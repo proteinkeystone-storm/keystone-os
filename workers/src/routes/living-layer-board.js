@@ -505,6 +505,36 @@ async function _sensorKeynapse(env, tenantId) {
   } catch (e) { return { soonLabel: '', soonAt: '', todayCount: 0, notesCount: 0 }; }
 }
 
+// networK : anniversaires d'un contact aujourd'hui + le prochain sous 7 jours.
+// Rappel ANNUEL → on compare le mois+jour (substr 'MM-DD'), pas l'année. Jours
+// calculés côté Europe/Paris pour rester aligné sur la journée locale du user.
+async function _sensorNetworkBirthdays(env, tenantId) {
+  if (!tenantId) return { today: [], todayCount: 0, soon: null, soonCount: 0 };
+  try {
+    const fmt = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const base = Date.now();
+    const window = [];   // [{ md:'MM-DD', offset:0..7 }]
+    for (let i = 0; i <= 7; i++) window.push({ md: fmt.format(new Date(base + i * 86400000)).slice(5), offset: i });
+    const keys = window.map(w => w.md);
+    const rows = (await env.DB.prepare(
+      `SELECT name, substr(birthday, 6, 5) AS md FROM nk_contacts
+       WHERE tenant_id = ? AND birthday IS NOT NULL AND birthday != ''
+         AND substr(birthday, 6, 5) IN (${keys.map(() => '?').join(',')})`
+    ).bind(tenantId, ...keys).all().catch(() => null))?.results || [];
+    const offOf = md => (window.find(w => w.md === md) || {}).offset;
+    const today = [], soonList = [];
+    for (const r of rows) {
+      const nm = (r.name || '').toString().replace(/[\r\n]+/g, ' ').trim().slice(0, 60);
+      if (!nm) continue;
+      const off = offOf(r.md);
+      if (off === 0) today.push(nm);
+      else if (off != null) soonList.push({ name: nm, days: off });
+    }
+    soonList.sort((a, b) => a.days - b.days);
+    return { today, todayCount: today.length, soon: soonList[0] || null, soonCount: soonList.length };
+  } catch (e) { return { today: [], todayCount: 0, soon: null, soonCount: 0 }; }
+}
+
 // Sentinel : sites surveillés + combien hors ligne (last_ok = 0).
 async function _sensorSentinel(env, tenantId) {
   if (!tenantId) return { total: 0, down: 0, downLabel: '' };
@@ -633,7 +663,7 @@ async function _fetchActivePilotable(env, audience) {
 // variantIndex : permet la ROTATION entre les candidats (pas toujours
 // le top-score). On trie par pertinence puis on pioche le N-ième.
 function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [], feedback = {}, preferTopic = null) {
-  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, clientSensors = {} } = sensors;
+  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, network = {}, clientSensors = {} } = sensors;
   // Les candidats "tendance" (mémoire des chiffres) sont injectés en tête
   // avec un score élevé : un delta réel est plus parlant qu'un total brut.
   const candidates = Array.isArray(extraCandidates) ? [...extraCandidates] : [];
@@ -665,6 +695,20 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [],
     candidates.push({
       text: `Rappel bientôt : ${keynapse.soonLabel}.`,
       score: 91, topic: 'keynapse',
+    });
+  }
+  // networK : anniversaire d'un contact aujourd'hui (chaleureux, à ne pas manquer).
+  if (network.todayCount === 1) {
+    candidates.push({ text: `Aujourd'hui, c'est l'anniversaire de ${network.today[0]}.`, score: 85, topic: 'network' });
+  } else if (network.todayCount > 1) {
+    candidates.push({ text: `${network.todayCount} anniversaires aujourd'hui, dont ${network.today[0]}.`, score: 85, topic: 'network' });
+  }
+  // networK : prochain anniversaire sous 7 jours (anticipation).
+  if (network.soon) {
+    const d = network.soon.days;
+    candidates.push({
+      text: `Anniversaire de ${network.soon.name} ${d === 1 ? 'demain' : 'dans ' + d + ' jours'} — de quoi préparer un mot.`,
+      score: 58, topic: 'network',
     });
   }
   // Social Manager : publication non aboutie.
@@ -793,7 +837,7 @@ const LIVING_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 // Construit les prompts système + user à partir des signaux (partagé
 // Llama/Claude). Retourne null si aucun signal exploitable.
 function _buildAiPrompts(sensors, firstName, variantIndex) {
-  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, clientSensors = {} } = sensors;
+  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, network = {}, clientSensors = {} } = sensors;
   const focus = (clientSensors && clientSensors.focus) || {};
   const _topQr = (Array.isArray(qrtop.top) && qrtop.top[0]) ? qrtop.top[0] : null;
   let signals = [
@@ -1110,7 +1154,7 @@ export async function handleLivingBoard(request, env) {
     ? clientSensors.followedSite.slice(0, 64) : null;
 
   // ── Collecte capteurs serveur en parallèle ──────────────────────
-  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, pilotable, followedQr, followedSite] = await Promise.all([
+  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, pilotable, followedQr, followedSite] = await Promise.all([
     _sensorSmartQR(env, padTenant),
     _sensorQrTop(env, padTenant),
     _sensorPulsa(env, lookupHmac),
@@ -1122,12 +1166,13 @@ export async function handleLivingBoard(request, env) {
     _sensorSocial(env, padTenant),
     _sensorSceau(env, padTenant),
     _sensorKeyBrand(env, padTenant),
+    _sensorNetworkBirthdays(env, padTenant),
     _fetchActivePilotable(env, plan),
     _sensorFollowedQr(env, padTenant, followedQrId),
     _sensorFollowedSite(env, padTenant, followedSiteId),
   ]);
 
-  const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, clientSensors };
+  const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, clientSensors };
 
   // Chiffres bruts pour la ligne de jauges (Niveau 2, #6). Le focus vient
   // du client (mesuré dans l'onglet). ghostQuota peut être null (anonyme/admin).

@@ -835,6 +835,7 @@ function _openContactForm(seed = {}) {
        <label class="nk-field"><span>E-mail</span><input name="email" type="email" maxlength="200" value="${esc(seed.email || '')}" autocomplete="off"></label>
        <label class="nk-field"><span>Téléphone</span><input name="phone" type="tel" maxlength="200" value="${esc(seed.phone || '')}" autocomplete="off"></label>
        <label class="nk-field"><span>Téléphone 2</span><input name="phone2" type="tel" maxlength="200" value="${esc(seed.phone2 || '')}" autocomplete="off"></label>
+       <label class="nk-field"><span>Anniversaire <em class="nk-opt">· optionnel, rappel annuel</em></span><input name="birthday" type="date" value="${esc(seed.birthday || '')}"></label>
        <label class="nk-field"><span>Site web</span><input name="website" type="url" inputmode="url" maxlength="400" placeholder="https://…" value="${esc(seed.website || '')}" autocomplete="off"></label>
        <label class="nk-field"><span>Adresse</span><textarea name="address" maxlength="400" rows="2" placeholder="N°, rue, code postal, ville…" autocomplete="off">${esc(seed.address || '')}</textarea></label>
        <div class="nk-field"><span>Réseaux sociaux</span>
@@ -942,6 +943,7 @@ async function _submitContact(form) {
     address: String(fd.get('address') || '').trim(),
     socials,
     photo: String(fd.get('photo') || ''),
+    birthday: String(fd.get('birthday') || ''),
     category_id: fd.get('category_id') || null,
   };
   if (!payload.name) { _toast('Le nom est requis', 'error'); return; }
@@ -1101,6 +1103,37 @@ function _onFicheActDown(e) {
 function _chip(field, val, cls) {
   return `<span class="nk-chip ${cls}">${esc(val)}<button class="nk-chip-x" data-act="nk-${field === 'roles' ? 'role' : 'tag'}-del" data-val="${esc(val)}" aria-label="Retirer">${icon('x', 12)}</button></span>`;
 }
+// Anniversaire : libellé « 12 mars », âge (si année plausible) et jours avant la
+// prochaine occurrence (rappel annuel = mois+jour). Renvoie null si vide/invalide.
+function _birthdayInfo(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '')); if (!m) return null;
+  const y = +m[1], mo = +m[2], da = +m[3];
+  if (mo < 1 || mo > 12 || da < 1 || da > 31) return null;
+  const label = new Date(2000, mo - 1, da).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+  const now = new Date();
+  const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let next = new Date(now.getFullYear(), mo - 1, da);
+  if (next < todayMid) next = new Date(now.getFullYear() + 1, mo - 1, da);
+  const days = Math.round((next - todayMid) / 86400000);
+  let age = null;
+  if (y >= 1900 && y <= now.getFullYear()) {
+    age = now.getFullYear() - y;
+    const passedThisYear = (now.getMonth() + 1 > mo) || (now.getMonth() + 1 === mo && now.getDate() >= da);
+    if (!passedThisYear) age -= 1;
+    if (age < 0) age = null;
+  }
+  return { label, age, days };
+}
+function _birthdaySection(c) {
+  const b = _birthdayInfo(c.birthday); if (!b) return '';
+  const bits = [b.label];
+  if (b.age != null) bits.push(`${b.age} ans`);
+  if (b.days === 0) bits.push("aujourd'hui !");
+  else if (b.days === 1) bits.push('demain');
+  else if (b.days <= 7) bits.push(`dans ${b.days} jours`);
+  return `<div class="nk-fiche-bday${b.days <= 7 ? ' nk-bday-soon' : ''}">${icon('calendar', 15)}<span>${esc(bits.join(' · '))}</span></div>`;
+}
+
 // Bloc « Coordonnées » de la fiche : adresse + carte embarquée (Google Maps
 // keyless, `output=embed` — pas de clé/géocodage) et réseaux sociaux. Tél/mail/
 // site vivent désormais dans la barre d'actions du haut. Rendu si au moins un
@@ -1146,6 +1179,7 @@ function _renderFiche(c) {
         (acts.length > 5 ? `<button class="nk-act-more" data-act="nk-fiche-tab" data-tab="activite">Voir toute l'activité</button>` : '')
       : `<div class="nk-fiche-empty">${icon('history', 22)}<span>Aucune activité pour l'instant.</span></div>`;
     body =
+      _birthdaySection(c) +
       _coordSection(c) +
       `<div class="nk-fiche-row2">
          <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Rôles</div><div class="nk-chips" data-chips="roles">${roles.map(r => _chip('roles', r, 'nk-chip-role')).join('')}<button class="nk-chip-add" data-act="nk-role-add" aria-label="Ajouter un rôle">${icon('plus', 14)}</button></div></div>
@@ -1343,11 +1377,11 @@ function _catLabelMap() { const m = {}; _cats.forEach(c => { m[String(c.id)] = c
 function _csvCell(v) { v = (v == null ? '' : String(v)); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
 function _exportCSV() {
   const labels = _catLabelMap();
-  const cols = ['name', 'kind', 'company', 'title', 'email', 'phone', 'phone2', 'website', 'address', 'socials', 'roles', 'tags', 'category', 'notes'];
+  const cols = ['name', 'kind', 'company', 'title', 'email', 'phone', 'phone2', 'website', 'address', 'birthday', 'socials', 'roles', 'tags', 'category', 'notes'];
   const lines = [cols.join(',')];
   for (const c of _allContacts()) {
     const socials = _parseArr(c.socials).map(s => `${s.type}:${s.url}`).join(' | ');
-    const row = [c.name, c.kind, c.company, c.title, c.email, c.phone, c.phone2, c.website, c.address,
+    const row = [c.name, c.kind, c.company, c.title, c.email, c.phone, c.phone2, c.website, c.address, c.birthday || '',
       socials, _parseArr(c.roles).join(' | '), _parseArr(c.tags).join(' | '), labels[String(c.category_id)] || '', c.notes];
     lines.push(row.map(_csvCell).join(','));
   }
@@ -1366,6 +1400,7 @@ function _vcardOf(c) {
   if (c.phone2)  L.push('TEL;TYPE=CELL:' + _vc(c.phone2));
   if (c.website) L.push('URL:' + _vc(_href(c.website)));
   if (c.address) L.push('ADR;TYPE=WORK:;;' + _vc(c.address) + ';;;;');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(c.birthday || '')) L.push('BDAY:' + c.birthday);
   _parseArr(c.socials).forEach(s => { if (s.url) L.push('URL:' + _vc(_href(s.url))); });
   const cats = _parseArr(c.roles).concat(_parseArr(c.tags));
   if (cats.length) L.push('CATEGORIES:' + cats.map(_vc).join(','));
@@ -1394,6 +1429,7 @@ const IMPORT_ALIASES = {
   phone2:  ['phone2', 'mobile', 'mobile phone', 'portable', 'cell', 'cellphone', 'secondary phone', 'téléphone mobile', 'téléphone 2', 'gsm'],
   website: ['website', 'web', 'web page', 'site', 'site web', 'url', 'site internet'],
   address: ['address', 'adresse', 'street address', 'adresse postale', 'location', 'lieu'],
+  birthday:['birthday', 'anniversaire', 'date de naissance', 'naissance', 'bday', 'birth date', 'birthdate', 'né(e) le', 'ne le'],
   category:['category', 'catégorie', 'categorie', 'group', 'groupe', 'liste', 'list'],
   roles:   ['roles', 'rôles', 'role', 'rôle'],
   tags:    ['tags', 'tag', 'étiquettes', 'etiquettes', 'labels'],
@@ -1401,6 +1437,16 @@ const IMPORT_ALIASES = {
   notes:   ['notes', 'note', 'remarques', 'commentaire', 'comments'],
 };
 function _splitMulti(v) { return String(v || '').split(/[|;]/).map(x => x.trim()).filter(Boolean); }
+// Normalise une date d'import vers 'YYYY-MM-DD' (accepte JJ/MM/AAAA, AAAA/MM/JJ). Sinon ''.
+function _normDate(s) {
+  s = String(s || '').trim(); if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  let m = /^(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})$/.exec(s);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  m = /^(\d{4})[\/.](\d{1,2})[\/.](\d{1,2})$/.exec(s);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  return '';
+}
 function _socialsCell(v) {
   return _splitMulti(v).map(tok => { const i = tok.indexOf(':'); if (i < 0) return null;
     return { type: tok.slice(0, i).trim() || 'other', url: tok.slice(i + 1).trim() }; }).filter(s => s && s.url);
@@ -1452,6 +1498,7 @@ async function _importCSV(text) {
     contacts.push({ name, cat,
       company: get(r, 'company'), title: get(r, 'title'), email: get(r, 'email'),
       phone: get(r, 'phone'), phone2: get(r, 'phone2'), website: get(r, 'website'), address: get(r, 'address'),
+      birthday: _normDate(get(r, 'birthday')),
       roles: _splitMulti(get(r, 'roles')), tags: _splitMulti(get(r, 'tags')),
       socials: _socialsCell(get(r, 'socials')), notes: get(r, 'notes') });
   }
@@ -1473,7 +1520,7 @@ async function _importCSV(text) {
     try {
       await _api('/contact', { method: 'POST', body: {
         name: c.name, kind: 'person', company: c.company, title: c.title, email: c.email,
-        phone: c.phone, phone2: c.phone2, website: c.website, address: c.address,
+        phone: c.phone, phone2: c.phone2, website: c.website, address: c.address, birthday: c.birthday,
         roles: c.roles, tags: c.tags, socials: c.socials,
         category_id: c.cat ? (map[c.cat.toLowerCase()] || null) : null,
       } });
