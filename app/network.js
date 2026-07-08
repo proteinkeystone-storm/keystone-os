@@ -1243,9 +1243,8 @@ function _actRow(a, deletable) {
 }
 function _renderFiche(c) {
   if (!_fiche) return;
-  const roles = _parseArr(c.roles), tags = _parseArr(c.tags);
+  const tags = _parseArr(c.tags);
   const av = `<span class="nk-fiche-av" style="background:hsl(${hue(c.name)} 42% 38% / .9)">${esc(initials(c.name))}${_avatarImg(c)}</span>`;
-  const badge = roles[0] ? `<span class="nk-fiche-badge">${esc(roles[0])}</span>` : `<span class="nk-fiche-badge nk-fiche-badge-soft">${KIND_LABELS[c.kind] || 'Contact'}</span>`;
   const tabs = FICHE_TABS.map(([id, lbl]) => `<button class="nk-fiche-tab${id === _ficheTabId ? ' nk-sel' : ''}" data-act="nk-fiche-tab" data-tab="${id}">${lbl}</button>`).join('');
 
   const acts = _contactActivity(c.id);
@@ -1259,10 +1258,7 @@ function _renderFiche(c) {
       _birthdaySection(c) +
       _relanceSection(c) +
       _coordSection(c) +
-      `<div class="nk-fiche-row2">
-         <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Rôles</div><div class="nk-chips" data-chips="roles">${roles.map(r => _chip('roles', r, 'nk-chip-role')).join('')}<button class="nk-chip-add" data-act="nk-role-add" aria-label="Ajouter un rôle">${icon('plus', 14)}</button></div></div>
-         <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Tags</div><div class="nk-chips" data-chips="tags">${tags.map(t => _chip('tags', t, 'nk-chip-tag')).join('')}<button class="nk-chip-add" data-act="nk-tag-add" aria-label="Ajouter un tag">${icon('plus', 14)}</button></div></div>
-       </div>
+      `<div class="nk-fiche-sec"><div class="nk-fiche-lbl">Tags</div><div class="nk-chips" data-chips="tags">${tags.map(t => _chip('tags', t, 'nk-chip-tag')).join('')}<button class="nk-chip-add" data-act="nk-tag-add" aria-label="Ajouter un tag">${icon('plus', 14)}</button></div></div>
        <div class="nk-fiche-sec"><div class="nk-fiche-lbl">Continuer avec…</div><div class="nk-shortcuts">${_shortcutsFor(c).map(id => {
          const d = SHORTCUT_DEFS[id]; if (!d) return '';
          return _isOwned(id)
@@ -1293,7 +1289,7 @@ function _renderFiche(c) {
      </div>
      <div class="nk-fiche-hd">
        <button class="nk-fiche-x" data-act="nk-fiche-close" aria-label="Fermer">${icon('x', 18)}</button>
-       <div class="nk-fiche-top">${av}<div class="nk-fiche-idz"><h2 class="nk-fiche-name">${esc(c.name)}</h2>${badge}${c.company ? `<div class="nk-fiche-org">${esc(c.company)}</div>` : ''}${c.title ? `<div class="nk-fiche-fn">${esc(c.title)}</div>` : ''}</div></div>
+       <div class="nk-fiche-top">${av}<div class="nk-fiche-idz"><h2 class="nk-fiche-name">${esc(c.name)}</h2>${c.company ? `<div class="nk-fiche-org">${esc(c.company)}</div>` : ''}${c.title ? `<div class="nk-fiche-fn">${esc(c.title)}</div>` : ''}</div></div>
        <div class="nk-fiche-acts">
          ${_ficheAct('phone', tel, 'Appeler (fixe)', c.phone)}
          ${_ficheAct('smartphone', tel2, 'Appeler (mobile)', c.phone2)}
