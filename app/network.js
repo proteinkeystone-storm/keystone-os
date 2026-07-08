@@ -1039,7 +1039,10 @@ const FICHE_TABS = [['resume', 'Résumé'], ['activite', 'Activité'], ['notes',
 
 function _openFiche(contact) {
   if (!contact || !contact.id) return;
+  // Anti-empilement : retirer toute fiche orpheline (une seule fiche à la fois).
+  _root.querySelectorAll('.nk-fiche').forEach(e => { if (e !== _fiche) e.remove(); });
   _ficheId = contact.id; _ficheTabId = 'resume';
+  if (_fiche) { _renderFiche(contact); return; }   // panneau déjà ouvert → mise à jour en place (pas de flash)
   const el = document.createElement('div');
   el.className = 'nk-fiche';
   _root.appendChild(el);
@@ -1048,10 +1051,10 @@ function _openFiche(contact) {
   _renderFiche(contact);
 }
 function _closeFiche() {
-  if (!_fiche) return;
   const el = _fiche; _fiche = null; _ficheId = null;
-  el.classList.remove('nk-fiche-open');
-  setTimeout(() => { if (el.parentNode) el.remove(); }, 260);
+  if (el) { el.classList.remove('nk-fiche-open'); setTimeout(() => { if (el.parentNode) el.remove(); }, 260); }
+  // Filet : retirer d'éventuelles fiches orphelines (empilement d'une version antérieure).
+  if (_root) _root.querySelectorAll('.nk-fiche').forEach(e => { if (e !== el) e.remove(); });
 }
 function _ficheTab(id) { _ficheTabId = id; const c = _contactById(_ficheId); if (c) _renderFiche(c); }
 
