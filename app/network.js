@@ -485,7 +485,9 @@ function render(animated = true) {
 }
 
 // Déplie les contacts d'une catégorie (cascade haut → bas).
-function spawnContacts(c, L, animated) {
+// reuse=true (« Voir les N autres ») : on RÉUTILISE les cartes déjà à l'écran
+// (aucune ré-animation), seules les nouvelles cascadent → pas de clignotement.
+function spawnContacts(c, L, animated, reuse) {
   const my = seq;
   _stage.classList.add('nk-focus');
   const list = _expandAll ? (c._all || c.contacts) : c.contacts;
@@ -518,20 +520,37 @@ function spawnContacts(c, L, animated) {
     L.h - 70 - (perCol - 1) * L.perGap - (c.extra ? 44 : 0)));
   const catRightX = L.catX + c._el.offsetWidth + 4;   // offsetWidth ignore le transform → départ stable
 
+  // Cartes déjà présentes (indexées par contact) quand on réutilise.
+  const existing = reuse ? (() => {
+    const m = new Map();
+    _nodes.querySelectorAll('.nk-person[data-id]').forEach(n => {
+      if (n.dataset.contact === String(c.id)) m.set(n.dataset.id, n);
+    });
+    return m;
+  })() : null;
+  let newCount = 0;   // index de cascade : ne compte QUE les cartes fraîchement créées
+
   list.forEach((ct, i) => {
     const col = Math.floor(i / perCol), row = i % perCol;
     const x = L.perX + col * COL_W;
     const y = Math.max(70, gridTop + row * L.perGap);
-    const el = document.createElement('div');
-    el.className = 'nk-node nk-person nk-enter';
-    el.dataset.contact = c.id;
-    if (ct.id) el.dataset.id = ct.id;     // NK-4 : ouverture de la fiche
-    el.style.left = x + 'px'; el.style.top = y + 'px';
-    const h = hue(ct.name);
-    el.innerHTML =
-      `<span class="nk-av" style="background:hsl(${h} 42% 38% / .85)">${esc(initials(ct.name))}${_avatarImg(ct)}</span>` +
-      `<span class="nk-who"><span class="nk-nm">${esc(ct.name)}</span><span class="nk-co">${esc(ct.company || '')}</span></span>`;
-    _nodes.appendChild(el);
+    const reused = existing && ct.id != null ? existing.get(String(ct.id)) : null;
+    let el;
+    if (reused) {
+      el = reused; existing.delete(String(ct.id));
+      el.style.left = x + 'px'; el.style.top = y + 'px';   // déjà visible → on le garde en place
+    } else {
+      el = document.createElement('div');
+      el.className = 'nk-node nk-person nk-enter';
+      el.dataset.contact = c.id;
+      if (ct.id) el.dataset.id = ct.id;     // NK-4 : ouverture de la fiche
+      el.style.left = x + 'px'; el.style.top = y + 'px';
+      const h = hue(ct.name);
+      el.innerHTML =
+        `<span class="nk-av" style="background:hsl(${h} 42% 38% / .85)">${esc(initials(ct.name))}${_avatarImg(ct)}</span>` +
+        `<span class="nk-who"><span class="nk-nm">${esc(ct.name)}</span><span class="nk-co">${esc(ct.company || '')}</span></span>`;
+      _nodes.appendChild(el);
+    }
 
     const path = document.createElementNS(SVGNS, 'path');
     path.setAttribute('d', bezier(catRightX, c._y, x - 6, y));
@@ -542,16 +561,21 @@ function spawnContacts(c, L, animated) {
     const len = path.getTotalLength();
     addFlow(path, i + 1, circuitDone);
 
-    if (animated && !REDUCED) {
-      const delay = i * P.stag;
+    if (reused) {
+      path.style.strokeDasharray = 'none';   // carte déjà là → fil instantané, aucune ré-animation
+    } else if (animated && !REDUCED) {
+      const delay = newCount * P.stag;
       addPathJob(path, len, P.dur * .85, delay);
       reveal(el, delay + P.dur * .85 * (P.pd / 100));
+      newCount++;
     } else {
       path.style.strokeDasharray = 'none';
-      if (animated) reveal(el, i * 30);
+      if (animated) reveal(el, newCount * 30);
       else el.style.opacity = 1;
+      newCount++;
     }
   });
+  if (existing) existing.forEach(n => n.remove());   // cartes disparues du jeu (sécurité ; jamais en expand)
 
   if (!_expandAll && c.extra) {
     const y = Math.max(70, gridTop + Math.min(perCol, list.length) * L.perGap) - 8;
@@ -593,9 +617,9 @@ function _expandCategory(id) {
   if (!c || !c._el) return;
   _expandAll = true;
   clearFlows();
-  _nodes.querySelectorAll('[data-contact]').forEach(e => e.remove());
-  _wires.querySelectorAll('path[data-contact]').forEach(e => e.remove());
-  spawnContacts(c, layout(), true);
+  _nodes.querySelectorAll('.nk-more[data-contact]').forEach(e => e.remove());   // retire « Voir les N autres »
+  _wires.querySelectorAll('path[data-contact]').forEach(e => e.remove());       // fils redessinés ; les cartes restent
+  spawnContacts(c, layout(), true, true);                                       // reuse : réutilise les 8 déjà là
   _focusOpenCategory(false);
 }
 
