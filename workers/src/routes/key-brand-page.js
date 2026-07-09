@@ -102,6 +102,7 @@ body.dark .toast{background:#f2f3f7;color:#15171c}
 /* Sommaire sur aplat. */
 .toc{padding:70px 24px}
 .toc-in{max-width:940px;margin:0 auto}
+.tocsep{height:1px;margin:48px 0 8px}
 .toc-title{font-weight:900;font-size:clamp(26px,4vw,36px);letter-spacing:-0.02em;text-transform:uppercase;margin:0 0 34px}
 .toc ol{list-style:none;margin:0;padding:0;columns:2;column-gap:44px}
 .toc li{margin:0 0 12px;break-inside:avoid}
@@ -689,7 +690,7 @@ function render(){
   if(navLinks.length>1){
     h+='<div class="toc" style="background:'+TINT+';color:'+TINTINK+'"><div class="toc-in"><p class="toc-title">Sommaire</p><ol>';
     navLinks.forEach(([a,l],i)=>{h+='<li><a href="'+a+'"><span class="tn" style="color:'+TINTSOFT+'">'+String(i+1).padStart(2,'0')+'</span>'+l+'</a></li>'});
-    h+='</ol></div></div>';
+    h+='</ol><div class="tocsep" style="background:'+TINTSOFT+'"></div></div></div>';
   }
 
   // Chapitre — La marque (identité + ton de voix, KB-13)

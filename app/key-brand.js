@@ -37,6 +37,7 @@ let _view = 'lib';          // 'lib' | 'chart' | 'import'
 let _tab = 'logo';          // 'logo' | 'colors' | 'type' | 'rules' | 'brand'
 // Import depuis une URL (KB-IMPORT-2). _importStage : 'url'|'loading'|'review'|'creating'.
 let _importStage = 'url';
+let _importMode = 'create'; // 'create' (nouvelle charte, depuis la biblio) | 'enrich' (ajoute à la charte ouverte)
 let _importUrl = '';
 let _importErr = '';
 let _importData = null;     // { meta:{name,baseline}, colors:[…{pick}], fonts:[…{pick}], logos:[…{pick}], diagnostics }
@@ -494,8 +495,13 @@ function _onClick(e) {
   if (act === 'open' && id)   { _openChart(id); return; }
 
   // ── Import depuis une URL (KB-IMPORT-2) ──
-  if (act === 'import-open')   { _view = 'import'; _importStage = 'url'; _importUrl = ''; _importErr = ''; _importData = null; _render(); return; }
-  if (act === 'import-cancel') { _view = 'lib'; _importStage = 'url'; _importData = null; _render(); return; }
+  if (act === 'import-open')   { _importMode = 'create'; _view = 'import'; _importStage = 'url'; _importUrl = ''; _importErr = ''; _importData = null; _render(); return; }
+  if (act === 'import-enrich' && _chart) { _importMode = 'enrich'; _view = 'import'; _importStage = 'url'; _importUrl = ''; _importErr = ''; _importData = null; _render(); return; }
+  if (act === 'import-cancel') {
+    if (_importMode === 'enrich' && _chart) { _view = 'chart'; _importStage = 'url'; _importData = null; _renderChart(); }
+    else { _view = 'lib'; _importStage = 'url'; _importData = null; _render(); }
+    return;
+  }
   if (act === 'import-run')    { _runImportFetch(); return; }
   if (act === 'import-create') { _runImportCreate(); return; }
   if (act === 'import-tog') {
@@ -932,7 +938,64 @@ function _normImportFont(f) {
   return { id: f.id || _uuid(), role, source: 'declared', family: String(f.family || '').slice(0, 60), axis: null, buyUrl: null };
 }
 
+// Enrichir la charte OUVERTE : ajoute les éléments cochés sans jamais écraser
+// l'existant (dédup couleurs par hex, polices par famille ; méta remplie
+// seulement si vide). Sert aussi bien à remplir une charte vide qu'à compléter.
+async function _mergeImportIntoChart() {
+  const d = _importData; if (!d || !_chart) return;
+  _importStage = 'creating'; _importErr = ''; _render();
+  try {
+    const kit = _chart.draft || (_chart.draft = _emptyKit(_chart.name));
+    kit.meta = kit.meta || {};
+    kit.colors = kit.colors || { palette: [] }; if (!Array.isArray(kit.colors.palette)) kit.colors.palette = [];
+    kit.typography = kit.typography || { fonts: [] }; if (!Array.isArray(kit.typography.fonts)) kit.typography.fonts = [];
+    kit.logo = kit.logo || { variants: [] }; if (!Array.isArray(kit.logo.variants)) kit.logo.variants = [];
+
+    // Méta : on ne remplit que ce qui est vide.
+    if ((!kit.meta.name || kit.meta.name === 'Nouvelle marque') && d.meta.name) {
+      kit.meta.name = d.meta.name.slice(0, 80); _chart.name = kit.meta.name;
+    }
+    if (!kit.meta.baseline && d.meta.baseline) kit.meta.baseline = d.meta.baseline.slice(0, 120);
+
+    // Couleurs : ajout des hex absents (rôle selon la grammaire existante).
+    const seenHex = new Set(kit.colors.palette.map(c => String(c.hex || '').toLowerCase()));
+    for (const c of d.colors.filter(x => x.pick && /^#[0-9a-fA-F]{6}$/.test(String(x.hex || '')))) {
+      const hex = c.hex.toLowerCase(); if (seenHex.has(hex)) continue; seenHex.add(hex);
+      const pal = kit.colors.palette;
+      const role = pal.some(x => x.role === 'primary') ? (pal.length >= 2 ? 'extra' : 'secondary') : 'primary';
+      pal.push({ id: _uuid(), name: (c.name || `Couleur ${pal.length + 1}`).slice(0, 40), hex, role, cmyk: null, pantone: null, story: null, nightHex: null });
+    }
+
+    // Polices : ajout des familles absentes.
+    const seenFam = new Set(kit.typography.fonts.map(f => String(f.family || '').toLowerCase()));
+    for (const f of d.fonts.filter(x => x.pick)) {
+      const key = String(f.family || '').toLowerCase(); if (!key || seenFam.has(key)) continue; seenFam.add(key);
+      kit.typography.fonts.push(_normImportFont(f));
+    }
+
+    // Logos : récupérés côté serveur, ajoutés en variantes.
+    for (const l of d.logos.filter(x => x.pick)) {
+      try {
+        const r = await _api(`/charts/${encodeURIComponent(_chart.id)}/import-logo`, { method: 'POST', body: { url: l.url, label: l.label || 'Logo' } });
+        if (r?.asset) kit.logo.variants.push({
+          id: _uuid(), label: (l.label || 'Logo').slice(0, 60), usage: '', kind: 'color',
+          assetId: r.asset.id, ext: r.asset.ext, mime: r.asset.mime, name: r.asset.name,
+        });
+      } catch (_) { /* un logo qui échoue ne bloque pas l'enrichissement */ }
+    }
+
+    _importData = null; _importMode = 'create'; _view = 'chart'; _importStage = 'url';
+    _scheduleSave();
+    _toast('Charte enrichie depuis le site.');
+    _renderChart();
+  } catch (e) {
+    _importErr = e.message || 'Ajout impossible.';
+    _importStage = 'review'; _render();
+  }
+}
+
 async function _runImportCreate() {
+  if (_importMode === 'enrich') return _mergeImportIntoChart();
   const d = _importData; if (!d) return;
   _importStage = 'creating'; _importErr = ''; _render();
   try {
@@ -989,7 +1052,8 @@ async function _runImportCreate() {
 function _renderImport(main) {
   _applyAccent(null);
   if (_importStage === 'loading' || _importStage === 'creating') {
-    main.innerHTML = `<div class="kb-state">${icon('refresh', 28)}<p>${_importStage === 'loading' ? 'Analyse du site…' : 'Création de la charte…'}</p></div>`;
+    const creatingLabel = _importMode === 'enrich' ? 'Ajout à la charte…' : 'Création de la charte…';
+    main.innerHTML = `<div class="kb-state">${icon('refresh', 28)}<p>${_importStage === 'loading' ? 'Analyse du site…' : creatingLabel}</p></div>`;
     return;
   }
 
@@ -1000,7 +1064,7 @@ function _renderImport(main) {
         <div class="kb-import-hero">
           <div class="kb-import-badge">${icon('globe', 26)}</div>
           <h1>Importer depuis un site</h1>
-          <p>Collez l’adresse du site d’une marque. On en déduit couleurs, typographies et logo — vous validez avant de créer la charte.</p>
+          <p>Collez l’adresse du site d’une marque. On en déduit couleurs, typographies et logo — vous validez avant de ${_importMode === 'enrich' ? 'les ajouter à la charte' : 'créer la charte'}.</p>
         </div>
         <div class="kb-import-urlbar">
           <input type="url" inputmode="url" data-field="import-url" value="${_esc(_importUrl)}"
@@ -1051,7 +1115,9 @@ function _renderImport(main) {
       <button class="kb-back" data-act="import-cancel">${icon('arrow-left', 16)} Annuler</button>
       <div class="kb-import-head">
         <h1>Voici ce qu’on a détecté</h1>
-        <p>Corrigez, décochez ce qui ne va pas, puis créez la charte. Tout reste modifiable ensuite.</p>
+        <p>${_importMode === 'enrich'
+          ? 'Corrigez, décochez ce qui ne va pas, puis ajoutez-le à la charte. Les couleurs et polices déjà présentes ne seront pas écrasées.'
+          : 'Corrigez, décochez ce qui ne va pas, puis créez la charte. Tout reste modifiable ensuite.'}</p>
       </div>
       ${_importErr ? `<p class="kb-import-err">${icon('alert-triangle', 15)} ${_esc(_importErr)}</p>` : ''}
       ${note ? `<p class="kb-import-note">${icon('info', 15)} ${_esc(note)}</p>` : ''}
@@ -1069,7 +1135,7 @@ function _renderImport(main) {
 
       <div class="kb-imp-foot">
         <button class="kb-btn" data-act="import-cancel">Annuler</button>
-        <button class="kb-btn primary" data-act="import-create">${icon('check', 16)} Créer la charte</button>
+        <button class="kb-btn primary" data-act="import-create">${icon('check', 16)} ${_importMode === 'enrich' ? 'Ajouter à la charte' : 'Créer la charte'}</button>
       </div>
     </div>`;
 }
@@ -1157,7 +1223,10 @@ function _renderChart() {
       <div class="kb-chart-head">
         <div class="kb-chart-topline">
           <button class="kb-link-back" data-act="back-lib">${icon('chevron-left', 16)} Chartes</button>
-          <div class="kb-pubbar">${_pubBarHtml()}</div>
+          <div class="kb-topline-acts">
+            <button class="kb-btn kb-btn-sm" data-act="import-enrich" title="Importer couleurs, typos et logo depuis un site — ajoutés à cette charte">${icon('globe', 15)} Importer depuis un site</button>
+            <div class="kb-pubbar">${_pubBarHtml()}</div>
+          </div>
         </div>
         <div class="kb-identity">
           <input class="kb-name-input" data-field="chart-name" value="${_esc(_chart.name)}" maxlength="80"
