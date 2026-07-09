@@ -18,30 +18,30 @@
 }
 
 /* ── Contrôles header networK : recherche escamotable + Ajouter + I/O ── */
-/* La recherche vit désormais dans la topbar : loupe seule, qui se déploie
-   en champ complet au clic (le champ s'ouvre en surimpression vers la gauche
-   pour ne pas pousser les boutons voisins). */
-.nk-search-hd { position: relative; display: flex; align-items: center; }
+/* Loupe seule (carré) qui se DÉPLIE en un rectangle INLINE : le champ pousse
+   le titre (qui se réduit) et NON les voisins → il ne recouvre jamais le « + »
+   ni l'I/O. La loupe reste à droite du champ (le champ s'ouvre vers la gauche).
+   `.nk-search-hd` porte le fond/bordure du pill quand il est ouvert. */
+.nk-search-hd { position: relative; display: flex; align-items: center; border-radius: 10px; transition: background .2s ease, border-color .2s ease; }
+.nk-search-hd.nk-open { background: var(--navy2, #1c2234); border: 1px solid var(--ws-border, rgba(255,255,255,.1)); }
 .nk-search-toggle {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 38px; height: 38px; border-radius: 10px; position: relative; z-index: 2;
+  order: 2; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: 10px;
   background: rgba(255,255,255,.03); border: 1px solid var(--ws-border, rgba(255,255,255,.1));
   color: var(--ws-text-soft, rgba(248,250,252,.7)); cursor: pointer;
   transition: background .2s ease, border-color .2s ease, color .2s ease;
 }
 .nk-search-toggle:hover { background: rgba(255,255,255,.07); border-color: var(--ws-border-strong, rgba(255,255,255,.2)); color: var(--ws-text, #f8fafc); }
+.nk-search-hd.nk-open .nk-search-toggle { background: transparent; border-color: transparent; color: var(--ws-text, #f8fafc); }
 .nk-search-hd .nk-search-input {
-  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
-  height: 38px; width: 0; min-width: 0; opacity: 0; pointer-events: none;
-  padding: 0 44px 0 0; border-radius: 10px; outline: none;
-  background: var(--navy2, #1c2234); border: 1px solid var(--ws-border, rgba(255,255,255,.1));
+  order: 1; height: 38px; width: 0; min-width: 0; opacity: 0; pointer-events: none;
+  padding: 0; border: none; outline: none; background: transparent;
   color: var(--text, #f8fafc); font-family: inherit; font-size: 15px; letter-spacing: -0.02em;
   transition: width .28s cubic-bezier(.22,1,.36,1), opacity .18s ease, padding .28s ease;
 }
-.nk-search-hd.nk-open .nk-search-input { width: min(320px, 44vw); opacity: 1; pointer-events: auto; padding-left: 14px; }
-.nk-search-hd.nk-open .nk-search-toggle { background: transparent; border-color: transparent; color: var(--ws-text, #f8fafc); }
+.nk-search-hd.nk-open .nk-search-input { width: min(280px, 40vw); opacity: 1; pointer-events: auto; padding-left: 14px; }
 .nk-search-input::placeholder { color: var(--text-dim, rgba(248,250,252,.45)); }
-.nk-search-hd .nk-search-results { left: auto; right: 0; width: min(320px, 44vw); }
+.nk-search-hd .nk-search-results { left: auto; right: 0; width: min(300px, 44vw); }
 
 /* « + » Ajouter : sorti du groupe .ws-topbar-actions repliable → TOUJOURS
    visible (à gauche du burger sur mobile) ; carré violet accent, même
@@ -645,11 +645,12 @@ button.nk-coord { width: 100%; font: inherit; text-align: left; cursor: pointer;
 @media (max-width: 1024px) {
   .ws-topbar-actions.is-open .nk-search-hd,
   .ws-topbar-actions.is-open .nk-io-btn { width: 100%; }
+  .ws-topbar-actions.is-open .nk-search-hd { background: transparent; border: none; }
   .ws-topbar-actions.is-open .nk-io-btn { justify-content: flex-start; padding: 0 12px; gap: 10px; }
   .ws-topbar-actions.is-open .nk-search-toggle { display: none; }
   .ws-topbar-actions.is-open .nk-search-hd .nk-search-input {
-    position: static; transform: none; width: 100%; opacity: 1; pointer-events: auto;
-    height: 38px; padding: 0 12px;
+    width: 100%; opacity: 1; pointer-events: auto; height: 38px; padding: 0 12px;
+    background: var(--navy2, #1c2234); border: 1px solid var(--ws-border, rgba(255,255,255,.1)); border-radius: 10px;
   }
   .ws-topbar-actions.is-open .nk-search-hd .nk-search-results {
     position: static; width: 100%; margin-top: 6px; box-shadow: none;
