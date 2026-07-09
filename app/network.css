@@ -649,11 +649,6 @@ button.nk-coord { width: 100%; font: inherit; text-align: left; cursor: pointer;
   .nk-mhead { flex: none; display: flex; align-items: center; gap: 8px; padding: 14px 16px 6px; }
   .nk-mhead-t { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; color: var(--text, #f8fafc); }
   .nk-mhead-n { font-size: 13px; font-weight: 700; color: var(--text-dim, rgba(248,250,252,.45)); }
-  .nk-mhead-add {
-    margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px;
-    border-radius: 999px; border: 1px solid rgba(139,92,246,.5); background: rgba(139,92,246,.14);
-    color: var(--text, #f8fafc); font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
-  }
 
   /* Liste verticale des contacts (scrolle) */
   .nk-mlist {

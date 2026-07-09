@@ -521,9 +521,8 @@ function _renderMobile() {
   m.innerHTML =
     `<div class="nk-rail" data-slot="rail">${chips}` +
     `<button class="nk-chip nk-chip-new" data-act="nk-new-cat" aria-label="Nouvelle catégorie">${icon('plus', 16)}</button></div>` +
-    `<div class="nk-mhead"><span class="nk-mhead-t">${esc(cat.label)}</span><span class="nk-mhead-n">${cat.count}</span>` +
-    (cat._orphan ? '' : `<button class="nk-mhead-add" data-act="nk-cat-add" data-cat="${esc(cat.id)}">${icon('plus', 15)} Ajouter</button>`) +
-    `</div><div class="nk-mlist">${rows}</div>`;
+    `<div class="nk-mhead"><span class="nk-mhead-t">${esc(cat.label)}</span><span class="nk-mhead-n">${cat.count}</span></div>` +
+    `<div class="nk-mlist">${rows}</div>`;
 
   const on = m.querySelector('.nk-chip-on');
   if (on) try { on.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch (_) {}
