@@ -98,7 +98,7 @@ export const PLATFORMS = {
       type: 'oauth2',
       authUrl:  'https://www.facebook.com/v20.0/dialog/oauth',
       tokenUrl: 'https://graph.facebook.com/v20.0/oauth/access_token',
-      scopes: { page: ['pages_manage_posts', 'pages_read_engagement', 'pages_show_list', 'read_insights'] },   // read_insights → stats par post
+      scopes: { page: ['pages_manage_posts', 'pages_read_engagement', 'pages_show_list'] },   // read_insights RETIRÉ : Meta « Invalid Scopes » (app non configurée/App Review requise) → bloquait la reconnexion. À réactiver APRÈS déclaration dans le dashboard Meta.
       tokenTtlDays: 60,           // long-lived ; un page token peut être non-expirant
       refreshable: true,
     },
@@ -133,7 +133,7 @@ export const PLATFORMS = {
       type: 'oauth2',
       authUrl:  'https://www.facebook.com/v20.0/dialog/oauth',
       tokenUrl: 'https://graph.facebook.com/v20.0/oauth/access_token',
-      scopes: { business: ['instagram_basic', 'instagram_content_publish', 'pages_show_list', 'instagram_manage_insights'] },   // insights → stats par média
+      scopes: { business: ['instagram_basic', 'instagram_content_publish', 'pages_show_list'] },   // instagram_manage_insights RETIRÉ : Meta « Invalid Scopes » (app non configurée/App Review requise) → bloquait la reconnexion. À réactiver APRÈS déclaration dans le dashboard Meta.
       tokenTtlDays: 60,
       refreshable: true,
     },
