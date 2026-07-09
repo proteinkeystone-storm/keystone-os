@@ -166,6 +166,7 @@ let _root = null, _stage = null, _wires = null, _nodes = null, _scene = null;
 let _cats = [];                 // catégories courantes
 let _activity = [];             // journal d'activité du tenant (NK-5)
 let openCat = null;             // id de la catégorie dépliée (une seule profondeur)
+let _mSel = null;               // MOBILE : catégorie sélectionnée dans le rail (chemin de rendu dédié)
 let _expandAll = false;         // « Voir les N autres » : affiche tous les contacts de la catégorie ouverte
 let seq = 0;                    // invalide les séquences en cours (anti double-clic)
 const jobs = new Set();
@@ -418,6 +419,8 @@ function render(animated = true) {
   _wires.innerHTML = ''; _nodes.innerHTML = '';
 
   const empty = _root.querySelector('[data-slot="empty"]');
+  // MOBILE : chemin de rendu dédié (rail de catégories + liste), pas d'arbre/pan.
+  if (_isMobile()) { empty.hidden = true; return _renderMobile(); }
   if (!_cats.length) { empty.hidden = false; return; }   // état vide (0 catégorie)
   empty.hidden = true;
 
@@ -477,9 +480,53 @@ function render(animated = true) {
       later(() => { if (my === seq) spawnContacts(c, L, anim); }, baseDelay);
     }
   }
-  // Pan mobile : suit la catégorie ouverte, sinon revient à l'arbre (desktop : drag manuel préservé).
-  if (_isMobile()) { if (openCat) _focusOpenCategory(false); else _panTo(0, 0, false); }
-  else if (!openCat && _autoFit) { _autoFit = false; _zoom = 1; _panX = _panY = 0; _applyTransform(); }
+  // (Desktop uniquement ici — le mobile a son propre chemin de rendu.)
+  if (!openCat && _autoFit) { _autoFit = false; _zoom = 1; _panX = _panY = 0; _applyTransform(); }
+}
+
+// ── MOBILE : rail de catégories (toujours visible) + liste des contacts ──
+// Remplace l'arbre canvas sous 820px : aucun pan/zoom/flottaison. Le rail se
+// scrolle horizontalement, la liste verticalement ; changer de catégorie =
+// taper une autre chip. Réutilise les cartes/avatars/fiches existants.
+function _renderMobile() {
+  let m = _stage.querySelector('.nk-mobile');
+  if (!m) { m = document.createElement('div'); m.className = 'nk-mobile'; _stage.appendChild(m); }
+  if (!_cats.length) {
+    m.innerHTML =
+      `<div class="nk-mobile-empty">` +
+      `<div class="nk-you"><div class="nk-you-avatar">${icon('user', 28)}</div><div class="nk-you-label">Vous</div></div>` +
+      `<p class="nk-empty-title">Votre réseau vivant, prêt à se déployer.</p>` +
+      `<p class="nk-empty-sub">Ajoutez une première relation pour le voir prendre forme.</p>` +
+      `<button class="nk-btn nk-btn-primary" data-act="nk-add">${icon('plus', 16)} Ajouter</button></div>`;
+    return;
+  }
+  if (!_mSel || !_cats.find(c => String(c.id) === String(_mSel))) _mSel = _cats[0].id;
+  const cat = _cats.find(c => String(c.id) === String(_mSel));
+
+  const chips = _cats.map(c =>
+    `<button class="nk-chip${String(c.id) === String(_mSel) ? ' nk-chip-on' : ''}" data-act="nk-mcat" data-cat="${esc(c.id)}">` +
+    `<span class="nk-chip-ic">${icon(c.icon || 'folder', 15)}</span>` +
+    `<span class="nk-chip-lbl">${esc(c.label)}</span>` +
+    `<span class="nk-chip-n">${c.count}</span></button>`).join('');
+
+  const list = cat.contacts || [];
+  const rows = list.length
+    ? list.map(ct =>
+        `<button class="nk-mrow" data-act="nk-mopen" data-id="${esc(ct.id)}">` +
+        `<span class="nk-av" style="background:hsl(${hue(ct.name)} 42% 38% / .85)">${esc(initials(ct.name))}${_avatarImg(ct)}</span>` +
+        `<span class="nk-who"><span class="nk-nm">${esc(ct.name)}</span><span class="nk-co">${esc(ct.company || '')}</span></span>` +
+        `<span class="nk-mrow-go">${icon('chevron-right', 16)}</span></button>`).join('')
+    : `<button class="nk-mempty" data-act="nk-cat-add" data-cat="${esc(cat.id)}">${icon('plus', 18)}<span>Ajouter un contact</span></button>`;
+
+  m.innerHTML =
+    `<div class="nk-rail" data-slot="rail">${chips}` +
+    `<button class="nk-chip nk-chip-new" data-act="nk-new-cat" aria-label="Nouvelle catégorie">${icon('plus', 16)}</button></div>` +
+    `<div class="nk-mhead"><span class="nk-mhead-t">${esc(cat.label)}</span><span class="nk-mhead-n">${cat.count}</span>` +
+    (cat._orphan ? '' : `<button class="nk-mhead-add" data-act="nk-cat-add" data-cat="${esc(cat.id)}">${icon('plus', 15)} Ajouter</button>`) +
+    `</div><div class="nk-mlist">${rows}</div>`;
+
+  const on = m.querySelector('.nk-chip-on');
+  if (on) try { on.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch (_) {}
 }
 
 // Déplie les contacts d'une catégorie (cascade haut → bas).
@@ -1832,6 +1879,8 @@ function _onClick(e) {
   if (!act) return;
   switch (act) {
     case 'close':          return closeNetwork();
+    case 'nk-mcat':        _mSel = actEl.dataset.cat; return _renderMobile();   // mobile : sélectionner une catégorie
+    case 'nk-mopen':       return _openFiche(_contactById(actEl.dataset.id));   // mobile : ouvrir une fiche
     case 'nk-search-toggle': return _toggleSearch();
     case 'nk-add':         return _openAddMenu();
     case 'nk-io':          return _openIOMenu();
