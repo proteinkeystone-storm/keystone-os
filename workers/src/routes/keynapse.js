@@ -74,7 +74,7 @@ async function _ensureSchema(env) {
     `CREATE INDEX IF NOT EXISTS idx_kn_reminders_bubble ON kn_reminders(tenant_id, bubble_id)`,
     `CREATE TABLE IF NOT EXISTS kn_media (
        id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default',
-       bubble_id TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('photo','drawing','audio','note')),
+       bubble_id TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('photo','drawing','audio','note','pdf')),
        r2_key TEXT, transcript TEXT, body TEXT, created_at TEXT DEFAULT (datetime('now')),
        FOREIGN KEY (tenant_id) REFERENCES tenants(id))`,
     `CREATE INDEX IF NOT EXISTS idx_kn_media_bubble ON kn_media(tenant_id, bubble_id)`,
@@ -91,6 +91,28 @@ async function _ensureSchema(env) {
   // Sprint 7 — colonne `label` (rappels lisibles), ajoutée a posteriori.
   // SQLite n'a pas ADD COLUMN IF NOT EXISTS → ALTER tolérant (déjà-présent = OK).
   try { await env.DB.prepare('ALTER TABLE kn_reminders ADD COLUMN label TEXT').run(); } catch (_) { /* déjà présent */ }
+  // Sprint 10 — autoriser kind='pdf'. Les bases existantes portent l'ancien
+  // CHECK (photo/drawing/audio/note) et SQLite ne sait pas ALTER une contrainte :
+  // reconstruction idempotente (atomique via batch), une seule fois. Si le CHECK
+  // contient déjà 'pdf', on ne touche à rien. Seules les métadonnées sont copiées
+  // (les blobs R2 restent en place, r2_key n'est qu'une chaîne).
+  try {
+    const row = await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='kn_media'").first();
+    if (row && row.sql && !/'pdf'/.test(row.sql)) {
+      await env.DB.batch([
+        env.DB.prepare(`CREATE TABLE kn_media_new (
+           id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default',
+           bubble_id TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('photo','drawing','audio','note','pdf')),
+           r2_key TEXT, transcript TEXT, body TEXT, created_at TEXT DEFAULT (datetime('now')),
+           FOREIGN KEY (tenant_id) REFERENCES tenants(id))`),
+        env.DB.prepare(`INSERT INTO kn_media_new (id, tenant_id, bubble_id, kind, r2_key, transcript, body, created_at)
+           SELECT id, tenant_id, bubble_id, kind, r2_key, transcript, body, created_at FROM kn_media`),
+        env.DB.prepare('DROP TABLE kn_media'),
+        env.DB.prepare('ALTER TABLE kn_media_new RENAME TO kn_media'),
+        env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_kn_media_bubble ON kn_media(tenant_id, bubble_id)'),
+      ]);
+    }
+  } catch (_) { /* échec → l'ancien schéma reste en place, PDF simplement indispo */ }
   _schemaReady = true;
 }
 
@@ -271,7 +293,7 @@ export async function handleBubbleDetail(request, env, id) {
   const todos = (await env.DB.prepare(`SELECT ${TODO_COLS} FROM kn_todos WHERE tenant_id = ? AND bubble_id = ? ORDER BY position, created_at`).bind(t, id).all()).results || [];
   const notes = (await env.DB.prepare(`SELECT ${NOTE_COLS} FROM kn_media WHERE tenant_id = ? AND bubble_id = ? AND kind = 'note' ORDER BY created_at DESC`).bind(t, id).all()).results || [];
   const links = (await env.DB.prepare('SELECT id, from_bubble, to_bubble FROM kn_links WHERE tenant_id = ? AND (from_bubble = ? OR to_bubble = ?)').bind(t, id, id).all()).results || [];
-  const media = (await env.DB.prepare(`SELECT ${MEDIA_COLS} FROM kn_media WHERE tenant_id = ? AND bubble_id = ? AND kind IN ('photo','drawing') ORDER BY created_at`).bind(t, id).all()).results || [];
+  const media = (await env.DB.prepare(`SELECT ${MEDIA_COLS} FROM kn_media WHERE tenant_id = ? AND bubble_id = ? AND kind IN ('photo','drawing','pdf') ORDER BY created_at`).bind(t, id).all()).results || [];
   // Sprint 6 — mémos vocaux (kind='audio') : id + transcript pour la fiche.
   const audios = (await env.DB.prepare(`SELECT ${AUDIO_COLS} FROM kn_media WHERE tenant_id = ? AND bubble_id = ? AND kind = 'audio' ORDER BY created_at DESC`).bind(t, id).all()).results || [];
   // Sprint 7 — rappels de la bulle (triés par échéance).
@@ -439,9 +461,9 @@ export async function handleLinkDelete(request, env, id) {
 // JAMAIS d'URL publique : servies uniquement au propriétaire (gate JWT) — le
 // front les récupère en blob authentifié. (kind 'note' reste géré au Sprint 2.)
 // ════════════════════════════════════════════════════════════════
-const MEDIA_KINDS = ['photo', 'drawing'];
-const MAX_MEDIA_BYTES = 8 * 1024 * 1024;     // 8 Mo (redimensionnement côté front)
-const MEDIA_COLS = 'id, bubble_id, kind, r2_key, created_at';
+const MEDIA_KINDS = ['photo', 'drawing', 'pdf'];
+const MAX_MEDIA_BYTES = 8 * 1024 * 1024;     // 8 Mo (images redimensionnées front ; PDF bruts)
+const MEDIA_COLS = 'id, bubble_id, kind, r2_key, body, created_at';   // body = nom de fichier (PDF)
 
 // POST /bubbles/:id/media?kind=photo|drawing  (corps = octets de l'image)
 export async function handleMediaUpload(request, env, bubbleId) {
@@ -450,17 +472,24 @@ export async function handleMediaUpload(request, env, bubbleId) {
   const t = gate.tenant;
   if (!env.HELP_MEDIA) return err('Stockage média indisponible', 500, origin);
   if (!(await _ownsBubble(env, t, bubbleId))) return err('Bulle introuvable', 404, origin);
-  const kind = String(new URL(request.url).searchParams.get('kind') || 'photo');
+  const url = new URL(request.url);
+  const kind = String(url.searchParams.get('kind') || 'photo');
   if (!MEDIA_KINDS.includes(kind)) return err('Type de média invalide', 400, origin);
   const ct = request.headers.get('content-type') || '';
-  if (!/^image\//i.test(ct)) return err('Image attendue', 400, origin);
+  if (kind === 'pdf') {
+    if (!/^application\/pdf/i.test(ct)) return err('PDF attendu', 400, origin);
+  } else if (!/^image\//i.test(ct)) {
+    return err('Image attendue', 400, origin);
+  }
   const buf = await request.arrayBuffer();
   if (!buf || buf.byteLength === 0) return err('Fichier vide', 400, origin);
-  if (buf.byteLength > MAX_MEDIA_BYTES) return err('Image trop lourde (max 8 Mo)', 413, origin);
+  if (buf.byteLength > MAX_MEDIA_BYTES) return err('Fichier trop lourd (max 8 Mo)', 413, origin);
+  // Nom de fichier (PDF uniquement) → stocké dans body pour l'affichage.
+  const name = kind === 'pdf' ? String(url.searchParams.get('name') || 'document.pdf').slice(0, 200) : null;
   const id = generateId();
   const key = `keynapse/${t}/${bubbleId}/${id}`;
   await env.HELP_MEDIA.put(key, buf, { httpMetadata: { contentType: ct } });
-  await env.DB.prepare('INSERT INTO kn_media (id, tenant_id, bubble_id, kind, r2_key) VALUES (?, ?, ?, ?, ?)').bind(id, t, bubbleId, kind, key).run();
+  await env.DB.prepare('INSERT INTO kn_media (id, tenant_id, bubble_id, kind, r2_key, body) VALUES (?, ?, ?, ?, ?, ?)').bind(id, t, bubbleId, kind, key, name).run();
   const media = await env.DB.prepare(`SELECT ${MEDIA_COLS} FROM kn_media WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
   return json({ ok: true, media }, 200, origin);
 }
@@ -472,7 +501,7 @@ export async function handleMediaServe(request, env, id) {
   const origin = getAllowedOrigin(env, request);
   const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
   const t = gate.tenant;
-  const row = await env.DB.prepare("SELECT r2_key FROM kn_media WHERE id = ? AND tenant_id = ? AND kind IN ('photo','drawing','audio')").bind(id, t).first();
+  const row = await env.DB.prepare("SELECT r2_key FROM kn_media WHERE id = ? AND tenant_id = ? AND kind IN ('photo','drawing','audio','pdf')").bind(id, t).first();
   if (!row || !row.r2_key || !env.HELP_MEDIA) return err('Média introuvable', 404, origin);
   const obj = await env.HELP_MEDIA.get(row.r2_key);
   if (!obj) return err('Média introuvable', 404, origin);

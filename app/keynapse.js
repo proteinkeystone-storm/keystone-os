@@ -168,8 +168,9 @@ function _onClick(e) {
     case 'kyn-link-del':    return _delLink(el.dataset.id);
     case 'kyn-link-go':     return _goLink(el.dataset.id);
     case 'kyn-photo-add':   return _pickPhoto();
+    case 'kyn-pdf-add':     return _pickPdf();
     case 'kyn-draw-add':    return _openDraw();
-    case 'kyn-media-open':  return _openLightbox(el.dataset.id);
+    case 'kyn-media-open':  return el.dataset.pdf ? _openPdf(el.dataset.id) : _openLightbox(el.dataset.id);
     case 'kyn-media-del':   return _delMedia(el.dataset.id);
     case 'kyn-lightbox-close': return _closeLightbox();
     case 'kyn-lightbox-prev':  return _lightboxStep(-1);
@@ -478,6 +479,8 @@ let _draw = null;               // modale de dessin
 
 const PENCIL_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
 const IMAGE_ICON  = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+const DOC_ICON    = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>';
+const PDF_MAX_BYTES = 8 * 1024 * 1024;   // 8 Mo (cohérent avec le worker)
 
 function _capturesSectionHTML() {
   const media = _panel.detail.media || [];
@@ -487,7 +490,13 @@ function _capturesSectionHTML() {
     <div class="kyn-sec">
       <p class="kyn-sec-h">Captures${n ? ` · ${n}` : ''}</p>
       <div class="kyn-caps">
-        ${media.map((m) => `
+        ${media.map((m) => m.kind === 'pdf' ? `
+          <div class="kyn-cap">
+            <button class="kyn-cap-btn kyn-cap-pdf" data-act="kyn-media-open" data-id="${m.id}" data-pdf="1" aria-label="Ouvrir le PDF">
+              ${DOC_ICON}<span class="kyn-cap-pdfname">${_esc(m.body || 'PDF')}</span>
+            </button>
+            <button class="kyn-cap-del" data-act="kyn-media-del" data-id="${m.id}" aria-label="Supprimer le PDF">×</button>
+          </div>` : `
           <div class="kyn-cap">
             <button class="kyn-cap-btn" data-act="kyn-media-open" data-id="${m.id}" aria-label="Voir la capture en grand"><img data-media-id="${m.id}" alt=""></button>
             <button class="kyn-cap-del" data-act="kyn-media-del" data-id="${m.id}" aria-label="Supprimer la capture">×</button>
@@ -495,6 +504,7 @@ function _capturesSectionHTML() {
         <button class="kyn-cap-add" data-act="kyn-photo-add" aria-label="Ajouter une photo">${IMAGE_ICON}<span>Photo</span></button>
         <button class="kyn-cap-add" data-act="kyn-draw-add" aria-label="Dessiner un croquis">${PENCIL_ICON}<span>Croquis</span></button>
         <button class="kyn-cap-add" data-act="kyn-voice-add" aria-label="Enregistrer une note vocale">${icon('mic', 15) || ''}<span>Vocal</span></button>
+        <button class="kyn-cap-add" data-act="kyn-pdf-add" aria-label="Ajouter un PDF">${DOC_ICON}<span>PDF</span></button>
       </div>
       ${_audiosListHTML()}
       ${_voiceUIHTML()}
@@ -605,17 +615,53 @@ function _resizeImage(file, maxDim, quality) {
     img.src = URL.createObjectURL(file);
   });
 }
-async function _uploadMedia(blob, kind) {
+async function _uploadMedia(blob, kind, name) {
   if (!_panel) return;
   try {
-    const res = await fetch(`${API_BASE}/api/keynapse/bubbles/${encodeURIComponent(_panel.id)}/media?kind=${kind}`, {
+    const q = name ? `&name=${encodeURIComponent(name)}` : '';
+    const res = await fetch(`${API_BASE}/api/keynapse/bubbles/${encodeURIComponent(_panel.id)}/media?kind=${kind}${q}`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${_jwt()}`, 'Content-Type': blob.type || 'image/jpeg' },
+      headers: { 'Authorization': `Bearer ${_jwt()}`, 'Content-Type': blob.type || (kind === 'pdf' ? 'application/pdf' : 'image/jpeg') },
       body: blob,
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.media) { _panel.detail.media = _panel.detail.media || []; _panel.detail.media.push(data.media); _refreshBody(); }
   } catch (_) {}
+}
+
+// PDF : input fichier → upload brut (pas de redimensionnement). Le nom est
+// conservé pour l'affichage ; ouverture = blob authentifié dans un onglet.
+function _pickPdf() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'application/pdf,.pdf';
+  inp.addEventListener('change', async () => {
+    const f = inp.files && inp.files[0]; if (!f) return;
+    if (f.type && f.type !== 'application/pdf' && !/\.pdf$/i.test(f.name)) { _knToast('Seuls les PDF sont acceptés.'); return; }
+    if (f.size > PDF_MAX_BYTES) { _knToast('PDF trop lourd (max 8 Mo).'); return; }
+    try { await _uploadMedia(f, 'pdf', f.name); } catch (_) {}
+  });
+  inp.click();
+}
+async function _openPdf(id) {
+  let url = _mediaUrls.get(id);
+  if (!url) {
+    try {
+      const res = await fetch(`${API_BASE}/api/keynapse/media/${encodeURIComponent(id)}`, { headers: { 'Authorization': `Bearer ${_jwt()}` } });
+      if (!res.ok) return;
+      url = URL.createObjectURL(await res.blob());
+      _mediaUrls.set(id, url);
+    } catch (_) { return; }
+  }
+  window.open(url, '_blank', 'noopener');
+}
+// Toast texte minimal (réutilise l'hôte des rappels).
+function _knToast(msg) {
+  const host = _toastHost(); if (!host) return;
+  const el = document.createElement('div');
+  el.className = 'kyn-toast';
+  el.innerHTML = `<div class="kyn-toast-main"><div class="kyn-toast-b">${_esc(msg)}</div></div><button class="kyn-toast-x" data-act="kyn-toast-close" aria-label="Fermer">×</button>`;
+  host.appendChild(el);
+  setTimeout(() => { if (el.isConnected) el.remove(); }, 6000);
 }
 async function _delMedia(id) {
   _panel.detail.media = (_panel.detail.media || []).filter((m) => m.id !== id);
@@ -1137,7 +1183,7 @@ function _unbindSWMessages() {
 
 // ── Lightbox plein écran (Niveau 3) ─────────────────────────────
 function _openLightbox(id) {
-  const media = _panel.detail.media || [];
+  const media = (_panel.detail.media || []).filter((m) => m.kind !== 'pdf');   // lightbox = images seules
   const i = media.findIndex((m) => m.id === id); if (i < 0) return;
   _lightbox = { ids: media.map((m) => m.id), i };
   _renderLightbox();
