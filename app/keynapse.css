@@ -35,7 +35,7 @@
 
 /* ── Toolbar (zoom / tout voir) ───────────────────────────────── */
 .kyn-toolbar {
-  position: absolute; left: 18px; bottom: 18px; display: flex; gap: 4px;
+  position: absolute; left: 16px; bottom: 20px; display: flex; flex-direction: column; gap: 4px;
   background: var(--navy2, #1c2234); border: 1px solid var(--bd, rgba(255,255,255,.1));
   border-radius: 12px; padding: 4px; box-shadow: var(--ws-shadow-2, 0 4px 12px rgba(0,0,0,.4));
 }
@@ -81,15 +81,11 @@
 .kyn-btn--accent:hover { background: var(--gold2, #818cf8); }
 
 /* ── Bouton flottant « + » ────────────────────────────────────── */
-.kyn-fab {
-  position: absolute; right: 22px; bottom: 22px; width: 56px; height: 56px;
-  border-radius: 50%; border: none; cursor: pointer;
-  background: var(--gold, #6366f1); color: #fff;
-  display: grid; place-items: center;
-  box-shadow: var(--ws-shadow-3, 0 12px 40px rgba(0,0,0,.5));
-}
-.kyn-fab:hover { background: var(--gold2, #818cf8); }
-.kyn-fab svg, .kyn-fab .ws-icon { stroke-width: 2; }
+/* « + » Nouvelle bulle : dans le header, carré arrondi comme .ws-iconbtn mais
+   violet (accent) pour rester l'action primaire qui attire l'œil. */
+.kyn-compose-btn { background: var(--gold, #6366f1); border-color: transparent; color: #fff; }
+.kyn-compose-btn:hover { background: var(--gold2, #818cf8); border-color: transparent; color: #fff; }
+.kyn-compose-btn svg, .kyn-compose-btn .ws-icon { stroke-width: 2; }
 
 /* ── Spinner ──────────────────────────────────────────────────── */
 .kyn-spin {
@@ -220,7 +216,7 @@
 }
 
 /* ═══ Zones (Sprint 3) ═════════════════════════════════════════ */
-.kyn-tool-sep { width: 1px; align-self: stretch; background: var(--bd, rgba(255,255,255,.12)); margin: 5px 2px; }
+.kyn-tool-sep { height: 1px; align-self: stretch; background: var(--bd, rgba(255,255,255,.12)); margin: 2px 5px; }
 
 /* Libellés de zone (moteur) + zoom sémantique */
 .kyn-zone-label { font-weight: 800; letter-spacing: .12em; pointer-events: none; opacity: .92; transition: opacity .25s ease; }

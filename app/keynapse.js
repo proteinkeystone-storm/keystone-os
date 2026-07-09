@@ -111,6 +111,7 @@ function _buildShell() {
       </div>
       ${burgerHTML()}
       <div class="ws-topbar-actions">
+        <button class="ws-iconbtn kyn-compose-btn" data-act="kyn-compose" aria-label="Nouvelle bulle" title="Nouvelle bulle">${icon('plus', 20) || '+'}</button>
         <button class="ws-iconbtn kyn-motion-btn" data-act="kyn-motion-toggle" aria-label="Activer ou figer l'animation des bulles"></button>
         ${helpButtonHTML(WORKSPACE_META.id)}
         ${ratingButtonHTML(WORKSPACE_META.id)}
@@ -256,11 +257,10 @@ function _render() {
       <div class="kyn-toolbar">
         <button class="kyn-tool" data-act="kyn-zones-open" title="Zones" aria-label="Zones">${LAYERS_ICON}</button>
         <span class="kyn-tool-sep"></span>
-        <button class="kyn-tool" data-act="kyn-zoom-out" title="Dézoomer" aria-label="Dézoomer">−</button>
         <button class="kyn-tool" data-act="kyn-fit" title="Tout voir" aria-label="Tout voir">${FIT_ICON}</button>
         <button class="kyn-tool" data-act="kyn-zoom-in" title="Zoomer" aria-label="Zoomer">+</button>
-      </div>
-      <button class="kyn-fab" data-act="kyn-compose" title="Nouvelle bulle" aria-label="Nouvelle bulle">${icon('plus', 24) || '+'}</button>`;
+        <button class="kyn-tool" data-act="kyn-zoom-out" title="Dézoomer" aria-label="Dézoomer">−</button>
+      </div>`;
     const stage = c.querySelector('[data-slot="stage"]');
     _engine = createConstellation({ container: stage, onBubbleMoved: _persistMove, onBubbleClick: _onBubbleClick, motion: _motionOn() });
   }
