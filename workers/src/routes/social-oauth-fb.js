@@ -89,10 +89,8 @@ export async function handleFacebookConnect(request, env) {
   u.searchParams.set('state', state);
   u.searchParams.set('scope', oauthScopes());
   u.searchParams.set('response_type', 'code');
-  // Force l'écran de consentement même si l'app est déjà autorisée → garantit que
-  // les nouveaux scopes (read_insights / instagram_manage_insights) sont bien
-  // (re)demandés à la reconnexion, sinon Meta fast-path et la permission manque.
-  u.searchParams.set('auth_type', 'rerequest');
+  // (auth_type=rerequest retiré : n'avait de sens que pour forcer les scopes
+  //  insights, désormais retirés ; il alourdissait le flux de sélection Page/IG.)
 
   return json({ authUrl: u.toString() }, 200, origin);
 }
