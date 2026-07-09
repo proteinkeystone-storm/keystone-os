@@ -95,33 +95,58 @@ export async function handleFacebookConnect(request, env) {
   return json({ authUrl: u.toString() }, 200, origin);
 }
 
-// Liste les Pages administrées + l'IG Business lié (1 requête). Le token IG de
-// publication EST le Page token (cf. provisionInstagram existant).
+// Liste TOUTES les Pages accessibles (rôle direct + détenues/gérées par un
+// portefeuille Business) et l'IG lié à chacune. Le token IG de publication EST
+// le Page token. ⚠ /me/accounts SEUL rate les Pages « nouvelle expérience » /
+// détenues par un Business → on complète via /me/businesses (owned + client).
 async function listPagesWithIG(userToken) {
   const base = getPlatform('facebook').api.base;   // https://graph.facebook.com/v20.0
-  // ⚠ NE PAS étendre l'IG imbriqué dans la LISTE : si une Page (nouveau type) ne
-  // sait pas exposer instagram_business_account, Meta RETIRE la Page entière de la
-  // réponse → on perd la Page qui porte justement l'IG. On liste d'abord les Pages
-  // à plat, puis on interroge l'Instagram Page PAR Page (requête séparée).
-  const res  = await fetch(`${base}/me/accounts?` + new URLSearchParams({
-    fields: 'id,name,access_token',
-    access_token: userToken,
-  }));
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`/me/accounts ${res.status} : ${data?.error?.message || ''}`);
+  const byId = new Map();   // id -> { id, name, pageToken }
+
+  // Source 1 — Pages où l'utilisateur a un rôle direct.
+  try {
+    const r = await fetch(`${base}/me/accounts?` + new URLSearchParams({ fields: 'id,name,access_token', access_token: userToken, limit: '100' }));
+    const d = await r.json().catch(() => ({}));
+    for (const p of (d.data || [])) byId.set(String(p.id), { id: p.id, name: p.name, pageToken: p.access_token || null });
+  } catch (_) {}
+
+  // Source 2 — Pages via les portefeuilles Business (nécessite business_management).
+  try {
+    const rb = await fetch(`${base}/me/businesses?` + new URLSearchParams({ fields: 'id,name', access_token: userToken, limit: '100' }));
+    const db = await rb.json().catch(() => ({}));
+    for (const biz of (db.data || [])) {
+      for (const edge of ['owned_pages', 'client_pages']) {
+        try {
+          const rp = await fetch(`${base}/${biz.id}/${edge}?` + new URLSearchParams({ fields: 'id,name,access_token', access_token: userToken, limit: '100' }));
+          const dp = await rp.json().catch(() => ({}));
+          for (const p of (dp.data || [])) if (!byId.has(String(p.id))) byId.set(String(p.id), { id: p.id, name: p.name, pageToken: p.access_token || null });
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
+
   const out = [];
-  for (const p of (data.data || [])) {
+  for (const p of byId.values()) {
+    // Une Page Business ne renvoie pas toujours son token dans la liste → le récupérer.
+    let pageToken = p.pageToken;
+    if (!pageToken) {
+      try {
+        const rt = await fetch(`${base}/${p.id}?` + new URLSearchParams({ fields: 'access_token', access_token: userToken }));
+        const dt = await rt.json().catch(() => ({}));
+        pageToken = dt.access_token || null;
+      } catch (_) {}
+    }
     let ig = null;
     try {
       const r2 = await fetch(`${base}/${p.id}?` + new URLSearchParams({
         fields: 'instagram_business_account{id,username},connected_instagram_account{id,username}',
-        access_token: p.access_token || userToken,
+        access_token: pageToken || userToken,
       }));
       const d2 = await r2.json().catch(() => ({}));
       const igObj = d2.instagram_business_account || d2.connected_instagram_account || null;
       if (igObj) ig = { id: igObj.id, username: igObj.username };
     } catch (_) { /* IG non détecté sur cette Page : non bloquant */ }
-    out.push({ id: p.id, name: p.name, pageToken: p.access_token, ig });
+    out.push({ id: p.id, name: p.name, pageToken, ig });
   }
   return out;
 }

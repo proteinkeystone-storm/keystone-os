@@ -98,7 +98,7 @@ export const PLATFORMS = {
       type: 'oauth2',
       authUrl:  'https://www.facebook.com/v20.0/dialog/oauth',
       tokenUrl: 'https://graph.facebook.com/v20.0/oauth/access_token',
-      scopes: { page: ['pages_manage_posts', 'pages_read_engagement', 'pages_show_list'] },   // read_insights RETIRÉ : Meta « Invalid Scopes » (app non configurée/App Review requise) → bloquait la reconnexion. À réactiver APRÈS déclaration dans le dashboard Meta.
+      scopes: { page: ['pages_manage_posts', 'pages_read_engagement', 'pages_show_list', 'business_management'] },   // business_management : capter les Pages détenues par un portefeuille Business (absentes de /me/accounts). read_insights RETIRÉ : Meta « Invalid Scopes » → à réactiver après déclaration dashboard Meta.
       tokenTtlDays: 60,           // long-lived ; un page token peut être non-expirant
       refreshable: true,
     },
