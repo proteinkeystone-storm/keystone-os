@@ -54,7 +54,7 @@ function _isMobile() { return (_stage ? _stage.getBoundingClientRect().width : w
 // ── Couche données (API worker + cache) ─────────────────────────
 const API_BASE  = 'https://keystone-os-api.keystone-os.workers.dev';
 const CACHE_KEY = 'nk_cache_v1';
-const PER_PAGE  = 8;   // contacts affichés avant « Voir les N autres »
+const PER_PAGE  = Infinity;   // on affiche TOUS les contacts d'un coup (plus de « Voir les N autres »)
 
 // Squelette hors-ligne / pré-déploiement : les 7 catégories par défaut
 // (miroir du seed serveur). Jamais persisté ; remplacé dès que l'API répond.
