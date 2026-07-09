@@ -1074,7 +1074,6 @@ function _renderQueue() {
       <span class="sm-q-badge ${_esc(p.status)}">${_esc(_Q_LABEL[p.status] || p.status)}</span>
       <span class="sm-q-excerpt">${exc(p)}</span>
       <span class="sm-q-nets">${_qNetGlyphs(p.targets)}</span>
-      ${canStats ? `<button type="button" class="sm-q-act${open ? ' is-on' : ''}" data-act="insights" data-id="${_esc(p.id)}" title="Voir les statistiques" aria-label="Voir les statistiques" aria-expanded="${open}">${icon('bar-chart', 14)}</button>` : ''}
       ${url ? `<a class="sm-q-act" href="${_esc(url)}" target="_blank" rel="noopener" title="Voir le post" aria-label="Voir le post">${icon('external-link', 14)}</a>` : ''}
       ${canResend ? `<button type="button" class="sm-q-act" data-act="retry-post" data-id="${_esc(p.id)}" title="Renvoyer les réseaux ratés" aria-label="Renvoyer">${icon('refresh', 14)}</button>` : ''}
       ${isRetrying ? '' : `<button type="button" class="sm-q-act danger" data-act="delete-post" data-id="${_esc(p.id)}" title="Supprimer de l'historique" aria-label="Supprimer de l'historique">${icon('trash-2', 14)}</button>`}
