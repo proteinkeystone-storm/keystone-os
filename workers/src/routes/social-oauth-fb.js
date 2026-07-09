@@ -100,17 +100,21 @@ export async function handleFacebookConnect(request, env) {
 async function listPagesWithIG(userToken) {
   const base = getPlatform('facebook').api.base;   // https://graph.facebook.com/v20.0
   const res  = await fetch(`${base}/me/accounts?` + new URLSearchParams({
-    fields: 'id,name,access_token,instagram_business_account{id,username}',
+    // instagram_business_account = liaison Page↔IG classique ; connected_instagram_account
+    // = liaison via le flux Meta plus récent (compte accordé mais NON exposé par le 1er
+    // champ → « aucun IG » à tort). On lit les deux et on prend celui qui est présent.
+    fields: 'id,name,access_token,instagram_business_account{id,username},connected_instagram_account{id,username}',
     access_token: userToken,
   }));
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`/me/accounts ${res.status} : ${data?.error?.message || ''}`);
-  return (data.data || []).map(p => ({
-    id: p.id, name: p.name, pageToken: p.access_token,
-    ig: p.instagram_business_account
-      ? { id: p.instagram_business_account.id, username: p.instagram_business_account.username }
-      : null,
-  }));
+  return (data.data || []).map(p => {
+    const igObj = p.instagram_business_account || p.connected_instagram_account || null;
+    return {
+      id: p.id, name: p.name, pageToken: p.access_token,
+      ig: igObj ? { id: igObj.id, username: igObj.username } : null,
+    };
+  });
 }
 
 // Upsert d'un compte social chiffré, scopé tenant (miroir du callback Threads).
