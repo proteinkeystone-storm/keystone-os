@@ -168,8 +168,10 @@ import { handleKeyBrandHealth, handleKeyBrandList, handleKeyBrandCreate,
          handleKeyBrandGet, handleKeyBrandUpdate, handleKeyBrandDuplicate,
          handleKeyBrandDelete, handleKeyBrandAssetUpload, handleKeyBrandFileServe,
          handleKeyBrandAssetDelete, handleKeyBrandPublish, handleKeyBrandAccess,
-         handleKeyBrandPublicGet, handleKeyBrandPublicFile } from './routes/key-brand.js';
+         handleKeyBrandPublicGet, handleKeyBrandPublicFile,
+         handleKeyBrandImportLogo } from './routes/key-brand.js';
 import { handleKeyBrandPage } from './routes/key-brand-page.js';
+import { handleKeyBrandImport } from './routes/key-brand-import.js';
 
 // ── Router ────────────────────────────────────────────────────
 export default {
@@ -197,10 +199,13 @@ export default {
       if (path === '/api/keybrand/health' && method === 'GET')  return handleKeyBrandHealth(request, env);
       if (path === '/api/keybrand/charts' && method === 'GET')  return handleKeyBrandList(request, env);
       if (path === '/api/keybrand/charts' && method === 'POST') return handleKeyBrandCreate(request, env);
+      if (path === '/api/keybrand/import' && (method === 'POST' || method === 'OPTIONS')) return handleKeyBrandImport(request, env);
       const kbDup = path.match(/^\/api\/keybrand\/charts\/([A-Za-z0-9-]+)\/duplicate$/);
       if (kbDup && method === 'POST') return handleKeyBrandDuplicate(request, env, kbDup[1]);
       const kbAssetUp = path.match(/^\/api\/keybrand\/charts\/([A-Za-z0-9-]+)\/assets$/);
       if (kbAssetUp && method === 'POST') return handleKeyBrandAssetUpload(request, env, kbAssetUp[1]);
+      const kbImpLogo = path.match(/^\/api\/keybrand\/charts\/([A-Za-z0-9-]+)\/import-logo$/);
+      if (kbImpLogo && method === 'POST') return handleKeyBrandImportLogo(request, env, kbImpLogo[1]);
       const kbPub = path.match(/^\/api\/keybrand\/charts\/([A-Za-z0-9-]+)\/publish$/);
       if (kbPub && method === 'POST') return handleKeyBrandPublish(request, env, kbPub[1]);
       const kbAcc = path.match(/^\/api\/keybrand\/charts\/([A-Za-z0-9-]+)\/access$/);

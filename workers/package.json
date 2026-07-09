@@ -7,7 +7,8 @@
     "deploy": "wrangler deploy",
     "db:init": "wrangler d1 execute keystone-os --file=./src/db/schema.sql",
     "db:local": "wrangler d1 execute keystone-os --local --file=./src/db/schema.sql",
-    "test": "node test/sceau.test.mjs"
+    "test": "node test/sceau.test.mjs",
+    "test:brand": "node test/brand-extract.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^3.101.0"

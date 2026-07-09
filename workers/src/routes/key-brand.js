@@ -23,6 +23,7 @@
 
 import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
+import { validateImportUrl } from './smart-agent.js';
 
 const KB_ENGINE_VERSION = 'KB-6';
 
@@ -369,6 +370,65 @@ export async function handleKeyBrandAssetUpload(request, env, chartId) {
     .bind(id, t, chartId, key, kind, ct, buf.byteLength, name)
     .run();
   return json({ ok: true, asset: { id, kind, mime: ct, ext, size: buf.byteLength, name } }, 201, origin);
+}
+
+// POST /charts/:id/import-logo  { url, label }  (KB-IMPORT-2)
+// Récupère un logo candidat repéré à l'import URL (favicon/og:image/<img>),
+// le contrôle (anti-SSRF, image only, SVG sanitizé), le stocke en asset logo.
+// Mêmes garde-fous que l'upload manuel — c'est juste la source qui change.
+const KB_LOGO_MIME_OK = ['image/svg+xml', 'image/png', 'image/jpeg', 'image/webp'];
+export async function handleKeyBrandImportLogo(request, env, chartId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  const t = gate.tenant;
+  if (!env.HELP_MEDIA) return err('Stockage fichiers indisponible', 500, origin);
+
+  const chart = await _findChart(env, t, chartId);
+  if (!chart) return err('Charte introuvable', 404, origin);
+
+  const body = await parseBody(request) || {};
+  const v = validateImportUrl(body.url);
+  if (!v.ok) return err(v.msg, 400, origin);
+
+  let res;
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 15000);
+    res = await fetch(v.url, {
+      signal: ctrl.signal, redirect: 'follow',
+      headers: { 'User-Agent': 'KeystoneKeyBrand/1.0 (+https://protein-keystone.com)', 'Accept': 'image/*,*/*' },
+    });
+    clearTimeout(to);
+  } catch (_) { return err('Image injoignable', 502, origin); }
+  if (!res.ok) return err(`L'image répond « ${res.status} »`, 422, origin);
+
+  const ct = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (!KB_LOGO_MIME_OK.includes(ct)) return err('Ce lien n\'est pas une image logo (SVG, PNG, JPG, WebP).', 415, origin);
+  const buf = await res.arrayBuffer();
+  if (!buf || buf.byteLength === 0) return err('Image vide', 400, origin);
+  if (buf.byteLength > KB_ASSET_MAX_BYTES) return err('Image trop lourde (max 4 Mo)', 413, origin);
+
+  const nb = await env.DB.prepare('SELECT COUNT(*) AS n FROM kb_assets WHERE chart_id = ? AND tenant_id = ?').bind(chartId, t).first();
+  if ((nb?.n || 0) >= KB_MAX_FILES_CHART) return err(`Limite atteinte : ${KB_MAX_FILES_CHART} fichiers par charte`, 409, origin);
+  const vol = await env.DB.prepare('SELECT COALESCE(SUM(size),0) AS s FROM kb_assets WHERE tenant_id = ?').bind(t).first();
+  if ((vol?.s || 0) + buf.byteLength > KB_MAX_TENANT_BYTES) return err('Espace de stockage du compte plein (200 Mo)', 409, origin);
+
+  const ext = KB_MIME_EXT[ct];
+  if (ext === 'svg') {
+    const text = new TextDecoder('utf-8', { fatal: false }).decode(buf);
+    if (!_svgIsSafe(text)) return err('SVG refusé : il contient du code actif ou des références externes', 400, origin);
+  }
+
+  const id = generateId();
+  const key = `kb/${t}/${chartId}/${id}.${ext}`;
+  const name = _cleanFilename(body.label || `logo.${ext}`, ext);
+  await env.HELP_MEDIA.put(key, buf, { httpMetadata: { contentType: ct } });
+  await env.DB
+    .prepare('INSERT INTO kb_assets (id, tenant_id, chart_id, r2_key, kind, mime, size, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, t, chartId, key, 'logo', ct, buf.byteLength, name)
+    .run();
+  return json({ ok: true, asset: { id, kind: 'logo', mime: ct, ext, size: buf.byteLength, name } }, 201, origin);
 }
 
 // GET /file/:id[?dl=1] — sert le fichier au propriétaire (blob authentifié).
