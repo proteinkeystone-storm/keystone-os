@@ -665,7 +665,9 @@ function render(){
   else if(scBg==='gradient'&&SC.c1&&SC.c2)heroStyle=' style="background:linear-gradient(135deg,'+esc(SC.c1)+','+esc(SC.c2)+')"';
   // Édition : scène sans fond défini → la couverture prend la TEINTE.
   if(scBg==='white')heroStyle=' style="background:'+TINT+'"';
-  const rawName=String(meta.name||DATA.name);
+  // Titre & texte propres à la scène (priment sur nom/baseline s'ils existent).
+  const rawName=String((SC.title&&String(SC.title).trim())||meta.name||DATA.name);
+  const heroText=String((SC.text&&String(SC.text).trim())||meta.baseline||'');
   let nameHtml=esc(rawName);
   let nmSt='';
   if(titleFont)nmSt+='font-family:\\''+esc(titleFont.family)+'\\',sans-serif;';
@@ -681,7 +683,7 @@ function render(){
      (coverLogo?'<img src="'+fileUrl(coverLogo.assetId)+'" alt="'+esc(DATA.name)+'">':'')+
      (scLay==='split'&&coverLogo?'<span class="hero-vr"'+(inkBase?' style="background:'+inkBase+'"':'')+'></span>':'')+
      '<div class="hero-txt"><div class="hero-name"'+(nmSt?' style="'+nmSt+'"':'')+'>'+nameHtml+'</div>'+
-     (meta.baseline?'<div class="hero-base"'+(inkBase?' style="color:'+inkBase+'"':'')+'>'+esc(meta.baseline)+'</div>':'')+
+     (heroText?'<div class="hero-base"'+(inkBase?' style="color:'+inkBase+'"':'')+'>'+esc(heroText)+'</div>':'')+
      '</div></div>')+
      '<div class="cover-foot"'+(inkName?' style="color:'+inkName+'"':'')+'>Charte graphique — <b>version '+DATA.version+'</b></div>'+
      '</div>';

@@ -499,6 +499,14 @@
 .kb-stage-logo{max-width:min(320px,60%);max-height:130px;object-fit:contain}
 .kb-stage-name{font-weight:900;font-size:clamp(24px,4vw,34px);letter-spacing:-0.025em;color:#15171c;line-height:1.1}
 .kb-stage-baseline{color:#5b6170;font-size:15px}
+.kb-stage-baseline:empty{display:none}
+.kb-scenegrp-txt{align-items:flex-start}
+.kb-scenetxtfields{flex:1;display:flex;flex-direction:column;gap:8px;min-width:200px}
+.kb-scenetitle,.kb-scenetext{width:100%;padding:8px 11px;border:1px solid var(--kb-line);background:none;color:var(--kb-ink);border-radius:8px;outline:none;font-size:14px;font-family:inherit}
+.kb-scenetitle{font-weight:700}
+.kb-scenetext{resize:vertical;min-height:38px;line-height:1.4}
+.kb-scenetitle:focus,.kb-scenetext:focus{border-color:var(--kb-accent)}
+.kb-scenetitle::placeholder,.kb-scenetext::placeholder{color:var(--kb-muted);opacity:.6}
 
 /* Mises en scène (KB-8) : centré (défaut) · bas gauche · côte à côte. */
 .kb-lay-corner{margin-top:auto;margin-right:auto;align-items:flex-start;text-align:left}

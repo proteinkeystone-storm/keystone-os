@@ -651,6 +651,20 @@ function _onInput(e) {
     if (_chart.draft && _chart.draft.meta) _chart.draft.meta.baseline = el.value;
     _scheduleSave();
   }
+  // Titre & texte propres à la scène (Branding) — màj surgicale de la page de
+  // garde pour ne pas perdre le focus pendant la frappe.
+  if (el.dataset.field === 'scene-title' && _chart) {
+    const s = _sceneOf(); s.title = el.value.slice(0, 80);
+    const nameEl = _root.querySelector('[data-slot="stage-name"]');
+    if (nameEl) nameEl.textContent = s.title.trim() || (_chart.draft.meta?.name || _chart.name || '');
+    _scheduleSave();
+  }
+  if (el.dataset.field === 'scene-text' && _chart) {
+    const s = _sceneOf(); s.text = el.value.slice(0, 220);
+    const baseEl = _root.querySelector('[data-slot="stage-base"]');
+    if (baseEl) baseEl.textContent = s.text.trim() || (_chart.draft.meta?.baseline || '');
+    _scheduleSave();
+  }
 
   // ── Onglet Logo (KB-1) ──
   const v = _variantOf(el.closest('[data-vid]')?.dataset.vid);
@@ -2821,6 +2835,10 @@ function _renderBrandTab() {
   const bgCss = _sceneBgCss(s);
   const hasMedia = (s.bgType === 'image' || s.bgType === 'video') && s.assetId;
   const brandName = meta.name || _chart.name;
+  // Titre & texte PROPRES à la scène (priment sur nom/baseline s'ils sont
+  // remplis ; sinon repli sur la charte → placeholder dans les champs).
+  const sceneTitle = (s.title || '').trim() || brandName;
+  const sceneText = (s.text || '').trim() || meta.baseline || '';
   const nameHtml = _esc(brandName);
   // Encre pilotée si le fond existe VRAIMENT (couleur/dégradé, ou média
   // déposé) — sinon Photo/Vidéo sans fichier = encre claire sur blanc.
@@ -2838,8 +2856,8 @@ function _renderBrandTab() {
         ${sceneLogo ? `<img class="kb-stage-logo" data-asset="${_esc(sceneLogo.assetId)}" alt="" draggable="false">` : ''}
         ${s.layout === 'split' && sceneLogo ? `<span class="kb-stage-vr" ${inked ? `style="background:${ink.base}"` : ''}></span>` : ''}
         <div class="kb-stage-txt">
-          <div class="kb-stage-name" style="${titleFont ? `font-family:${titleFont};` : ''}${inked ? `color:${ink.name}` : ''}">${nameHtml}</div>
-          ${meta.baseline ? `<div class="kb-stage-baseline" ${blStyle ? `style="${blStyle}"` : ''}>${_esc(meta.baseline)}</div>` : ''}
+          <div class="kb-stage-name" data-slot="stage-name" style="${titleFont ? `font-family:${titleFont};` : ''}${inked ? `color:${ink.name}` : ''}">${_esc(sceneTitle)}</div>
+          <div class="kb-stage-baseline" data-slot="stage-base" ${blStyle ? `style="${blStyle}"` : ''}>${_esc(sceneText)}</div>
         </div>
       </div>`;
 
@@ -2885,10 +2903,20 @@ function _renderBrandTab() {
         <button class="kb-chip ${s.logoId === 'none' ? 'on' : ''}" data-act="scene-logo" data-v="none">Sans</button>
       </div>` : '';
 
+  // Titre & texte propres à la scène (repli sur nom/baseline via placeholder).
+  const textRow = `
+      <div class="kb-scenegrp kb-scenegrp-txt"><span class="kb-scenelbl">Titre &amp; texte</span>
+        <div class="kb-scenetxtfields">
+          <input class="kb-scenetitle" data-field="scene-title" value="${_esc(s.title || '')}" placeholder="${_esc(brandName)}" maxlength="80" spellcheck="false">
+          <textarea class="kb-scenetext" data-field="scene-text" placeholder="${_esc(meta.baseline || 'Baseline / description (optionnel)')}" maxlength="220" rows="2">${_esc(s.text || '')}</textarea>
+        </div>
+      </div>`;
+
   // Avec un média : plein cadre → les réglages de composition n'ont plus d'objet.
   const sceneBar = `
     <div class="kb-scenebar">
       <div class="kb-scenegrp"><span class="kb-scenelbl">Fond</span>${bgChips}</div>
+      ${hasMedia ? '' : textRow}
       ${hasMedia ? '' : logoRow}
       ${hasMedia ? '' : `<div class="kb-scenegrp"><span class="kb-scenelbl">Mise en scène</span>${chips(SCENE_LAYOUTS, s.layout, 'scene-lay')}</div>
       <div class="kb-scenegrp"><span class="kb-scenelbl">Encre</span>${chips(SCENE_INKS, s.ink, 'scene-ink')}</div>`}
