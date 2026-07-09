@@ -296,12 +296,11 @@ select::-ms-expand{display:none}
 .supcap .mk-browser,.supcap .mk-phone{margin-left:auto;margin-right:auto}
 .supcap .mk-bizrow{justify-content:center}
 .supzip-row{margin:28px 0 0;text-align:center}
-.packband{max-width:940px;margin:22px auto 0;padding:0 20px}
-.packband-in{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;padding:18px 22px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
-.packband-t{font-size:15px;font-weight:800;margin:0;letter-spacing:-0.01em}
-.packband-s{font-size:13px;color:var(--muted);margin:4px 0 0;max-width:520px;line-height:1.45}
-.packband .btn{white-space:nowrap}
-@media print{.packband{display:none}}
+.packlist{list-style:none;padding:0;margin:18px 0 0;display:grid;gap:10px;max-width:620px}
+.packlist li{display:flex;flex-direction:column;gap:2px;padding:12px 16px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.packlist b{font-size:14px;font-weight:800;letter-spacing:-0.01em}
+.packlist span{font-size:12.5px;color:var(--muted)}
+.packdl-row{margin:22px 0 0}
 .supgal-title{font-size:14px;font-weight:800;margin:26px 0 0;letter-spacing:-0.01em}
 .mk-browser{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;max-width:760px}
 .mk-bar{display:flex;align-items:center;gap:12px;padding:9px 14px;background:#eceef2;border-bottom:1px solid #dfe2e8}
@@ -621,6 +620,8 @@ function render(){
   const showIdent=!!(IDN.mission||IDV.length||IDN.story);
   const showVoice=!!(VO.reg||VOP.length||VO.use||VO.avoid||VO.example);
   const showMarque=showIdent||showVoice;
+  // Pack de marque (KB-EXPORT-1) : dès qu'il y a de la matière à exporter.
+  const showPack=palette.length>0||fonts.length>0||variants.length>0;
 
   const navLinks=[];
   if(showMarque)navLinks.push(['#marque','La marque']);
@@ -629,6 +630,7 @@ function render(){
   if(fonts.length)navLinks.push(['#typos','Typographies']);
   if((rasterV.length&&inter.length)||customR.length)navLinks.push(['#regles','Règles']);
   if(showBrand)navLinks.push(['#univers','Univers']);
+  if(showPack)navLinks.push(['#pack','Pack de marque']);
   if(showSupports)navLinks.push(['#supports','Supports']);
   // Intercalaire de chapitre — numérotation dynamique (géométrie variable).
   let chapN=0;
@@ -682,13 +684,6 @@ function render(){
      '</div></div>')+
      '<div class="cover-foot"'+(inkName?' style="color:'+inkName+'"':'')+'>Charte graphique — <b>version '+DATA.version+'</b></div>'+
      '</div>';
-
-  // Pack de marque — export machine-readable (tokens DTCG + logo + guide),
-  // téléchargeable directement depuis la charte numérique (KB-EXPORT-1).
-  h+='<div class="packband no-print"><div class="packband-in"><div>'+
-     '<p class="packband-t">Pack de marque</p>'+
-     '<p class="packband-s">Couleurs, typographies, logo et règles réunis en un dossier prêt à importer dans une IA de design (Claude Design) ou un outil de tokens.</p>'+
-     '</div><button class="btn primary" id="packdl">'+DL_ICON+'Télécharger le pack</button></div></div>';
 
   // Sommaire sur aplat (numéros = mêmes chapitres que la nav).
   if(navLinks.length>1){
@@ -900,6 +895,21 @@ function render(){
       h+='</div></div>';
     } else if(phWords.length){h+=wordChips}
     if(phIds.length){h+='<div class="phgrid">';for(const id of phIds)h+='<img src="'+fileUrl(id)+'" alt="" loading="lazy">';h+='</div>'}
+    h+='</section>';
+  }
+
+  // Pack de marque (KB-EXPORT-1) — chapitre : la charte condensée en un
+  // dossier machine-readable, téléchargeable ici même.
+  if(showPack){
+    h+=chap('pack','Pack de marque');
+    h+='<section><h2>Le pack de marque</h2><p class="sub">Toute cette charte réunie en un dossier prêt à donner à une IA de design (Claude Design) ou à un outil de tokens — pour produire des visuels, pages et contenus fidèles à la marque.</p>';
+    h+='<ul class="packlist">';
+    h+='<li><b>design-tokens.json</b><span>Couleurs & typographies au format standard (DTCG)</span></li>';
+    h+='<li><b>brand.md</b><span>La marque en clair : couleurs, polices, règles, ton de voix</span></li>';
+    h+='<li><b>design-system-spec.json</b><span>Le manifeste lu par les outils d’import</span></li>';
+    if(variants.length)h+='<li><b>logo/</b><span>Vos logos en fichier original</span></li>';
+    h+='</ul>';
+    h+='<p class="packdl-row no-print"><button class="btn primary" id="packdl">'+DL_ICON+'Télécharger le pack (.zip)</button></p>';
     h+='</section>';
   }
 
