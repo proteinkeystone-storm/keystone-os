@@ -229,6 +229,16 @@ function _buildShell() {
       </div>
       ${burgerHTML()}
       <div class="ws-topbar-actions">
+        <div class="nk-search nk-search-hd">
+          <button class="nk-search-toggle" data-act="nk-search-toggle" aria-label="Rechercher" aria-expanded="false" title="Rechercher">${icon('search', 20)}</button>
+          <input type="text" class="nk-search-input" placeholder="Rechercher une personne, une entreprise…" aria-label="Rechercher dans votre réseau" tabindex="-1">
+        </div>
+        <button class="nk-add-btn" data-act="nk-add" aria-label="Ajouter au réseau" title="Ajouter au réseau">
+          ${icon('plus', 18)}<span>Ajouter</span>
+        </button>
+        <button class="nk-io-btn" data-act="nk-io" aria-label="Importer / Exporter" title="Importer / Exporter">
+          ${icon('download', 18)}
+        </button>
         <button class="ws-iconbtn nk-anim-btn" data-act="nk-anim-open" aria-label="Réglages de l'animation" title="Réglages de l'animation">${icon('sliders', 20)}</button>
         ${helpButtonHTML(WORKSPACE_META.id)}
         ${ratingButtonHTML(WORKSPACE_META.id)}
@@ -237,19 +247,6 @@ function _buildShell() {
     <div class="ws-body">
       <main class="ws-main nk-main" data-slot="main">
         <div class="nk-canvas" data-slot="canvas">
-          <div class="nk-chrome">
-            <div class="nk-search">
-              ${icon('search', 18)}
-              <input type="text" class="nk-search-input" placeholder="Rechercher une personne, une entreprise…" aria-label="Rechercher dans votre réseau">
-            </div>
-            <button class="nk-add-btn" data-act="nk-add" aria-label="Ajouter au réseau">
-              ${icon('plus', 18)}<span>Ajouter</span>
-            </button>
-            <button class="nk-io-btn" data-act="nk-io" aria-label="Importer / Exporter" title="Importer / Exporter">
-              ${icon('download', 18)}
-            </button>
-          </div>
-
           <div class="nk-viewport" data-slot="viewport">
             <div class="nk-scene" data-slot="scene">
               <svg class="nk-wires" data-slot="wires" xmlns="${SVGNS}"></svg>
@@ -263,10 +260,10 @@ function _buildShell() {
           </div>
 
           <div class="nk-toolbar">
-            <button class="nk-tool" data-act="nk-zoom-out" title="Dézoomer" aria-label="Dézoomer">${icon('minus', 18)}</button>
-            <button class="nk-tool nk-tool-pct" data-act="nk-zoom-reset" title="Réinitialiser le zoom">100 %</button>
-            <button class="nk-tool" data-act="nk-zoom-in" title="Zoomer" aria-label="Zoomer">${icon('plus', 18)}</button>
             <button class="nk-tool" data-act="nk-fit" title="Recentrer" aria-label="Recentrer">${icon('maximize', 17)}</button>
+            <button class="nk-tool" data-act="nk-zoom-in" title="Zoomer" aria-label="Zoomer">${icon('plus', 18)}</button>
+            <button class="nk-tool nk-tool-pct" data-act="nk-zoom-reset" title="Réinitialiser le zoom">100 %</button>
+            <button class="nk-tool" data-act="nk-zoom-out" title="Dézoomer" aria-label="Dézoomer">${icon('minus', 18)}</button>
           </div>
         </div>
       </main>
@@ -281,6 +278,7 @@ function _buildShell() {
 
   if (window.innerWidth < MOBILE_BP) { const si = _root.querySelector('.nk-search-input'); if (si) si.placeholder = 'Rechercher'; }
   _root.addEventListener('click', _onClick);
+  _root.addEventListener('keydown', (e) => { if (e.key === 'Escape' && e.target.classList.contains('nk-search-input')) _collapseSearch(); });
   _root.addEventListener('submit', _onSubmit);
   _root.addEventListener('input', _onInput);
   _root.addEventListener('pointerdown', _onFicheActDown);
@@ -667,7 +665,7 @@ function _onWheel(e) {
   _setZoom(_zoom * (e.deltaY < 0 ? 1.08 : 0.92));
 }
 function _onPanStart(e) {
-  if (e.target.closest('.nk-node, .nk-toolbar, .nk-chrome')) return;   // pan = fond seulement
+  if (e.target.closest('.nk-node, .nk-toolbar')) return;   // pan = fond seulement
   _drag = { x: e.clientX, y: e.clientY, px: _panX, py: _panY };
   _scene.style.cursor = 'grabbing';
   _scene.classList.add('nk-nofx');   // drag = instantané (pas de transition)
@@ -956,6 +954,31 @@ function _renderSearch(q) {
 function _clearSearch() {
   const inp = _root && _root.querySelector('.nk-search-input');
   if (inp) inp.value = '';
+  _renderSearch('');
+}
+// Recherche header : la loupe seule → champ complet au clic, et retour.
+function _toggleSearch() {
+  const box = _root && _root.querySelector('.nk-search-hd');
+  if (!box) return;
+  box.classList.contains('nk-open') ? _collapseSearch() : _openSearch();
+}
+function _openSearch() {
+  const box = _root && _root.querySelector('.nk-search-hd');
+  if (!box) return;
+  box.classList.add('nk-open');
+  const tog = box.querySelector('.nk-search-toggle');
+  const inp = box.querySelector('.nk-search-input');
+  if (tog) tog.setAttribute('aria-expanded', 'true');
+  if (inp) { inp.tabIndex = 0; inp.focus(); }
+}
+function _collapseSearch() {
+  const box = _root && _root.querySelector('.nk-search-hd');
+  if (!box || !box.classList.contains('nk-open')) return;
+  box.classList.remove('nk-open');
+  const tog = box.querySelector('.nk-search-toggle');
+  const inp = box.querySelector('.nk-search-input');
+  if (tog) tog.setAttribute('aria-expanded', 'false');
+  if (inp) { inp.value = ''; inp.tabIndex = -1; inp.blur(); }
   _renderSearch('');
 }
 
@@ -1731,6 +1754,11 @@ async function _importCSV(text) {
 
 // ── Événements ──────────────────────────────────────────────────
 function _onClick(e) {
+  // Recherche header : un clic hors du champ ouvert le referme (loupe seule).
+  if (_root) {
+    const openSearch = _root.querySelector('.nk-search-hd.nk-open');
+    if (openSearch && !e.target.closest('.nk-search-hd')) _collapseSearch();
+  }
   // Appui long qui vient de copier → avaler le clic (pas de navigation du lien).
   if (_lpFired) {
     _lpFired = false;
@@ -1774,7 +1802,7 @@ function _onClick(e) {
   if (person && !actEl) return _openFiche(_contactById(person.dataset.id));
 
   const searchItem = e.target.closest('.nk-search-item');
-  if (searchItem) { const c = _contactById(searchItem.dataset.id); _clearSearch(); return _openFiche(c); }
+  if (searchItem) { const c = _contactById(searchItem.dataset.id); _collapseSearch(); return _openFiche(c); }
 
   const catEl = e.target.closest('.nk-cat');
   if (catEl && !actEl) return toggle(catEl.dataset.cat);   // desktop ET mobile : inline + auto-pan mobile
@@ -1782,6 +1810,7 @@ function _onClick(e) {
   if (!act) return;
   switch (act) {
     case 'close':          return closeNetwork();
+    case 'nk-search-toggle': return _toggleSearch();
     case 'nk-add':         return _openAddMenu();
     case 'nk-io':          return _openIOMenu();
     case 'nk-export-csv':  return _exportCSV();

@@ -17,46 +17,48 @@
   --nk-flowop: .3;
 }
 
-/* ── Chrome networK : recherche + Ajouter (flotte sur le canvas) ── */
-.nk-chrome {
-  position: absolute; top: 16px; left: 0; right: 0; z-index: 6;
-  display: flex; align-items: center; justify-content: center; gap: 12px;
-  padding: 0 20px; pointer-events: none;
+/* ── Contrôles header networK : recherche escamotable + Ajouter + I/O ── */
+/* La recherche vit désormais dans la topbar : loupe seule, qui se déploie
+   en champ complet au clic (le champ s'ouvre en surimpression vers la gauche
+   pour ne pas pousser les boutons voisins). */
+.nk-search-hd { position: relative; display: flex; align-items: center; }
+.nk-search-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: 10px; position: relative; z-index: 2;
+  background: rgba(255,255,255,.03); border: 1px solid var(--ws-border, rgba(255,255,255,.1));
+  color: var(--ws-text-soft, rgba(248,250,252,.7)); cursor: pointer;
+  transition: background .2s ease, border-color .2s ease, color .2s ease;
 }
-.nk-chrome > * { pointer-events: auto; }
-.nk-search {
-  display: flex; align-items: center; gap: 10px;
-  width: min(460px, 60%); height: 46px; padding: 0 16px;
-  border-radius: 999px;
-  background: var(--navy2, #1c2234); border: 1px solid var(--bd, rgba(255,255,255,.1));
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  color: var(--text-dim, rgba(248,250,252,.55));
-}
-.nk-search svg { flex: none; opacity: .7; }
-.nk-search-input {
-  flex: 1; min-width: 0; height: 100%;
-  background: none; border: none; outline: none;
+.nk-search-toggle:hover { background: rgba(255,255,255,.07); border-color: var(--ws-border-strong, rgba(255,255,255,.2)); color: var(--ws-text, #f8fafc); }
+.nk-search-hd .nk-search-input {
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  height: 38px; width: 0; min-width: 0; opacity: 0; pointer-events: none;
+  padding: 0 44px 0 0; border-radius: 10px; outline: none;
+  background: var(--navy2, #1c2234); border: 1px solid var(--ws-border, rgba(255,255,255,.1));
   color: var(--text, #f8fafc); font-family: inherit; font-size: 15px; letter-spacing: -0.02em;
+  transition: width .28s cubic-bezier(.22,1,.36,1), opacity .18s ease, padding .28s ease;
 }
+.nk-search-hd.nk-open .nk-search-input { width: min(320px, 44vw); opacity: 1; pointer-events: auto; padding-left: 14px; }
+.nk-search-hd.nk-open .nk-search-toggle { background: transparent; border-color: transparent; color: var(--ws-text, #f8fafc); }
 .nk-search-input::placeholder { color: var(--text-dim, rgba(248,250,252,.45)); }
+.nk-search-hd .nk-search-results { left: auto; right: 0; width: min(320px, 44vw); }
+
 .nk-add-btn {
-  display: flex; align-items: center; gap: 8px;
-  height: 46px; padding: 0 18px 0 14px;
-  border-radius: 999px; border: 1px solid var(--bd, rgba(255,255,255,.1));
-  background: var(--navy2, #1c2234); color: var(--text, #f8fafc);
-  font-family: inherit; font-size: 15px; font-weight: 700; letter-spacing: -0.02em;
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  transition: background .18s ease, border-color .18s ease;
+  display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0;
+  height: 38px; padding: 0 14px; border-radius: 10px;
+  border: 1px solid var(--ws-border, rgba(255,255,255,.1)); background: rgba(255,255,255,.03);
+  color: var(--ws-text, #f8fafc); font-family: inherit; font-size: 14px; font-weight: 700; letter-spacing: -0.02em;
+  cursor: pointer; transition: background .2s ease, border-color .2s ease;
 }
-.nk-add-btn:hover { background: rgba(139,92,246,.14); border-color: rgba(139,92,246,.5); }
+.nk-add-btn:hover { background: rgba(139,92,246,.16); border-color: rgba(139,92,246,.5); }
 .nk-io-btn {
-  flex: none; width: 46px; height: 46px; border-radius: 999px; display: grid; place-items: center;
-  border: 1px solid var(--bd, rgba(255,255,255,.1)); background: var(--navy2, #1c2234);
-  color: var(--text-dim, rgba(248,250,252,.7)); cursor: pointer;
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  transition: background .18s ease, border-color .18s ease, color .18s ease;
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 38px; height: 38px; border-radius: 10px;
+  border: 1px solid var(--ws-border, rgba(255,255,255,.1)); background: rgba(255,255,255,.03);
+  color: var(--ws-text-soft, rgba(248,250,252,.7)); cursor: pointer;
+  transition: background .2s ease, border-color .2s ease, color .2s ease;
 }
-.nk-io-btn:hover { background: rgba(139,92,246,.14); border-color: rgba(139,92,246,.5); color: var(--text, #f8fafc); }
+.nk-io-btn:hover { background: rgba(139,92,246,.16); border-color: rgba(139,92,246,.5); color: var(--ws-text, #f8fafc); }
 
 /* ── Viewport (pan/zoom) + scène ─────────────────────────────────── */
 .nk-viewport { position: absolute; inset: 0; overflow: hidden; touch-action: none; }
@@ -166,10 +168,10 @@
 }
 .nk-more svg { color: var(--nk-violet); }
 
-/* ── Toolbar (zoom / recentrer) ──────────────────────────────────── */
+/* ── Toolbar (zoom / recentrer) — colonne verticale à gauche ─────── */
 .nk-toolbar {
-  position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 6;
-  display: flex; align-items: center; gap: 2px; padding: 5px;
+  position: absolute; left: 16px; top: 50%; bottom: auto; transform: translateY(-50%); z-index: 6;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px;
   background: var(--navy2, #1c2234); border: 1px solid var(--bd, rgba(255,255,255,.1));
   border-radius: 14px; box-shadow: var(--ws-shadow-2, 0 4px 12px rgba(0,0,0,.4));
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -614,11 +616,6 @@ button.nk-coord { width: 100%; font: inherit; text-align: left; cursor: pointer;
 
 /* ══════════════ Responsive (mobile < 820px) ══════════════ */
 @media (max-width: 820px) {
-  .nk-chrome { gap: 8px; padding: 0 12px; top: max(12px, env(safe-area-inset-top)); }
-  .nk-search { flex: 1; width: auto; height: 44px; }
-  .nk-add-btn span { display: none; }
-  .nk-add-btn { width: 44px; height: 44px; padding: 0; justify-content: center; flex: none; }
-  .nk-io-btn { width: 44px; height: 44px; }
   .nk-map iframe { height: 170px; }
   /* Pills catégories : compactes, label COMPLET (gestion ⋯ déplacée dans l'écran liste) */
   .nk-cat { max-width: calc(100vw - 118px); height: 50px; gap: 9px; padding: 0 6px 0 12px; }
@@ -632,7 +629,7 @@ button.nk-coord { width: 100%; font: inherit; text-align: left; cursor: pointer;
   .nk-you2-avatar svg { width: 24px; height: 24px; }
   .nk-you2-label { font-size: 13px; }
   .nk-person { width: 178px; }   /* + étroit → catégorie active + contacts tiennent ensemble */
-  .nk-toolbar { bottom: max(16px, env(safe-area-inset-bottom)); }
+  .nk-toolbar { left: max(10px, env(safe-area-inset-left)); top: 50%; bottom: auto; transform: translateY(-50%); }
   /* Fiche = plein écran, header natif (retour + …) */
   .nk-fiche { width: 100%; border-left: none; }
   .nk-fiche-nav { display: flex; }
@@ -640,4 +637,23 @@ button.nk-coord { width: 100%; font: inherit; text-align: left; cursor: pointer;
   .nk-fiche-hd { padding-top: 4px; }
   .nk-fiche-act-edit { display: none; }   /* l'édition passe par le « … » du header */
   .nk-toast { bottom: 96px; }
+}
+
+/* ══ Sous 1024px, la topbar bascule en menu burger (dropdown vertical).
+   Les contrôles networK (recherche, Ajouter, I/O) rejoignent ce menu :
+   ils s'étirent et la recherche redevient un champ pleine largeur. ══ */
+@media (max-width: 1024px) {
+  .ws-topbar-actions.is-open .nk-search-hd,
+  .ws-topbar-actions.is-open .nk-add-btn,
+  .ws-topbar-actions.is-open .nk-io-btn { width: 100%; }
+  .ws-topbar-actions.is-open .nk-add-btn,
+  .ws-topbar-actions.is-open .nk-io-btn { justify-content: flex-start; padding: 0 12px; gap: 10px; }
+  .ws-topbar-actions.is-open .nk-search-toggle { display: none; }
+  .ws-topbar-actions.is-open .nk-search-hd .nk-search-input {
+    position: static; transform: none; width: 100%; opacity: 1; pointer-events: auto;
+    height: 38px; padding: 0 12px;
+  }
+  .ws-topbar-actions.is-open .nk-search-hd .nk-search-results {
+    position: static; width: 100%; margin-top: 6px; box-shadow: none;
+  }
 }
