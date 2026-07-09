@@ -271,7 +271,7 @@ function _addBlock(atLimit, limitTxt) {
   if (atLimit) return `<div class="snt-add snt-add-locked">${icon('lock', 18)}<span>Limite de ${limitTxt} site${_limit > 1 ? 's' : ''} atteinte pour le plan ${_esc(_plan || '—')}. Passez à un plan supérieur pour en ajouter.</span></div>`;
   return `
     <form class="snt-add snt-add-top" data-form="add">
-      <input class="snt-input" name="url" type="url" inputmode="url" autocomplete="off" placeholder="https://votre-site.com" required aria-label="Adresse du site" />
+      <input class="snt-input" name="url" type="url" inputmode="url" autocomplete="off" value="https://" placeholder="https://votre-site.com" required aria-label="Adresse du site" />
       <input class="snt-input snt-input-label" name="label" type="text" placeholder="Nom (optionnel)" aria-label="Nom du site" />
       <button class="snt-btn" type="submit"${_busy ? ' disabled' : ''}>${icon('plus', 16)} ${_busy ? 'Ajout…' : 'Ajouter'}</button>
     </form>
@@ -1239,7 +1239,7 @@ async function _onSubmit(e) {
   if (_busy) return;
   const url = (form.querySelector('[name="url"]').value || '').trim();
   const label = (form.querySelector('[name="label"]').value || '').trim();
-  if (!url) return;
+  if (!url || /^https?:\/\/$/i.test(url)) return;   // vide ou schéma pré-rempli seul → on ignore
   _busy = true; _render();
   try { await _api('/sites', { method: 'POST', body: { url, label } }); _busy = false; await _load(true); }
   catch (e2) { _busy = false; _render(); alert(e2.message || 'Ajout impossible.'); }
