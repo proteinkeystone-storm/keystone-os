@@ -82,8 +82,10 @@
 
 /* ── Bouton flottant « + » ────────────────────────────────────── */
 /* « + » Nouvelle bulle : dans le header, carré arrondi comme .ws-iconbtn mais
-   violet (accent) pour rester l'action primaire qui attire l'œil. */
-.kyn-compose-btn { background: var(--gold, #6366f1); border-color: transparent; color: #fff; }
+   violet (accent) pour rester l'action primaire qui attire l'œil. Sorti du
+   groupe .ws-topbar-actions repliable → TOUJOURS visible (à gauche du burger
+   sur mobile) ; margin-right = même respiration que le cluster d'actions. */
+.kyn-compose-btn { margin-right: 8px; background: var(--gold, #6366f1); border-color: transparent; color: #fff; }
 .kyn-compose-btn:hover { background: var(--gold2, #818cf8); border-color: transparent; color: #fff; }
 .kyn-compose-btn svg, .kyn-compose-btn .ws-icon { stroke-width: 2; }
 

@@ -109,9 +109,9 @@ function _buildShell() {
         <span class="ws-topbar-app-picto">${icon('keynapse', 24)}</span>
         <span class="name">${WORKSPACE_META.name}</span>
       </div>
+      <button class="ws-iconbtn kyn-compose-btn" data-act="kyn-compose" aria-label="Nouvelle bulle" title="Nouvelle bulle">${icon('plus', 20) || '+'}</button>
       ${burgerHTML()}
       <div class="ws-topbar-actions">
-        <button class="ws-iconbtn kyn-compose-btn" data-act="kyn-compose" aria-label="Nouvelle bulle" title="Nouvelle bulle">${icon('plus', 20) || '+'}</button>
         <button class="ws-iconbtn kyn-motion-btn" data-act="kyn-motion-toggle" aria-label="Activer ou figer l'animation des bulles"></button>
         ${helpButtonHTML(WORKSPACE_META.id)}
         ${ratingButtonHTML(WORKSPACE_META.id)}

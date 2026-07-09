@@ -43,14 +43,13 @@
 .nk-search-input::placeholder { color: var(--text-dim, rgba(248,250,252,.45)); }
 .nk-search-hd .nk-search-results { left: auto; right: 0; width: min(320px, 44vw); }
 
-.nk-add-btn {
-  display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0;
-  height: 38px; padding: 0 14px; border-radius: 10px;
-  border: 1px solid var(--ws-border, rgba(255,255,255,.1)); background: rgba(255,255,255,.03);
-  color: var(--ws-text, #f8fafc); font-family: inherit; font-size: 14px; font-weight: 700; letter-spacing: -0.02em;
-  cursor: pointer; transition: background .2s ease, border-color .2s ease;
-}
-.nk-add-btn:hover { background: rgba(139,92,246,.16); border-color: rgba(139,92,246,.5); }
+/* « + » Ajouter : sorti du groupe .ws-topbar-actions repliable → TOUJOURS
+   visible (à gauche du burger sur mobile) ; carré violet accent, même
+   traitement que le « + » de Keynapse (base .ws-iconbtn 38×38). Le violet
+   est en dur car --nk-violet ne cascade pas jusqu'au header (hors .nk-canvas). */
+.nk-add-btn { margin-right: 8px; background: #8b5cf6; border-color: transparent; color: #fff; }
+.nk-add-btn:hover { background: #7c4ddb; border-color: transparent; color: #fff; }
+.nk-add-btn svg { stroke-width: 2; }
 .nk-io-btn {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
   width: 38px; height: 38px; border-radius: 10px;
@@ -640,13 +639,12 @@ button.nk-coord { width: 100%; font: inherit; text-align: left; cursor: pointer;
 }
 
 /* ══ Sous 1024px, la topbar bascule en menu burger (dropdown vertical).
-   Les contrôles networK (recherche, Ajouter, I/O) rejoignent ce menu :
-   ils s'étirent et la recherche redevient un champ pleine largeur. ══ */
+   Recherche + I/O rejoignent ce menu et s'étirent (la recherche redevient un
+   champ pleine largeur). Le « + » Ajouter, lui, vit HORS du dropdown → toujours
+   visible à gauche du burger. ══ */
 @media (max-width: 1024px) {
   .ws-topbar-actions.is-open .nk-search-hd,
-  .ws-topbar-actions.is-open .nk-add-btn,
   .ws-topbar-actions.is-open .nk-io-btn { width: 100%; }
-  .ws-topbar-actions.is-open .nk-add-btn,
   .ws-topbar-actions.is-open .nk-io-btn { justify-content: flex-start; padding: 0 12px; gap: 10px; }
   .ws-topbar-actions.is-open .nk-search-toggle { display: none; }
   .ws-topbar-actions.is-open .nk-search-hd .nk-search-input {

@@ -227,15 +227,13 @@ function _buildShell() {
         <span class="ws-topbar-app-picto">${icon('network', 24)}</span>
         <span class="name">${WORKSPACE_META.name}</span>
       </div>
+      <button class="ws-iconbtn nk-add-btn" data-act="nk-add" aria-label="Ajouter au réseau" title="Ajouter au réseau">${icon('plus', 20)}</button>
       ${burgerHTML()}
       <div class="ws-topbar-actions">
         <div class="nk-search nk-search-hd">
           <button class="nk-search-toggle" data-act="nk-search-toggle" aria-label="Rechercher" aria-expanded="false" title="Rechercher">${icon('search', 20)}</button>
           <input type="text" class="nk-search-input" placeholder="Rechercher une personne, une entreprise…" aria-label="Rechercher dans votre réseau" tabindex="-1">
         </div>
-        <button class="nk-add-btn" data-act="nk-add" aria-label="Ajouter au réseau" title="Ajouter au réseau">
-          ${icon('plus', 18)}<span>Ajouter</span>
-        </button>
         <button class="nk-io-btn" data-act="nk-io" aria-label="Importer / Exporter" title="Importer / Exporter">
           ${icon('download', 18)}
         </button>
