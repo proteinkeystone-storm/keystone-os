@@ -296,6 +296,12 @@ select::-ms-expand{display:none}
 .supcap .mk-browser,.supcap .mk-phone{margin-left:auto;margin-right:auto}
 .supcap .mk-bizrow{justify-content:center}
 .supzip-row{margin:28px 0 0;text-align:center}
+.packband{max-width:940px;margin:22px auto 0;padding:0 20px}
+.packband-in{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;padding:18px 22px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
+.packband-t{font-size:15px;font-weight:800;margin:0;letter-spacing:-0.01em}
+.packband-s{font-size:13px;color:var(--muted);margin:4px 0 0;max-width:520px;line-height:1.45}
+.packband .btn{white-space:nowrap}
+@media print{.packband{display:none}}
 .supgal-title{font-size:14px;font-weight:800;margin:26px 0 0;letter-spacing:-0.01em}
 .mk-browser{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;max-width:760px}
 .mk-bar{display:flex;align-items:center;gap:12px;padding:9px 14px;background:#eceef2;border-bottom:1px solid #dfe2e8}
@@ -464,6 +470,75 @@ function buildZip(files){const enc=new TextEncoder();const parts=[],cen=[];let o
   const cd=off;for(const c of cen){parts.push(u32(0x02014b50),u16(20),u16(20),u16(0x0800),u16(0),u16(T),u16(D),u32(c.crc),u32(c.size),u32(c.size),u16(c.n.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(c.off),c.n);off+=46+c.n.length}
   parts.push(u32(0x06054b50),u16(0),u16(0),u16(cen.length),u16(cen.length),u32(off-cd),u32(cd),u16(0));
   return new Blob(parts,{type:'application/zip'})}
+
+// ── Pack de marque (KB-EXPORT-1) ────────────────────────────────
+// Sérialise la charte publiée (DATA.kit) en dossier machine-readable :
+//   design-tokens.json (format DTCG) · design-system-spec.json ·
+//   brand.md (lisible humain + IA) · logo/*.  → un ZIP à glisser dans
+//   Claude Design (voie « upload brut ») ou un outil de tokens.
+const _hx6=h=>/^#[0-9a-fA-F]{6}$/.test(String(h||''));
+const _tslug=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+async function buildPack(){
+  const NL=String.fromCharCode(10),BT=String.fromCharCode(96);   // saut de ligne et backtick sans littéral (template literal serveur)
+  const kit=DATA.kit||{},meta=kit.meta||{};
+  const palette=(kit.colors&&kit.colors.palette||[]).filter(c=>c&&_hx6(c.hex));
+  const fonts=(kit.typography&&kit.typography.fonts||[]).filter(f=>f&&f.family);
+  const variants=(kit.logo&&kit.logo.variants||[]).filter(v=>v&&v.assetId);
+
+  // 1) design-tokens.json (DTCG).
+  const color={},usedC={};
+  palette.forEach((c,i)=>{let n=_tslug(c.name)||('couleur-'+(i+1));if(usedC[n])n=n+'-'+(i+1);usedC[n]=1;
+    color[n]={$type:'color',$value:c.hex.toLowerCase()};
+    if(_hx6(c.nightHex))color[n+'-dark']={$type:'color',$value:c.nightHex.toLowerCase()}});
+  const fontFamily={},fontWeight={},usedF={};
+  fonts.forEach((f,i)=>{let n=f.role&&!usedF[f.role]?f.role:('police-'+(i+1));usedF[n]=1;
+    fontFamily[n]={$type:'fontFamily',$value:f.family};
+    if(f.source==='google'&&f.axis){const ws=weightsOf(f.axis)||[];if(ws.length)fontWeight[n]={$type:'number',$value:ws.includes(700)?700:(ws.includes(400)?400:ws[0])}}});
+  const tokens={color};
+  if(Object.keys(fontFamily).length)tokens.fontFamily=fontFamily;
+  if(Object.keys(fontWeight).length)tokens.fontWeight=fontWeight;
+
+  // 2) design-system-spec.json (manifeste lu par Claude Design).
+  const spec={schemaVersion:'1.0',systemName:DATA.name||meta.name||'Marque',
+    paths:{tokens:'design-tokens.json',assets:'logo/'},framework:'html',
+    generatedBy:'Key Brand',version:DATA.version||1};
+
+  // 3) brand.md (une seule fiche compacte, lisible humain + IA).
+  const FL={distort:'Ne pas déformer le logo',tilt:'Ne pas l’incliner',recolor:'Ne pas changer ses couleurs',invert:'Ne pas l’inverser en négatif',shadow:'Ne pas ajouter d’ombre ni d’effet',outline:'Ne pas l’encadrer d’un filet',opacity:'Ne pas baisser son opacité',busybg:'Ne pas le poser sur un fond chargé',crowd:'Ne pas envahir sa zone de protection'};
+  const RL={title:'Titrage',body:'Texte courant',office:'Bureautique',substitution:'Substitution'};
+  const inter=(kit.rules&&kit.rules.interdits||[]).filter(r=>r.enabled!==false).map(r=>FL[r.key]||r.key);
+  const customR=(kit.rules&&kit.rules.custom||[]).filter(r=>r.label);
+  const identity=kit.identity||{},voice=identity.voice||{};
+  let md='# '+(DATA.name||'Marque')+' — pack de marque'+NL+NL;
+  if(meta.baseline)md+='> '+meta.baseline+NL+NL;
+  if(palette.length){md+='## Couleurs'+NL+NL;palette.forEach(c=>{md+='- **'+(c.name||c.hex)+'** '+BT+c.hex.toLowerCase()+BT+' — rôle : '+(c.role||'—')+(_hx6(c.nightHex)?' · sombre '+BT+c.nightHex.toLowerCase()+BT:'')+NL})}
+  if(fonts.length){md+=NL+'## Typographies'+NL+NL;fonts.forEach(f=>{md+='- **'+f.family+'** — '+(RL[f.role]||f.role||'')+' ('+(f.source==='google'?'Google Fonts':'à installer')+(f.axis?', graisses '+String(f.axis).replace(/;/g,', '):'')+')'+(f.buyUrl?' — '+f.buyUrl:'')+NL})}
+  if(variants.length){md+=NL+'## Logo'+NL+NL;variants.forEach(v=>{md+='- '+(v.label||'Logo')+' → '+BT+'logo/'+safeName(v.label||'logo')+'.'+v.ext+BT+NL})}
+  if(inter.length||customR.length){md+=NL+'## Règles d’usage'+NL+NL;inter.forEach(x=>{md+='- '+x+NL});customR.forEach(r=>{md+='- '+(r.kind==='good'?'[bon usage] ':'[à éviter] ')+r.label+NL})}
+  if(identity.mission||voice.principles&&voice.principles.length||voice.use||voice.avoid){md+=NL+'## Marque & ton de voix'+NL+NL;
+    if(identity.mission)md+='**Mission :** '+identity.mission+NL+NL;
+    if(voice.principles&&voice.principles.length)md+='Principes : '+voice.principles.filter(Boolean).join(' · ')+NL+NL;
+    if(voice.use)md+='À privilégier : '+voice.use+NL+NL;
+    if(voice.avoid)md+='À éviter : '+voice.avoid+NL+NL}
+  md+=NL+'---'+NL+'Généré depuis Key Brand — charte « '+(DATA.name||'Marque')+' », version '+(DATA.version||1)+'.'+NL;
+
+  // 4) Assemblage du ZIP (JSON + md + fichiers logo en original).
+  const enc=new TextEncoder();
+  const files=[
+    {name:'design-tokens.json',data:enc.encode(JSON.stringify(tokens,null,2))},
+    {name:'design-system-spec.json',data:enc.encode(JSON.stringify(spec,null,2))},
+    {name:'brand.md',data:enc.encode(md)},
+  ];
+  const used={};
+  for(const v of variants){
+    try{const b=await(await fetch(fileUrl(v.assetId,true))).blob();
+      let base=safeName(v.label||'logo'),n='logo/'+base+'.'+v.ext;
+      for(let i=2;used[n];i++)n='logo/'+base+'-'+i+'.'+v.ext;used[n]=1;
+      files.push({name:n,data:new Uint8Array(await b.arrayBuffer())})}
+    catch(_){/* un logo indisponible ne bloque pas le pack */}
+  }
+  saveBlob(buildZip(files),safeName(DATA.name)+' — pack de marque.zip');
+}
 function loadFont(fam,axis){const id='pf-'+fam.toLowerCase().replace(/[^a-z0-9]+/g,'-');if(document.getElementById(id))return;
   const l=document.createElement('link');l.id=id;l.rel='stylesheet';
   const f=encodeURIComponent(fam).replace(/%20/g,'+');const spec=axis&&axis!=='400'?':wght@'+axis:'';
@@ -607,6 +682,13 @@ function render(){
      '</div></div>')+
      '<div class="cover-foot"'+(inkName?' style="color:'+inkName+'"':'')+'>Charte graphique — <b>version '+DATA.version+'</b></div>'+
      '</div>';
+
+  // Pack de marque — export machine-readable (tokens DTCG + logo + guide),
+  // téléchargeable directement depuis la charte numérique (KB-EXPORT-1).
+  h+='<div class="packband no-print"><div class="packband-in"><div>'+
+     '<p class="packband-t">Pack de marque</p>'+
+     '<p class="packband-s">Couleurs, typographies, logo et règles réunis en un dossier prêt à importer dans une IA de design (Claude Design) ou un outil de tokens.</p>'+
+     '</div><button class="btn primary" id="packdl">'+DL_ICON+'Télécharger le pack</button></div></div>';
 
   // Sommaire sur aplat (numéros = mêmes chapitres que la nav).
   if(navLinks.length>1){
@@ -972,6 +1054,11 @@ function bind(variants){
         files.push({name:n,data:new Uint8Array(await b.arrayBuffer())})}
       saveBlob(buildZip(files),safeName(DATA.name)+' — kit logos.zip')}
     catch(err){toast('Kit impossible : '+err.message)}
+  });
+  // Pack de marque (KB-EXPORT-1) : tokens DTCG + spec + brand.md + logos.
+  document.getElementById('packdl')?.addEventListener('click',async()=>{
+    toast('Préparation du pack…');
+    try{await buildPack()}catch(err){toast('Pack impossible : '+err.message)}
   });
   // Graisse : pilote l'alphabet complet de la carte.
   app.querySelectorAll('[data-w]').forEach(sel=>{sel.addEventListener('change',()=>{
