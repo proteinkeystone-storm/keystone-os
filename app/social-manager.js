@@ -233,7 +233,7 @@ function _renderMain() {
             <div class="sm-nets" data-slot="nets" role="group" aria-label="Réseaux cibles">
               <div class="sm-nets-loading">Chargement des comptes connectés…</div>
             </div>
-            <button type="button" class="sm-connect-trigger" data-act="open-connect">${icon('plus', 15)}&nbsp;Connecter un réseau social</button>
+            <button type="button" class="sm-connect-trigger" data-slot="connect-trigger" data-act="open-connect">${icon('plus', 15)}&nbsp;Connecter un réseau social</button>
           </div>
 
           <div class="sm-field">
@@ -295,6 +295,16 @@ function _renderHero() {
 function _renderNets() {
   const box = _root && _root.querySelector('[data-slot="nets"]');
   if (!box) return;
+
+  // Découvrabilité : quand des réseaux SONT connectés, le bouton devient « Gérer »
+  // (c'est là, dans le modal, qu'on déconnecte/reconnecte — pas seulement qu'on ajoute).
+  const trg = _root.querySelector('[data-slot="connect-trigger"]');
+  if (trg) {
+    const hasConn = Array.isArray(_accounts) && _accounts.some(a => a.status === 'connected');
+    trg.innerHTML = hasConn
+      ? `${icon('settings', 15)}&nbsp;Gérer mes réseaux`
+      : `${icon('plus', 15)}&nbsp;Connecter un réseau social`;
+  }
 
   if (_accounts === null) { box.innerHTML = `<div class="sm-nets-loading">Chargement des comptes connectés…</div>`; return; }
   const conn = _accounts.filter(a => a.status === 'connected');

@@ -127,7 +127,7 @@ export async function handleThreadsCallback(request, env) {
     if (!userId) throw new Error('user_id Threads introuvable.');
 
     const displayName = username ? `@${username}` : 'Threads';
-    const scopes      = 'threads_basic,threads_content_publish';
+    const scopes      = getPlatform('threads').auth.scopes.profile.join(',');   // synchro registry (inclut threads_manage_insights)
     const acc         = await encrypt(accessToken, env.KS_ENCRYPTION_KEY);
 
     const existing = await env.DB

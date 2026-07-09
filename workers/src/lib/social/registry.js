@@ -98,7 +98,7 @@ export const PLATFORMS = {
       type: 'oauth2',
       authUrl:  'https://www.facebook.com/v20.0/dialog/oauth',
       tokenUrl: 'https://graph.facebook.com/v20.0/oauth/access_token',
-      scopes: { page: ['pages_manage_posts', 'pages_read_engagement', 'pages_show_list'] },
+      scopes: { page: ['pages_manage_posts', 'pages_read_engagement', 'pages_show_list', 'read_insights'] },   // read_insights → stats par post
       tokenTtlDays: 60,           // long-lived ; un page token peut être non-expirant
       refreshable: true,
     },
@@ -133,7 +133,7 @@ export const PLATFORMS = {
       type: 'oauth2',
       authUrl:  'https://www.facebook.com/v20.0/dialog/oauth',
       tokenUrl: 'https://graph.facebook.com/v20.0/oauth/access_token',
-      scopes: { business: ['instagram_basic', 'instagram_content_publish', 'pages_show_list'] },
+      scopes: { business: ['instagram_basic', 'instagram_content_publish', 'pages_show_list', 'instagram_manage_insights'] },   // insights → stats par média
       tokenTtlDays: 60,
       refreshable: true,
     },
@@ -171,7 +171,7 @@ export const PLATFORMS = {
       type: 'oauth2',
       authUrl:  'https://threads.net/oauth/authorize',
       tokenUrl: 'https://graph.threads.net/oauth/access_token',
-      scopes: { profile: ['threads_basic', 'threads_content_publish'] },
+      scopes: { profile: ['threads_basic', 'threads_content_publish', 'threads_manage_insights'] },   // insights → stats par thread
       tokenTtlDays: 60,
       refreshable: true,
     },
