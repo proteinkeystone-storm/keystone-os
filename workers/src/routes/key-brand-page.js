@@ -117,9 +117,9 @@ body.dark .toast{background:#f2f3f7;color:#15171c}
 .chap h2{font-weight:900;font-size:clamp(28px,4.6vw,44px);letter-spacing:-0.02em;text-transform:uppercase;margin:0}
 
 /* Planche : filet + libellé tout-caps, une idée à la fois, de l'air. */
-section{max-width:940px;margin:0 auto;padding:64px 24px 10px}
-section>h2{font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--ink);border-top:1px solid var(--ink);padding-top:14px;margin:0 0 6px}
-.sub{color:var(--muted);font-size:13.5px;margin:0 0 22px;max-width:52ch}
+section{max-width:940px;margin:0 auto;padding:80px 24px 72px}
+section>h2{font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--ink);border-top:1px solid var(--ink);padding-top:18px;margin:0 0 8px}
+.sub{color:var(--muted);font-size:13.5px;margin:0 0 30px;max-width:52ch}
 .pl-solo{background:#fff;border:1px solid var(--line);border-radius:18px;display:flex;align-items:center;justify-content:center;padding:9% 8%;margin-top:26px}
 .pl-solo img{max-width:min(440px,66%);max-height:210px;object-fit:contain}
 .pl-tail{max-width:940px;margin:0 auto;padding:26px 24px 0}
@@ -379,7 +379,7 @@ footer a:hover{text-decoration:underline}
   .cover{min-height:96vh;page-break-after:always}
   .toc{page-break-after:always;padding:60px 24px}
   .chap{page-break-before:always;padding:110px 24px}
-  section{padding:34px 24px 6px}
+  section{padding:34px 24px 24px}
 }
 @media (max-width:560px){
   .hero{padding:40px 18px}
@@ -536,7 +536,7 @@ async function buildPack(){
       files.push({name:n,data:new Uint8Array(await b.arrayBuffer())})}
     catch(_){/* un logo indisponible ne bloque pas le pack */}
   }
-  saveBlob(buildZip(files),safeName(DATA.name)+' — pack de marque.zip');
+  saveBlob(buildZip(files),safeName(DATA.name)+' — design-system.zip');
 }
 function loadFont(fam,axis){const id='pf-'+fam.toLowerCase().replace(/[^a-z0-9]+/g,'-');if(document.getElementById(id))return;
   const l=document.createElement('link');l.id=id;l.rel='stylesheet';
@@ -630,7 +630,7 @@ function render(){
   if(fonts.length)navLinks.push(['#typos','Typographies']);
   if((rasterV.length&&inter.length)||customR.length)navLinks.push(['#regles','Règles']);
   if(showBrand)navLinks.push(['#univers','Univers']);
-  if(showPack)navLinks.push(['#pack','Pack de marque']);
+  if(showPack)navLinks.push(['#pack','Design System']);
   if(showSupports)navLinks.push(['#supports','Supports']);
   // Intercalaire de chapitre — numérotation dynamique (géométrie variable).
   let chapN=0;
@@ -901,15 +901,15 @@ function render(){
   // Pack de marque (KB-EXPORT-1) — chapitre : la charte condensée en un
   // dossier machine-readable, téléchargeable ici même.
   if(showPack){
-    h+=chap('pack','Pack de marque');
-    h+='<section><h2>Le pack de marque</h2><p class="sub">Toute cette charte réunie en un dossier prêt à donner à une IA de design (Claude Design) ou à un outil de tokens — pour produire des visuels, pages et contenus fidèles à la marque.</p>';
+    h+=chap('pack','Design System');
+    h+='<section><h2>Le Design System</h2><p class="sub">Toute cette charte réunie en un dossier prêt à donner à une IA de design (Claude Design) ou à un outil de tokens — pour produire des visuels, pages et contenus fidèles à la marque.</p>';
     h+='<ul class="packlist">';
     h+='<li><b>design-tokens.json</b><span>Couleurs & typographies au format standard (DTCG)</span></li>';
     h+='<li><b>brand.md</b><span>La marque en clair : couleurs, polices, règles, ton de voix</span></li>';
     h+='<li><b>design-system-spec.json</b><span>Le manifeste lu par les outils d’import</span></li>';
     if(variants.length)h+='<li><b>logo/</b><span>Vos logos en fichier original</span></li>';
     h+='</ul>';
-    h+='<p class="packdl-row no-print"><button class="btn primary" id="packdl">'+DL_ICON+'Télécharger le pack (.zip)</button></p>';
+    h+='<p class="packdl-row no-print"><button class="btn primary" id="packdl">'+DL_ICON+'Télécharger le Design System (.zip)</button></p>';
     h+='</section>';
   }
 
