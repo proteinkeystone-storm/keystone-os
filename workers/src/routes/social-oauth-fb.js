@@ -99,22 +99,31 @@ export async function handleFacebookConnect(request, env) {
 // publication EST le Page token (cf. provisionInstagram existant).
 async function listPagesWithIG(userToken) {
   const base = getPlatform('facebook').api.base;   // https://graph.facebook.com/v20.0
+  // ⚠ NE PAS étendre l'IG imbriqué dans la LISTE : si une Page (nouveau type) ne
+  // sait pas exposer instagram_business_account, Meta RETIRE la Page entière de la
+  // réponse → on perd la Page qui porte justement l'IG. On liste d'abord les Pages
+  // à plat, puis on interroge l'Instagram Page PAR Page (requête séparée).
   const res  = await fetch(`${base}/me/accounts?` + new URLSearchParams({
-    // instagram_business_account = liaison Page↔IG classique ; connected_instagram_account
-    // = liaison via le flux Meta plus récent (compte accordé mais NON exposé par le 1er
-    // champ → « aucun IG » à tort). On lit les deux et on prend celui qui est présent.
-    fields: 'id,name,access_token,instagram_business_account{id,username},connected_instagram_account{id,username}',
+    fields: 'id,name,access_token',
     access_token: userToken,
   }));
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`/me/accounts ${res.status} : ${data?.error?.message || ''}`);
-  return (data.data || []).map(p => {
-    const igObj = p.instagram_business_account || p.connected_instagram_account || null;
-    return {
-      id: p.id, name: p.name, pageToken: p.access_token,
-      ig: igObj ? { id: igObj.id, username: igObj.username } : null,
-    };
-  });
+  const out = [];
+  for (const p of (data.data || [])) {
+    let ig = null;
+    try {
+      const r2 = await fetch(`${base}/${p.id}?` + new URLSearchParams({
+        fields: 'instagram_business_account{id,username},connected_instagram_account{id,username}',
+        access_token: p.access_token || userToken,
+      }));
+      const d2 = await r2.json().catch(() => ({}));
+      const igObj = d2.instagram_business_account || d2.connected_instagram_account || null;
+      if (igObj) ig = { id: igObj.id, username: igObj.username };
+    } catch (_) { /* IG non détecté sur cette Page : non bloquant */ }
+    out.push({ id: p.id, name: p.name, pageToken: p.access_token, ig });
+  }
+  return out;
 }
 
 // Upsert d'un compte social chiffré, scopé tenant (miroir du callback Threads).
