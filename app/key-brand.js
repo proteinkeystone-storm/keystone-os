@@ -198,7 +198,7 @@ let _pubAccess = null;      // choix d'accès en cours d'édition dans le pannea
 const ACCESS_OPTIONS = [
   ['unlisted', 'Lien non répertorié', 'seuls ceux qui ont le lien y accèdent (défaut)'],
   ['code',     'Protégé par un code', 'le lien + un code transmis à part'],
-  ['public',   'Public',              'accessible à quiconque a le lien'],
+  ['public',   'Public',              'accessible à tous + référençable par Google (vitrine)'],
 ];
 function _publicUrl() { return _chart ? `${API_BASE}/b/${_chart.slug}` : ''; }
 
@@ -3352,7 +3352,9 @@ function _renderPubPanel() {
                    placeholder="4 caractères minimum" spellcheck="false" autocomplete="off">
           </label>
           <p class="kb-hint">${isLive && _chart.access === 'code' ? 'Laissez vide pour conserver le code actuel.' : 'Transmettez-le par un autre canal que le lien.'}</p>` : ''}
-          <p class="kb-hint">La page n'est jamais référencée par les moteurs de recherche.</p>
+          <p class="kb-hint">${access === 'public'
+            ? 'En « Public », la page peut être référencée par les moteurs de recherche (Google…). Les deux autres modes restent invisibles des moteurs.'
+            : 'La page n\'est pas référencée par les moteurs de recherche.'}</p>
         </div>
         <div class="kb-pub-col">
           <h4>${isLive ? `Publier la version ${_chart.version + 1}` : 'Première publication'}</h4>

@@ -25,8 +25,25 @@ function _esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-export function handleKeyBrandPage(request, env, slug) {
+export async function handleKeyBrandPage(request, env, slug) {
   const nonce = crypto.randomUUID().replace(/-/g, '');
+
+  // Référencement : seule une charte PUBLIÉE et en accès « public » est
+  // indexable ; unlisted / code / non publiée restent noindex (par défaut).
+  // Repli sûr sur noindex si la DB est indisponible (harnais de rendu).
+  let robots = 'noindex, nofollow';
+  let pubName = '';
+  try {
+    if (env && env.DB) {
+      const row = await env.DB
+        .prepare('SELECT name, status, access FROM kb_charts WHERE slug = ?')
+        .bind(String(slug || '')).first();
+      if (row && row.status === 'published' && row.access === 'public') {
+        robots = 'index, follow';
+        pubName = String(row.name || '').replace(/[<>&]/g, '').slice(0, 90);
+      }
+    }
+  } catch (_) { /* noindex par défaut */ }
   const csp = [
     "default-src 'none'",
     `script-src 'nonce-${nonce}'`,
@@ -45,9 +62,9 @@ export function handleKeyBrandPage(request, env, slug) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
+<meta name="robots" content="${robots}">
 <meta name="referrer" content="no-referrer">
-<title>Charte graphique</title>
+<title>${pubName ? pubName + ' — charte graphique' : 'Charte graphique'}</title>
 <style>
 :root{--ink:#15171c;--muted:#5b6170;--line:#e5e7ee;--bg:#f7f8fb;--panel:#fff;--accent:#3b5bdb;--danger:#e11d48;--ok:#0f9d63}
 *{box-sizing:border-box}
@@ -1116,7 +1133,7 @@ boot();
       'Content-Security-Policy': csp,
       'Referrer-Policy': 'no-referrer',
       'X-Content-Type-Options': 'nosniff',
-      'X-Robots-Tag': 'noindex, nofollow',
+      'X-Robots-Tag': robots,
       'Cache-Control': 'no-store',
     },
   });
