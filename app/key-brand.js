@@ -665,6 +665,18 @@ function _onInput(e) {
     if (baseEl) baseEl.textContent = s.text.trim() || (_chart.draft.meta?.baseline || '');
     _scheduleSave();
   }
+  if (el.dataset.field === 'scene-tsize' && _chart) {
+    const v = Math.min(1.8, Math.max(0.6, parseFloat(el.value) || 1));
+    _sceneOf().titleSize = v;
+    _root.querySelector('[data-slot="stage-name"]')?.style.setProperty('--kb-ts', v);
+    _scheduleSave();
+  }
+  if (el.dataset.field === 'scene-bsize' && _chart) {
+    const v = Math.min(1.8, Math.max(0.6, parseFloat(el.value) || 1));
+    _sceneOf().textSize = v;
+    _root.querySelector('[data-slot="stage-base"]')?.style.setProperty('--kb-bs', v);
+    _scheduleSave();
+  }
 
   // ── Onglet Logo (KB-1) ──
   const v = _variantOf(el.closest('[data-vid]')?.dataset.vid);
@@ -2839,6 +2851,9 @@ function _renderBrandTab() {
   // remplis ; sinon repli sur la charte → placeholder dans les champs).
   const sceneTitle = (s.title || '').trim() || brandName;
   const sceneText = (s.text || '').trim() || meta.baseline || '';
+  // Échelle de taille (facteur ×, garde la responsivité du clamp de base).
+  const titleSize = Math.min(1.8, Math.max(0.6, Number(s.titleSize) || 1));
+  const textSize = Math.min(1.8, Math.max(0.6, Number(s.textSize) || 1));
   const nameHtml = _esc(brandName);
   // Encre pilotée si le fond existe VRAIMENT (couleur/dégradé, ou média
   // déposé) — sinon Photo/Vidéo sans fichier = encre claire sur blanc.
@@ -2856,8 +2871,8 @@ function _renderBrandTab() {
         ${sceneLogo ? `<img class="kb-stage-logo" data-asset="${_esc(sceneLogo.assetId)}" alt="" draggable="false">` : ''}
         ${s.layout === 'split' && sceneLogo ? `<span class="kb-stage-vr" ${inked ? `style="background:${ink.base}"` : ''}></span>` : ''}
         <div class="kb-stage-txt">
-          <div class="kb-stage-name" data-slot="stage-name" style="${titleFont ? `font-family:${titleFont};` : ''}${inked ? `color:${ink.name}` : ''}">${_esc(sceneTitle)}</div>
-          <div class="kb-stage-baseline" data-slot="stage-base" ${blStyle ? `style="${blStyle}"` : ''}>${_esc(sceneText)}</div>
+          <div class="kb-stage-name" data-slot="stage-name" style="--kb-ts:${titleSize};${titleFont ? `font-family:${titleFont};` : ''}${inked ? `color:${ink.name}` : ''}">${_esc(sceneTitle)}</div>
+          <div class="kb-stage-baseline" data-slot="stage-base" style="--kb-bs:${textSize};${blStyle}">${_esc(sceneText)}</div>
         </div>
       </div>`;
 
@@ -2909,6 +2924,10 @@ function _renderBrandTab() {
         <div class="kb-scenetxtfields">
           <input class="kb-scenetitle" data-field="scene-title" value="${_esc(s.title || '')}" placeholder="${_esc(brandName)}" maxlength="80" spellcheck="false">
           <textarea class="kb-scenetext" data-field="scene-text" placeholder="${_esc(meta.baseline || 'Baseline / description (optionnel)')}" maxlength="220" rows="2">${_esc(s.text || '')}</textarea>
+          <div class="kb-scenesizes">
+            <label class="kb-sizerow">${icon('type', 13)} Titre<input type="range" data-field="scene-tsize" min="0.6" max="1.8" step="0.05" value="${titleSize}" aria-label="Taille du titre"></label>
+            <label class="kb-sizerow">${icon('type', 12)} Texte<input type="range" data-field="scene-bsize" min="0.6" max="1.8" step="0.05" value="${textSize}" aria-label="Taille du texte"></label>
+          </div>
         </div>
       </div>`;
 

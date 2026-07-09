@@ -75,8 +75,8 @@ button{font-family:inherit}
 .hero-inner{position:relative;display:flex;flex-direction:column;align-items:center;gap:16px}
 .hero-txt{display:flex;flex-direction:column;gap:10px;align-items:center}
 .hero-inner>img{max-width:min(340px,70%);max-height:140px;object-fit:contain}
-.hero-name{font-weight:900;font-size:clamp(28px,5vw,42px);letter-spacing:-0.03em;line-height:1.08}
-.hero-base{color:var(--muted);font-size:16.5px}
+.hero-name{font-weight:900;font-size:calc(clamp(28px,5vw,42px) * var(--ts,1));letter-spacing:-0.03em;line-height:1.08}
+.hero-base{color:var(--muted);font-size:calc(16.5px * var(--bs,1))}
 .hero-vr{width:1px;align-self:stretch;background:rgba(255,255,255,.3)}
 .hero.hlay-corner{display:flex;align-items:flex-end;justify-content:flex-start;min-height:340px;text-align:left}
 .hlay-corner .hero-inner,.hlay-corner .hero-txt{align-items:flex-start}
@@ -668,8 +668,10 @@ function render(){
   // Titre & texte propres à la scène (priment sur nom/baseline s'ils existent).
   const rawName=String((SC.title&&String(SC.title).trim())||meta.name||DATA.name);
   const heroText=String((SC.text&&String(SC.text).trim())||meta.baseline||'');
+  const tSize=Math.min(1.8,Math.max(0.6,Number(SC.titleSize)||1));
+  const bSize=Math.min(1.8,Math.max(0.6,Number(SC.textSize)||1));
   let nameHtml=esc(rawName);
-  let nmSt='';
+  let nmSt='--ts:'+tSize+';';
   if(titleFont)nmSt+='font-family:\\''+esc(titleFont.family)+'\\',sans-serif;';
   if(inkName)nmSt+='color:'+inkName;
   // Couverture pleine page (scène KB-8) + mention façon PDF de charte.
@@ -683,7 +685,7 @@ function render(){
      (coverLogo?'<img src="'+fileUrl(coverLogo.assetId)+'" alt="'+esc(DATA.name)+'">':'')+
      (scLay==='split'&&coverLogo?'<span class="hero-vr"'+(inkBase?' style="background:'+inkBase+'"':'')+'></span>':'')+
      '<div class="hero-txt"><div class="hero-name"'+(nmSt?' style="'+nmSt+'"':'')+'>'+nameHtml+'</div>'+
-     (heroText?'<div class="hero-base"'+(inkBase?' style="color:'+inkBase+'"':'')+'>'+esc(heroText)+'</div>':'')+
+     (heroText?'<div class="hero-base" style="--bs:'+bSize+';'+(inkBase?'color:'+inkBase:'')+'">'+esc(heroText)+'</div>':'')+
      '</div></div>')+
      '<div class="cover-foot"'+(inkName?' style="color:'+inkName+'"':'')+'>Charte graphique — <b>version '+DATA.version+'</b></div>'+
      '</div>';
