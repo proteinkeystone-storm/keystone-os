@@ -488,12 +488,13 @@ const BK_READER_JS = `
 export function buildStandaloneHTML(edition) {
   const ed = edition || {};
   const pages = Array.isArray(ed.pages) ? ed.pages : [];
-  // Couverture dédiée optionnelle : simplement PRÉPOSÉE aux pages — le
-  // lecteur traite déjà la 1ʳᵉ image comme la couverture (affichée seule).
+  // Couverture de BIBLIOTHÈQUE optionnelle : n'entre PAS dans le document
+  // lu (le lecteur ouvre sur la page 1). Elle voyage en métadonnée inerte
+  // dans le JSON embarqué (data URI comprise) pour que le ré-import la
+  // restitue — le fichier reste sa propre source, couverture incluse.
   const cover = ed.cover && ed.cover.src ? ed.cover : null;
   // Manifeste embarqué = l'édition SANS les data URI des pages (elles
   // vivent en <img> juste dessous) — le ré-import recompose les deux.
-  // meta.cover signale que la 1ʳᵉ <img> est la couverture, pas une page.
   const meta = {
     format: BK_FORMAT,
     format_version: ed.format_version || BK_FORMAT_VERSION,
@@ -505,12 +506,11 @@ export function buildStandaloneHTML(edition) {
     updated: ed.updated || '',
     theme: ed.theme || {},
     options: ed.options || {},
-    cover: cover ? { alt: cover.alt || 'Couverture' } : null,
+    cover: cover ? { src: cover.src, alt: cover.alt || 'Couverture' } : null,
     pages: pages.map(p => ({ alt: p.alt || '' })),
   };
   const metaJSON = _escJSONForScript(JSON.stringify(meta));
-  const allImgs = (cover ? [{ src: cover.src, alt: cover.alt || 'Couverture' }] : []).concat(pages);
-  const imgs = allImgs.map((p, i) =>
+  const imgs = pages.map((p, i) =>
     `    <img src="${p.src}" alt="${_esc(p.alt || ('Page ' + (i + 1)))}">`
   ).join('\n');
 

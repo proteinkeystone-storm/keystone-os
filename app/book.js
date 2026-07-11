@@ -271,7 +271,7 @@ function _openEditor(ed) {
             </div>
           </div>
           <label class="bk-field bk-field-row bk-check"><span>Double page sur grand écran</span><input type="checkbox" data-k="doublePage"></label>
-          <div class="bk-field"><span>Couverture dédiée (optionnel)</span>
+          <div class="bk-field"><span>Couverture de bibliothèque (optionnel)</span>
             <div class="bk-cover-row">
               <div class="bk-cover-thumb" data-slot="cover-thumb"></div>
               <div class="bk-cover-btns">
@@ -279,7 +279,7 @@ function _openEditor(ed) {
                 <button class="bk-btn bk-btn-ghost" data-act="cover-clear" hidden>${icon('x', 15)} Retirer</button>
               </div>
             </div>
-            <p class="bk-note">Sans couverture dédiée, la première page fait office de couverture.</p>
+            <p class="bk-note">Illustre la carte de votre bibliothèque. Le document lui-même n'est pas modifié : la lecture s'ouvre toujours sur la première page.</p>
           </div>
         </section>
         <section class="bk-sec">
@@ -519,9 +519,11 @@ async function _onReimportFile(e) {
     if (meta.format !== BK_FORMAT) throw new Error('format inconnu');
     const imgs = [...dom.querySelectorAll('#bk-pages img')];
     if (!imgs.length) throw new Error('aucune page dans ce fichier');
-    // meta.cover ⇒ la 1ʳᵉ <img> est la couverture dédiée, pas une page.
+    // Couverture de bibliothèque : dans le JSON (meta.cover.src). Compat
+    // ancien format (une seule livraison) : meta.cover SANS src ⇒ la
+    // couverture avait été préposée en 1ʳᵉ <img> — on la re-sépare.
     const srcs = imgs.map(im => im.getAttribute('src'));
-    const coverSrc = meta.cover ? srcs.shift() : null;
+    const coverSrc = meta.cover?.src || (meta.cover ? srcs.shift() : null);
     const ed = {
       ...newEdition(),
       ...meta,
