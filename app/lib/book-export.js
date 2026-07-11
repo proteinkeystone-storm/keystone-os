@@ -115,19 +115,44 @@ body.bk-boot #bk-pages, body.bk-boot #bk-fallback-hd { display: none; }
 .bk-hd button:hover { background: rgba(var(--bk-tint-rgb), .14); color: var(--bk-tint); }
 .bk-hd svg { width: 19px; height: 19px; stroke: currentColor; stroke-width: 1.7; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 .bk-stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 26px 54px; }
-.bk-book { position: relative; perspective: 2400px; }
+/* flex: 0 0 auto — JAMAIS de shrink silencieux : un livre trop large doit
+   déborder visiblement, pas se comprimer pendant que ses pages (en px)
+   gardent leur taille — c'était le chevauchement gauche/droite. */
+.bk-book { position: relative; perspective: 2400px; flex: 0 0 auto; }
 .bk-pg {
-  position: absolute; top: 0; height: 100%; overflow: hidden;
+  position: absolute; top: 0; height: 100%; width: 50%; overflow: hidden;
   background: #fff; box-shadow: 0 8px 34px rgba(0,0,0,${dark ? '.5' : '.22'});
 }
 /* contain, jamais cover : une page dont le ratio diffère de la boîte est
    posée ENTIÈRE sur son papier blanc (letterbox), jamais rognée au pli —
    le rognage se lisait comme « la page de droite recouvre la gauche ». */
 .bk-pg img { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* largeurs RELATIVES au livre (50 % / 100 %) : quoi qu'il arrive à la
+   boîte, gauche = 0–50 % et droite = 50–100 % — chevauchement impossible. */
 .bk-pg-left  { left: 0; border-radius: 6px 0 0 6px; }
 .bk-pg-right { right: 0; border-radius: 0 6px 6px 0; }
-.bk-pg-single { left: 0; border-radius: 6px; }
+.bk-pg-single { left: 0; width: 100%; border-radius: 6px; }
 .bk-pg-empty { background: transparent; box-shadow: none; }
+/* coin de page qui se soulève — invitation à feuilleter (couverture).
+   Deux couches pour rester lisible sur page claire COMME sombre :
+   ::before = le dessous révélé (voile sombre), ::after = le rabat papier. */
+.bk-hint {
+  position: absolute; right: 0; bottom: 0; width: 62px; height: 62px; z-index: 4; pointer-events: none;
+  transform-origin: 100% 100%;
+  filter: drop-shadow(-4px -4px 7px rgba(0,0,0,.30));
+  animation: bk-peel 2.6s ease-in-out infinite;
+}
+.bk-hint::before {
+  content: ''; position: absolute; inset: 0;
+  clip-path: polygon(100% 0, 0 100%, 100% 100%);
+  background: rgba(0,0,0,.30);
+}
+.bk-hint::after {
+  content: ''; position: absolute; inset: 0;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+  background: linear-gradient(135deg, #fffdf6 55%, #ece8dc 82%, #d9d4c6 100%);
+}
+@keyframes bk-peel { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.22); } }
 /* pli central du livre ouvert */
 .bk-spine { position: absolute; top: 0; bottom: 0; left: 50%; width: 44px; transform: translateX(-50%); z-index: 2; pointer-events: none;
   background: linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.16) 46%, rgba(0,0,0,.26) 50%, rgba(0,0,0,.16) 54%, rgba(0,0,0,0) 100%); }
@@ -166,7 +191,7 @@ body.bk-boot #bk-pages, body.bk-boot #bk-fallback-hd { display: none; }
 .bk-thumb img { width: 100%; height: auto; display: block; border-radius: 4px; }
 .bk-thumb.cur, .bk-thumb:hover { border-color: var(--bk-tint); }
 .bk-thumb-num { font-size: 11px; color: ${stageMut}; padding: 3px 0 5px; display: block; text-align: center; }
-@media (prefers-reduced-motion: reduce) { .bk-leaf, .bk-progress span { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { .bk-leaf, .bk-progress span { transition: none !important; } .bk-hint { animation: none; } }
 @media (max-width: 640px) { .bk-stage { padding: 14px 10px; } .bk-hd-sub { display: none; } .bk-nav { opacity: 0 !important; } }
 @media print {
   .bk-app { display: none !important; }
@@ -243,10 +268,17 @@ const BK_READER_JS = `
   var mode = 'single';                                 // 'single' | 'double'
   var cur = 0;                                         // index de la page de GAUCHE affichée (ou la page seule)
   var busy = false;
+  var hintOff = false;                                 // coin d'invitation : retiré au premier feuilletage
 
   function stageSize() {
-    var r = stage.getBoundingClientRect();
-    return { w: Math.max(120, r.width - 24), h: Math.max(120, r.height - 12) };
+    // Espace INTÉRIEUR réel (clientWidth inclut le padding : on le retire).
+    // Mesurer getBoundingClientRect sans ôter le padding donnait un livre
+    // trop large de 108 px, silencieusement comprimé par le flex → les
+    // pages (en px) se chevauchaient. Vu sur pages paysage.
+    var cs = window.getComputedStyle(stage);
+    var w = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    var h = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    return { w: Math.max(120, w), h: Math.max(120, h) };
   }
   function layout() {
     var s = stageSize();
@@ -293,14 +325,18 @@ const BK_READER_JS = `
     var html = '';
     if (mode === 'double' && !isCoverAlone()) {
       html = pageHTML(leftIdx(), 'bk-pg-left') + pageHTML(rightIdx(), 'bk-pg-right') + '<div class="bk-spine"></div>';
-      book.style.width = Math.round(pw * 2) + 'px';
+      book.style.width = (pw * 2) + 'px';
     } else {
       html = pageHTML(cur, 'bk-pg-single');
-      book.style.width = Math.round(pw) + 'px';
+      book.style.width = pw + 'px';
     }
     book.innerHTML = html;
-    var pgs = book.querySelectorAll('.bk-pg');
-    for (var i = 0; i < pgs.length; i++) { pgs[i].style.width = Math.round(pw) + 'px'; }
+    // Invitation à feuilleter : coin de page qui se soulève sur la
+    // couverture, retiré définitivement au premier changement de page.
+    if (!hintOff && cur === 0 && N > 1) {
+      var firstPg = book.querySelector('.bk-pg');
+      if (firstPg) firstPg.insertAdjacentHTML('beforeend', '<div class="bk-hint"></div>');
+    }
     updateHUD();
   }
 
@@ -327,11 +363,12 @@ const BK_READER_JS = `
 
   function go(dir) {
     if (busy) return;
+    hintOff = true;
     var tgt = dir > 0 ? targetNext() : targetPrev();
     if (dir > 0 && (mode === 'double' ? cur >= lastPos() : cur >= N - 1)) return;
     if (dir < 0 && cur <= 0) return;
-    if (REDUCED || mode !== 'double' || cur === 0 || tgt === 0) {
-      cur = tgt; render(); return;                     // couverture & mobile : bascule directe
+    if (REDUCED || document.hidden || mode !== 'double' || cur === 0 || tgt === 0) {
+      cur = tgt; render(); return;                     // couverture, mobile & page cachée : bascule directe
     }
     flip(dir, tgt);
   }
@@ -345,9 +382,6 @@ const BK_READER_JS = `
     var underL = dir > 0 ? leftIdx() : tgt;
     var underR = dir > 0 ? (tgt + 1 <= N - 1 ? tgt + 1 : -1) : rightIdx();
     book.innerHTML = pageHTML(underL, 'bk-pg-left') + pageHTML(underR, 'bk-pg-right') + '<div class="bk-spine"></div>';
-    var pw = book._pw || 300;
-    var pgs = book.querySelectorAll('.bk-pg');
-    for (var i = 0; i < pgs.length; i++) pgs[i].style.width = Math.round(pw) + 'px';
 
     var leaf = el('div', 'bk-leaf ' + (dir > 0 ? 'bk-leaf-fwd' : 'bk-leaf-bwd'));
     var faceF = el('div', 'bk-leaf-face');
@@ -358,17 +392,26 @@ const BK_READER_JS = `
     leaf.appendChild(faceF); leaf.appendChild(faceB); leaf.appendChild(shade);
     book.appendChild(leaf);
 
-    var t0 = null, DUR = 560;
+    var t0 = null, DUR = 560, done = false, guard;
+    function finish() {
+      if (done) return;
+      done = true; clearTimeout(guard);
+      cur = tgt; busy = false; render();
+    }
     function step(ts) {
+      if (done) return;
       if (t0 === null) t0 = ts;
       var t = Math.min(1, (ts - t0) / DUR);
       var e = 1 - Math.pow(1 - t, 3);                  // easeOutCubic
       var ang = (dir > 0 ? -180 : 180) * e;
       leaf.style.transform = 'rotateY(' + ang + 'deg)';
       shade.style.background = 'rgba(0,0,0,' + (0.22 * Math.sin(Math.PI * e)).toFixed(3) + ')';
-      if (t < 1) { requestAnimationFrame(step); }
-      else { cur = tgt; busy = false; render(); }
+      if (t < 1) { requestAnimationFrame(step); } else { finish(); }
     }
+    // Garde-fou horloge : si le rAF est gelé (onglet caché, webview
+    // throttlée), on conclut le flip quand même — jamais de lecteur
+    // bloqué en plein tournage de page.
+    guard = setTimeout(finish, DUR + 500);
     requestAnimationFrame(step);
   }
 
