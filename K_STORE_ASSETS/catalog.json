@@ -412,6 +412,35 @@
         "partenaires",
         "network"
       ]
+    },
+    {
+      "id": "O-BOK-001",
+      "padKey": null,
+      "title": "booK",
+      "subtitle": "Vos flipbooks en un fichier qui s'ouvre partout, pour toujours — sans abonnement, sans serveur",
+      "category": "COM",
+      "plan": "STARTER",
+      "price": 49,
+      "lifetimePrice": 199,
+      "longDesc": "booK transforme votre PDF ou vos images en flipbook élégant — catalogue, magazine, plaquette, book, menu — que l'on feuillette comme un vrai livre, page tournée comprise. La différence avec tout ce qui existe : votre publication est UN SEUL fichier autonome, qui s'ouvre d'un double-clic, partout, pour toujours — sans serveur, sans abonnement, sans watermark, sans dépendre de Keystone. Envoyez-le par e-mail, posez-le sur une clé USB, archivez-le : il vous appartient, et il reste même rééditable en le ré-important dans booK. Zéro IA, zéro crédit : tout est inclus.",
+      "icon": "book",
+      "ai_optimized": null,
+      "isNew": true,
+      "published": true,
+      "tags": [
+        "artefact",
+        "communication",
+        "flipbook",
+        "catalogue",
+        "magazine",
+        "brochure",
+        "plaquette",
+        "menu",
+        "pdf",
+        "book",
+        "publication",
+        "editorial"
+      ]
     }
   ]
 }

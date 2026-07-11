@@ -28,6 +28,7 @@ import { openSentinel }                          from './sentinel.js';
 import { openSceau }                             from './sceau.js';
 import { openKeyBrand }                          from './key-brand.js';
 import { openNetwork }                            from './network.js';
+import { openBook }                               from './book.js';
 import { openGhostwriter, isGhostwriterEnabled } from './ghostwriter.js';
 import { openGhostwriterInline }                 from './lib/ghostwriter-inline.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
@@ -111,6 +112,9 @@ const ICONS = {
     // O-NET-001). CE registre-ci (ICONS local) alimente les tuiles dashboard + K-Store ;
     // doit rester en phase avec 'network' de lib/ui-icons.js (topbar).
     'network':        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11 Q13 5.5 16.6 5.7"/><path d="M6.3 12 H17.4"/><path d="M6 13 Q13 18.5 16.6 18.3"/><circle cx="4" cy="12" r="2.3" fill="currentColor" stroke="none"/><circle cx="18.4" cy="5.6" r="1.9" fill="currentColor" stroke="none"/><circle cx="19.4" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="18.4" cy="18.4" r="1.9" fill="currentColor" stroke="none"/></svg>`,
+    // book : livre fermé à dos rond — picto de booK (O-BOK-001), flipbooks souverains.
+    // Tracés IDENTIQUES à 'book' de lib/ui-icons.js (topbar du pad), style brand 1.8.
+    'book':           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`,
     // smart-agent : tête de robot + étincelle de savoir — picto du Smart Agent (O-AGT-001).
     // Tracés IDENTIQUES à ui-icons.js 'smart-agent' (le robot de la topbar du pad),
     // au style brand 1.8 du dashboard → robot partout (tuile, K-Store, fiche détail).
@@ -2234,6 +2238,7 @@ export function openTool(padId, opts = {}) {
     if (padId === 'O-SEC-001')  { openSceau(opts); return; }          // Sceau — secret usage-unique scellé E2E+OPRF (S3)
     if (padId === 'O-BRD-001')  { openKeyBrand(opts); return; }       // Key Brand — charte graphique vivante, zéro IA (KB-0)
     if (padId === 'O-NET-001')  { openNetwork(opts); return; }        // networK — réseau relationnel vivant, V1 manuelle (NK-0)
+    if (padId === 'O-BOK-001')  { openBook(opts); return; }           // booK — flipbooks souverains, export autoporté, zéro IA (BK-0)
     if (padId === 'O-IMM-010') { openVefaStudio(); return; }
     if (padId === 'A-COM-001') { openSDQR(opts); return; }   // opts.createVcard = handoff networK → QR vCard
     if (padId === 'A-COM-002') { openKodex(); return; }

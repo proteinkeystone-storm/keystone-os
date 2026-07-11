@@ -1,0 +1,15 @@
+{
+  "id": "O-BOK-001",
+  "padKey": null,
+  "type": "artifact",
+  "ui_kind": "fullscreen",
+  "title": "booK",
+  "subtitle": "Vos flipbooks en un fichier qui s'ouvre partout, pour toujours — sans abonnement, sans serveur",
+  "category": "COM",
+  "icon": "book",
+  "ai_optimized": null,
+  "notice": "Artefact à workspace fullscreen indépendant — pas d'édition de form ici.\nFlipbooks souverains : PDF/images → pages recompressées → bibliothèque (IndexedDB) → export en UN fichier HTML autoporté qui ne dépend de rien, pas même de Keystone (le manifeste JSON de l'édition est embarqué dans le fichier, ré-importable pour réédition). V1 = export seul, ZÉRO worker, ZÉRO IA, zéro appel réseau. Moteur d'export : app/lib/book-export.js (module pur). ISOLATION : préfixe bk-/bk_.\nPour modifier le comportement : éditer le code de l'artefact directement.",
+  "fields": [],
+  "system_prompt": "",
+  "longDesc": "booK transforme votre PDF ou vos images en flipbook élégant — catalogue, magazine, plaquette, book, menu — que l'on feuillette comme un vrai livre, page tournée comprise. La différence avec tout ce qui existe : votre publication est UN SEUL fichier autonome, qui s'ouvre d'un double-clic, partout, pour toujours — sans serveur, sans abonnement, sans watermark, sans dépendre de Keystone. Envoyez-le par e-mail, posez-le sur une clé USB, archivez-le : il vous appartient, et il reste même rééditable en le ré-important dans booK. Zéro IA, zéro crédit : tout est inclus."
+}

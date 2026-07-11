@@ -1,0 +1,45 @@
+{
+  "title": "booK",
+  "tldr": "booK transforme un PDF ou des images en flipbook que l'on feuillette comme un vrai livre — et votre publication tient dans UN SEUL fichier autonome. Ce fichier s'ouvre d'un double-clic, partout, pour toujours : sans serveur, sans abonnement, sans watermark, sans même dépendre de Keystone. Envoyez-le par e-mail, posez-le derrière un QR, archivez-le sur une clé USB — il vous appartient. Et il reste rééditable : ré-importez-le dans booK, il redevient modifiable, même des années plus tard. Votre bibliothèque garde tous vos flipbooks sous la main.",
+  "key_points": [
+    "Créer : le « + » en haut ouvre un nouveau flipbook. Déposez un PDF (chaque page devient une page du livre) ou des images — tout est recompressé automatiquement pour que le fichier reste léger.",
+    "Organiser les pages : la première vignette est la couverture. Les flèches déplacent une page, la croix la retire. L'aperçu à droite montre EXACTEMENT le fichier qui sera livré.",
+    "Habiller : titre, sous-titre, auteur, teinte d'accent, fond de lecture sombre ou clair, et double page sur grand écran (comme un magazine ouvert).",
+    "Publier : « Enregistrer » range le flipbook dans votre bibliothèque ; « Télécharger le fichier autonome » produit le .html souverain. Le poids estimé s'affiche — au-delà de 20 Mo, pensez à alléger.",
+    "Feuilleter : clic ou flèches du clavier pour tourner les pages (effet page tournée sur ordinateur, glissement du doigt sur mobile), sommaire en vignettes, plein écran. Le fichier s'imprime aussi proprement, page par page.",
+    "Ré-importer : le bouton nuage en haut ouvre un fichier booK existant et le remet dans votre bibliothèque, prêt à être modifié — le fichier EST sa propre sauvegarde."
+  ],
+  "faq": [
+    {
+      "q": "En quoi est-ce différent des sites de flipbooks (FlipHTML5, Calaméo…) ?",
+      "a": "Chez eux, votre document vit sur LEURS serveurs : watermark, abonnement, et le lien meurt si vous résiliez. Avec booK, votre publication est un fichier qui vous appartient : il s'ouvre sans connexion, sans compte, et fonctionnera encore dans des années — même si Keystone disparaissait."
+    },
+    {
+      "q": "Où le fichier peut-il être ouvert ?",
+      "a": "Partout où il y a un navigateur : double-clic depuis un ordinateur, pièce jointe d'e-mail, clé USB, espace de téléchargement de votre site… Il ne fait AUCUN appel à Internet. Et sans JavaScript (impression, très vieux navigateurs), les pages s'affichent quand même, simplement empilées."
+    },
+    {
+      "q": "Que deviennent mes flipbooks si je change d'ordinateur ?",
+      "a": "La bibliothèque est rangée dans le navigateur de CET appareil. Le geste de sauvegarde universel, c'est le fichier autonome : téléchargez-le et conservez-le où vous voulez — il se ré-importe dans booK sur n'importe quel appareil et redevient modifiable."
+    },
+    {
+      "q": "Mon fichier est lourd, que faire ?",
+      "a": "Le poids vient du nombre de pages et de la finesse des visuels (chaque page est déjà recompressée à l'import). Retirez les pages non essentielles, ou repartez d'un PDF exporté en qualité écran plutôt qu'imprimerie. En dessous de 15–20 Mo, tout va bien."
+    },
+    {
+      "q": "Consomme-t-il des crédits IA ? Mes documents sont-ils envoyés quelque part ?",
+      "a": "Non et non. booK est 100 % sans IA et tout se fabrique dans votre navigateur : vos PDF et images ne quittent jamais votre appareil. Zéro crédit consommé, zéro donnée transmise."
+    },
+    {
+      "q": "Puis-je le partager par un lien ou un QR ?",
+      "a": "Aujourd'hui, vous partagez le fichier lui-même (e-mail, transfert, votre site). Le lien public hébergé et le QR avec statistiques de lecture arrivent dans une prochaine version."
+    }
+  ],
+  "shortcuts": [
+    { "keys": "Clic gauche / droit du livre", "desc": "Page précédente / suivante" },
+    { "keys": "← → · Espace", "desc": "Tourner les pages au clavier" },
+    { "keys": "Début / Fin", "desc": "Couverture / dernière page" },
+    { "keys": "Glisser (mobile)", "desc": "Tourner les pages du doigt" },
+    { "keys": "Échap", "desc": "Fermer le sommaire, revenir en arrière" }
+  ]
+}
