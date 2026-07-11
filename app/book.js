@@ -99,6 +99,7 @@ export function openBook() {
       <main class="ws-main bk-main" data-slot="main"></main>
     </div>
     <input type="file" class="bk-file-pages" accept="image/*,application/pdf" multiple hidden>
+    <input type="file" class="bk-file-cover" accept="image/*" hidden>
     <input type="file" class="bk-file-book" accept="text/html,.html" hidden>
   `;
   document.body.appendChild(_root);
@@ -112,6 +113,14 @@ export function openBook() {
   _root.querySelector('[data-act="reimport"]').addEventListener('click', () => _root.querySelector('.bk-file-book').click());
   _root.querySelector('.bk-file-book').addEventListener('change', _onReimportFile);
   _root.querySelector('.bk-file-pages').addEventListener('change', e => { _addFiles([...e.target.files]); e.target.value = ''; });
+  _root.querySelector('.bk-file-cover').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f || !_ed) return;
+    try { _ed.cover = { src: await _compressImageFile(f) }; } catch (_) { _toast('Image de couverture illisible', true); return; }
+    _syncCoverUI();
+    _touch();
+  });
   document.addEventListener('keydown', _onKey);
   _renderShelf();
 }
@@ -151,7 +160,8 @@ async function _renderShelf() {
   if (!grid) return;
 
   const cards = list.map(ed => {
-    const cover = ed.pages && ed.pages[0] ? `<img src="${ed.pages[0].src}" alt="" loading="lazy">` : `<span class="bk-cover-empty">${icon('book', 34)}</span>`;
+    const coverSrc = ed.cover?.src || (ed.pages && ed.pages[0] && ed.pages[0].src);
+    const cover = coverSrc ? `<img src="${coverSrc}" alt="" loading="lazy">` : `<span class="bk-cover-empty">${icon('book', 34)}</span>`;
     const date = ed.updated ? new Date(ed.updated).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
     return `
       <article class="bk-card" data-id="${_esc(ed.id)}">
@@ -261,6 +271,16 @@ function _openEditor(ed) {
             </div>
           </div>
           <label class="bk-field bk-field-row bk-check"><span>Double page sur grand écran</span><input type="checkbox" data-k="doublePage"></label>
+          <div class="bk-field"><span>Couverture dédiée (optionnel)</span>
+            <div class="bk-cover-row">
+              <div class="bk-cover-thumb" data-slot="cover-thumb"></div>
+              <div class="bk-cover-btns">
+                <button class="bk-btn" data-act="cover-pick">${icon('image', 15)} Choisir une image</button>
+                <button class="bk-btn bk-btn-ghost" data-act="cover-clear" hidden>${icon('x', 15)} Retirer</button>
+              </div>
+            </div>
+            <p class="bk-note">Sans couverture dédiée, la première page fait office de couverture.</p>
+          </div>
         </section>
         <section class="bk-sec">
           <h3><span class="bk-step">3</span> Publier</h3>
@@ -306,6 +326,10 @@ function _openEditor(ed) {
   const dbl = main.querySelector('input[data-k="doublePage"]');
   dbl.checked = _ed.options?.doublePage !== false;
   dbl.addEventListener('change', () => { _ed.options.doublePage = dbl.checked; _touch(); });
+  // Couverture dédiée
+  main.querySelector('[data-act="cover-pick"]').addEventListener('click', () => _root.querySelector('.bk-file-cover').click());
+  main.querySelector('[data-act="cover-clear"]').addEventListener('click', () => { _ed.cover = null; _syncCoverUI(); _touch(); });
+  _syncCoverUI();
   // Dropzone
   const drop = main.querySelector('[data-slot="drop"]');
   drop.addEventListener('click', () => _root.querySelector('.bk-file-pages').click());
@@ -328,6 +352,15 @@ function _openEditor(ed) {
 
   _renderPages();
   _refreshPreview(true);
+}
+
+function _syncCoverUI() {
+  const th = _root?.querySelector('[data-slot="cover-thumb"]');
+  const clear = _root?.querySelector('[data-act="cover-clear"]');
+  if (!th || !_ed) return;
+  th.innerHTML = _ed.cover?.src ? `<img src="${_ed.cover.src}" alt="Couverture">` : icon('image', 18);
+  th.classList.toggle('on', !!_ed.cover?.src);
+  if (clear) clear.hidden = !_ed.cover?.src;
 }
 
 function _renderPages() {
@@ -360,6 +393,7 @@ function _updateSize() {
 function _estimateMo(ed) {
   let bytes = 60000;                                         // coquille lecteur ≈ 60 Ko
   for (const p of ed.pages) bytes += p.src.length;
+  if (ed.cover?.src) bytes += ed.cover.src.length;
   return Math.round(bytes / 1048576 * 10) / 10;
 }
 
@@ -485,12 +519,16 @@ async function _onReimportFile(e) {
     if (meta.format !== BK_FORMAT) throw new Error('format inconnu');
     const imgs = [...dom.querySelectorAll('#bk-pages img')];
     if (!imgs.length) throw new Error('aucune page dans ce fichier');
+    // meta.cover ⇒ la 1ʳᵉ <img> est la couverture dédiée, pas une page.
+    const srcs = imgs.map(im => im.getAttribute('src'));
+    const coverSrc = meta.cover ? srcs.shift() : null;
     const ed = {
       ...newEdition(),
       ...meta,
       id: meta.id || newEdition().id,
       updated: new Date().toISOString(),
-      pages: imgs.map((im, i) => ({ src: im.getAttribute('src'), alt: meta.pages?.[i]?.alt || '' })),
+      cover: coverSrc ? { src: coverSrc } : null,
+      pages: srcs.map((s, i) => ({ src: s, alt: meta.pages?.[i]?.alt || '' })),
     };
     ed.sizeMo = _estimateMo(ed);
     await _libPut(ed);

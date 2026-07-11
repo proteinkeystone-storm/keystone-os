@@ -111,6 +111,16 @@ html.light-mode .bk-card { background: rgba(0, 0, 0, .035); border-color: rgba(0
 .bk-tint.on { border-color: currentColor; box-shadow: 0 0 0 2px var(--c); }
 .bk-tint-custom { width: 26px; height: 26px; border: none; padding: 0; background: none; cursor: pointer; border-radius: 50%; overflow: hidden; }
 
+.bk-cover-row { display: flex; align-items: center; gap: 12px; }
+.bk-cover-thumb {
+  width: 46px; height: 60px; border-radius: 7px; overflow: hidden; flex: 0 0 auto;
+  border: 1.5px dashed rgba(127, 127, 127, .4); display: flex; align-items: center; justify-content: center; opacity: .55;
+}
+.bk-cover-thumb.on { border-style: solid; border-color: var(--bk-tint); opacity: 1; background: #fff; }
+.bk-cover-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.bk-cover-btns { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.bk-cover-btns .bk-btn { padding: 7px 12px; font-size: 12.5px; }
+
 .bk-seg { display: inline-flex; border: 1px solid rgba(127, 127, 127, .25); border-radius: 10px; overflow: hidden; }
 .bk-seg button { background: none; border: none; color: inherit; font: inherit; font-size: 12.5px; padding: 6px 13px; cursor: pointer; opacity: .6; }
 .bk-seg button.on { background: rgba(var(--c2-rgb, 138, 92, 246), .16); opacity: 1; font-weight: 700; }

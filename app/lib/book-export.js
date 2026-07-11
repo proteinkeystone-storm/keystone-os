@@ -41,6 +41,7 @@ export function newEdition() {
     updated: new Date().toISOString(),
     theme: { tint: '#C9A227', stage: 'dark' },      // stage: dark | light
     options: { doublePage: true },                   // double page sur grand écran
+    cover: null,                                     // { src: dataURI } — couverture dédiée optionnelle (sinon page 1)
     pages: [],                                       // [{ src: dataURI, alt }]
   };
 }
@@ -487,8 +488,12 @@ const BK_READER_JS = `
 export function buildStandaloneHTML(edition) {
   const ed = edition || {};
   const pages = Array.isArray(ed.pages) ? ed.pages : [];
+  // Couverture dédiée optionnelle : simplement PRÉPOSÉE aux pages — le
+  // lecteur traite déjà la 1ʳᵉ image comme la couverture (affichée seule).
+  const cover = ed.cover && ed.cover.src ? ed.cover : null;
   // Manifeste embarqué = l'édition SANS les data URI des pages (elles
   // vivent en <img> juste dessous) — le ré-import recompose les deux.
+  // meta.cover signale que la 1ʳᵉ <img> est la couverture, pas une page.
   const meta = {
     format: BK_FORMAT,
     format_version: ed.format_version || BK_FORMAT_VERSION,
@@ -500,10 +505,12 @@ export function buildStandaloneHTML(edition) {
     updated: ed.updated || '',
     theme: ed.theme || {},
     options: ed.options || {},
+    cover: cover ? { alt: cover.alt || 'Couverture' } : null,
     pages: pages.map(p => ({ alt: p.alt || '' })),
   };
   const metaJSON = _escJSONForScript(JSON.stringify(meta));
-  const imgs = pages.map((p, i) =>
+  const allImgs = (cover ? [{ src: cover.src, alt: cover.alt || 'Couverture' }] : []).concat(pages);
+  const imgs = allImgs.map((p, i) =>
     `    <img src="${p.src}" alt="${_esc(p.alt || ('Page ' + (i + 1)))}">`
   ).join('\n');
 
