@@ -120,7 +120,10 @@ body.bk-boot #bk-pages, body.bk-boot #bk-fallback-hd { display: none; }
   position: absolute; top: 0; height: 100%; overflow: hidden;
   background: #fff; box-shadow: 0 8px 34px rgba(0,0,0,${dark ? '.5' : '.22'});
 }
-.bk-pg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* contain, jamais cover : une page dont le ratio diffère de la boîte est
+   posée ENTIÈRE sur son papier blanc (letterbox), jamais rognée au pli —
+   le rognage se lisait comme « la page de droite recouvre la gauche ». */
+.bk-pg img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .bk-pg-left  { left: 0; border-radius: 6px 0 0 6px; }
 .bk-pg-right { right: 0; border-radius: 0 6px 6px 0; }
 .bk-pg-single { left: 0; border-radius: 6px; }
@@ -133,7 +136,7 @@ body.bk-boot #bk-pages, body.bk-boot #bk-fallback-hd { display: none; }
 .bk-leaf-fwd { right: 0; transform-origin: left center; }
 .bk-leaf-bwd { left: 0;  transform-origin: right center; }
 .bk-leaf-face { position: absolute; inset: 0; overflow: hidden; backface-visibility: hidden; -webkit-backface-visibility: hidden; background: #fff; }
-.bk-leaf-face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bk-leaf-face img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .bk-leaf-back { transform: rotateY(180deg); }
 .bk-leaf-shade { position: absolute; inset: 0; pointer-events: none; background: rgba(0,0,0,0); transition: background .1s linear; }
 /* zones de navigation */
@@ -257,8 +260,9 @@ const BK_READER_JS = `
       ph = s.h; pw = ph * ratio;
       if (pw > s.w) { pw = s.w; ph = pw / ratio; }
     }
-    book.style.height = Math.round(ph) + 'px';
-    book.style.width = Math.round(mode === 'double' && !isCoverAlone() ? pw * 2 : pw) + 'px';
+    pw = Math.floor(pw); ph = Math.floor(ph);   // entiers : 2 pages de round(pw) pouvaient déborder d'1 px la boîte round(2pw)
+    book.style.height = ph + 'px';
+    book.style.width = (mode === 'double' && !isCoverAlone() ? pw * 2 : pw) + 'px';
     book._pw = pw; book._ph = ph;
     render();
   }

@@ -79,7 +79,7 @@ html.light-mode .bk-card { background: rgba(0, 0, 0, .035); border-color: rgba(0
 
 .bk-pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 10px; margin-top: 14px; }
 .bk-page-th { position: relative; border-radius: 8px; overflow: hidden; background: rgba(127, 127, 127, .12); }
-.bk-page-th img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; }
+.bk-page-th img { width: 100%; aspect-ratio: 3 / 4; object-fit: contain; background: #fff; display: block; }
 .bk-page-num {
   position: absolute; top: 4px; left: 4px; font-size: 10px; font-weight: 700;
   background: rgba(0, 0, 0, .55); color: #fff; border-radius: 5px; padding: 1px 5px;
