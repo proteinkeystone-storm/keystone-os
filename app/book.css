@@ -48,9 +48,19 @@ html.light-mode .bk-card { background: rgba(0, 0, 0, .035); border-color: rgba(0
 .bk-card-new-ico { display: block; }
 
 /* ── Lecture plein pad ─────────────────────────────────────────── */
+/* Vue lecture : pleins bords — le padding généreux de .ws-main rognait
+   le lecteur (surtout en mobile où chaque pixel compte). */
+.bk-main.bk-main-read { padding: 0; overflow: hidden; }
 .bk-read { display: flex; flex-direction: column; height: 100%; }
 .bk-read-bar { display: flex; align-items: center; gap: 14px; padding: 10px 16px; }
-.bk-read-title { flex: 1; text-align: center; font-weight: 900; letter-spacing: -0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-read-title { flex: 1; min-width: 0; text-align: center; font-weight: 900; letter-spacing: -0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-btn .bk-btn-txt { margin-left: 2px; }
+@media (max-width: 640px) {
+  /* le titre du livre reste lisible : les boutons passent en icône seule */
+  .bk-read-bar { gap: 8px; padding: 8px 10px; }
+  .bk-read-bar .bk-btn-txt { display: none; }
+  .bk-read-bar .bk-btn { padding: 9px 11px; }
+}
 .bk-read-frame { flex: 1; border: none; width: 100%; min-height: 0; border-radius: 14px 14px 0 0; background: #101014; }
 
 /* ── Éditeur ───────────────────────────────────────────────────── */

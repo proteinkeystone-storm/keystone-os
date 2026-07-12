@@ -28,7 +28,10 @@ const WORKSPACE_META = { id: 'O-BOK-001', name: 'booK' };
 // Recompression à l'import (BOOK_BRIEF §2.5) : c'est elle qui rend la
 // promesse « un seul fichier » tenable. Largeur cap 1600 px, WebP q.82
 // (repli JPEG q.85 si le navigateur ne sait pas encoder WebP).
-const MAX_PAGE_W   = 1600;
+// Sur tactile (mémoire limitée, iOS tue l'onglet sur un gros PDF) : cap
+// abaissé à 1200 px — largement suffisant pour un écran de téléphone.
+const IS_COARSE    = (() => { try { return matchMedia('(pointer: coarse)').matches; } catch (_) { return false; } })();
+const MAX_PAGE_W   = IS_COARSE ? 1200 : 1600;
 const SOFT_CAP_MO  = 20;          // plafond doux : avertissement au-delà
 const TINT_PRESETS = ['#C9A227', '#2A9D8F', '#E76F51', '#4A6FA5', '#8A5CF6', '#20242B'];
 
@@ -151,6 +154,7 @@ function _onBack() {
 // ── Étagère (bibliothèque) ──────────────────────────────────────
 async function _renderShelf() {
   const main = _root.querySelector('[data-slot="main"]');
+  main.classList.remove('bk-main-read');
   main.innerHTML = `<div class="bk-shelf"><div class="bk-shelf-grid" data-slot="grid"></div></div>`;
   let list = [];
   try { list = await _libAll(); } catch (_) {}
@@ -221,12 +225,13 @@ async function _renderShelf() {
 // ── Lecture plein pad (l'aperçu EST l'export) ───────────────────
 function _openReader(ed) {
   const main = _root.querySelector('[data-slot="main"]');
+  main.classList.add('bk-main-read');            // lecture = pleins bords (annule le padding ws-main)
   main.innerHTML = `
     <div class="bk-read">
       <div class="bk-read-bar">
-        <button class="bk-btn bk-btn-ghost" data-act="close">${icon('arrow-left', 16)} Bibliothèque</button>
+        <button class="bk-btn bk-btn-ghost" data-act="close" title="Bibliothèque" aria-label="Bibliothèque">${icon('arrow-left', 16)}<span class="bk-btn-txt">Bibliothèque</span></button>
         <span class="bk-read-title">${_esc(ed.title || 'Sans titre')}</span>
-        <button class="bk-btn" data-act="export">${icon('download', 16)} Fichier autonome</button>
+        <button class="bk-btn" data-act="export" title="Fichier autonome" aria-label="Télécharger le fichier autonome">${icon('download', 16)}<span class="bk-btn-txt">Fichier autonome</span></button>
       </div>
       <iframe class="bk-read-frame" title="Aperçu du flipbook" sandbox="allow-scripts"></iframe>
     </div>`;
@@ -240,6 +245,7 @@ function _openEditor(ed) {
   _ed = JSON.parse(JSON.stringify(ed));    // copie de travail : l'étagère garde l'original tant qu'on n'enregistre pas
   _dirty = false;
   const main = _root.querySelector('[data-slot="main"]');
+  main.classList.remove('bk-main-read');
   main.innerHTML = `
     <div class="bk-editor">
       <div class="bk-panel">
@@ -439,7 +445,7 @@ async function _importPDF(file, say) {
     say(`Page ${i} / ${doc.numPages}…`);
     const page = await doc.getPage(i);
     const vp1 = page.getViewport({ scale: 1 });
-    const scale = Math.min(2.5, MAX_PAGE_W / vp1.width);
+    const scale = Math.min(IS_COARSE ? 2 : 2.5, MAX_PAGE_W / vp1.width);
     const vp = page.getViewport({ scale });
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
@@ -447,7 +453,10 @@ async function _importPDF(file, say) {
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, viewport: vp }).promise;
     _ed.pages.push({ src: _canvasToURI(canvas), alt: '' });
+    page.cleanup();
+    canvas.width = canvas.height = 0;                // libère le bitmap tout de suite (crash mémoire iOS sur gros PDF)
     if (i % 4 === 0) _renderPages();                 // feedback visuel en cours de route
+    await new Promise(r => setTimeout(r, 0));        // souffle entre les pages : laisse le GC et le paint passer
   }
   try { doc.destroy(); } catch (_) {}
 }
@@ -465,7 +474,9 @@ function _compressImageFile(file) {
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);   // JPEG n'a pas d'alpha
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(_canvasToURI(canvas));
+      const uri = _canvasToURI(canvas);
+      canvas.width = canvas.height = 0;              // libère le bitmap (mémoire mobile)
+      resolve(uri);
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image illisible')); };
     img.src = url;

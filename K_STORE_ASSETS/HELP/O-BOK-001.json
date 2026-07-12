@@ -19,8 +19,12 @@
       "a": "Partout où il y a un navigateur : double-clic depuis un ordinateur, pièce jointe d'e-mail, clé USB, espace de téléchargement de votre site… Il ne fait AUCUN appel à Internet. Et sans JavaScript (impression, très vieux navigateurs), les pages s'affichent quand même, simplement empilées."
     },
     {
-      "q": "Que deviennent mes flipbooks si je change d'ordinateur ?",
-      "a": "La bibliothèque est rangée dans le navigateur de CET appareil. Le geste de sauvegarde universel, c'est le fichier autonome : téléchargez-le et conservez-le où vous voulez — il se ré-importe dans booK sur n'importe quel appareil et redevient modifiable."
+      "q": "Mon flipbook créé sur ordinateur n'apparaît pas sur mon téléphone — c'est normal ?",
+      "a": "Oui : la bibliothèque est rangée dans le navigateur de CHAQUE appareil, elle ne transite par aucun serveur (c'est le principe souverain de booK). Pour passer un flipbook d'un appareil à l'autre : téléchargez le fichier autonome, envoyez-le-vous (AirDrop, e-mail…), puis ré-importez-le avec le bouton nuage — il arrive complet et modifiable. Le fichier EST la sauvegarde."
+    },
+    {
+      "q": "L'import d'un gros PDF échoue sur mon téléphone, que faire ?",
+      "a": "La fabrication des pages demande de la mémoire, et les téléphones en ont peu : pour un PDF lourd (plusieurs dizaines de pages ou scans haute résolution), créez le flipbook sur ordinateur, puis transférez le fichier autonome sur le téléphone. Sur mobile, booK réduit automatiquement la finesse des pages pour limiter la casse."
     },
     {
       "q": "Mon fichier est lourd, que faire ?",

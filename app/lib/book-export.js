@@ -116,6 +116,9 @@ body.bk-boot #bk-pages, body.bk-boot #bk-fallback-hd { display: none; }
 .bk-hd button:hover { background: rgba(var(--bk-tint-rgb), .14); color: var(--bk-tint); }
 .bk-hd svg { width: 19px; height: 19px; stroke: currentColor; stroke-width: 1.7; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 .bk-stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 26px 54px; }
+/* Téléphone en paysage : page pleine largeur, on défile verticalement */
+.bk-stage-wide { align-items: flex-start; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 !important; }
+.bk-stage-wide .bk-book { margin: 0 auto; flex: 0 0 auto; }
 /* flex: 0 0 auto — JAMAIS de shrink silencieux : un livre trop large doit
    déborder visiblement, pas se comprimer pendant que ses pages (en px)
    gardent leur taille — c'était le chevauchement gauche/droite. */
@@ -193,7 +196,16 @@ body.bk-boot #bk-pages, body.bk-boot #bk-fallback-hd { display: none; }
 .bk-thumb.cur, .bk-thumb:hover { border-color: var(--bk-tint); }
 .bk-thumb-num { font-size: 11px; color: ${stageMut}; padding: 3px 0 5px; display: block; text-align: center; }
 @media (prefers-reduced-motion: reduce) { .bk-leaf, .bk-progress span { transition: none !important; } .bk-hint { animation: none; } }
-@media (max-width: 640px) { .bk-stage { padding: 14px 10px; } .bk-hd-sub { display: none; } .bk-nav { opacity: 0 !important; } }
+@media (max-width: 640px) {
+  .bk-stage { padding: 8px 6px; }
+  .bk-hd { padding: 7px 10px; gap: 8px; min-height: 44px; }
+  .bk-hd-title { font-size: 13.5px; }
+  .bk-hd-sub { display: none; }
+  .bk-hd button { width: 32px; height: 32px; }
+  .bk-nav { opacity: 0 !important; }
+  .bk-thumbs { padding-top: 58px; }
+}
+@media (max-height: 560px) and (pointer: coarse) { .bk-hd { min-height: 40px; padding: 5px 10px; } }
 @media print {
   .bk-app { display: none !important; }
   body.bk-boot { overflow: visible; }
@@ -222,8 +234,9 @@ const BK_READER_JS = `
   for (var i = 0; i < srcEls.length; i++) pages.push({ src: srcEls[i].getAttribute('src'), alt: srcEls[i].getAttribute('alt') || ('Page ' + (i + 1)) });
   var N = pages.length;
   var wantDouble = !meta.options || meta.options.doublePage !== false;
-  var REDUCED = false;
+  var REDUCED = false, COARSE = false;
   try { REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+  try { COARSE = window.matchMedia('(pointer: coarse)').matches; } catch (e) {}
 
   document.body.className += ' bk-boot';
 
@@ -283,10 +296,17 @@ const BK_READER_JS = `
   }
   function layout() {
     var s = stageSize();
-    var newMode = (wantDouble && N > 1 && s.w > s.h * 1.05 && s.w > 620) ? 'double' : 'single';
-    mode = newMode;
+    // Téléphone tourné en paysage : mode « pleine largeur » — une page
+    // calée sur toute la largeur, on la parcourt en défilant verticalement
+    // (la double page y serait minuscule). Détection : écran tactile +
+    // paysage + petite hauteur (une tablette paysage garde la double page).
+    var wide = COARSE && s.w > s.h && s.h < 560;
+    mode = (!wide && wantDouble && N > 1 && s.w > s.h * 1.05 && s.w > 620) ? 'double' : 'single';
+    stage.className = wide ? 'bk-stage bk-stage-wide' : 'bk-stage';
     var pw, ph;
-    if (mode === 'double') {
+    if (wide) {
+      pw = s.w; ph = pw / ratio;                 // peut dépasser l'écran → scroll vertical
+    } else if (mode === 'double') {
       ph = s.h; pw = ph * ratio;
       if (pw * 2 > s.w) { pw = s.w / 2; ph = pw / ratio; }
     } else {
@@ -338,6 +358,7 @@ const BK_READER_JS = `
       var firstPg = book.querySelector('.bk-pg');
       if (firstPg) firstPg.insertAdjacentHTML('beforeend', '<div class="bk-hint"></div>');
     }
+    if (stage.scrollTop) stage.scrollTop = 0;      // mode pleine largeur : chaque page repart du haut
     updateHUD();
   }
 
@@ -467,14 +488,22 @@ const BK_READER_JS = `
   btnThumbs.onclick = function () { toggleThumbs(); };
 
   // ── Plein écran ────────────────────────────────────────────────
+  // iPhone : l'API Fullscreen n'existe pas pour les éléments HTML — on
+  // masque le bouton plutôt que de laisser un contrôle mort.
+  var docEl = document.documentElement;
+  if (!(docEl.requestFullscreen || docEl.webkitRequestFullscreen)) {
+    btnFull.style.display = 'none';
+  }
   btnFull.onclick = function () {
-    var d = document, e = d.documentElement;
+    var d = document;
     if (d.fullscreenElement || d.webkitFullscreenElement) {
       (d.exitFullscreen || d.webkitExitFullscreen || function () {}).call(d);
     } else {
-      (e.requestFullscreen || e.webkitRequestFullscreen || function () {}).call(e);
+      (docEl.requestFullscreen || docEl.webkitRequestFullscreen || function () {}).call(docEl);
     }
   };
+  document.addEventListener('fullscreenchange', function () { layout(); });
+  document.addEventListener('webkitfullscreenchange', function () { layout(); });
 
   var rT = null;
   window.addEventListener('resize', function () { clearTimeout(rT); rT = setTimeout(layout, 120); });
