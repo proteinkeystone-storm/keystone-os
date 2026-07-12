@@ -155,6 +155,7 @@ function _onBack() {
 async function _renderShelf() {
   const main = _root.querySelector('[data-slot="main"]');
   main.classList.remove('bk-main-read');
+  _root.classList.remove('bk-reading');
   main.innerHTML = `<div class="bk-shelf"><div class="bk-shelf-grid" data-slot="grid"></div></div>`;
   let list = [];
   try { list = await _libAll(); } catch (_) {}
@@ -226,6 +227,7 @@ async function _renderShelf() {
 function _openReader(ed) {
   const main = _root.querySelector('[data-slot="main"]');
   main.classList.add('bk-main-read');            // lecture = pleins bords (annule le padding ws-main)
+  _root.classList.add('bk-reading');             // paysage téléphone : la topbar Keystone s'efface
   main.innerHTML = `
     <div class="bk-read">
       <div class="bk-read-bar">
@@ -246,6 +248,7 @@ function _openEditor(ed) {
   _dirty = false;
   const main = _root.querySelector('[data-slot="main"]');
   main.classList.remove('bk-main-read');
+  _root.classList.remove('bk-reading');
   main.innerHTML = `
     <div class="bk-editor">
       <div class="bk-panel">

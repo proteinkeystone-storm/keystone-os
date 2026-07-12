@@ -116,9 +116,25 @@ body.bk-boot #bk-pages, body.bk-boot #bk-fallback-hd { display: none; }
 .bk-hd button:hover { background: rgba(var(--bk-tint-rgb), .14); color: var(--bk-tint); }
 .bk-hd svg { width: 19px; height: 19px; stroke: currentColor; stroke-width: 1.7; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 .bk-stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 26px 54px; }
-/* Téléphone en paysage : page pleine largeur, on défile verticalement */
+/* Téléphone en paysage : page pleine largeur, on défile verticalement.
+   Le bandeau disparaît (toute la hauteur va à la page) — seul reste un
+   badge compteur flottant. */
 .bk-stage-wide { align-items: flex-start; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 !important; }
 .bk-stage-wide .bk-book { margin: 0 auto; flex: 0 0 auto; }
+.bk-wide .bk-hd { display: none; }
+.bk-float-count {
+  display: none; position: fixed; top: 8px; right: 10px; z-index: 6;
+  padding: 3px 10px; border-radius: 999px; font-size: 11px; font-variant-numeric: tabular-nums;
+  background: rgba(0, 0, 0, .5); color: rgba(255, 255, 255, .85); pointer-events: none;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.bk-wide .bk-float-count { display: block; }
+/* Zoom : la page se déplace au doigt / à la souris */
+.bk-book { transform-origin: center center; }
+.bk-zoomed .bk-book { cursor: grab; }
+.bk-zoomed .bk-book:active { cursor: grabbing; }
+.bk-zoomed .bk-nav { display: none; }
+.bk-zoomed .bk-hint { display: none; }
 /* flex: 0 0 auto — JAMAIS de shrink silencieux : un livre trop large doit
    déborder visiblement, pas se comprimer pendant que ses pages (en px)
    gardent leur taille — c'était le chevauchement gauche/droite. */
@@ -245,6 +261,8 @@ const BK_READER_JS = `
     left:  '<svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>',
     right: '<svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>',
     grid:  '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>',
+    zin:   '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
+    zout:  '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
     full:  '<svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>',
     x:     '<svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>'
   };
@@ -257,9 +275,11 @@ const BK_READER_JS = `
     '<div class="bk-hd-title">' + esc(meta.title || 'Sans titre') + '</div>' +
     (meta.subtitle ? '<div class="bk-hd-sub">' + esc(meta.subtitle) + '</div>' : ''));
   var count = el('span', 'bk-hd-count');
+  var btnZoomOut = el('button', null, SVG.zout); btnZoomOut.setAttribute('aria-label', 'R\\u00e9duire'); btnZoomOut.title = 'R\\u00e9duire';
+  var btnZoomIn = el('button', null, SVG.zin); btnZoomIn.setAttribute('aria-label', 'Zoomer'); btnZoomIn.title = 'Zoomer (double-clic sur la page)';
   var btnThumbs = el('button', null, SVG.grid); btnThumbs.setAttribute('aria-label', 'Sommaire'); btnThumbs.title = 'Sommaire';
   var btnFull = el('button', null, SVG.full); btnFull.setAttribute('aria-label', 'Plein \\u00e9cran'); btnFull.title = 'Plein \\u00e9cran';
-  hd.appendChild(hdLeft); hd.appendChild(count); hd.appendChild(btnThumbs); hd.appendChild(btnFull);
+  hd.appendChild(hdLeft); hd.appendChild(count); hd.appendChild(btnZoomOut); hd.appendChild(btnZoomIn); hd.appendChild(btnThumbs); hd.appendChild(btnFull);
 
   var stage = el('div', 'bk-stage');
   var book = el('div', 'bk-book');
@@ -269,8 +289,11 @@ const BK_READER_JS = `
 
   var progress = el('div', 'bk-progress', '<span></span>');
   var thumbs = el('div', 'bk-thumbs');
+  // Badge compteur flottant : seul repère affiché quand le bandeau est
+  // masqué (téléphone en paysage — chaque pixel de hauteur compte).
+  var floatCount = el('div', 'bk-float-count');
 
-  app.appendChild(hd); app.appendChild(stage); app.appendChild(progress); app.appendChild(thumbs);
+  app.appendChild(hd); app.appendChild(stage); app.appendChild(progress); app.appendChild(thumbs); app.appendChild(floatCount);
   document.body.appendChild(app);
 
   // ── Géométrie ──────────────────────────────────────────────────
@@ -303,6 +326,8 @@ const BK_READER_JS = `
     var wide = COARSE && s.w > s.h && s.h < 560;
     mode = (!wide && wantDouble && N > 1 && s.w > s.h * 1.05 && s.w > 620) ? 'double' : 'single';
     stage.className = wide ? 'bk-stage bk-stage-wide' : 'bk-stage';
+    if (app.classList) app.classList.toggle('bk-wide', wide);   // bandeau masqué en paysage téléphone
+    if (wide) { s = stageSize(); }                               // le bandeau vient de disparaître : re-mesurer
     var pw, ph;
     if (wide) {
       pw = s.w; ph = pw / ratio;                 // peut dépasser l'écran → scroll vertical
@@ -342,6 +367,7 @@ const BK_READER_JS = `
 
   function render() {
     normalize();
+    if (Z !== 1) { Z = 1; panX = panY = 0; book.style.transform = ''; app.classList.remove('bk-zoomed'); }  // nouvelle page = zoom remis
     var pw = book._pw || 300;
     var html = '';
     if (mode === 'double' && !isCoverAlone()) {
@@ -367,6 +393,7 @@ const BK_READER_JS = `
     if (mode === 'double' && !isCoverAlone() && rightIdx() <= N - 1) label = (leftIdx() + 1) + '\\u2013' + (rightIdx() + 1) + ' / ' + N;
     else label = (cur + 1) + ' / ' + N;
     count.textContent = label;
+    floatCount.textContent = label;
     prevBtn.disabled = cur <= 0;
     nextBtn.disabled = mode === 'double' ? cur >= lastPos() : cur >= N - 1;
     var farthest = mode === 'double' && !isCoverAlone() && rightIdx() >= 0 ? Math.min(rightIdx(), N - 1) : cur;
@@ -440,27 +467,117 @@ const BK_READER_JS = `
   prevBtn.onclick = function () { go(-1); };
   nextBtn.onclick = function () { go(1); };
 
+  // ── Zoom : boutons loupe, double-clic/double-tap, pincement, molette+Ctrl.
+  // transform = translate(pan) scale(Z), origine au centre — le pan se
+  // déplace au doigt ou à la souris, borné pour ne jamais perdre la page.
+  var Z = 1, panX = 0, panY = 0;
+  function clampPan() {
+    var w = parseFloat(book.style.width) || 300, h = parseFloat(book.style.height) || 400;
+    var mx = (Z - 1) * w / 2, my = (Z - 1) * h / 2;
+    if (panX > mx) panX = mx; if (panX < -mx) panX = -mx;
+    if (panY > my) panY = my; if (panY < -my) panY = -my;
+  }
+  function applyZoom() {
+    if (Z < 1.02) { Z = 1; panX = 0; panY = 0; }
+    clampPan();
+    book.style.transform = Z === 1 ? '' : 'translate(' + Math.round(panX) + 'px, ' + Math.round(panY) + 'px) scale(' + Z.toFixed(3) + ')';
+    app.classList.toggle('bk-zoomed', Z > 1);
+  }
+  function setZoom(nz, cx, cy) {
+    nz = Math.max(1, Math.min(4, nz));
+    if (cx !== undefined && nz !== Z) {
+      var r = book.getBoundingClientRect();
+      var bx = (cx - (r.left + r.width / 2)) / Z;    // point visé, en unités non zoomées depuis le centre
+      var by = (cy - (r.top + r.height / 2)) / Z;
+      panX -= bx * (nz - Z); panY -= by * (nz - Z);  // garde le point visé sous le curseur
+    }
+    Z = nz; applyZoom();
+  }
+  btnZoomIn.onclick  = function () { setZoom(Z + 0.6); };
+  btnZoomOut.onclick = function () { setZoom(Z - 0.6); };
+  stage.addEventListener('wheel', function (e) {
+    if (!e.ctrlKey) return;                          // Ctrl+molette / pincement trackpad = zoom
+    e.preventDefault();
+    setZoom(Z * (e.deltaY < 0 ? 1.15 : 0.87), e.clientX, e.clientY);
+  }, { passive: false });
+  // Déplacement à la souris quand zoomé
+  var drag = null;
+  book.addEventListener('mousedown', function (e) {
+    if (Z <= 1) return;
+    drag = { x: e.clientX, y: e.clientY, px: panX, py: panY };
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', function (e) {
+    if (!drag) return;
+    panX = drag.px + (e.clientX - drag.x); panY = drag.py + (e.clientY - drag.y);
+    applyZoom();
+  });
+  window.addEventListener('mouseup', function () { drag = null; });
+
   document.addEventListener('keydown', function (e) {
     if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { go(1); e.preventDefault(); }
     else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { go(-1); e.preventDefault(); }
     else if (e.key === 'Home') { cur = 0; render(); }
     else if (e.key === 'End') { cur = mode === 'double' ? lastPos() : N - 1; render(); }
-    else if (e.key === 'Escape' && thumbs.className.indexOf('on') >= 0) toggleThumbs(false);
+    else if (e.key === 'Escape') {
+      if (Z > 1) setZoom(1);                                          // Échap : d'abord sortir du zoom
+      else if (thumbs.className.indexOf('on') >= 0) toggleThumbs(false);
+    }
   });
 
-  // Swipe (mobile) — seuil 40 px, dominante horizontale.
-  var tx = null, ty = null;
-  stage.addEventListener('touchstart', function (e) { if (e.touches.length === 1) { tx = e.touches[0].clientX; ty = e.touches[0].clientY; } }, { passive: true });
-  stage.addEventListener('touchend', function (e) {
-    if (tx === null) return;
-    var dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
-    tx = ty = null;
-    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.4) go(dx < 0 ? 1 : -1);
+  // ── Tactile : swipe pour tourner, double-tap pour zoomer,
+  //    pincement à deux doigts, glissé à un doigt quand zoomé.
+  function tdist(e) { var a = e.touches[0], b = e.touches[1]; return Math.max(20, Math.sqrt(Math.pow(a.clientX - b.clientX, 2) + Math.pow(a.clientY - b.clientY, 2))); }
+  var tx = null, ty = null, pinch = null, tpan = null, lastTap = 0;
+  stage.addEventListener('touchstart', function (e) {
+    if (e.touches.length === 2) {
+      pinch = { d: tdist(e), z: Z, cx: (e.touches[0].clientX + e.touches[1].clientX) / 2, cy: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
+      tx = ty = null;
+    } else if (e.touches.length === 1) {
+      if (Z > 1) tpan = { x: e.touches[0].clientX, y: e.touches[0].clientY, px: panX, py: panY };
+      tx = e.touches[0].clientX; ty = e.touches[0].clientY;
+    }
   }, { passive: true });
-  // Clic direct sur la moitié de page (desktop, en plus des chevrons)
+  stage.addEventListener('touchmove', function (e) {
+    if (pinch && e.touches.length === 2) {
+      e.preventDefault();
+      setZoom(pinch.z * tdist(e) / pinch.d, pinch.cx, pinch.cy);
+    } else if (tpan && e.touches.length === 1) {
+      e.preventDefault();
+      panX = tpan.px + (e.touches[0].clientX - tpan.x);
+      panY = tpan.py + (e.touches[0].clientY - tpan.y);
+      applyZoom();
+    }
+  }, { passive: false });
+  stage.addEventListener('touchend', function (e) {
+    if (pinch) { if (e.touches.length < 2) pinch = null; return; }
+    if (tpan) { tpan = null; tx = ty = null; return; }               // on déplaçait la page zoomée
+    if (tx === null || !e.changedTouches.length) return;
+    var t = e.changedTouches[0];
+    var dx = t.clientX - tx, dy = t.clientY - ty;
+    tx = ty = null;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.4) { go(dx < 0 ? 1 : -1); return; }
+    if (Math.abs(dx) < 12 && Math.abs(dy) < 12) {                    // tap : double-tap = zoom
+      var now = Date.now();
+      if (now - lastTap < 320) { setZoom(Z > 1 ? 1 : 2.2, t.clientX, t.clientY); lastTap = 0; }
+      else lastTap = now;
+    }
+  }, { passive: true });
+
+  // ── Souris : clic = tourner (différé pour laisser sa chance au
+  //    double-clic), double-clic = zoomer sur le point visé.
+  var clickTimer = null;
   book.addEventListener('click', function (e) {
+    if (Z > 1 || COARSE) return;                    // zoomé : le glissé prime ; tactile : le swipe prime
+    clearTimeout(clickTimer);
     var r = book.getBoundingClientRect();
-    go(e.clientX < r.left + r.width / 2 ? -1 : 1);
+    var dir = e.clientX < r.left + r.width / 2 ? -1 : 1;
+    clickTimer = setTimeout(function () { go(dir); }, 260);
+  });
+  book.addEventListener('dblclick', function (e) {
+    clearTimeout(clickTimer);
+    e.preventDefault();
+    setZoom(Z > 1 ? 1 : 2.2, e.clientX, e.clientY);
   });
 
   // ── Sommaire ───────────────────────────────────────────────────

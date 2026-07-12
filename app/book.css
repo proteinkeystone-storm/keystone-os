@@ -61,6 +61,13 @@ html.light-mode .bk-card { background: rgba(0, 0, 0, .035); border-color: rgba(0
   .bk-read-bar .bk-btn-txt { display: none; }
   .bk-read-bar .bk-btn { padding: 9px 11px; }
 }
+/* Téléphone en paysage, pendant la lecture : la topbar Keystone s'efface
+   (toute la hauteur va au livre) — la barre du lecteur garde le retour. */
+@media (max-height: 560px) and (pointer: coarse) {
+  .bk-app.bk-reading .ws-topbar { display: none; }
+  .bk-app.bk-reading .bk-read-bar { padding: 4px 8px; }
+  .bk-app.bk-reading .bk-read-bar .bk-btn-txt { display: none; }
+}
 .bk-read-frame { flex: 1; border: none; width: 100%; min-height: 0; border-radius: 14px 14px 0 0; background: #101014; }
 
 /* ── Éditeur ───────────────────────────────────────────────────── */
