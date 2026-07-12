@@ -29,6 +29,7 @@ import { openSceau }                             from './sceau.js';
 import { openKeyBrand }                          from './key-brand.js';
 import { openNetwork }                            from './network.js';
 import { openBook }                               from './book.js';
+import { openDesk }                               from './desk.js';
 import { openGhostwriter, isGhostwriterEnabled } from './ghostwriter.js';
 import { openGhostwriterInline }                 from './lib/ghostwriter-inline.js';
 import { lock, unlock, isLocked }              from './lockscreen.js';
@@ -115,6 +116,9 @@ const ICONS = {
     // book : livre fermé à dos rond — picto de booK (O-BOK-001), flipbooks souverains.
     // Tracés IDENTIQUES à 'book' de lib/ui-icons.js (topbar du pad), style brand 1.8.
     'book':           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`,
+    // desk : chemin de fer (3 pages en frise) — picto de desK (O-DSK-001).
+    // Tracés IDENTIQUES à 'desk' de lib/ui-icons.js, style brand 1.8.
+    'desk':           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="5.5" height="10" rx="1"/><rect x="9.25" y="4.5" width="5.5" height="15" rx="1"/><rect x="16.5" y="7" width="5.5" height="10" rx="1"/></svg>`,
     // smart-agent : tête de robot + étincelle de savoir — picto du Smart Agent (O-AGT-001).
     // Tracés IDENTIQUES à ui-icons.js 'smart-agent' (le robot de la topbar du pad),
     // au style brand 1.8 du dashboard → robot partout (tuile, K-Store, fiche détail).
@@ -2239,6 +2243,7 @@ export function openTool(padId, opts = {}) {
     if (padId === 'O-BRD-001')  { openKeyBrand(opts); return; }       // Key Brand — charte graphique vivante, zéro IA (KB-0)
     if (padId === 'O-NET-001')  { openNetwork(opts); return; }        // networK — réseau relationnel vivant, V1 manuelle (NK-0)
     if (padId === 'O-BOK-001')  { openBook(opts); return; }           // booK — flipbooks souverains, export autoporté, zéro IA (BK-0)
+    if (padId === 'O-DSK-001')  { openDesk(opts); return; }           // desK — chemin de fer vivant, tenant = publication (DK-1)
     if (padId === 'O-IMM-010') { openVefaStudio(); return; }
     if (padId === 'A-COM-001') { openSDQR(opts); return; }   // opts.createVcard = handoff networK → QR vCard
     if (padId === 'A-COM-002') { openKodex(); return; }

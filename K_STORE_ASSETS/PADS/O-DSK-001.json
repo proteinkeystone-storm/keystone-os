@@ -1,0 +1,15 @@
+{
+  "id": "O-DSK-001",
+  "padKey": null,
+  "type": "artifact",
+  "ui_kind": "fullscreen",
+  "title": "desK",
+  "subtitle": "Le chemin de fer vivant de votre revue — qui doit livrer quoi, quand, et quoi faire quand ça dérape",
+  "category": "COM",
+  "icon": "desk",
+  "ai_optimized": null,
+  "notice": "Artefact à workspace fullscreen indépendant — pas d'édition de form ici.\nChemin de fer vivant d'une revue (DESK_BRIEF.md) : frise de cartes-pages partagée en équipe, rail des jalons avec marges, inspecteur, repagination, pointage, bascule de remplaçant. ⚠ TENANT = LA PUBLICATION (dk_members contrôle l'accès, jamais claims.sub comme tenant). DK-1 = socle (publications, membres, rubriques, numéros) ; marbre complet en DK-2, casier R2 en DK-3, digestion e-mail en DK-4. Front app/desk.js (portage du harnais _design-lab/desk-harness.html validé), worker routes/desk.js, tables dk_. ZÉRO IA au cœur.\nPour modifier le comportement : éditer le code de l'artefact directement.",
+  "fields": [],
+  "system_prompt": "",
+  "longDesc": "desK pilote la production de votre revue : le chemin de fer devient une frise vivante de cartes-pages, partagée par l'équipe. Chaque article affiche sa marge réelle avant le bouclage — et tant qu'elle tient, rien ne s'allume. Quand un retard la consomme, la carte passe à l'ambre puis au rouge, et l'inspecteur vous tend la décision : relancer le contributeur, ou basculer sur un remplaçant préparé au banc. Simulez un report de remise et voyez la date d'impression réagir en direct. La maquette reste dans InDesign : desK est le cockpit autour. Multi-revues, équipe invitée par e-mail, zéro IA au cœur."
+}

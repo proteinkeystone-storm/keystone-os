@@ -111,6 +111,8 @@ export const ICONS = {
   'book-open'  : '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
   // booK (O-BOK-001) — livre fermé à dos rond (Lucide "book"). Identité du pad flipbooks.
   'book'       : '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+  // desK (O-DSK-001) — chemin de fer : trois pages en frise, la courante saillante.
+  'desk'       : '<rect x="2" y="7" width="5.5" height="10" rx="1"/><rect x="9.25" y="4.5" width="5.5" height="15" rx="1"/><rect x="16.5" y="7" width="5.5" height="10" rx="1"/>',
   'custom'     : '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/>',
   // Dossier d'agents (SA-4.4.1) — style Lucide "folder".
   'folder'     : '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',

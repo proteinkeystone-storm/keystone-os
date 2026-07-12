@@ -441,6 +441,34 @@
         "publication",
         "editorial"
       ]
+    },
+    {
+      "id": "O-DSK-001",
+      "padKey": null,
+      "title": "desK",
+      "subtitle": "Le chemin de fer vivant de votre revue — qui doit livrer quoi, quand, et quoi faire quand ça dérape",
+      "category": "COM",
+      "plan": "STARTER",
+      "price": 49,
+      "lifetimePrice": 199,
+      "longDesc": "desK pilote la production de votre revue : le chemin de fer devient une frise vivante de cartes-pages, partagée par l'équipe. Chaque article affiche sa marge réelle avant le bouclage — et tant qu'elle tient, rien ne s'allume. Quand un retard la consomme, la carte passe à l'ambre puis au rouge, et l'inspecteur vous tend la décision : relancer le contributeur, ou basculer sur un remplaçant préparé au banc. Simulez un report de remise et voyez la date d'impression réagir en direct. La maquette reste dans InDesign : desK est le cockpit autour. Multi-revues, équipe invitée par e-mail, zéro IA au cœur.",
+      "icon": "desk",
+      "ai_optimized": null,
+      "isNew": true,
+      "published": true,
+      "tags": [
+        "artefact",
+        "communication",
+        "revue",
+        "magazine",
+        "journal",
+        "redaction",
+        "chemin de fer",
+        "bouclage",
+        "editorial",
+        "presse",
+        "flatplan"
+      ]
     }
   ]
 }

@@ -149,6 +149,12 @@ import { handleNetworkHealth, handleNetworkBootstrap,
          handleCategoryCreate, handleCategoryUpdate, handleCategoryDelete,
          handleContactCreate, handleContactUpdate, handleContactDelete,
          handleActivityList, handleActivityCreate, handleActivityDelete } from './routes/network.js';
+// desK — chemin de fer vivant (Pad O-DSK-001 · DK-1). Tenant = LA PUBLICATION.
+import { handleDeskHealth, handleDeskBootstrap, handlePubCreate, handlePubPatch,
+         handleTeamList, handleTeamInvite, handleTeamRemove,
+         handleRubCreate, handleRubPatch, handleRubDelete,
+         handleIssueCreate, handleIssueGet, handleIssuePatch, handleIssueSwap,
+         handlePagePatch, handleArtCreate, handleArtPatch, handleArtDelete } from './routes/desk.js';
 // Key-Ring (Sonnette) — ORDRE 3 : « Sonner » Web Push + boucle retour.
 import { handleKeyringRing, handleKeyringRingStatus, handleKeyringRespond, handleKeyringRespondGet,
          handleKeyringPushSubscribe, handleKeyringPushUnsubscribe, handleKeyringPushStatus, handleKeyringPushList,
@@ -292,6 +298,38 @@ export default {
       if (path === '/api/network/activity'  && method === 'POST') return handleActivityCreate(request, env);
       const nkAct = path.match(/^\/api\/network\/activity\/([A-Za-z0-9-]+)$/);
       if (nkAct && method === 'DELETE') return handleActivityDelete(request, env, nkAct[1]);
+
+      // ── desK (Pad O-DSK-001 · DK-1) — chemin de fer vivant. Tenant = publication ──
+      if (path === '/api/desk/health'      && method === 'GET')  return handleDeskHealth(request, env);
+      if (path === '/api/desk/bootstrap'   && method === 'GET')  return handleDeskBootstrap(request, env);
+      if (path === '/api/desk/publication' && method === 'POST') return handlePubCreate(request, env);
+      const dkPub = path.match(/^\/api\/desk\/publication\/([A-Za-z0-9-]+)$/);
+      if (dkPub && method === 'PATCH') return handlePubPatch(request, env, dkPub[1]);
+      const dkTeam = path.match(/^\/api\/desk\/publication\/([A-Za-z0-9-]+)\/team$/);
+      if (dkTeam && method === 'GET') return handleTeamList(request, env, dkTeam[1]);
+      const dkInvite = path.match(/^\/api\/desk\/publication\/([A-Za-z0-9-]+)\/invite$/);
+      if (dkInvite && method === 'POST') return handleTeamInvite(request, env, dkInvite[1]);
+      const dkMember = path.match(/^\/api\/desk\/publication\/([A-Za-z0-9-]+)\/member\/([A-Za-z0-9_-]+)$/);
+      if (dkMember && method === 'DELETE') return handleTeamRemove(request, env, dkMember[1], dkMember[2]);
+      const dkRubC = path.match(/^\/api\/desk\/publication\/([A-Za-z0-9-]+)\/rubrique$/);
+      if (dkRubC && method === 'POST') return handleRubCreate(request, env, dkRubC[1]);
+      const dkRub = path.match(/^\/api\/desk\/rubrique\/([A-Za-z0-9-]+)$/);
+      if (dkRub && method === 'PATCH')  return handleRubPatch(request, env, dkRub[1]);
+      if (dkRub && method === 'DELETE') return handleRubDelete(request, env, dkRub[1]);
+      const dkIssueC = path.match(/^\/api\/desk\/publication\/([A-Za-z0-9-]+)\/issue$/);
+      if (dkIssueC && method === 'POST') return handleIssueCreate(request, env, dkIssueC[1]);
+      const dkIssue = path.match(/^\/api\/desk\/issue\/([A-Za-z0-9-]+)$/);
+      if (dkIssue && method === 'GET')   return handleIssueGet(request, env, dkIssue[1]);
+      if (dkIssue && method === 'PATCH') return handleIssuePatch(request, env, dkIssue[1]);
+      const dkSwap = path.match(/^\/api\/desk\/issue\/([A-Za-z0-9-]+)\/swap$/);
+      if (dkSwap && method === 'POST') return handleIssueSwap(request, env, dkSwap[1]);
+      const dkPage = path.match(/^\/api\/desk\/page\/([A-Za-z0-9-]+)$/);
+      if (dkPage && method === 'PATCH') return handlePagePatch(request, env, dkPage[1]);
+      const dkArtC = path.match(/^\/api\/desk\/publication\/([A-Za-z0-9-]+)\/article$/);
+      if (dkArtC && method === 'POST') return handleArtCreate(request, env, dkArtC[1]);
+      const dkArt = path.match(/^\/api\/desk\/article\/([A-Za-z0-9-]+)$/);
+      if (dkArt && method === 'PATCH')  return handleArtPatch(request, env, dkArt[1]);
+      if (dkArt && method === 'DELETE') return handleArtDelete(request, env, dkArt[1]);
 
       // ── Sentinel (Pad O-GEO-001 · S0) — audit web avec suivi ──
       if (path === '/api/sentinel/health' && method === 'GET')  return handleSentinelHealth(request, env);
