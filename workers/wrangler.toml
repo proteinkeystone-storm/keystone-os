@@ -46,6 +46,22 @@ binding = "AI"
 binding     = "HELP_MEDIA"
 bucket_name = "keystone-help-media"
 
+# ── R2 — Casier desK (Pad O-DSK-001 · DK-3, DESK_BRIEF §6) ────
+# Pièces ÉPHÉMÈRES des cartes-pages (PDF, photos HD, textes) — purge
+# auto 30 j après « imprimé » (cron 3h), quota doux 2 Go/numéro.
+# ⚠ CRÉER LE BUCKET AVANT LE PREMIER DEPLOY (sinon wrangler deploy échoue) :
+#   npx wrangler r2 bucket create keystone-desk-casier
+# Upload par défaut = mode DIRECT (streamé via le Worker, zéro setup).
+# Pour passer en PRÉSIGNÉ (navigateur → R2 sans transiter par le Worker) :
+#   1. dashboard R2 → API token « Object Read & Write » limité à ce bucket
+#   2. wrangler secret put DK_R2_ACCOUNT_ID / DK_R2_ACCESS_KEY_ID / DK_R2_SECRET_ACCESS_KEY
+#   3. CORS du bucket : AllowedOrigins = origines Keystone,
+#      AllowedMethods = GET, PUT · AllowedHeaders = content-type
+# Bascule sans redeploy — le Worker détecte les secrets à chaque requête.
+[[r2_buckets]]
+binding     = "DK_CASIER"
+bucket_name = "keystone-desk-casier"
+
 # ── Vectorize — index sémantique du coffre Kortex (Smart Agent, SA-2) ──
 # Embeddings @cf/baai/bge-m3 (multilingue/français, 1024 dims, cosine).
 # Isolation multi-tenant par NAMESPACE (= tenant_id) à l'insert ET au query.

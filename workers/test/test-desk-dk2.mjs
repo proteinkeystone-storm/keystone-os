@@ -59,7 +59,7 @@ async function main() {
 
   // 1 · Santé
   const h = await fetch(API + '/api/desk/health').then(r => r.json());
-  ok(h.ok && h.engine === 'DK-2' && h.schema === 'ready', 'health → moteur DK-2, schéma prêt', h);
+  ok(h.ok && /^DK-\d/.test(h.engine) && h.schema === 'ready', 'health → moteur DK-2+, schéma prêt', h);
 
   // 2 · Publication + numéro
   const pub = await call(A, '/publication', { method: 'POST', body: { name: 'Revue Test DK-2 ' + Date.now() } });

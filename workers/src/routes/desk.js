@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Routes desK (Pad O-DSK-001) · DK-2 (marbre & bascule)
+   KEYSTONE OS — Routes desK (Pad O-DSK-001) · DK-3 (casier & relances)
 
    Chemin de fer vivant d'une revue (DESK_BRIEF.md). DK-1 = publications,
    membres/invitations, rubriques, numéros + jalons, cartes-pages,
@@ -7,7 +7,11 @@
    (rituel de bouclage, fraîcheur/péremption, historique inter-numéros)
    + MULTI-ARTICLES PAR PAGE (dk_page_slots, §2.4) + DÉPLACEMENT PAR
    INSERTION avec pages figées ancrées (§3.5) + OPÉRATIONS PAR LOT
-   (sélection multiple, §3.5). Le cœur reste ZÉRO IA.
+   (sélection multiple, §3.5). DK-3 = CASIER R2 (§6 — transmission
+   éphémère présignée navigateur→R2, quota doux, purge post-impression)
+   + RELANCES Resend « brouillon proposé » (§5.4 — la rédactrice valide,
+   annulation émergente au pointage) + retard moyen par contributeur
+   (INTERNE, jamais un score). Le cœur reste ZÉRO IA.
 
    GET    /api/desk/health                    Public — santé du moteur
    GET    /api/desk/bootstrap                 { me, publications } (+ accepte les invites par e-mail)
@@ -32,6 +36,14 @@
    POST   /api/desk/publication/:id/article   Créer un article
    PATCH  /api/desk/article/:id               Statut (pointage), remise, fraîcheur, contenu
    DELETE /api/desk/article/:id               Supprimer (retiré des emplacements/bancs)
+   POST   /api/desk/page/:id/casier           Demander un dépôt (présigné R2 ou direct)
+   POST   /api/desk/casier/:id/put            Dépôt direct streamé (repli sans clés S3)
+   POST   /api/desk/casier/:id/complete       Valider un dépôt présigné (taille réelle)
+   GET    /api/desk/casier/:id/url            Lien de téléchargement (présigné ou jeton)
+   GET    /api/desk/casier/:id/dl?e&t         Téléchargement streamé (jeton HMAC court)
+   DELETE /api/desk/casier/:id                Supprimer une pièce
+   POST   /api/desk/publication/:id/contrib   Mémoriser l'e-mail d'un contributeur
+   POST   /api/desk/article/:id/relance       Envoyer une relance (Resend) + historiser
 
    Le passage d'un numéro au statut « imprime » déclenche le RITUEL DE
    BOUCLAGE (§4) : titulaires → « publie » (histo), remplaçants non
@@ -45,8 +57,9 @@
 
 import { json, err, parseBody, generateId, getAllowedOrigin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
+import { presignR2, r2PresignReady } from '../lib/r2-presign.js';
 
-const DK_ENGINE_VERSION = 'DK-2';
+const DK_ENGINE_VERSION = 'DK-3';
 
 const MAX_NAME_LEN   = 160;
 const MAX_TITLE_LEN  = 240;
@@ -61,6 +74,27 @@ const MAX_BANC       = 8;       // remplaçants par emplacement
 const MAX_HISTO      = 40;      // entrées d'historique conservées par article
 const MAX_SLOTS      = 12;      // emplacements (articles) par page — brèves, papier + encadré…
 const MAX_BATCH_NS   = 120;     // pages par opération de lot
+
+// ── Casier (§6 — transmission éphémère, PAS un DAM) ─────────────
+const FILE_MAX_BYTES   = 150 * 1024 * 1024;    // une photo HD de 40 Mo passe large
+const QUOTA_ISSUE      = 2 * 1024 * 1024 * 1024; // quota doux PAR NUMÉRO (compteur visible)
+const MAX_FILES_ISSUE  = 400;
+const CASIER_GRACE_DAYS = 30;   // délai de grâce après « imprimé » avant purge (surclassable env)
+const FILE_URL_TTL     = 600;   // liens upload/download : 10 min
+// Types whitelistés (§13) : PDF, photos HD, textes — le casier transmet, il ne stocke pas.
+const FILE_EXTS = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+  gif: 'image/gif', heic: 'image/heic', heif: 'image/heif', tif: 'image/tiff', tiff: 'image/tiff',
+  pdf: 'application/pdf', txt: 'text/plain', md: 'text/markdown', rtf: 'application/rtf',
+  doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  odt: 'application/vnd.oasis.opendocument.text', csv: 'text/csv',
+  zip: 'application/zip',
+};
+
+// ── Relances (§5.4 — restent dans le monde e-mail) ──────────────
+const RELANCE_DAILY_LIMIT = 30;               // par publication et par jour
+const MAX_MAIL_SUBJECT = 200;
+const MAX_MAIL_BODY    = 6000;
 
 const ART_STATUS  = ['propose', 'attendu', 'remis', 'relu', 'maquette', 'publie', 'abandonne'];
 const ISSUE_STATUS = ['preparation', 'production', 'boucle', 'imprime'];
@@ -132,11 +166,42 @@ async function _ensureSchema(env) {
        position INTEGER NOT NULL DEFAULT 0, art_id TEXT,
        banc TEXT NOT NULL DEFAULT '[]')`,
     `CREATE INDEX IF NOT EXISTS idx_dk_slots_page ON dk_page_slots(page_id, position)`,
+    // DK-3 : casier — pièces éphémères en R2, métadonnées ici (§6). Une pièce
+    // vit sur une carte-page ; art_id (optionnel) sert la rétention prolongée
+    // d'un article reversé au marbre. status : pending (annoncée) | ok (reçue).
+    `CREATE TABLE IF NOT EXISTS dk_files (
+       id TEXT PRIMARY KEY, pub_id TEXT NOT NULL, issue_id TEXT NOT NULL,
+       page_id TEXT NOT NULL, art_id TEXT,
+       name TEXT NOT NULL, mime TEXT, size INTEGER NOT NULL DEFAULT 0,
+       r2_key TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+       uploaded_by TEXT, created_at TEXT DEFAULT (datetime('now')))`,
+    `CREATE INDEX IF NOT EXISTS idx_dk_files_issue ON dk_files(issue_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_dk_files_page ON dk_files(page_id)`,
+    // DK-3 : contributeurs (satellite §2) — e-mails connus + retard moyen
+    // constaté, INTERNE (cale le calendrier de relance, jamais exposé en score).
+    `CREATE TABLE IF NOT EXISTS dk_contribs (
+       id TEXT PRIMARY KEY, pub_id TEXT NOT NULL, name TEXT NOT NULL,
+       email TEXT, n_remises INTEGER NOT NULL DEFAULT 0,
+       total_delay INTEGER NOT NULL DEFAULT 0,
+       UNIQUE (pub_id, name))`,
+    // DK-3 : journal des relances ENVOYÉES (la « relance prévue » est calculée,
+    // pas stockée — l'annulation au pointage est émergente, §5.4).
+    `CREATE TABLE IF NOT EXISTS dk_relances (
+       id TEXT PRIMARY KEY, pub_id TEXT NOT NULL, art_id TEXT NOT NULL,
+       email TEXT NOT NULL, subject TEXT, sent_by TEXT,
+       sent_at TEXT DEFAULT (datetime('now')))`,
+    `CREATE INDEX IF NOT EXISTS idx_dk_relances_art ON dk_relances(art_id)`,
+    `CREATE TABLE IF NOT EXISTS dk_email_log (
+       pub_id TEXT NOT NULL, day TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
+       PRIMARY KEY (pub_id, day))`,
   ];
   for (const sql of stmts) { await env.DB.prepare(sql).run(); }
   // DK-2 : rubrique pré-assignée au niveau de la page (monter un dossier sur
   // des pages encore vides). ALTER idempotent (échoue en silence si déjà là).
   try { await env.DB.prepare(`ALTER TABLE dk_pages ADD COLUMN rub_id TEXT`).run(); } catch (_) {}
+  // DK-3 : horodatage du passage en « imprimé » — point de départ du délai de
+  // grâce du casier (purge post-impression, §6).
+  try { await env.DB.prepare(`ALTER TABLE dk_issues ADD COLUMN imprime_at TEXT`).run(); } catch (_) {}
   // Migration DK-1 → DK-2 : l'ancien art_id/banc de la page devient l'emplacement 0.
   await env.DB.prepare(
     `INSERT INTO dk_page_slots (id, page_id, pub_id, position, art_id, banc)
@@ -218,6 +283,7 @@ const ISSUE_COLS = 'id, pub_id, num, theme, status, jalons, created_at';
 const PAGE_COLS  = 'id, issue_id, n, kind, fixe_tag, fixe_title, rub_id, updated_at, updated_by';
 const SLOT_COLS  = 'id, page_id, position, art_id, banc';
 const ART_COLS   = 'id, title, rub_id, contrib, status, due, fresh, perime, notes, histo, created_at, updated_at';
+const FILE_COLS  = 'id, issue_id, page_id, art_id, name, mime, size, status, uploaded_by, created_at';
 
 // ── Health (public) ─────────────────────────────────────────────
 export async function handleDeskHealth(request, env) {
@@ -427,7 +493,19 @@ export async function handleIssueGet(request, env, issueId) {
     // marbre (réservoir transversal) — la vue marbre du front filtre dedans.
     const articles = (await env.DB.prepare(`SELECT ${ART_COLS} FROM dk_articles WHERE pub_id = ? ORDER BY updated_at DESC LIMIT ${MAX_ARTICLES}`).bind(pubId).all()).results || [];
     const rubriques = (await env.DB.prepare(`SELECT ${RUB_COLS} FROM dk_rubriques WHERE pub_id = ? ORDER BY position`).bind(pubId).all()).results || [];
-    return json({ ok: true, issue, pages, slots, articles, rubriques, now: new Date().toISOString() }, 200, origin);
+    // DK-3 : pièces du casier du numéro, contributeurs (e-mails + retard moyen
+    // interne) et relances envoyées — le front en déduit les relances À FAIRE.
+    const files = (await env.DB.prepare(`SELECT ${FILE_COLS} FROM dk_files WHERE issue_id = ? ORDER BY created_at DESC`).bind(issueId).all()).results || [];
+    const contribs = (await env.DB.prepare('SELECT id, name, email, n_remises, total_delay FROM dk_contribs WHERE pub_id = ? ORDER BY name').bind(pubId).all()).results || [];
+    const relances = (await env.DB.prepare('SELECT art_id, email, sent_by, sent_at FROM dk_relances WHERE pub_id = ? ORDER BY sent_at DESC LIMIT 300').bind(pubId).all()).results || [];
+    const used = files.reduce((n, f) => n + (f.status !== 'dead' ? (f.size || 0) : 0), 0);
+    const casier = !env.DK_CASIER ? 'off' : (r2PresignReady(env) ? 'presigned' : 'direct');
+    return json({
+      ok: true, issue, pages, slots, articles, rubriques, files, contribs, relances,
+      casier, quota: { used, max: QUOTA_ISSUE },
+      mailer: !!env.KS_RESEND_KEY,
+      now: new Date().toISOString(),
+    }, 200, origin);
   } catch (e) {
     return err('Lecture impossible : ' + (e && e.message || 'erreur'), 500, origin);
   }
@@ -451,6 +529,8 @@ export async function handleIssuePatch(request, env, issueId) {
   // Rituel de bouclage (§4) : au PASSAGE en « imprime » seulement.
   let boucle = null;
   if (body.status === 'imprime' && cur.status !== 'imprime') {
+    // Point de départ du délai de grâce du casier (purge §6).
+    await env.DB.prepare(`UPDATE dk_issues SET imprime_at = datetime('now') WHERE id = ?`).bind(issueId).run();
     boucle = await _bouclerIssue(env, cur, _byName(u));
   }
   return json({ ok: true, boucle }, 200, origin);
@@ -506,7 +586,7 @@ export async function handleIssueSwap(request, env, issueId) {
   const pb = await env.DB.prepare(`SELECT ${PAGE_COLS} FROM dk_pages WHERE issue_id = ? AND n = ?`).bind(issueId, nb).first();
   if (!pa || !pb) return err('Page introuvable', 404, origin);
   const by = _byName(u);
-  // Contenu + emplacements suivent (page_id des slots échangés via pivot).
+  // Contenu + emplacements + pièces du casier suivent (page_id via pivot).
   await env.DB.batch([
     env.DB.prepare(`UPDATE dk_pages SET kind = ?, fixe_tag = ?, fixe_title = ?, rub_id = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?`)
       .bind(pb.kind, pb.fixe_tag, pb.fixe_title, pb.rub_id, by, pa.id),
@@ -515,6 +595,9 @@ export async function handleIssueSwap(request, env, issueId) {
     env.DB.prepare(`UPDATE dk_page_slots SET page_id = 'dk_pivot' WHERE page_id = ?`).bind(pa.id),
     env.DB.prepare(`UPDATE dk_page_slots SET page_id = ? WHERE page_id = ?`).bind(pa.id, pb.id),
     env.DB.prepare(`UPDATE dk_page_slots SET page_id = ? WHERE page_id = 'dk_pivot'`).bind(pb.id),
+    env.DB.prepare(`UPDATE dk_files SET page_id = 'dk_pivot' WHERE page_id = ?`).bind(pa.id),
+    env.DB.prepare(`UPDATE dk_files SET page_id = ? WHERE page_id = ?`).bind(pa.id, pb.id),
+    env.DB.prepare(`UPDATE dk_files SET page_id = ? WHERE page_id = 'dk_pivot'`).bind(pb.id),
   ]);
   return json({ ok: true }, 200, origin);
 }
@@ -576,6 +659,13 @@ export async function handleIssueMove(request, env, issueId) {
   for (const s of slotRows) {
     const dst = remap.get(s.page_id);
     if (dst) stmts.push(env.DB.prepare('UPDATE dk_page_slots SET page_id = ? WHERE id = ?').bind(dst, s.id));
+  }
+  // Les pièces du casier suivent leur carte comme les emplacements.
+  const fileRows = (await env.DB.prepare(
+    `SELECT f.id, f.page_id FROM dk_files f JOIN dk_pages p ON p.id = f.page_id WHERE p.issue_id = ?`).bind(issueId).all()).results || [];
+  for (const f of fileRows) {
+    const dst = remap.get(f.page_id);
+    if (dst) stmts.push(env.DB.prepare('UPDATE dk_files SET page_id = ? WHERE id = ?').bind(dst, f.id));
   }
   await env.DB.batch(stmts);
   return json({ ok: true, moved: from.length }, 200, origin);
@@ -830,10 +920,11 @@ export async function handleArtPatch(request, env, artId) {
     if (body.rub_id) { const r = await env.DB.prepare('SELECT id FROM dk_rubriques WHERE id = ? AND pub_id = ?').bind(body.rub_id, pubId).first(); if (!r) return err('Rubrique inconnue', 400, origin); rubId = r.id; }
     sets.push('rub_id = ?'); vals.push(rubId);
   }
+  let pointage = false;
   if (body.status !== undefined) {
     if (!ART_STATUS.includes(body.status)) return err('Statut inconnu', 400, origin);
     sets.push('status = ?'); vals.push(body.status);
-    if (body.status === 'remis' && cur.status !== 'remis') histo = _histoPush(histo, 'Copie pointée reçue par ' + by);
+    if (body.status === 'remis' && cur.status !== 'remis') { pointage = true; histo = _histoPush(histo, 'Copie pointée reçue par ' + by); }
     else if (body.status !== cur.status) histo = _histoPush(histo, 'Statut « ' + body.status + ' » par ' + by);
   }
   if (body.due !== undefined) {
@@ -849,6 +940,15 @@ export async function handleArtPatch(request, env, artId) {
   sets.push('histo = ?', "updated_at = datetime('now')");
   vals.push(histo, artId);
   await env.DB.prepare(`UPDATE dk_articles SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
+  // DK-3 : au pointage, le retard constaté nourrit le retard moyen du
+  // contributeur (INTERNE, §2 — cale le calendrier de relance, jamais un score).
+  if (pointage && cur.contrib) {
+    const delay = cur.due ? Math.max(-30, Math.min(90, Math.round((Date.now() - new Date(cur.due + 'T12:00:00').getTime()) / 86400000))) : 0;
+    await env.DB.prepare(
+      `INSERT INTO dk_contribs (id, pub_id, name, n_remises, total_delay) VALUES (?, ?, ?, 1, ?)
+       ON CONFLICT (pub_id, name) DO UPDATE SET n_remises = n_remises + 1, total_delay = total_delay + ?`)
+      .bind(generateId(), pubId, _s(cur.contrib, MAX_NAME_LEN), cur.due ? delay : 0, cur.due ? delay : 0).run();
+  }
   const article = await env.DB.prepare(`SELECT ${ART_COLS} FROM dk_articles WHERE id = ?`).bind(artId).first();
   return json({ ok: true, article }, 200, origin);
 }
@@ -882,4 +982,350 @@ export async function handleArtDelete(request, env, artId) {
   }
   await env.DB.prepare('DELETE FROM dk_articles WHERE id = ?').bind(artId).run();
   return json({ ok: true }, 200, origin);
+}
+
+/* ═══════════════════ DK-3 · Le casier (§6) ═══════════════════════
+   Transmission ÉPHÉMÈRE, pas un DAM : les pièces passent, les archives
+   vivent ailleurs (InDesign, PDF final, booK). Fichiers en R2 (binding
+   DK_CASIER), métadonnées en D1. Deux modes d'upload :
+   - presigned : le navigateur PUT directement sur R2 (URL SigV4) — le
+     fichier ne transite jamais par le Worker. Actif si les secrets
+     DK_R2_ACCOUNT_ID / DK_R2_ACCESS_KEY_ID / DK_R2_SECRET_ACCESS_KEY
+     sont posés ET la CORS du bucket configurée.
+   - direct : repli sans secrets — POST streamé à travers le Worker
+     (body → R2 sans bufferiser). Fonctionne jour 1, zéro setup.        */
+
+function _fileExt(name) {
+  const m = /\.([A-Za-z0-9]{1,8})$/.exec(String(name || ''));
+  return m ? m[1].toLowerCase() : '';
+}
+function _fileName(name) {
+  // Nom d'affichage assaini (aussi utilisé en Content-Disposition).
+  const base = String(name || 'piece').split(/[\\/]/).pop().replace(/[^A-Za-z0-9À-ÿ ._()-]/g, '').trim();
+  return (base || 'piece').slice(0, 120);
+}
+async function _fileGate(request, env, origin, fileId) {
+  const f = await env.DB.prepare(`SELECT ${FILE_COLS}, pub_id, r2_key FROM dk_files WHERE id = ?`).bind(fileId).first();
+  if (!f) return { error: err('Pièce introuvable', 404, origin) };
+  const u = await memberGate(request, env, origin, f.pub_id);
+  if (u.error) return u;
+  return { u, file: f };
+}
+async function _casierUsed(env, issueId) {
+  const r = await env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS used FROM dk_files WHERE issue_id = ?`).bind(issueId).first();
+  return { n: r?.n || 0, used: r?.used || 0 };
+}
+// Jeton HMAC court pour le téléchargement en mode direct (une URL <a href>
+// ne porte pas de header Authorization) — signé KS_JWT_SECRET, TTL 10 min.
+async function _dlToken(env, fileId, exp) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.KS_JWT_SECRET || ''), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`dkfile:${fileId}:${exp}`));
+  return [...new Uint8Array(sig)].slice(0, 20).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// POST /page/:id/casier {name, size, art_id?} → annonce un dépôt.
+export async function handleCasierRequest(request, env, pageId) {
+  const origin = getAllowedOrigin(env, request);
+  const pubId = await pubOf(env, 'dk_pages', pageId);
+  const u = await memberGate(request, env, origin, pubId);
+  if (u.error) return u.error;
+  if (!env.DK_CASIER) return err('Casier non configuré sur ce serveur (bucket R2 absent)', 503, origin);
+  const page = await env.DB.prepare(`SELECT ${PAGE_COLS} FROM dk_pages WHERE id = ?`).bind(pageId).first();
+  if (!page) return err('Page introuvable', 404, origin);
+  const body = await parseBody(request);
+
+  const name = _fileName(body.name);
+  const ext = _fileExt(body.name);
+  if (!FILE_EXTS[ext]) return err(`Type de fichier non accepté (.${ext || '?'}) — le casier transmet PDF, photos et textes`, 400, origin);
+  const size = parseInt(body.size, 10);
+  if (!Number.isFinite(size) || size <= 0) return err('Taille du fichier requise', 400, origin);
+  if (size > FILE_MAX_BYTES) return err(`Fichier trop lourd (max ${Math.round(FILE_MAX_BYTES / 1048576)} Mo)`, 413, origin);
+
+  const { n, used } = await _casierUsed(env, page.issue_id);
+  if (n >= MAX_FILES_ISSUE) return err('Limite de pièces atteinte sur ce numéro', 403, origin);
+  if (used + size > QUOTA_ISSUE) {
+    return err(`Quota du casier atteint pour ce numéro (${Math.round(used / 1048576)} Mo utilisés sur ${Math.round(QUOTA_ISSUE / 1048576)} Mo) — supprimez des pièces transmises`, 403, origin);
+  }
+
+  // Pièce rattachée à l'article titulaire de la page par défaut (rétention
+  // prolongée si l'article est reversé au marbre, §6) — surclassable.
+  let artId = null;
+  if (body.art_id) {
+    const a = await env.DB.prepare('SELECT id FROM dk_articles WHERE id = ? AND pub_id = ?').bind(body.art_id, pubId).first();
+    if (a) artId = a.id;
+  } else {
+    const s0 = await env.DB.prepare('SELECT art_id FROM dk_page_slots WHERE page_id = ? ORDER BY position LIMIT 1').bind(pageId).first();
+    if (s0 && s0.art_id) artId = s0.art_id;
+  }
+
+  const id = generateId();
+  const key = `dk-casier/${pubId}/${page.issue_id}/${id}.${ext}`;
+  await env.DB.prepare(
+    `INSERT INTO dk_files (id, pub_id, issue_id, page_id, art_id, name, mime, size, r2_key, status, uploaded_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`)
+    .bind(id, pubId, page.issue_id, pageId, artId, name, FILE_EXTS[ext], size, key, _byName(u)).run();
+
+  let upload;
+  if (r2PresignReady(env)) {
+    const url = await presignR2({
+      accountId: env.DK_R2_ACCOUNT_ID, accessKeyId: env.DK_R2_ACCESS_KEY_ID,
+      secretAccessKey: env.DK_R2_SECRET_ACCESS_KEY, bucket: env.DK_R2_BUCKET || 'keystone-desk-casier',
+      key, method: 'PUT', expires: FILE_URL_TTL,
+    });
+    upload = { mode: 'presigned', url, content_type: FILE_EXTS[ext] };
+  } else {
+    upload = { mode: 'direct', path: `/casier/${id}/put` };
+  }
+  return json({ ok: true, file: { id, page_id: pageId, art_id: artId, name, size, status: 'pending' }, upload, quota: { used: used + size, max: QUOTA_ISSUE } }, 200, origin);
+}
+
+// POST /casier/:id/put — repli direct : le body est STREAMÉ vers R2.
+export async function handleCasierPut(request, env, fileId) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _fileGate(request, env, origin, fileId);
+  if (g.error) return g.error;
+  const { file } = g;
+  if (!env.DK_CASIER) return err('Casier non configuré', 503, origin);
+  if (file.status !== 'pending') return err('Cette pièce a déjà été transmise', 400, origin);
+  const declared = file.size || 0;
+  const len = parseInt(request.headers.get('content-length') || '0', 10);
+  if (len && len > FILE_MAX_BYTES) return err('Fichier trop lourd', 413, origin);
+  const obj = await env.DK_CASIER.put(file.r2_key, request.body, {
+    httpMetadata: { contentType: file.mime || 'application/octet-stream' },
+  });
+  const size = obj?.size ?? len ?? declared;
+  if (size > FILE_MAX_BYTES) {
+    await env.DK_CASIER.delete(file.r2_key).catch(() => {});
+    await env.DB.prepare('DELETE FROM dk_files WHERE id = ?').bind(fileId).run();
+    return err('Fichier trop lourd', 413, origin);
+  }
+  await env.DB.prepare(`UPDATE dk_files SET status = 'ok', size = ? WHERE id = ?`).bind(size, fileId).run();
+  return json({ ok: true, file: { id: fileId, size, status: 'ok' } }, 200, origin);
+}
+
+// POST /casier/:id/complete — valide un dépôt présigné (l'objet doit exister).
+export async function handleCasierComplete(request, env, fileId) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _fileGate(request, env, origin, fileId);
+  if (g.error) return g.error;
+  const { file } = g;
+  if (!env.DK_CASIER) return err('Casier non configuré', 503, origin);
+  if (file.status === 'ok') return json({ ok: true, file: { id: fileId, size: file.size, status: 'ok' } }, 200, origin);
+  const head = await env.DK_CASIER.head(file.r2_key);
+  if (!head) return err('Pièce non reçue par le stockage — réessayez l\'envoi', 409, origin);
+  if (head.size > FILE_MAX_BYTES) {
+    await env.DK_CASIER.delete(file.r2_key).catch(() => {});
+    await env.DB.prepare('DELETE FROM dk_files WHERE id = ?').bind(fileId).run();
+    return err('Fichier trop lourd', 413, origin);
+  }
+  await env.DB.prepare(`UPDATE dk_files SET status = 'ok', size = ? WHERE id = ?`).bind(head.size, fileId).run();
+  return json({ ok: true, file: { id: fileId, size: head.size, status: 'ok' } }, 200, origin);
+}
+
+// GET /casier/:id/url — lien de téléchargement court (présigné R2 ou jeton).
+export async function handleCasierUrl(request, env, fileId) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _fileGate(request, env, origin, fileId);
+  if (g.error) return g.error;
+  const { file } = g;
+  if (file.status !== 'ok') return err('Pièce pas encore transmise', 409, origin);
+  const disposition = `attachment; filename="${file.name.replace(/[^A-Za-z0-9._ -]/g, '_')}"`;
+  if (r2PresignReady(env)) {
+    const url = await presignR2({
+      accountId: env.DK_R2_ACCOUNT_ID, accessKeyId: env.DK_R2_ACCESS_KEY_ID,
+      secretAccessKey: env.DK_R2_SECRET_ACCESS_KEY, bucket: env.DK_R2_BUCKET || 'keystone-desk-casier',
+      key: file.r2_key, method: 'GET', expires: FILE_URL_TTL, disposition,
+    });
+    return json({ ok: true, url }, 200, origin);
+  }
+  const exp = Math.floor(Date.now() / 1000) + FILE_URL_TTL;
+  const t = await _dlToken(env, fileId, exp);
+  return json({ ok: true, url: `${new URL(request.url).origin}/api/desk/casier/${fileId}/dl?e=${exp}&t=${t}` }, 200, origin);
+}
+
+// GET /casier/:id/dl?e&t — téléchargement streamé (jeton, pas de JWT :
+// l'URL s'ouvre dans un onglet). Vérification HMAC + expiration.
+export async function handleCasierDl(request, env, fileId) {
+  const origin = getAllowedOrigin(env, request);
+  if (!env.DK_CASIER) return err('Casier non configuré', 503, origin);
+  const url = new URL(request.url);
+  const exp = parseInt(url.searchParams.get('e') || '0', 10);
+  const t = String(url.searchParams.get('t') || '');
+  if (!exp || exp < Math.floor(Date.now() / 1000)) return err('Lien expiré — redemandez le téléchargement', 403, origin);
+  const expected = await _dlToken(env, fileId, exp);
+  if (t !== expected) return err('Lien invalide', 403, origin);
+  const file = await env.DB.prepare(`SELECT name, mime, r2_key, status FROM dk_files WHERE id = ?`).bind(fileId).first();
+  if (!file || file.status !== 'ok') return err('Pièce introuvable', 404, origin);
+  const obj = await env.DK_CASIER.get(file.r2_key);
+  if (!obj) return err('Pièce absente du stockage', 404, origin);
+  return new Response(obj.body, {
+    status: 200,
+    headers: {
+      'Content-Type': file.mime || 'application/octet-stream',
+      'Content-Length': String(obj.size),
+      'Content-Disposition': `attachment; filename="${String(file.name).replace(/[^A-Za-z0-9._ -]/g, '_')}"`,
+      'Cache-Control': 'private, no-store',
+      'Access-Control-Allow-Origin': origin,   // le lien s'ouvre en navigation ; le header sert un éventuel fetch
+    },
+  });
+}
+
+// DELETE /casier/:id — retire la pièce (objet R2 + métadonnées).
+export async function handleCasierDelete(request, env, fileId) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _fileGate(request, env, origin, fileId);
+  if (g.error) return g.error;
+  if (env.DK_CASIER) await env.DK_CASIER.delete(g.file.r2_key).catch(() => {});
+  await env.DB.prepare('DELETE FROM dk_files WHERE id = ?').bind(fileId).run();
+  return json({ ok: true }, 200, origin);
+}
+
+/* Purge planifiée du casier (§6 — cron quotidien 3h) :
+   - pièces des numéros « imprimé » depuis > CASIER_GRACE_DAYS jours,
+     SAUF rétention prolongée : la pièce d'un article encore vivant ET
+     réservé quelque part (emplacement ou banc d'un numéro non imprimé)
+     survit tant que la réservation tient (§12, option recommandée) ;
+   - dépôts « pending » abandonnés depuis > 24 h.                        */
+export async function sweepDeskCasier(env) {
+  await _ensureSchema(env);
+  const grace = Math.max(0, parseInt(env.DK_CASIER_GRACE_DAYS ?? CASIER_GRACE_DAYS, 10) || 0);
+  let purged = 0, retained = 0, stale = 0;
+
+  // Filet legacy : un numéro imprimé sans horodatage démarre sa grâce ici.
+  await env.DB.prepare(`UPDATE dk_issues SET imprime_at = datetime('now') WHERE status = 'imprime' AND imprime_at IS NULL`).run();
+
+  const rows = (await env.DB.prepare(
+    `SELECT f.id, f.r2_key, f.art_id FROM dk_files f
+     JOIN dk_issues i ON i.id = f.issue_id
+     WHERE i.status = 'imprime' AND i.imprime_at <= datetime('now', ?)`)
+    .bind(`-${grace} days`).all()).results || [];
+
+  for (const f of rows) {
+    if (f.art_id) {
+      // Rétention prolongée : article vivant + réservé dans un numéro non imprimé ?
+      const alive = await env.DB.prepare(
+        `SELECT a.id FROM dk_articles a WHERE a.id = ? AND a.status NOT IN ('publie', 'abandonne')`).bind(f.art_id).first();
+      if (alive) {
+        const slots = (await env.DB.prepare(
+          `SELECT s.art_id, s.banc FROM dk_page_slots s
+           JOIN dk_pages p ON p.id = s.page_id
+           JOIN dk_issues i ON i.id = p.issue_id
+           WHERE i.status != 'imprime' AND s.pub_id = (SELECT pub_id FROM dk_articles WHERE id = ?)`).bind(f.art_id).all()).results || [];
+        const reserved = slots.some(s => {
+          if (s.art_id === f.art_id) return true;
+          try { const b = JSON.parse(s.banc || '[]'); return Array.isArray(b) && b.includes(f.art_id); } catch (_) { return false; }
+        });
+        if (reserved) { retained++; continue; }
+      }
+    }
+    if (env.DK_CASIER) await env.DK_CASIER.delete(f.r2_key).catch(() => {});
+    await env.DB.prepare('DELETE FROM dk_files WHERE id = ?').bind(f.id).run();
+    purged++;
+  }
+
+  // Dépôts annoncés jamais aboutis (> 24 h) — nettoyage silencieux.
+  const pend = (await env.DB.prepare(
+    `SELECT id, r2_key FROM dk_files WHERE status = 'pending' AND created_at <= datetime('now', '-1 day')`).all()).results || [];
+  for (const f of pend) {
+    if (env.DK_CASIER) await env.DK_CASIER.delete(f.r2_key).catch(() => {});
+    await env.DB.prepare('DELETE FROM dk_files WHERE id = ?').bind(f.id).run();
+    stale++;
+  }
+  return { purged, retained, stale };
+}
+
+/* ═══════════════ DK-3 · Contributeurs & relances (§5.4) ══════════
+   Les relances restent dans le monde e-mail : brouillon proposé côté
+   front (gabarit déterministe, ZÉRO IA), la rédactrice ajuste puis
+   envoie ici via Resend. La « relance prévue » n'est jamais stockée :
+   elle se CALCULE (échéance + retard moyen), donc le pointage l'annule
+   de lui-même. Seuls les envois sont journalisés (dk_relances).        */
+
+// POST /publication/:id/contrib {name, email} — mémoriser un e-mail connu.
+export async function handleContribUpsert(request, env, pubId) {
+  const origin = getAllowedOrigin(env, request);
+  const u = await memberGate(request, env, origin, pubId);
+  if (u.error) return u.error;
+  const body = await parseBody(request);
+  const name = _s(String(body.name || '').trim(), MAX_NAME_LEN);
+  if (!name) return err('Nom du contributeur requis', 400, origin);
+  const email = String(body.email || '').toLowerCase().trim();
+  if (email && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200)) return err('E-mail invalide', 400, origin);
+  await env.DB.prepare(
+    `INSERT INTO dk_contribs (id, pub_id, name, email) VALUES (?, ?, ?, ?)
+     ON CONFLICT (pub_id, name) DO UPDATE SET email = excluded.email`)
+    .bind(generateId(), pubId, name, email || null).run();
+  const contrib = await env.DB.prepare('SELECT id, name, email, n_remises, total_delay FROM dk_contribs WHERE pub_id = ? AND name = ?').bind(pubId, name).first();
+  return json({ ok: true, contrib }, 200, origin);
+}
+
+// POST /article/:id/relance {email, subject, body} — envoi Resend + journal.
+export async function handleRelanceSend(request, env, artId) {
+  const origin = getAllowedOrigin(env, request);
+  const pubId = await pubOf(env, 'dk_articles', artId);
+  const u = await memberGate(request, env, origin, pubId);
+  if (u.error) return u.error;
+  const art = await env.DB.prepare(`SELECT ${ART_COLS} FROM dk_articles WHERE id = ?`).bind(artId).first();
+  if (!art) return err('Article introuvable', 404, origin);
+  if (!['propose', 'attendu'].includes(art.status)) return err('Cet article n\'attend plus de copie — la relance n\'a plus d\'objet', 400, origin);
+  if (!env.KS_RESEND_KEY) {
+    return err('L\'envoi de relances n\'est pas encore activé sur ce serveur (clé d\'envoi absente). Utilisez « Via ma messagerie » en attendant.', 503, origin);
+  }
+
+  const body = await parseBody(request);
+  const email = String(body.email || '').toLowerCase().trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) return err('E-mail du contributeur invalide', 400, origin);
+  const subject = _s(String(body.subject || '').trim(), MAX_MAIL_SUBJECT);
+  const text = String(body.body || '').slice(0, MAX_MAIL_BODY).trim();
+  if (!subject || !text) return err('Objet et message requis', 400, origin);
+
+  // Garde-fou : plafond d'envois par publication et par jour (pattern Sentinel).
+  const day = new Date().toISOString().slice(0, 10);
+  await env.DB.prepare(`INSERT INTO dk_email_log (pub_id, day, count) VALUES (?, ?, 1)
+    ON CONFLICT (pub_id, day) DO UPDATE SET count = count + 1`).bind(pubId, day).run();
+  const used = await env.DB.prepare('SELECT count FROM dk_email_log WHERE pub_id = ? AND day = ?').bind(pubId, day).first();
+  const revert = () => env.DB.prepare('UPDATE dk_email_log SET count = MAX(count - 1, 0) WHERE pub_id = ? AND day = ?').bind(pubId, day).run().catch(() => {});
+  if (used && used.count > RELANCE_DAILY_LIMIT) {
+    await revert();
+    return err(`Limite de ${RELANCE_DAILY_LIMIT} relances par jour atteinte pour cette publication`, 429, origin);
+  }
+
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:15px;line-height:1.55;color:#1c1c1e">${esc(text).replace(/\n/g, '<br>')}</div>`;
+  const from = env.KS_RESEND_FROM ? String(env.KS_RESEND_FROM) : 'desK — la rédaction <desk@protein-keystone.com>';
+  const payload = { from, to: [email], subject, html, text };
+  if (u.email) payload.reply_to = u.email;   // les réponses reviennent à la rédactrice
+
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 15000);
+  let res, data = {};
+  try {
+    res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.KS_RESEND_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload), signal: ctrl.signal,
+    });
+    try { data = await res.json(); } catch (_) {}
+  } catch (e) {
+    await revert(); clearTimeout(timer);
+    return err('Envoi impossible : ' + ((e && e.name === 'AbortError') ? 'délai dépassé' : 'réseau'), 502, origin);
+  }
+  clearTimeout(timer);
+  if (!res.ok) {
+    await revert();
+    return err('Envoi refusé par le service : ' + String(data.message || data.name || `HTTP ${res.status}`), 502, origin);
+  }
+
+  const by = _byName(u);
+  await env.DB.prepare('INSERT INTO dk_relances (id, pub_id, art_id, email, subject, sent_by) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(generateId(), pubId, artId, email, subject, by).run();
+  await env.DB.prepare(`UPDATE dk_articles SET histo = ?, updated_at = datetime('now') WHERE id = ?`)
+    .bind(_histoPush(art.histo, `Relance envoyée à ${email} par ${by}`), artId).run();
+  // L'e-mail du contributeur est mémorisé au passage (satellite §2).
+  if (art.contrib) {
+    await env.DB.prepare(
+      `INSERT INTO dk_contribs (id, pub_id, name, email) VALUES (?, ?, ?, ?)
+       ON CONFLICT (pub_id, name) DO UPDATE SET email = excluded.email`)
+      .bind(generateId(), pubId, _s(art.contrib, MAX_NAME_LEN), email).run();
+  }
+  return json({ ok: true, sent: { art_id: artId, email, sent_by: by } }, 200, origin);
 }

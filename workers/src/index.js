@@ -149,14 +149,17 @@ import { handleNetworkHealth, handleNetworkBootstrap,
          handleCategoryCreate, handleCategoryUpdate, handleCategoryDelete,
          handleContactCreate, handleContactUpdate, handleContactDelete,
          handleActivityList, handleActivityCreate, handleActivityDelete } from './routes/network.js';
-// desK — chemin de fer vivant (Pad O-DSK-001 · DK-2). Tenant = LA PUBLICATION.
+// desK — chemin de fer vivant (Pad O-DSK-001 · DK-3). Tenant = LA PUBLICATION.
 import { handleDeskHealth, handleDeskBootstrap, handlePubCreate, handlePubPatch,
          handleTeamList, handleTeamInvite, handleTeamRemove,
          handleRubCreate, handleRubPatch, handleRubDelete,
          handleIssueCreate, handleIssueGet, handleIssuePatch, handleIssueSwap,
          handleIssueMove, handleIssueBatch,
          handlePagePatch, handleSlotCreate, handleSlotPatch, handleSlotDelete,
-         handleArtCreate, handleArtPatch, handleArtDelete } from './routes/desk.js';
+         handleArtCreate, handleArtPatch, handleArtDelete,
+         handleCasierRequest, handleCasierPut, handleCasierComplete,
+         handleCasierUrl, handleCasierDl, handleCasierDelete,
+         handleContribUpsert, handleRelanceSend, sweepDeskCasier } from './routes/desk.js';
 // Key-Ring (Sonnette) — ORDRE 3 : « Sonner » Web Push + boucle retour.
 import { handleKeyringRing, handleKeyringRingStatus, handleKeyringRespond, handleKeyringRespondGet,
          handleKeyringPushSubscribe, handleKeyringPushUnsubscribe, handleKeyringPushStatus, handleKeyringPushList,
@@ -341,6 +344,23 @@ export default {
       const dkArt = path.match(/^\/api\/desk\/article\/([A-Za-z0-9-]+)$/);
       if (dkArt && method === 'PATCH')  return handleArtPatch(request, env, dkArt[1]);
       if (dkArt && method === 'DELETE') return handleArtDelete(request, env, dkArt[1]);
+      // DK-3 — casier R2 (présigné ou direct streamé), contributeurs, relances.
+      const dkCasierC = path.match(/^\/api\/desk\/page\/([A-Za-z0-9-]+)\/casier$/);
+      if (dkCasierC && method === 'POST') return handleCasierRequest(request, env, dkCasierC[1]);
+      const dkCasierPut = path.match(/^\/api\/desk\/casier\/([A-Za-z0-9-]+)\/put$/);
+      if (dkCasierPut && method === 'POST') return handleCasierPut(request, env, dkCasierPut[1]);
+      const dkCasierDone = path.match(/^\/api\/desk\/casier\/([A-Za-z0-9-]+)\/complete$/);
+      if (dkCasierDone && method === 'POST') return handleCasierComplete(request, env, dkCasierDone[1]);
+      const dkCasierUrl = path.match(/^\/api\/desk\/casier\/([A-Za-z0-9-]+)\/url$/);
+      if (dkCasierUrl && method === 'GET') return handleCasierUrl(request, env, dkCasierUrl[1]);
+      const dkCasierDl = path.match(/^\/api\/desk\/casier\/([A-Za-z0-9-]+)\/dl$/);
+      if (dkCasierDl && method === 'GET') return handleCasierDl(request, env, dkCasierDl[1]);
+      const dkCasier = path.match(/^\/api\/desk\/casier\/([A-Za-z0-9-]+)$/);
+      if (dkCasier && method === 'DELETE') return handleCasierDelete(request, env, dkCasier[1]);
+      const dkContrib = path.match(/^\/api\/desk\/publication\/([A-Za-z0-9-]+)\/contrib$/);
+      if (dkContrib && method === 'POST') return handleContribUpsert(request, env, dkContrib[1]);
+      const dkRelance = path.match(/^\/api\/desk\/article\/([A-Za-z0-9-]+)\/relance$/);
+      if (dkRelance && method === 'POST') return handleRelanceSend(request, env, dkRelance[1]);
 
       // ── Sentinel (Pad O-GEO-001 · S0) — audit web avec suivi ──
       if (path === '/api/sentinel/health' && method === 'GET')  return handleSentinelHealth(request, env);
@@ -1076,6 +1096,13 @@ export default {
         sweepExpiredSecrets(env)
           .then(r => console.log('[sceau-sweep]', JSON.stringify(r)))
           .catch(e => console.warn('[sceau-sweep] failed', e?.message || e))
+      );
+      // desK — purge du casier (§6) : numéros imprimés + grâce 30 j,
+      // rétention prolongée des pièces d'articles reversés au marbre.
+      ctx.waitUntil(
+        sweepDeskCasier(env)
+          .then(r => console.log('[desk-casier-sweep]', JSON.stringify(r)))
+          .catch(e => console.warn('[desk-casier-sweep] failed', e?.message || e))
       );
     }
   },

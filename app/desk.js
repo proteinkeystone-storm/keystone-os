@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// desK — Pad O-DSK-001 · DK-2 (marbre & bascule)
+// desK — Pad O-DSK-001 · DK-3 (casier & relances — la boucle quotidienne)
 //
 // Chemin de fer vivant d'une revue (DESK_BRIEF.md) : grille de
 // planches EN RANGÉES (le chemin de fer papier au mur), curseur de
@@ -8,6 +8,13 @@
 // bouclage), multi-articles par page (emplacements), sélection
 // multiple + opérations par lot, déplacement par insertion (pages
 // figées ancrées) — branché sur le worker.
+//
+// DK-3 : casier de pièces éphémères (upload présigné R2 ou direct
+// streamé, glisser des fichiers sur une carte, quota visible, purge
+// post-impression côté serveur) + relances « brouillon proposé »
+// (§5.4 : la relance À FAIRE est CALCULÉE — échéance + retard moyen
+// interne du contributeur — donc le pointage l'annule de lui-même ;
+// gabarit déterministe ZÉRO IA, on ajuste puis Resend).
 //
 // ⚠ TENANT = LA PUBLICATION (pas la personne). Le front ne fait que
 // choisir une publication ; l'appartenance est contrôlée serveur
@@ -89,6 +96,18 @@ function _relTime(iso) {
 
 // ── Couche API (pattern networK : JWT + timeout) ────────────────
 function _jwt() { return localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token') || ''; }
+// Envoi binaire (casier, mode direct) : le fichier part en body brut,
+// streamé par le worker vers R2 — pas de timeout court (photo HD).
+async function _apiBlob(path, file) {
+  const res = await fetch(API_BASE + '/api/desk' + path, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + _jwt(), 'Content-Type': file.type || 'application/octet-stream' },
+    body: file,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ('Erreur ' + res.status));
+  return data;
+}
 async function _api(path, opts = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 30000);
@@ -457,6 +476,139 @@ function _placementsOf(artId) {
   return { tit, banc };
 }
 
+/* ═══════════ DK-3 · Casier & relances (helpers) ═════════════════ */
+function _filesOf(p) { return (_D.files || []).filter(f => f.page_id === p.id); }
+function _fmtSize(b) {
+  b = b || 0;
+  if (b >= 1073741824) return (b / 1073741824).toFixed(1).replace('.', ',') + ' Go';
+  if (b >= 1048576) return (b / 1048576).toFixed(1).replace('.', ',') + ' Mo';
+  return Math.max(1, Math.round(b / 1024)) + ' Ko';
+}
+function _contribByName(name) {
+  if (!name) return null;
+  const n = String(name).trim().toLowerCase();
+  return (_D.contribs || []).find(c => (c.name || '').trim().toLowerCase() === n) || null;
+}
+function _relancesOf(artId) { return (_D.relances || []).filter(r => r.art_id === artId); }
+
+/* La relance À FAIRE se calcule, elle n'est jamais stockée (§5.4) :
+   - contributeur fiable ou inconnu → relance DOUCE 2 j après l'échéance ;
+   - retard moyen constaté > 5 j → RAPPEL 3 j avant l'échéance ;
+   - une relance envoyée < 7 j suspend la suggestion ;
+   - le pointage (statut ≠ attendu) la fait disparaître d'elle-même.    */
+function _relanceInfo(a) {
+  const st = STATUS[a.status] || STATUS.propose;
+  if (!st.needsCopy || !a.due || !a.contrib) return null;
+  const c = _contribByName(a.contrib);
+  const avg = c && c.n_remises ? c.total_delay / c.n_remises : null;
+  const offset = (avg !== null && avg > 5) ? -3 : 2;
+  const at = new Date(new Date(a.due + 'T12:00:00').getTime() + offset * DAY);
+  if (Date.now() < at.getTime()) return null;
+  const last = _relancesOf(a.id)[0];
+  if (last && (Date.now() - new Date(last.sent_at + (last.sent_at.endsWith('Z') ? '' : 'Z')).getTime()) < 7 * DAY) return null;
+  return { at, mode: offset < 0 ? 'avant' : 'apres', email: c ? c.email : null };
+}
+function _relancesDues() {
+  return (_D && _D.articles || []).filter(a => !['publie', 'abandonne'].includes(a.status) && _relanceInfo(a));
+}
+
+// Gabarit de brouillon (déterministe, ZÉRO IA) — la voix reste la sienne.
+function _relanceDraft(a) {
+  const pub = _pubs.find(p => p.id === _pubId);
+  const revue = pub ? pub.name : 'La rédaction';
+  const num = _D.issue ? _D.issue.num : '';
+  const due = a.due ? new Date(a.due + 'T12:00:00') : null;
+  const late = due ? Math.round((Date.now() - due.getTime()) / DAY) : 0;
+  const jB = _jalonDate('bouclage');
+  // Dates en toutes lettres dans la prose (« 7 juillet » — l'abréviation
+  // « juil. » créerait un double point en fin de phrase).
+  const fmtL = d => new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+  const subject = `${revue} n° ${num} — votre article « ${a.title} »`;
+  let corps;
+  if (late > 0) {
+    corps = `nous préparons le n° ${num}${_D.issue && _D.issue.theme ? ' (' + _D.issue.theme + ')' : ''} et votre article « ${a.title} » était attendu pour le ${fmtL(due)}.\n\nPourriez-vous nous dire où vous en êtes ? ${jB ? 'Le bouclage rédactionnel est fixé au ' + fmtL(jB) + ' — ' : ''}même un texte encore imparfait nous aide à avancer la maquette.`;
+  } else {
+    corps = `petit rappel amical : votre article « ${a.title} » pour le n° ${num} est attendu pour le ${fmtL(due)}.${jB ? '\n\nLe bouclage rédactionnel est fixé au ' + fmtL(jB) + '.' : ''}`;
+  }
+  const body = `Bonjour,\n\n${corps}\n\nMerci beaucoup, bien cordialement,\n${_me && _me.name ? _me.name : 'La rédaction'}`;
+  return { subject, body };
+}
+
+// Upload d'une liste de fichiers vers le casier d'une page (présigné ou direct).
+async function _uploadFiles(page, fileList, refresh) {
+  const files = [...(fileList || [])];
+  if (!files.length) return;
+  if (_D.casier === 'off') { _toast('Le casier n’est pas configuré sur ce serveur.', true); return; }
+  for (const f of files) {
+    try {
+      _toast('Envoi de « ' + f.name + ' »…');
+      const req = await _api('/page/' + page.id + '/casier', { method: 'POST', body: { name: f.name, size: f.size } });
+      if (req.upload.mode === 'presigned') {
+        const put = await fetch(req.upload.url, { method: 'PUT', body: f, headers: { 'Content-Type': req.upload.content_type } });
+        if (!put.ok) throw new Error('le stockage a refusé le fichier (HTTP ' + put.status + ')');
+        await _api('/casier/' + req.file.id + '/complete', { method: 'POST' });
+      } else {
+        await _apiBlob('/casier/' + req.file.id + '/put', f);
+      }
+      _toast('« ' + f.name + ' » transmis au casier.');
+    } catch (e) { _toast('Échec de « ' + f.name + ' » : ' + e.message, true); }
+  }
+  await _loadIssue(true);
+  if (refresh) refresh();
+}
+
+// Section « Casier » commune aux inspecteurs de page (article / vide / figée).
+function _casierSectionHTML(p) {
+  if (!_D || _D.casier === 'off') return '';
+  const files = _filesOf(p);
+  const q = _D.quota || { used: 0, max: 1 };
+  return `<div class="dk-sec"><h4>Casier — pièces (${files.filter(f => f.status === 'ok').length})</h4>
+    ${files.map(f => `<div class="dk-file">
+      <span class="dk-file-ico">${icon('paperclip', 13)}</span>
+      <div class="dk-file-info">
+        <div class="dk-file-name">${_esc(f.name)}</div>
+        <div class="dk-file-meta">${_fmtSize(f.size)}${f.uploaded_by ? ' · ' + _esc(f.uploaded_by) : ''} · ${_relTime(f.created_at)}${f.status !== 'ok' ? ' · <em>envoi en cours…</em>' : ''}</div>
+      </div>
+      ${f.status === 'ok' ? `<button class="dk-iconbtn" data-dlf="${f.id}" title="Télécharger" aria-label="Télécharger">${icon('download', 14)}</button>` : ''}
+      <button class="dk-iconbtn" data-delf="${f.id}" title="Supprimer la pièce" aria-label="Supprimer">${icon('x', 14)}</button>
+    </div>`).join('') || `<p class="dk-empty-line">Aucune pièce — glissez PDF, photos ou textes sur la carte, ou déposez-les ci-dessous.</p>`}
+    <div class="dk-btn-row" style="margin-top:8px">
+      <button class="dk-btn small" data-act="addfile">${icon('upload-cloud', 14)} Déposer des fichiers</button>
+      <input type="file" data-k="fileinput" multiple style="display:none">
+    </div>
+    <p class="dk-note">Casier de transmission éphémère — purgé ~30 j après l'impression du numéro. ${_fmtSize(q.used)} utilisés sur ${_fmtSize(q.max)}.</p>
+  </div>`;
+}
+function _bindCasier(insp, p, refresh) {
+  const input = insp.querySelector('[data-k="fileinput"]');
+  if (!input) return;
+  insp.querySelector('[data-act="addfile"]').onclick = () => input.click();
+  input.addEventListener('change', () => { _uploadFiles(p, input.files, refresh); input.value = ''; });
+  insp.querySelectorAll('[data-dlf]').forEach(b => b.onclick = async () => {
+    try {
+      const r = await _api('/casier/' + b.dataset.dlf + '/url');
+      const link = document.createElement('a');
+      link.href = r.url;
+      link.rel = 'noopener';
+      document.body.appendChild(link); link.click(); link.remove();
+    } catch (e) { _toast(e.message, true); }
+  });
+  // Suppression sobre en deux temps : le second clic confirme.
+  insp.querySelectorAll('[data-delf]').forEach(b => b.onclick = async () => {
+    if (!b.classList.contains('arm')) {
+      b.classList.add('arm'); b.title = 'Cliquer à nouveau pour supprimer';
+      setTimeout(() => b.classList.remove('arm'), 2600);
+      return;
+    }
+    try {
+      await _api('/casier/' + b.dataset.delf, { method: 'DELETE' });
+      _toast('Pièce supprimée.');
+      await _loadIssue(true);
+      if (refresh) refresh();
+    } catch (e) { _toast(e.message, true); }
+  });
+}
+
 /* ═══════════════════ Le chemin de fer ═══════════════════ */
 function _renderFer() {
   if (!_D || !_D.issue) return;
@@ -477,6 +629,7 @@ function _renderFer() {
       </div>` : ''}
       <span class="dk-ferbar-issue">n° ${_esc(_D.issue.num)}${_D.issue.theme ? ' · ' + _esc(_D.issue.theme) : ''} · ${_D.pages.length} pages</span>
       <span class="dk-ferbar-spacer"></span>
+      ${_relancesDues().length ? `<button class="dk-btn ghost small dk-relbtn" data-act="relances" title="Copies en attente à relancer">${icon('bell', 14)}<span class="dk-btn-txt"> Relances (${_relancesDues().length})</span></button>` : ''}
       <button class="dk-btn ghost small" data-act="newart">${icon('plus', 14)}<span class="dk-btn-txt"> Article</span></button>
     </div>
     ${_view === 'fer'
@@ -488,6 +641,7 @@ function _renderFer() {
     if (_view !== b.dataset.v) { _view = b.dataset.v; _clearMsel(); _renderFer(); }
   });
   main.querySelector('[data-act="newart"]').addEventListener('click', () => _openArtForm());
+  main.querySelector('[data-act="relances"]')?.addEventListener('click', () => _openRelanceList());
   if (_view === 'fer') {
     _renderFrise();
     const sizer = main.querySelector('[data-k="size"]');
@@ -540,11 +694,14 @@ function _planches() {
 
 function _cardHTML(p, prevP) {
   const msel = _msel.has(p.n) ? ' msel' : '';
+  const nFiles = _filesOf(p).filter(f => f.status === 'ok').length;
+  const fileBadge = nFiles ? `<span class="dk-pc-badge">${icon('paperclip', 9)}${nFiles}</span>` : '';
   if (p.kind === 'fixe') {
     return `<div class="dk-pcard fixe locked${msel}" data-n="${p.n}">
       <span class="dk-pc-fixe-tag">${_esc(p.fixe_tag || 'Figée')}</span>
       ${p.fixe_title ? `<div class="dk-pc-title">${_esc(p.fixe_title)}</div>` : ''}
       <div class="dk-pc-foot"><div class="dk-pc-status"><span class="dk-pc-status-dot" style="background:#4cc38a"></span><span>figée</span></div></div>
+      ${fileBadge ? `<div class="dk-pc-badges">${fileBadge}</div>` : ''}
     </div>`;
   }
   const slots = _slotsOf(p);
@@ -555,6 +712,7 @@ function _cardHTML(p, prevP) {
       ${rub ? `<div class="dk-pc-rub dk-pc-rub-vide"><span>${_esc(rub.name)}</span></div>` : ''}
       <span class="dk-pc-vide-ico">${icon('plus', 20)}</span>
       <span class="dk-pc-vide-txt">réserver<br>un article</span>
+      ${fileBadge ? `<div class="dk-pc-badges">${fileBadge}</div>` : ''}
     </div>`;
   }
   const st = STATUS[a.status] || STATUS.propose;
@@ -567,6 +725,7 @@ function _cardHTML(p, prevP) {
   const badges = [];
   if (slots.length > 1) badges.push(`<span class="dk-pc-badge">${icon('copy', 9)}${slots.length}</span>`);
   if (bancTotal) badges.push(`<span class="dk-pc-badge">${icon('users', 9)}${bancTotal}</span>`);
+  if (fileBadge) badges.push(fileBadge);
   return `<div class="dk-pcard ${cls}${msel}${rub ? ' rubbed' : ''}" data-n="${p.n}" data-art="${a.id}"${_rubVars(rub)}>
     <div class="dk-pc-rub"><span>${_esc(rub ? rub.name : 'Sans rubrique')}${suite ? ' · suite' : ''}</span></div>
     <div class="dk-pc-title">${_esc(a.title)}</div>
@@ -710,6 +869,29 @@ function _bindFrise() {
     _mselAnchor = n;
     if (_msel.size) _clearMsel();
     _openInsp(n);
+  });
+  // Pointer §3.5 : glisser des FICHIERS sur une carte → casier de la page.
+  f.addEventListener('dragover', e => {
+    if (!e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return;
+    e.preventDefault();
+    const card = e.target.closest('.dk-pcard');
+    f.querySelectorAll('.dk-pcard.dropfile').forEach(x => { if (x !== card) x.classList.remove('dropfile'); });
+    if (card && !_offline && _D.casier !== 'off') {
+      card.classList.add('dropfile');
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  });
+  f.addEventListener('dragleave', e => {
+    if (!f.contains(e.relatedTarget)) f.querySelectorAll('.dk-pcard.dropfile').forEach(x => x.classList.remove('dropfile'));
+  });
+  f.addEventListener('drop', e => {
+    if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+    e.preventDefault();
+    const card = e.target.closest('.dk-pcard');
+    f.querySelectorAll('.dk-pcard.dropfile').forEach(x => x.classList.remove('dropfile'));
+    if (!card || _offline || _D.casier === 'off') return;
+    const p = _D.pages.find(x => x.n === parseInt(card.dataset.n, 10));
+    if (p) _uploadFiles(p, e.dataTransfer.files, () => { if (_selN === p.n) _openInsp(p.n, true); });
   });
 }
 // Les listeners window sont posés UNE fois par module (le pad peut se rouvrir)
@@ -1019,6 +1201,7 @@ function _openInspMarbre(artId) {
     ${histo.length ? `<div class="dk-sec"><h4>Historique</h4>${histo.slice(0, 20).map(h => `<div class="dk-histo">${_esc(h)}</div>`).join('')}</div>` : ''}
     <div class="dk-sec"><h4>Actions</h4><div class="dk-btn-row">
       <button class="dk-btn" data-act="editart">${icon('edit-3', 14)} Modifier</button>
+      ${(STATUS[a.status] || {}).needsCopy && a.contrib ? `<button class="dk-btn ${_relanceInfo(a) ? 'primary' : ''}" data-act="relancem">${icon('mail', 14)} Relancer</button>` : ''}
       ${vivant ? `<button class="dk-btn" data-act="abandon">Abandonner</button>` : ''}
       <button class="dk-btn ghost" data-act="delart">${icon('trash-2', 14)} Supprimer</button>
     </div><div data-slot="confirm"></div></div>`);
@@ -1035,6 +1218,7 @@ function _openInspMarbre(artId) {
     } catch (e) { _toast(e.message, true); }
   });
   insp.querySelector('[data-act="editart"]').onclick = () => _openArtForm(null, a, () => _openInspMarbre(a.id));
+  insp.querySelector('[data-act="relancem"]')?.addEventListener('click', () => _openRelanceForm(a, () => _openInspMarbre(a.id)));
   const confirmBox = insp.querySelector('[data-slot="confirm"]');
   insp.querySelector('[data-act="abandon"]')?.addEventListener('click', () => {
     confirmBox.innerHTML = `<div class="dk-confirm">Abandonner « ${_esc(a.title)} » ? Il sort du marbre (l'historique est conservé).
@@ -1110,8 +1294,10 @@ function _renderInspFixe(insp, p) {
       </div>
       <p class="dk-note">Une page figée ne bouge pas quand le contenu coule autour (repagination) — une pub vendue « page ${p.n} » reste page ${p.n}.</p>
     </div>
+    ${_casierSectionHTML(p)}
     ${p.updated_by ? `<p class="dk-modified">Modifié par ${_esc(p.updated_by)} ${_relTime(p.updated_at)}</p>` : ''}`);
   _bindClose(insp);
+  _bindCasier(insp, p, () => _openInsp(p.n, true));
   insp.querySelector('[data-act="savefixe"]').onclick = async () => {
     try {
       await _api('/page/' + p.id, { method: 'PATCH', body: { fixe_title: insp.querySelector('[data-k="fixe_title"]').value } });
@@ -1152,8 +1338,10 @@ function _renderInspVide(insp, p) {
       <div class="dk-btn-row"><button class="dk-btn" data-act="mkfixe">${icon('lock', 14)} Page figée (pub, sommaire…)</button></div>
     </div>
     <div class="dk-sec"><div class="dk-btn-row"><button class="dk-btn primary" data-act="newarthere">${icon('plus', 14)} Nouvel article sur cette page</button></div></div>
+    ${_casierSectionHTML(p)}
     ${p.updated_by ? `<p class="dk-modified">Modifié par ${_esc(p.updated_by)} ${_relTime(p.updated_at)}</p>` : ''}`);
   _bindClose(insp);
+  _bindCasier(insp, p, () => _openInsp(p.n, true));
   insp.querySelectorAll('[data-act="reserve"]').forEach(b => b.onclick = async () => {
     try {
       await _api('/page/' + p.id + '/slot', { method: 'POST', body: { art_id: b.dataset.a } });
@@ -1192,6 +1380,8 @@ function _renderInspArticle(insp, p) {
   const histo = _histoOf(a);
   const canSim = st.needsCopy && a.due;
   const card = _computeCard(p);
+  const relDue = _relanceInfo(a);
+  const lastRel = _relancesOf(a.id)[0];
 
   insp.innerHTML = _inspShell(a.title,
     `<div class="dk-insp-rub"><span class="dk-pc-dot" style="background:${rub ? rub.color : '#8d93a8'}"></span>${_esc(rub ? rub.name : 'Sans rubrique')} · page ${p.n}</div>`,
@@ -1237,6 +1427,15 @@ function _renderInspArticle(insp, p) {
       <div data-slot="bancpick"></div>
     </div>
 
+    ${st.needsCopy && a.contrib ? `<div class="dk-sec"><h4>Relance</h4>
+      ${relDue ? `<p class="dk-relance-due">${relDue.mode === 'avant' ? 'Rappel suggéré avant l’échéance' : 'Copie en attente — relance suggérée'}${a.due ? ' (remise prévue le ' + _fmtD(a.due) + ')' : ''}.</p>` : ''}
+      ${lastRel ? `<p class="dk-note" style="margin-top:2px">Dernière relance : ${_esc(lastRel.email)} — ${_relTime(lastRel.sent_at)}${lastRel.sent_by ? ' (' + _esc(lastRel.sent_by) + ')' : ''}.</p>` : ''}
+      <div class="dk-btn-row"><button class="dk-btn small ${relDue ? 'primary' : ''}" data-act="relance">${icon('mail', 14)} Rédiger une relance</button></div>
+      <p class="dk-note">Brouillon proposé, votre voix : vous ajustez avant l'envoi. Le pointage « copie reçue » annule la relance de lui-même.</p>
+    </div>` : ''}
+
+    ${_casierSectionHTML(p)}
+
     ${histo.length ? `<div class="dk-sec"><h4>Historique</h4>${histo.slice(0, 8).map(h => `<div class="dk-histo">${_esc(h)}</div>`).join('')}</div>` : ''}
 
     <div class="dk-sec"><h4>Actions</h4><div class="dk-btn-row">
@@ -1251,6 +1450,8 @@ function _renderInspArticle(insp, p) {
   _bindClose(insp);
 
   insp.querySelectorAll('[data-slotidx]').forEach(b => b.onclick = () => { _selSlot = parseInt(b.dataset.slotidx, 10); _openInsp(p.n, true); });
+  _bindCasier(insp, p, () => _openInsp(p.n, true));
+  insp.querySelector('[data-act="relance"]')?.addEventListener('click', () => _openRelanceForm(a, () => _openInsp(p.n, true)));
 
   const patchArt = async (body, msg) => {
     try {
@@ -1380,6 +1581,86 @@ function _renderInspArticle(insp, p) {
     };
     insp.querySelector('[data-act="simcancel"]').onclick = () => { range.value = 0; range.dispatchEvent(new Event('input')); };
   }
+}
+
+/* ═══════════ DK-3 · Relances (liste + brouillon proposé) ════════ */
+// Liste des copies à relancer (calculée — voir _relanceInfo).
+function _openRelanceList() {
+  const insp = _root.querySelector('[data-slot="insp"]');
+  const dues = _relancesDues();
+  insp.innerHTML = _inspShell('Relances — copies en attente', null,
+    `<div class="dk-sec">
+      ${dues.length ? dues.map(a => {
+        const pl = _placementsOf(a.id);
+        const late = a.due ? Math.round((Date.now() - new Date(a.due + 'T12:00:00').getTime()) / DAY) : 0;
+        const ri = _relanceInfo(a);
+        return `<div class="dk-banc-item">
+          <div class="dk-banc-info">
+            <div class="dk-banc-title">${_esc(a.title)}</div>
+            <div class="dk-banc-meta">${_esc(a.contrib || '—')} · ${pl.tit.length ? 'p. ' + pl.tit.join(', ') : 'au marbre'}${a.due ? ' · remise le ' + _fmtD(a.due) : ''}${late > 0 ? ` · <span class="rouge">${late} j de retard</span>` : (ri && ri.mode === 'avant' ? ' · rappel avant échéance' : '')}</div>
+          </div>
+          <button class="dk-btn small primary" data-rel="${a.id}">${icon('mail', 13)} Rédiger</button>
+        </div>`;
+      }).join('') : `<p class="dk-empty-line">Rien à relancer — toutes les copies attendues sont dans les temps.</p>`}
+      <p class="dk-note">Suggestions calculées : échéance de remise + retard moyen constaté du contributeur. Un pointage « copie reçue » retire l'article de lui-même.</p>
+    </div>`);
+  _bindClose(insp);
+  insp.classList.add('on');
+  _root.querySelector('[data-slot="veil"]').classList.add('on');
+  insp.querySelectorAll('[data-rel]').forEach(b => b.onclick = () => {
+    const a = _artById(b.dataset.rel);
+    if (a) _openRelanceForm(a, _openRelanceList);
+  });
+}
+
+// Brouillon proposé (§5.4) — gabarit déterministe, la rédactrice ajuste,
+// l'envoi part via le worker (Resend) et s'historise sur l'article.
+function _openRelanceForm(a, backFn) {
+  const insp = _root.querySelector('[data-slot="insp"]');
+  const draft = _relanceDraft(a);
+  const c = _contribByName(a.contrib);
+  const mailer = !!(_D && _D.mailer);
+  insp.innerHTML = _inspShell('Relance — ' + (a.contrib || a.title), null,
+    `<div class="dk-sec">
+      <label class="dk-field"><span>E-mail du contributeur</span><input type="email" data-k="rmail" maxlength="200" value="${_esc(c && c.email || '')}" placeholder="adresse@exemple.fr"></label>
+      <label class="dk-field"><span>Objet</span><input type="text" data-k="rsubject" maxlength="200" value="${_esc(draft.subject)}"></label>
+      <label class="dk-field"><span>Message</span><textarea data-k="rbody" rows="11" maxlength="6000">${_esc(draft.body)}</textarea></label>
+      <div class="dk-btn-row" style="margin-top:10px">
+        ${mailer ? `<button class="dk-btn primary" data-act="rsend">${icon('send', 14)} Envoyer</button>` : ''}
+        <button class="dk-btn" data-act="rmailto">${icon('mail', 14)} Via ma messagerie</button>
+        <button class="dk-btn ghost" data-act="rcancel">Annuler</button>
+      </div>
+      <p class="dk-note">${mailer
+        ? 'L\'envoi est journalisé sur l\'article ; les réponses du contributeur arrivent dans VOTRE boîte (répondre-à).'
+        : 'L\'envoi direct n\'est pas encore activé sur ce serveur — « Via ma messagerie » ouvre le brouillon dans votre messagerie habituelle (non journalisé).'}
+        L'e-mail saisi est mémorisé pour ${_esc(a.contrib || 'ce contributeur')}.</p>
+    </div>`);
+  _bindClose(insp);
+  insp.classList.add('on');
+  _root.querySelector('[data-slot="veil"]').classList.add('on');
+  const g = k => insp.querySelector(`[data-k="${k}"]`).value;
+  const validEmail = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  insp.querySelector('[data-act="rcancel"]').onclick = () => { if (backFn) backFn(); else _closeInsp(); };
+  insp.querySelector('[data-act="rsend"]')?.addEventListener('click', async () => {
+    const email = g('rmail').trim().toLowerCase();
+    if (!validEmail(email)) { _toast('Indiquez l\'e-mail du contributeur', true); return; }
+    try {
+      await _api('/article/' + a.id + '/relance', { method: 'POST', body: { email, subject: g('rsubject').trim(), body: g('rbody') } });
+      _toast('Relance envoyée à ' + email + '.');
+      await _loadIssue(true);
+      if (backFn) backFn(); else _closeInsp();
+    } catch (e) { _toast(e.message, true); }
+  });
+  insp.querySelector('[data-act="rmailto"]').onclick = async () => {
+    const email = g('rmail').trim().toLowerCase();
+    if (email && validEmail(email) && a.contrib) {
+      // Mémoriser l'e-mail même quand l'envoi part de la messagerie perso.
+      try { await _api('/publication/' + _pubId + '/contrib', { method: 'POST', body: { name: a.contrib, email } }); _loadIssue(true); } catch (_) {}
+    }
+    window.location.href = 'mailto:' + encodeURIComponent(email) +
+      '?subject=' + encodeURIComponent(g('rsubject').trim()) +
+      '&body=' + encodeURIComponent(g('rbody'));
+  };
 }
 
 // ── Formulaire article (création / édition) ─────────────────────
