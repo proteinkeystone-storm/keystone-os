@@ -380,16 +380,23 @@ function _stateOf(marge) { return marge === null ? '' : (marge < 0 ? 'rouge' : (
 function _margeTxt(m) { return m === null ? '' : (m < 0 ? 'marge brûlée (' + m + ' j)' : 'marge ' + m + ' j'); }
 function _artById(id) { return (_D.articles || []).find(a => a.id === id) || null; }
 function _rubById(id) { return (_D.rubriques || []).find(r => r.id === id) || null; }
-// Teinte de rubrique pour le fond des cartes (demande Stéphane 2026-07-12 :
-// liseré haut + fond à 30 % — la rubrique se lit d'un seul coup d'œil).
-function _rgba(hex, a) {
+// Teinte de rubrique pour les cartes (design Stéphane 2026-07-12 : bordure
+// + bandeau haut de la couleur de rubrique, fond teinté profond, textes
+// recontrastés — la rubrique se lit d'un seul coup d'œil, sans pastille).
+function _rgbOf(hex) {
   const m = /^#([0-9a-fA-F]{6})$/.exec(hex || '');
-  if (!m) return 'rgba(127,127,127,.06)';
+  if (!m) return [127, 127, 127];
   const n = parseInt(m[1], 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function _rgba(hex, a) { const [r, g, b] = _rgbOf(hex); return `rgba(${r},${g},${b},${a})`; }
+function _mixTo(hex, target, ratio) {   // mélange chaque canal vers target (0 ou 255)
+  const [r, g, b] = _rgbOf(hex).map(c => Math.round(c + (target - c) * ratio));
+  return `rgb(${r},${g},${b})`;
 }
 function _rubVars(rub, alpha = 0.3) {
-  return rub ? ` style="--dk-rub:${rub.color};--dk-rub-tint:${_rgba(rub.color, alpha)}"` : '';
+  if (!rub) return '';
+  return ` style="--dk-rub:${rub.color};--dk-rub-tint:${_rgba(rub.color, alpha)};--dk-rub-lite:${_mixTo(rub.color, 255, 0.55)};--dk-rub-deep:${_mixTo(rub.color, 0, 0.4)}"`;
 }
 function _slotsOf(p) { return (_D.slots || []).filter(s => s.page_id === p.id).sort((a, b) => a.position - b.position); }
 function _bancOf(s) { try { const b = JSON.parse(s.banc || '[]'); return Array.isArray(b) ? b : []; } catch (_) { return []; } }
@@ -545,7 +552,7 @@ function _cardHTML(p, prevP) {
   if (!a) {
     const rub = _rubById(p.rub_id);
     return `<div class="dk-pcard vide${msel}${rub ? ' rubbed' : ''}" data-n="${p.n}"${_rubVars(rub, 0.14)}>
-      ${rub ? `<div class="dk-pc-rub dk-pc-rub-vide"><span class="dk-pc-dot" style="background:${rub.color}"></span><span>${_esc(rub.name)}</span></div>` : ''}
+      ${rub ? `<div class="dk-pc-rub dk-pc-rub-vide"><span>${_esc(rub.name)}</span></div>` : ''}
       <span class="dk-pc-vide-ico">${icon('plus', 20)}</span>
       <span class="dk-pc-vide-txt">réserver<br>un article</span>
     </div>`;
@@ -561,7 +568,7 @@ function _cardHTML(p, prevP) {
   if (slots.length > 1) badges.push(`<span class="dk-pc-badge">${icon('copy', 9)}${slots.length}</span>`);
   if (bancTotal) badges.push(`<span class="dk-pc-badge">${icon('users', 9)}${bancTotal}</span>`);
   return `<div class="dk-pcard ${cls}${msel}${rub ? ' rubbed' : ''}" data-n="${p.n}" data-art="${a.id}"${_rubVars(rub)}>
-    <div class="dk-pc-rub"><span class="dk-pc-dot" style="background:${rub ? rub.color : '#8d93a8'}"></span><span>${_esc(rub ? rub.name : 'Sans rubrique')}${suite ? ' · suite' : ''}</span></div>
+    <div class="dk-pc-rub"><span>${_esc(rub ? rub.name : 'Sans rubrique')}${suite ? ' · suite' : ''}</span></div>
     <div class="dk-pc-title">${_esc(a.title)}</div>
     ${a.contrib ? `<div class="dk-pc-contrib">${_esc(a.contrib)}${slots.length > 1 ? ' +' + (slots.length - 1) : ''}</div>` : ''}
     <div class="dk-pc-foot">
