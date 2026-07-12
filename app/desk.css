@@ -185,30 +185,38 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
   position: relative; cursor: pointer; transition: border-color .18s, transform .18s, box-shadow .18s;
 }
 .dk-pcard:hover { border-color: rgba(127, 127, 127, .45); transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0, 0, 0, .28); }
-/* La couleur de rubrique habille la carte (design Stéphane) : bordure ET
-   bandeau haut de la MÊME couleur (fondus, aucune couture), fond teinté
-   profond composé sur une base sombre fixe (30 % article, 14 % page vide
-   pré-assignée), textes recontrastés. Pas de pastille — la carte EST la
-   couleur. Les états ambre/rouge et la sélection reprennent la bordure. */
+/* La couleur de rubrique habille la carte (design Stéphane) : le bandeau
+   haut EST la bordure haute épaisse de la carte — le coin arrondi se fond
+   donc nativement dans les côtés, sans aucune couture (comme le dessin de
+   référence). Fond teinté profond composé sur une base sombre fixe (30 %
+   article, 14 % page vide pré-assignée), textes recontrastés, pas de
+   pastille. Les alertes ambre/rouge reprennent les côtés, jamais le bandeau. */
 .dk-pcard.rubbed {
   background: linear-gradient(var(--dk-rub-tint), var(--dk-rub-tint)), #15171e;
   border-color: var(--dk-rub);
-}
-.dk-pcard.rubbed::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 6px;
-  background: var(--dk-rub); border-radius: 10px 10px 0 0; pointer-events: none;
+  border-top-width: 9px;
+  border-radius: 15px 15px 12px 12px;
+  padding-top: 8px;
 }
 .dk-pcard.rubbed .dk-pc-rub { color: var(--dk-rub-lite); font-weight: 600; }
 .dk-pcard.rubbed .dk-pc-contrib, .dk-pcard.rubbed .dk-pc-status,
 .dk-pcard.rubbed .dk-pc-marge, .dk-pcard.rubbed.vide { color: rgba(255, 255, 255, .74); }
 .dk-pcard.rubbed .dk-pc-badge { background: rgba(0, 0, 0, .32); color: rgba(255, 255, 255, .8); }
-/* Les alertes et la sélection priment toujours sur la bordure de rubrique */
-.dk-pcard.rubbed.ambre { border-color: rgba(230, 162, 60, .75); }
-.dk-pcard.rubbed.rouge { border-color: rgba(229, 72, 77, .85); }
+/* Les alertes et la sélection priment sur les côtés — le bandeau reste rubrique */
+.dk-pcard.rubbed.ambre { border-color: rgba(230, 162, 60, .75); border-top-color: var(--dk-rub); }
+.dk-pcard.rubbed.rouge { border-color: rgba(229, 72, 77, .85); border-top-color: var(--dk-rub); }
 .dk-pcard.rubbed.ambre .dk-pc-marge { color: var(--dk-ambre); }
 .dk-pcard.rubbed.rouge .dk-pc-marge { color: var(--dk-rouge); }
-.dk-pcard.rubbed.sel, .dk-pcard.rubbed.msel { border-color: var(--dk-gold); }
-.dk-frise-wrap[data-size="0"] .dk-pcard.rubbed::before { height: 4px; border-radius: 6px 6px 0 0; }
+.dk-pcard.rubbed.sel, .dk-pcard.rubbed.msel { border-color: var(--dk-gold); border-top-color: var(--dk-rub); }
+/* Page vide pré-assignée : cap plein couleur rubrique + corps en pointillés
+   (« réservée, encore vide ») — les règles .vide plus bas écrasent bordure
+   et fond, on les ré-affirme ici avec la spécificité supérieure. */
+.dk-pcard.vide.rubbed {
+  border-top-style: solid; border-top-width: 7px; border-top-color: var(--dk-rub);
+  background: linear-gradient(var(--dk-rub-tint), var(--dk-rub-tint)), #15171e;
+}
+html.light-mode .dk-pcard.vide.rubbed { background: linear-gradient(var(--dk-rub-tint), var(--dk-rub-tint)), #fbfbfd; }
+.dk-frise-wrap[data-size="0"] .dk-pcard.rubbed { border-top-width: 5px; border-radius: 9px 9px 8px 8px; }
 /* Thème clair : la teinte se compose sur une base claire, textes sombres */
 html.light-mode .dk-pcard.rubbed { background: linear-gradient(var(--dk-rub-tint), var(--dk-rub-tint)), #fbfbfd; }
 html.light-mode .dk-pcard.rubbed .dk-pc-rub { color: var(--dk-rub-deep); }
