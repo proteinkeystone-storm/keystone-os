@@ -1257,17 +1257,22 @@ function _renderInspArticle(insp, p) {
     } catch (e) { _toast(e.message, true); }
   });
 
-  // Ajouter un 2ᵉ (3ᵉ…) article sur la même page (§2.4 — brèves, encadré)
+  // Ajouter un 2ᵉ (3ᵉ…) article sur la même page (§2.4 — brèves, encadré).
+  // Toujours offrir la CRÉATION — sinon impasse quand le marbre n'a rien
+  // d'autre à proposer (retour terrain L'Épaulette, 2026-07-12).
   insp.querySelector('[data-act="addslot"]')?.addEventListener('click', () => {
     const onPage = new Set(slots.map(s => s.art_id));
     const cands = (_D.articles || []).filter(x => !onPage.has(x.id) && !['publie', 'abandonne'].includes(x.status));
     const box = insp.querySelector('[data-slot="slotpick"]');
-    box.innerHTML = cands.length ? cands.slice(0, 30).map(x => `
+    box.innerHTML = `
+      <div class="dk-btn-row" style="margin:8px 0"><button class="dk-btn primary small" data-act="newartslot">${icon('plus', 13)} Nouvel article sur cette page</button></div>
+      ${cands.length ? cands.slice(0, 30).map(x => `
       <div class="dk-banc-item">
         <div class="dk-banc-info"><div class="dk-banc-title">${_esc(x.title)}</div>
         <div class="dk-banc-meta">${_rubById(x.rub_id) ? _esc(_rubById(x.rub_id).name) : 'Sans rubrique'}${x.contrib ? ' · ' + _esc(x.contrib) : ''} · ${(STATUS[x.status] || {}).label || x.status}</div></div>
         <button class="dk-btn small" data-addslot="${x.id}">Ajouter</button>
-      </div>`).join('') : `<p class="dk-empty-line">Aucun autre article disponible au marbre.</p>`;
+      </div>`).join('') : `<p class="dk-empty-line">Aucun autre article au marbre — créez-le ci-dessus.</p>`}`;
+    box.querySelector('[data-act="newartslot"]').onclick = () => _openArtForm(p);
     box.querySelectorAll('[data-addslot]').forEach(bp => bp.onclick = async () => {
       try {
         await _api('/page/' + p.id + '/slot', { method: 'POST', body: { art_id: bp.dataset.addslot } });
@@ -1275,6 +1280,7 @@ function _renderInspArticle(insp, p) {
         await _loadIssue(true); _selSlot = _slotsOf(p).length - 1; _openInsp(p.n, true);
       } catch (e) { _toast(e.message, true); }
     });
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
 
   // Bascule (confirmation sobre — le titulaire reste au marbre)
@@ -1300,24 +1306,30 @@ function _renderInspArticle(insp, p) {
       } catch (e) { _toast(e.message, true); }
     };
   }));
-  // Ajouter au banc de CET emplacement
+  // Ajouter au banc de CET emplacement (création directe possible — un
+  // remplaçant se prépare souvent avant d'exister au marbre)
   insp.querySelector('[data-act="addbanc"]').addEventListener('click', () => {
     const placed = new Set((_D.slots || []).map(s => s.art_id).filter(Boolean));
     const inBanc = new Set(_bancOf(slot));
     const cands = (_D.articles || []).filter(x => x.id !== a.id && !placed.has(x.id) && !inBanc.has(x.id) && !['publie', 'abandonne'].includes(x.status));
     const box = insp.querySelector('[data-slot="bancpick"]');
-    box.innerHTML = cands.length ? cands.slice(0, 30).map(x => `
+    box.innerHTML = `
+      <div class="dk-btn-row" style="margin:8px 0"><button class="dk-btn primary small" data-act="newartbanc">${icon('plus', 13)} Nouvel article au banc</button></div>
+      ${cands.length ? cands.slice(0, 30).map(x => `
       <div class="dk-banc-item">
         <div class="dk-banc-info"><div class="dk-banc-title">${_esc(x.title)}</div>
         <div class="dk-banc-meta">${_rubById(x.rub_id) ? _esc(_rubById(x.rub_id).name) : 'Sans rubrique'} · ${(STATUS[x.status] || {}).label || x.status}</div></div>
         <button class="dk-btn small" data-pick="${x.id}">Au banc</button>
-      </div>`).join('') : `<p class="dk-empty-line">Aucun article libre à mettre au banc.</p>`;
+      </div>`).join('') : `<p class="dk-empty-line">Aucun article libre au marbre — créez-le ci-dessus.</p>`}`;
+    box.querySelector('[data-act="newartbanc"]').onclick = () =>
+      _openArtForm(null, null, () => _openInsp(p.n, true), slot);
     box.querySelectorAll('[data-pick]').forEach(bp => bp.onclick = async () => {
       try {
         await _api('/slot/' + slot.id, { method: 'PATCH', body: { banc: _bancOf(slot).concat(bp.dataset.pick) } });
         await _loadIssue(true); _openInsp(p.n, true);
       } catch (e) { _toast(e.message, true); }
     });
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
 
   // Simulation en direct (recalcul local, rien d'écrit sans Appliquer)
@@ -1353,7 +1365,9 @@ function _renderInspArticle(insp, p) {
 }
 
 // ── Formulaire article (création / édition) ─────────────────────
-function _openArtForm(page, existing, onDone) {
+// page     : créer + réserver comme emplacement de cette page ;
+// bancSlot : créer + poser au banc de cet emplacement (remplaçant neuf).
+function _openArtForm(page, existing, onDone, bancSlot) {
   const insp = _root.querySelector('[data-slot="insp"]');
   const rubs = _D.rubriques || [];
   const a = existing || null;
@@ -1407,7 +1421,10 @@ function _openArtForm(page, existing, onDone) {
       } else {
         const r = await _api('/publication/' + _pubId + '/article', { method: 'POST', body });
         if (page) await _api('/page/' + page.id + '/slot', { method: 'POST', body: { art_id: r.article.id } });
-        _toast(page ? 'Article créé et réservé page ' + page.n + '.' : 'Article créé — il attend au marbre.');
+        else if (bancSlot) await _api('/slot/' + bancSlot.id, { method: 'PATCH', body: { banc: _bancOf(bancSlot).concat(r.article.id) } });
+        _toast(page ? 'Article créé et réservé page ' + page.n + '.'
+          : bancSlot ? 'Article créé et posé au banc des remplaçants.'
+          : 'Article créé — il attend au marbre.');
       }
       await _loadIssue(true);
       if (_view === 'marbre') _renderMarbre();
