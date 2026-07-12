@@ -44,6 +44,11 @@
    DELETE /api/desk/casier/:id                Supprimer une pièce
    POST   /api/desk/publication/:id/contrib   Mémoriser l'e-mail d'un contributeur
    POST   /api/desk/article/:id/relance       Envoyer une relance (Resend) + historiser
+   (DK-4, routes/desk-email.js) :
+   email()                                     Handler e-mail CF (catch-all redaction-*@) → digestion 3 étages
+   POST   /api/desk/email-inject               Injecter un e-mail à la main (admin — tests & secours)
+   POST   /api/desk/inbox/:id/apply            Confirmer une entrée du bac (rattacher / créer au marbre)
+   POST   /api/desk/inbox/:id/reject           Rejeter une entrée du bac (pièces purgées)
 
    Le passage d'un numéro au statut « imprime » déclenche le RITUEL DE
    BOUCLAGE (§4) : titulaires → « publie » (histo), remplaçants non
@@ -59,7 +64,7 @@ import { json, err, parseBody, generateId, getAllowedOrigin } from '../lib/auth.
 import { requireJWT } from '../lib/jwt.js';
 import { presignR2, r2PresignReady } from '../lib/r2-presign.js';
 
-const DK_ENGINE_VERSION = 'DK-3';
+const DK_ENGINE_VERSION = 'DK-4';
 
 const MAX_NAME_LEN   = 160;
 const MAX_TITLE_LEN  = 240;
@@ -194,6 +199,24 @@ async function _ensureSchema(env) {
     `CREATE TABLE IF NOT EXISTS dk_email_log (
        pub_id TEXT NOT NULL, day TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
        PRIMARY KEY (pub_id, day))`,
+    // DK-4 : bac « à trier » (§5.3) — chaque e-mail entrant non rattaché
+    // automatiquement devient une entrée pending ; les rattachements
+    // automatiques y laissent une trace (status 'auto'). Jamais contourné.
+    `CREATE TABLE IF NOT EXISTS dk_inbox (
+       id TEXT PRIMARY KEY, pub_id TEXT NOT NULL,
+       from_email TEXT, from_name TEXT, subject TEXT, body TEXT,
+       suggestion TEXT NOT NULL DEFAULT '{}',
+       attachments TEXT NOT NULL DEFAULT '[]',
+       status TEXT NOT NULL DEFAULT 'pending',
+       resolved_by TEXT, resolved_at TEXT,
+       received_at TEXT DEFAULT (datetime('now')))`,
+    `CREATE INDEX IF NOT EXISTS idx_dk_inbox_pub ON dk_inbox(pub_id, status)`,
+    // DK-4 : habitudes apprises SANS ML (§5.3) — « les mails de Dupont vont
+    // en rubrique Histoire ». Règle déterministe posée à chaque confirmation.
+    `CREATE TABLE IF NOT EXISTS dk_habits (
+       pub_id TEXT NOT NULL, from_email TEXT NOT NULL, rub_id TEXT,
+       updated_at TEXT DEFAULT (datetime('now')),
+       PRIMARY KEY (pub_id, from_email))`,
   ];
   for (const sql of stmts) { await env.DB.prepare(sql).run(); }
   // DK-2 : rubrique pré-assignée au niveau de la page (monter un dossier sur
@@ -211,7 +234,32 @@ async function _ensureSchema(env) {
        AND NOT EXISTS (SELECT 1 FROM dk_page_slots s WHERE s.page_id = p.id)`).run();
   // Les colonnes héritées ne sont plus la source de vérité — on les vide.
   await env.DB.prepare(`UPDATE dk_pages SET art_id = NULL, banc = '[]' WHERE art_id IS NOT NULL`).run();
+  // DK-4 : slug d'adresse de dépôt (§5.2) — redaction-<slug>@<domaine>.
+  // L'adresse PORTE le tenant : le slug est unique. Backfill des pubs existantes.
+  try { await env.DB.prepare(`ALTER TABLE dk_publications ADD COLUMN slug TEXT`).run(); } catch (_) {}
+  await env.DB.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dk_pubs_slug ON dk_publications(slug)`).run();
+  const noSlug = (await env.DB.prepare('SELECT id, name FROM dk_publications WHERE slug IS NULL').all()).results || [];
+  for (const p of noSlug) {
+    await env.DB.prepare('UPDATE dk_publications SET slug = ? WHERE id = ?').bind(await _freeSlug(env, p.name), p.id).run();
+  }
   _schemaReady = true;
+}
+
+// ── Slug d'adresse (DK-4, §5.2) : minuscules sans accent ────────
+function _slugify(name) {
+  const s = String(name || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  return s.length >= 2 ? s : 'revue';
+}
+async function _freeSlug(env, name) {
+  const base = _slugify(name);
+  let slug = base;
+  for (let i = 2; i < 50; i++) {
+    const taken = await env.DB.prepare('SELECT id FROM dk_publications WHERE slug = ?').bind(slug).first();
+    if (!taken) return slug;
+    slug = `${base.slice(0, 36)}-${i}`;
+  }
+  return `${base.slice(0, 24)}-${generateId().slice(0, 8)}`;
 }
 
 /* ── Gates ────────────────────────────────────────────────────────
@@ -277,13 +325,34 @@ function _histoPush(histoJSON, line) {
 }
 function _byName(u) { return u.name || (u.email ? u.email.split('@')[0] : 'un membre'); }
 
-const PUB_COLS   = 'id, name, owner_sub, created_at';
+const PUB_COLS   = 'id, name, owner_sub, slug, created_at';
 const RUB_COLS   = 'id, name, color, position';
 const ISSUE_COLS = 'id, pub_id, num, theme, status, jalons, created_at';
 const PAGE_COLS  = 'id, issue_id, n, kind, fixe_tag, fixe_title, rub_id, updated_at, updated_by';
 const SLOT_COLS  = 'id, page_id, position, art_id, banc';
 const ART_COLS   = 'id, title, rub_id, contrib, status, due, fresh, perime, notes, histo, created_at, updated_at';
 const FILE_COLS  = 'id, issue_id, page_id, art_id, name, mime, size, status, uploaded_by, created_at';
+
+/* ── Partagé avec routes/desk-email.js (DK-4) ─────────────────────
+   La digestion e-mail vit dans son propre module ; elle réutilise le
+   schéma, les gates et les invariants du casier d'ICI (source unique). */
+export async function ensureDeskSchema(env) { return _ensureSchema(env); }
+export { memberGate as dkMemberGate, _histoPush as dkHistoPush, _s as dkS,
+         _fileExt as dkFileExt, _fileName as dkFileName, _byName as dkByName };
+export const DK_FILE_EXTS = FILE_EXTS;
+export const DK_FILE_MAX = FILE_MAX_BYTES;
+export const DK_MAX_NAME = MAX_NAME_LEN;
+export const DK_MAX_TITLE = MAX_TITLE_LEN;
+export const DK_MAX_NOTES = MAX_NOTES_LEN;
+// Retard constaté → retard moyen interne du contributeur (jamais un score).
+export async function dkContribStats(env, pubId, contrib, due) {
+  if (!contrib) return;
+  const delay = due ? Math.max(-30, Math.min(90, Math.round((Date.now() - new Date(due + 'T12:00:00').getTime()) / 86400000))) : 0;
+  await env.DB.prepare(
+    `INSERT INTO dk_contribs (id, pub_id, name, n_remises, total_delay) VALUES (?, ?, ?, 1, ?)
+     ON CONFLICT (pub_id, name) DO UPDATE SET n_remises = n_remises + 1, total_delay = total_delay + ?`)
+    .bind(generateId(), pubId, _s(contrib, MAX_NAME_LEN), due ? delay : 0, due ? delay : 0).run();
+}
 
 // ── Health (public) ─────────────────────────────────────────────
 export async function handleDeskHealth(request, env) {
@@ -315,7 +384,7 @@ export async function handleDeskBootstrap(request, env) {
     for (const p of pubs) {
       const issues = (await env.DB.prepare(
         `SELECT ${ISSUE_COLS} FROM dk_issues WHERE pub_id = ? ORDER BY created_at DESC LIMIT 40`).bind(p.id).all()).results || [];
-      out.push({ id: p.id, name: p.name, owner: p.owner_sub === u.sub, issues });
+      out.push({ id: p.id, name: p.name, slug: p.slug || null, owner: p.owner_sub === u.sub, issues });
     }
     return json({ ok: true, engine: DK_ENGINE_VERSION, me: { sub: u.sub, name: u.name }, publications: out }, 200, origin);
   } catch (e) {
@@ -336,7 +405,8 @@ export async function handlePubCreate(request, env) {
   if (owned >= MAX_PUBS_OWNED) return err('Limite de publications atteinte', 403, origin);
 
   const id = generateId();
-  await env.DB.prepare('INSERT INTO dk_publications (id, name, owner_sub) VALUES (?, ?, ?)').bind(id, name, u.sub).run();
+  const slug = await _freeSlug(env, name);
+  await env.DB.prepare('INSERT INTO dk_publications (id, name, owner_sub, slug) VALUES (?, ?, ?, ?)').bind(id, name, u.sub, slug).run();
   await env.DB.prepare('INSERT INTO dk_members (pub_id, sub, name, email) VALUES (?, ?, ?, ?)').bind(id, u.sub, u.name, u.email).run();
   for (let i = 0; i < DEFAULT_RUBRIQUES.length; i++) {
     const r = DEFAULT_RUBRIQUES[i];
@@ -351,9 +421,23 @@ export async function handlePubPatch(request, env, pubId) {
   const u = await ownerGate(request, env, origin, pubId);
   if (u.error) return u.error;
   const body = await parseBody(request);
-  const name = String(body.name || '').trim();
-  if (!name || name.length > MAX_NAME_LEN) return err('Nom invalide', 400, origin);
-  await env.DB.prepare('UPDATE dk_publications SET name = ? WHERE id = ?').bind(name, pubId).run();
+  const sets = [], vals = [];
+  if (body.name !== undefined) {
+    const name = String(body.name || '').trim();
+    if (!name || name.length > MAX_NAME_LEN) return err('Nom invalide', 400, origin);
+    sets.push('name = ?'); vals.push(name);
+  }
+  // DK-4 : slug de l'adresse de dépôt (redaction-<slug>@…), unique.
+  if (body.slug !== undefined) {
+    const slug = String(body.slug || '').trim().toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(slug)) return err('Adresse invalide — minuscules, chiffres et tirets (2 à 40 caractères)', 400, origin);
+    const taken = await env.DB.prepare('SELECT id FROM dk_publications WHERE slug = ? AND id != ?').bind(slug, pubId).first();
+    if (taken) return err('Cette adresse est déjà prise par une autre publication', 409, origin);
+    sets.push('slug = ?'); vals.push(slug);
+  }
+  if (!sets.length) return err('Rien à modifier', 400, origin);
+  vals.push(pubId);
+  await env.DB.prepare(`UPDATE dk_publications SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
   return json({ ok: true }, 200, origin);
 }
 
@@ -495,15 +579,25 @@ export async function handleIssueGet(request, env, issueId) {
     const rubriques = (await env.DB.prepare(`SELECT ${RUB_COLS} FROM dk_rubriques WHERE pub_id = ? ORDER BY position`).bind(pubId).all()).results || [];
     // DK-3 : pièces du casier du numéro, contributeurs (e-mails + retard moyen
     // interne) et relances envoyées — le front en déduit les relances À FAIRE.
-    const files = (await env.DB.prepare(`SELECT ${FILE_COLS} FROM dk_files WHERE issue_id = ? ORDER BY created_at DESC`).bind(issueId).all()).results || [];
+    // Pièces du numéro + pièces « au marbre » (page_id = '' : rattachées à un
+    // article de la publication, pas encore posées sur une page — DK-4).
+    const files = (await env.DB.prepare(
+      `SELECT ${FILE_COLS} FROM dk_files WHERE issue_id = ? OR (pub_id = ? AND page_id = '') ORDER BY created_at DESC`)
+      .bind(issueId, pubId).all()).results || [];
     const contribs = (await env.DB.prepare('SELECT id, name, email, n_remises, total_delay FROM dk_contribs WHERE pub_id = ? ORDER BY name').bind(pubId).all()).results || [];
     const relances = (await env.DB.prepare('SELECT art_id, email, sent_by, sent_at FROM dk_relances WHERE pub_id = ? ORDER BY sent_at DESC LIMIT 300').bind(pubId).all()).results || [];
     const used = files.reduce((n, f) => n + (f.status !== 'dead' ? (f.size || 0) : 0), 0);
     const casier = !env.DK_CASIER ? 'off' : (r2PresignReady(env) ? 'presigned' : 'direct');
+    // DK-4 : bac « à trier » (entrées en attente) + adresse de dépôt.
+    const inbox = (await env.DB.prepare(
+      `SELECT id, from_email, from_name, subject, body, suggestion, attachments, received_at
+       FROM dk_inbox WHERE pub_id = ? AND status = 'pending' ORDER BY received_at DESC LIMIT 50`).bind(pubId).all()).results || [];
+    const pubRow = await env.DB.prepare('SELECT slug FROM dk_publications WHERE id = ?').bind(pubId).first();
     return json({
-      ok: true, issue, pages, slots, articles, rubriques, files, contribs, relances,
+      ok: true, issue, pages, slots, articles, rubriques, files, contribs, relances, inbox,
       casier, quota: { used, max: QUOTA_ISSUE },
       mailer: !!env.KS_RESEND_KEY,
+      email: { domain: env.DK_EMAIL_DOMAIN || null, slug: (pubRow && pubRow.slug) || null },
       now: new Date().toISOString(),
     }, 200, origin);
   } catch (e) {
@@ -942,13 +1036,7 @@ export async function handleArtPatch(request, env, artId) {
   await env.DB.prepare(`UPDATE dk_articles SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
   // DK-3 : au pointage, le retard constaté nourrit le retard moyen du
   // contributeur (INTERNE, §2 — cale le calendrier de relance, jamais un score).
-  if (pointage && cur.contrib) {
-    const delay = cur.due ? Math.max(-30, Math.min(90, Math.round((Date.now() - new Date(cur.due + 'T12:00:00').getTime()) / 86400000))) : 0;
-    await env.DB.prepare(
-      `INSERT INTO dk_contribs (id, pub_id, name, n_remises, total_delay) VALUES (?, ?, ?, 1, ?)
-       ON CONFLICT (pub_id, name) DO UPDATE SET n_remises = n_remises + 1, total_delay = total_delay + ?`)
-      .bind(generateId(), pubId, _s(cur.contrib, MAX_NAME_LEN), cur.due ? delay : 0, cur.due ? delay : 0).run();
-  }
+  if (pointage) await dkContribStats(env, pubId, cur.contrib, cur.due);
   const article = await env.DB.prepare(`SELECT ${ART_COLS} FROM dk_articles WHERE id = ?`).bind(artId).first();
   return json({ ok: true, article }, 200, origin);
 }
@@ -1231,7 +1319,17 @@ export async function sweepDeskCasier(env) {
     await env.DB.prepare('DELETE FROM dk_files WHERE id = ?').bind(f.id).run();
     stale++;
   }
-  return { purged, retained, stale };
+  // DK-4 : entrées du bac jamais triées (> 90 j) — pièces R2 comprises.
+  let inbox = 0;
+  const oldRows = (await env.DB.prepare(
+    `SELECT id, attachments FROM dk_inbox WHERE status = 'pending' AND received_at <= datetime('now', '-90 days')`).all()).results || [];
+  for (const r of oldRows) {
+    let atts = []; try { atts = JSON.parse(r.attachments || '[]'); } catch (_) {}
+    for (const a of atts) { if (env.DK_CASIER && a.r2_key) await env.DK_CASIER.delete(a.r2_key).catch(() => {}); }
+    await env.DB.prepare('DELETE FROM dk_inbox WHERE id = ?').bind(r.id).run();
+    inbox++;
+  }
+  return { purged, retained, stale, inbox };
 }
 
 /* ═══════════════ DK-3 · Contributeurs & relances (§5.4) ══════════

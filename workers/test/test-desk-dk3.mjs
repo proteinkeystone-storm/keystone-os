@@ -63,7 +63,7 @@ async function main() {
 
   // 1 · Santé
   const h = await fetch(API + '/api/desk/health').then(r => r.json());
-  ok(h.ok && h.engine === 'DK-3' && h.schema === 'ready', 'health → moteur DK-3, schéma prêt', h);
+  ok(h.ok && /^DK-\d/.test(h.engine) && h.schema === 'ready', 'health → moteur DK-3+, schéma prêt', h);
 
   // 2 · Publication + numéro + article attendu en retard
   const pub = await call(A, '/publication', { method: 'POST', body: { name: 'Revue Test DK-3 ' + Date.now() } });

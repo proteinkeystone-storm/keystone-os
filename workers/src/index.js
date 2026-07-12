@@ -160,6 +160,8 @@ import { handleDeskHealth, handleDeskBootstrap, handlePubCreate, handlePubPatch,
          handleCasierRequest, handleCasierPut, handleCasierComplete,
          handleCasierUrl, handleCasierDl, handleCasierDelete,
          handleContribUpsert, handleRelanceSend, sweepDeskCasier } from './routes/desk.js';
+// desK DK-4 — adresse de dépôt redaction-*@ : digestion des e-mails + bac à trier.
+import { handleDeskEmail, handleEmailInject, handleInboxApply, handleInboxReject } from './routes/desk-email.js';
 // Key-Ring (Sonnette) — ORDRE 3 : « Sonner » Web Push + boucle retour.
 import { handleKeyringRing, handleKeyringRingStatus, handleKeyringRespond, handleKeyringRespondGet,
          handleKeyringPushSubscribe, handleKeyringPushUnsubscribe, handleKeyringPushStatus, handleKeyringPushList,
@@ -361,6 +363,12 @@ export default {
       if (dkContrib && method === 'POST') return handleContribUpsert(request, env, dkContrib[1]);
       const dkRelance = path.match(/^\/api\/desk\/article\/([A-Za-z0-9-]+)\/relance$/);
       if (dkRelance && method === 'POST') return handleRelanceSend(request, env, dkRelance[1]);
+      // DK-4 — bac à trier + injection d'e-mail (admin : tests & secours).
+      if (path === '/api/desk/email-inject' && method === 'POST') return handleEmailInject(request, env);
+      const dkInboxApply = path.match(/^\/api\/desk\/inbox\/([A-Za-z0-9-]+)\/apply$/);
+      if (dkInboxApply && method === 'POST') return handleInboxApply(request, env, dkInboxApply[1]);
+      const dkInboxReject = path.match(/^\/api\/desk\/inbox\/([A-Za-z0-9-]+)\/reject$/);
+      if (dkInboxReject && method === 'POST') return handleInboxReject(request, env, dkInboxReject[1]);
 
       // ── Sentinel (Pad O-GEO-001 · S0) — audit web avec suivi ──
       if (path === '/api/sentinel/health' && method === 'GET')  return handleSentinelHealth(request, env);
@@ -1105,5 +1113,13 @@ export default {
           .catch(e => console.warn('[desk-casier-sweep] failed', e?.message || e))
       );
     }
+  },
+
+  // ── Email handler (Cloudflare Email Routing) — desK DK-4 ──────
+  // Catch-all `redaction-*@<domaine>` routé vers ce worker : l'adresse
+  // porte la publication (slug), la digestion fait le reste (3 étages,
+  // bac à trier jamais contourné). Voir routes/desk-email.js.
+  async email(message, env, ctx) {
+    await handleDeskEmail(message, env, ctx);
   },
 };

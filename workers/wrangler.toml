@@ -62,6 +62,7 @@ bucket_name = "keystone-help-media"
 binding     = "DK_CASIER"
 bucket_name = "keystone-desk-casier"
 
+
 # ── Vectorize — index sémantique du coffre Kortex (Smart Agent, SA-2) ──
 # Embeddings @cf/baai/bge-m3 (multilingue/français, 1024 dims, cosine).
 # Isolation multi-tenant par NAMESPACE (= tenant_id) à l'insert ET au query.
@@ -104,6 +105,23 @@ KS_ALLOWED_ORIGIN = "https://protein-keystone.com,https://www.protein-keystone.c
 # /api/proxy/llm (BYOK explicite déjà en prod : Brief, Annonces, pads).
 # Lu par lib/llm-router.js → byokRoutingEnabled(env).
 BYOK_ROUTING = "off"
+
+# ── desK DK-4 — adresse de dépôt e-mail (DESK_BRIEF §5.2) ─────
+# Le worker expose un handler email() (digestion 3 étages + bac).
+# ACTIVATION (quand le domaine porteur est tranché — il doit être une
+# zone Cloudflare : l'Email Routing n'existe pas sur un DNS Vercel) :
+#   1. Cloudflare dashboard → zone du domaine → Email → Email Routing
+#      → activer (pose les MX) ;
+#   2. Routing rules → Catch-all → action « Send to Worker » →
+#      keystone-os-api (les adresses redaction-<slug>@ sont dynamiques,
+#      une par publication → catch-all obligatoire) ;
+#   3. décommenter DK_EMAIL_DOMAIN (l'app affiche alors l'adresse de
+#      dépôt dans les réglages de chaque publication) + redeploy.
+# Sans DK_EMAIL_DOMAIN, tout DK-4 fonctionne déjà via l'injection
+# admin (POST /api/desk/email-inject) — utile en secours.
+# DK_EMAIL_IA = "off" coupe l'étage 2 IA (suggestion de rubrique des
+# spontanés via callLLM/Mistral inclus) — le bac reste la vérité.
+# DK_EMAIL_DOMAIN = "exemple.fr"
 
 # ── SDQR — RGPD (Sprint SDQR-5) ─────────────────────────────
 # Rétention des logs de scan en jours (purge auto via Cron, voir [triggers])

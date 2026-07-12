@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// desK — Pad O-DSK-001 · DK-3 (casier & relances — la boucle quotidienne)
+// desK — Pad O-DSK-001 · DK-4 (adresse de dépôt & digestion)
 //
 // Chemin de fer vivant d'une revue (DESK_BRIEF.md) : grille de
 // planches EN RANGÉES (le chemin de fer papier au mur), curseur de
@@ -15,6 +15,13 @@
 // (§5.4 : la relance À FAIRE est CALCULÉE — échéance + retard moyen
 // interne du contributeur — donc le pointage l'annule de lui-même ;
 // gabarit déterministe ZÉRO IA, on ajuste puis Resend).
+//
+// DK-4 : le bac « à trier » (§5.3) — les e-mails des contributeurs
+// arrivent sur redaction-<slug>@ (worker), la digestion rattache le
+// sûr toute seule et pose le doute ICI : bandeau en tête de frise,
+// suggestion pré-cochée, confirmation 1 clic, spontanés → marbre.
+// Chaque confirmation apprend (e-mail du contributeur, habitude de
+// rubrique). Adresse de dépôt réglable (slug) dans les réglages.
 //
 // ⚠ TENANT = LA PUBLICATION (pas la personne). Le front ne fait que
 // choisir une publication ; l'appartenance est contrôlée serveur
@@ -584,6 +591,10 @@ function _bindCasier(insp, p, refresh) {
   if (!input) return;
   insp.querySelector('[data-act="addfile"]').onclick = () => input.click();
   input.addEventListener('change', () => { _uploadFiles(p, input.files, refresh); input.value = ''; });
+  _bindFileButtons(insp, refresh);
+}
+// Télécharger / supprimer une pièce — partagé casier de page & fiche marbre.
+function _bindFileButtons(insp, refresh) {
   insp.querySelectorAll('[data-dlf]').forEach(b => b.onclick = async () => {
     try {
       const r = await _api('/casier/' + b.dataset.dlf + '/url');
@@ -632,10 +643,12 @@ function _renderFer() {
       ${_relancesDues().length ? `<button class="dk-btn ghost small dk-relbtn" data-act="relances" title="Copies en attente à relancer">${icon('bell', 14)}<span class="dk-btn-txt"> Relances (${_relancesDues().length})</span></button>` : ''}
       <button class="dk-btn ghost small" data-act="newart">${icon('plus', 14)}<span class="dk-btn-txt"> Article</span></button>
     </div>
+    ${(_D.inbox || []).length ? `<button class="dk-bacstrip" data-act="bac">${icon('mail', 15)}<span>${_D.inbox.length} contribution${_D.inbox.length > 1 ? 's' : ''} à rattacher</span><span class="dk-bacstrip-go">trier ${icon('chevron-right', 13)}</span></button>` : ''}
     ${_view === 'fer'
       ? `<div class="dk-frise-wrap" data-size="${_size}"><div class="dk-frise" data-slot="frise"></div></div>`
       : `<div class="dk-marbre-wrap" data-slot="marbre"></div>`}`;
   _renderRail();
+  main.querySelector('[data-act="bac"]')?.addEventListener('click', () => _openBacList());
   main.querySelector('[data-slot="view"]').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     if (_view !== b.dataset.v) { _view = b.dataset.v; _clearMsel(); _renderFer(); }
@@ -1191,6 +1204,18 @@ function _openInspMarbre(artId) {
       ${_kv('Fraîcheur', fresh.label, fresh.cls)}
       ${_kv('Dans ce numéro', pl.tit.length ? 'p. ' + pl.tit.join(', ') : (pl.banc.length ? 'au banc p. ' + pl.banc.join(', ') : 'libre'))}
     </div>
+    ${(() => {
+      const myFiles = (_D.files || []).filter(f => f.art_id === a.id && f.status === 'ok');
+      return myFiles.length ? `<div class="dk-sec"><h4>Pièces de l'article (${myFiles.length})</h4>
+        ${myFiles.map(f => `<div class="dk-file">
+          <span class="dk-file-ico">${icon('paperclip', 13)}</span>
+          <div class="dk-file-info"><div class="dk-file-name">${_esc(f.name)}</div>
+          <div class="dk-file-meta">${_fmtSize(f.size)}${f.uploaded_by ? ' · ' + _esc(f.uploaded_by) : ''}${f.page_id === '' ? ' · au marbre avec l’article' : ''}</div></div>
+          <button class="dk-iconbtn" data-dlf="${f.id}" title="Télécharger" aria-label="Télécharger">${icon('download', 14)}</button>
+          <button class="dk-iconbtn" data-delf="${f.id}" title="Supprimer la pièce" aria-label="Supprimer">${icon('x', 14)}</button>
+        </div>`).join('')}
+      </div>` : '';
+    })()}
     ${vivant ? `<div class="dk-sec"><h4>Réserver sur une page du n° ${_esc(_D.issue.num)}</h4>
       <div class="dk-pagepick">${targets.slice(0, 200).map(p => {
         const nb = _slotsOf(p).length;
@@ -1208,6 +1233,7 @@ function _openInspMarbre(artId) {
   _bindClose(insp);
   insp.classList.add('on');
   _root.querySelector('[data-slot="veil"]').classList.add('on');
+  _bindFileButtons(insp, () => _openInspMarbre(a.id));
   insp.querySelectorAll('[data-pg]').forEach(b => b.onclick = async () => {
     try {
       await _api('/page/' + b.dataset.pg + '/slot', { method: 'POST', body: { art_id: a.id } });
@@ -1583,6 +1609,128 @@ function _renderInspArticle(insp, p) {
   }
 }
 
+/* ═══════════ DK-4 · Le bac « à trier » (§5.3, jamais contourné) ═══
+   Chaque e-mail non rattaché automatiquement attend ici : suggestion
+   pré-cochée, confirmation humaine en un clic. « L'IA propose,
+   l'humain décide. » Chaque confirmation apprend (e-mail, habitude). */
+function _bacAtts(row) { try { const a = JSON.parse(row.attachments || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; } }
+function _bacSugg(row) { try { return JSON.parse(row.suggestion || '{}') || {}; } catch (_) { return {}; } }
+const BAC_VIA = { expediteur: 'expéditeur connu', 'expediteur-ambigu': 'expéditeur connu — plusieurs articles possibles', titre: 'titre reconnu', habitude: 'habitude apprise', ia: 'suggestion IA', aucune: '' };
+
+function _openBacList() {
+  const insp = _root.querySelector('[data-slot="insp"]');
+  const rows = _D.inbox || [];
+  insp.innerHTML = _inspShell('À trier — contributions reçues', null,
+    `<div class="dk-sec">
+      ${rows.length ? rows.map(r => {
+        const s = _bacSugg(r), atts = _bacAtts(r);
+        const sugArt = s.kind === 'article' ? _artById(s.art_id) : null;
+        const sugLine = sugArt ? '→ « ' + sugArt.title + ' »' : (s.rub_id && _rubById(s.rub_id) ? '→ spontané · ' + _rubById(s.rub_id).name : '→ spontané');
+        return `<div class="dk-banc-item">
+          <div class="dk-banc-info">
+            <div class="dk-banc-title">${_esc(r.subject || '(sans objet)')}</div>
+            <div class="dk-banc-meta">${_esc(r.from_name || r.from_email || '?')} · ${_relTime(r.received_at)}${atts.length ? ' · ' + atts.length + ' pièce' + (atts.length > 1 ? 's' : '') : ''}<br>${_esc(sugLine)}</div>
+          </div>
+          <button class="dk-btn small primary" data-bac="${r.id}">Trier</button>
+        </div>`;
+      }).join('') : `<p class="dk-empty-line">Le bac est vide — tout est rattaché.</p>`}
+      <p class="dk-note">Rien ne se range tout seul dans le doute : vous confirmez, l'app apprend (adresse du contributeur, rubrique habituelle).</p>
+    </div>`);
+  _bindClose(insp);
+  insp.classList.add('on');
+  _root.querySelector('[data-slot="veil"]').classList.add('on');
+  insp.querySelectorAll('[data-bac]').forEach(b => b.onclick = () => {
+    const row = (_D.inbox || []).find(x => x.id === b.dataset.bac);
+    if (row) _openBacItem(row);
+  });
+}
+
+function _openBacItem(row) {
+  const insp = _root.querySelector('[data-slot="insp"]');
+  const s = _bacSugg(row), atts = _bacAtts(row);
+  const sugArt = s.kind === 'article' ? _artById(s.art_id) : null;
+  const candIds = Array.isArray(s.candidates) ? s.candidates : [];
+  const attendus = (_D.articles || []).filter(a => ['propose', 'attendu'].includes(a.status));
+  const rubs = _D.rubriques || [];
+  const via = BAC_VIA[s.via] || '';
+  const defMode = sugArt ? 'art' : 'new';
+  insp.innerHTML = _inspShell(row.subject || '(sans objet)',
+    `<div class="dk-insp-rub">${_esc(row.from_name || row.from_email || 'expéditeur inconnu')}${row.from_email && row.from_name ? ' · ' + _esc(row.from_email) : ''} · ${_relTime(row.received_at)}</div>`,
+    `${row.body ? `<div class="dk-sec"><h4>Message</h4><div class="dk-bac-body">${_esc(row.body.slice(0, 1500))}${row.body.length > 1500 ? '…' : ''}</div></div>` : ''}
+    ${atts.length ? `<div class="dk-sec"><h4>Pièces jointes (${atts.length})</h4>
+      ${atts.map(a => `<div class="dk-file"><span class="dk-file-ico">${icon('paperclip', 13)}</span>
+        <div class="dk-file-info"><div class="dk-file-name">${_esc(a.name)}</div><div class="dk-file-meta">${_fmtSize(a.size)}</div></div></div>`).join('')}
+      <p class="dk-note">Versées au casier au moment du rattachement.</p></div>` : ''}
+    <div class="dk-sec"><h4>Rattacher${via ? ` <span class="dk-bac-via">· ${via}</span>` : ''}</h4>
+      ${sugArt ? `<label class="dk-bac-choice"><input type="radio" name="bacmode" value="art" ${defMode === 'art' ? 'checked' : ''}>
+        <span>C'est la copie de <strong>« ${_esc(sugArt.title)} »</strong>${sugArt.contrib ? ' (' + _esc(sugArt.contrib) + ')' : ''}</span></label>` : ''}
+      ${attendus.length ? `<label class="dk-bac-choice"><input type="radio" name="bacmode" value="autre">
+        <span>Un autre article attendu :</span></label>
+      <select data-k="bacart" class="dk-bac-select">${attendus.slice(0, 80).map(a => `<option value="${a.id}" ${candIds.includes(a.id) && (!sugArt || a.id !== sugArt.id) ? '' : ''}>${_esc(a.title)}${a.contrib ? ' — ' + _esc(a.contrib) : ''}</option>`).join('')}</select>` : ''}
+      <label class="dk-bac-choice"><input type="radio" name="bacmode" value="new" ${defMode === 'new' ? 'checked' : ''}>
+        <span>Un spontané — nouvel article au marbre :</span></label>
+      <div class="dk-bac-new">
+        <label class="dk-field"><span>Titre</span><input type="text" data-k="bactitle" maxlength="240" value="${_esc(row.subject || '')}"></label>
+        <label class="dk-field"><span>Rubrique</span><select data-k="bacrub">
+          <option value="">Sans rubrique</option>
+          ${rubs.map(r => `<option value="${r.id}" ${s.rub_id === r.id ? 'selected' : ''}>${_esc(r.name)}</option>`).join('')}
+        </select></label>
+        <label class="dk-field"><span>Contributeur</span><input type="text" data-k="baccontrib" maxlength="160" value="${_esc(row.from_name || '')}"></label>
+      </div>
+      <div class="dk-btn-row" style="margin-top:12px">
+        <button class="dk-btn primary" data-act="bacok">${icon('check', 14)} Confirmer</button>
+        <button class="dk-btn" data-act="bacreject">Rejeter</button>
+        <button class="dk-btn ghost" data-act="bacback">Retour</button>
+      </div>
+      <div data-slot="bacmsg"></div>
+    </div>`);
+  _bindClose(insp);
+  insp.classList.add('on');
+  _root.querySelector('[data-slot="veil"]').classList.add('on');
+  insp.querySelector('[data-act="bacback"]').onclick = _openBacList;
+  insp.querySelector('[data-k="bacart"]')?.addEventListener('change', () => {
+    insp.querySelector('input[name="bacmode"][value="autre"]').checked = true;
+  });
+  insp.querySelector('[data-act="bacok"]').onclick = async () => {
+    const mode = insp.querySelector('input[name="bacmode"]:checked')?.value;
+    let body = null;
+    if (mode === 'art' && sugArt) body = { art_id: sugArt.id };
+    else if (mode === 'autre') {
+      const id = insp.querySelector('[data-k="bacart"]')?.value;
+      if (!id) { _toast('Choisissez un article', true); return; }
+      body = { art_id: id };
+    } else {
+      const title = insp.querySelector('[data-k="bactitle"]').value.trim();
+      if (!title) { _toast('Le titre est requis', true); return; }
+      body = { create: { title, rub_id: insp.querySelector('[data-k="bacrub"]').value || null, contrib: insp.querySelector('[data-k="baccontrib"]').value.trim() } };
+    }
+    try {
+      await _api('/inbox/' + row.id + '/apply', { method: 'POST', body });
+      _toast(body.art_id ? 'Copie rattachée — pointée reçue.' : 'Spontané créé au marbre.');
+      await _loadIssue(true);
+      if ((_D.inbox || []).length) _openBacList(); else _closeInsp();
+      _renderFer();
+    } catch (e) { _toast(e.message, true); }
+  };
+  insp.querySelector('[data-act="bacreject"]').onclick = async () => {
+    const box = insp.querySelector('[data-slot="bacmsg"]');
+    box.innerHTML = `<div class="dk-confirm">Rejeter cette contribution ? Les pièces jointes seront supprimées.
+      <div class="dk-btn-row" style="margin-top:8px">
+        <button class="dk-btn primary small" data-act="rejyes">Rejeter</button>
+        <button class="dk-btn small" data-act="rejno">Annuler</button></div></div>`;
+    box.querySelector('[data-act="rejno"]').onclick = () => { box.innerHTML = ''; };
+    box.querySelector('[data-act="rejyes"]').onclick = async () => {
+      try {
+        await _api('/inbox/' + row.id + '/reject', { method: 'POST' });
+        _toast('Contribution rejetée.');
+        await _loadIssue(true);
+        if ((_D.inbox || []).length) _openBacList(); else _closeInsp();
+        _renderFer();
+      } catch (e) { _toast(e.message, true); }
+    };
+  };
+}
+
 /* ═══════════ DK-3 · Relances (liste + brouillon proposé) ════════ */
 // Liste des copies à relancer (calculée — voir _relanceInfo).
 function _openRelanceList() {
@@ -1754,6 +1902,23 @@ async function _openSettings() {
       </div>
     </div>` : ''}
 
+    ${(() => {
+      const em = _D?.email || {};
+      const slug = em.slug || pub?.slug || '';
+      const addr = em.domain && slug ? `redaction-${slug}@${em.domain}` : null;
+      return `<div class="dk-sec"><h4>Adresse de dépôt (contributions par e-mail)</h4>
+        ${pub && pub.owner ? `<div class="dk-form-row dk-slug-row">
+          <span class="dk-slug-fix">redaction-</span>
+          <input type="text" data-k="pubslug" maxlength="40" value="${_esc(slug)}" spellcheck="false">
+          <span class="dk-slug-fix">@${_esc(em.domain || '…')}</span>
+          <button class="dk-btn small" data-act="saveslug">Enregistrer</button>
+        </div>` : (addr ? `<p class="dk-bac-addr"><strong>${_esc(addr)}</strong></p>` : '')}
+        <p class="dk-note">${addr
+          ? `Transférez-y (ou mettez en copie) les e-mails des contributeurs : la copie se pointe toute seule quand l'expéditeur est connu, le reste attend dans le bac « à trier ». Rien ne se range en silence.`
+          : `Le branchement e-mail arrive — cette adresse s'activera avec le domaine de dépôt. Le bac « à trier » et la digestion sont déjà prêts.`}</p>
+      </div>`;
+    })()}
+
     ${_D?.issue ? `<div class="dk-sec"><h4>Jalons du n° ${_esc(_D.issue.num)}</h4>
       ${JALON_DEFS.map(j => `<label class="dk-field dk-field-row"><span>${j.name}</span><input type="date" data-jalon="${j.key}" value="${jalons[j.key] || ''}"></label>`).join('')}
       <div class="dk-btn-row"><button class="dk-btn small primary" data-act="savejalons">Enregistrer les jalons</button></div>
@@ -1805,6 +1970,16 @@ async function _openSettings() {
     if (!name) return;
     try { await _api('/publication/' + _pubId, { method: 'PATCH', body: { name } }); pub.name = name; _renderPubSlot(); _toast('Publication renommée.'); }
     catch (e) { _toast(e.message, true); }
+  });
+  insp.querySelector('[data-act="saveslug"]')?.addEventListener('click', async () => {
+    const slug = insp.querySelector('[data-k="pubslug"]').value.trim().toLowerCase();
+    if (!slug) return;
+    try {
+      await _api('/publication/' + _pubId, { method: 'PATCH', body: { slug } });
+      if (pub) pub.slug = slug;
+      _toast('Adresse de dépôt mise à jour.');
+      await _loadIssue(true); _openSettings();
+    } catch (e) { _toast(e.message, true); }
   });
   insp.querySelector('[data-act="savejalons"]')?.addEventListener('click', async () => {
     const body = {};
