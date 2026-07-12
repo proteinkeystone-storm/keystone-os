@@ -380,6 +380,17 @@ function _stateOf(marge) { return marge === null ? '' : (marge < 0 ? 'rouge' : (
 function _margeTxt(m) { return m === null ? '' : (m < 0 ? 'marge brûlée (' + m + ' j)' : 'marge ' + m + ' j'); }
 function _artById(id) { return (_D.articles || []).find(a => a.id === id) || null; }
 function _rubById(id) { return (_D.rubriques || []).find(r => r.id === id) || null; }
+// Teinte de rubrique pour le fond des cartes (demande Stéphane 2026-07-12 :
+// liseré haut + fond à 30 % — la rubrique se lit d'un seul coup d'œil).
+function _rgba(hex, a) {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex || '');
+  if (!m) return 'rgba(127,127,127,.06)';
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+function _rubVars(rub, alpha = 0.3) {
+  return rub ? ` style="--dk-rub:${rub.color};--dk-rub-tint:${_rgba(rub.color, alpha)}"` : '';
+}
 function _slotsOf(p) { return (_D.slots || []).filter(s => s.page_id === p.id).sort((a, b) => a.position - b.position); }
 function _bancOf(s) { try { const b = JSON.parse(s.banc || '[]'); return Array.isArray(b) ? b : []; } catch (_) { return []; } }
 const _isDone = a => ['maquette', 'publie'].includes(a.status);
@@ -533,7 +544,7 @@ function _cardHTML(p, prevP) {
   const a = slots.length ? _artById(slots[0].art_id) : null;
   if (!a) {
     const rub = _rubById(p.rub_id);
-    return `<div class="dk-pcard vide${msel}" data-n="${p.n}">
+    return `<div class="dk-pcard vide${msel}${rub ? ' rubbed' : ''}" data-n="${p.n}"${_rubVars(rub, 0.14)}>
       ${rub ? `<div class="dk-pc-rub dk-pc-rub-vide"><span class="dk-pc-dot" style="background:${rub.color}"></span><span>${_esc(rub.name)}</span></div>` : ''}
       <span class="dk-pc-vide-ico">${icon('plus', 20)}</span>
       <span class="dk-pc-vide-txt">réserver<br>un article</span>
@@ -549,7 +560,7 @@ function _cardHTML(p, prevP) {
   const badges = [];
   if (slots.length > 1) badges.push(`<span class="dk-pc-badge">${icon('copy', 9)}${slots.length}</span>`);
   if (bancTotal) badges.push(`<span class="dk-pc-badge">${icon('users', 9)}${bancTotal}</span>`);
-  return `<div class="dk-pcard ${cls}${msel}" data-n="${p.n}" data-art="${a.id}">
+  return `<div class="dk-pcard ${cls}${msel}${rub ? ' rubbed' : ''}" data-n="${p.n}" data-art="${a.id}"${_rubVars(rub)}>
     <div class="dk-pc-rub"><span class="dk-pc-dot" style="background:${rub ? rub.color : '#8d93a8'}"></span><span>${_esc(rub ? rub.name : 'Sans rubrique')}${suite ? ' · suite' : ''}</span></div>
     <div class="dk-pc-title">${_esc(a.title)}</div>
     ${a.contrib ? `<div class="dk-pc-contrib">${_esc(a.contrib)}${slots.length > 1 ? ' +' + (slots.length - 1) : ''}</div>` : ''}
@@ -1471,8 +1482,9 @@ async function _openSettings() {
     <div class="dk-sec"><h4>Rubriques (liste fermée)</h4>
       <div data-slot="rublist">${rubs.map(r => `
         <div class="dk-banc-item">
-          <span class="dk-pc-dot" style="background:${r.color}"></span>
+          <input type="color" data-rubcolor="${r.id}" value="${_esc(r.color || '#8d93a8')}" title="Choisir la couleur">
           <div class="dk-banc-info"><div class="dk-banc-title">${_esc(r.name)}</div></div>
+          <input type="text" class="dk-hex" data-rubhex="${r.id}" value="${_esc(r.color || '')}" maxlength="7" spellcheck="false" title="Code hexadécimal de votre charte (ex. #C9A227)">
           <button class="dk-btn small ghost" data-delrub="${r.id}" title="Supprimer">${icon('x', 13)}</button>
         </div>`).join('')}</div>
       <div class="dk-form-row">
@@ -1480,6 +1492,7 @@ async function _openSettings() {
         <input type="color" data-k="newrubcolor" value="#8d93a8" title="Couleur">
         <button class="dk-btn small" data-act="addrub">Ajouter</button>
       </div>
+      <p class="dk-note">La couleur habille les cartes de la rubrique (liseré + fond). Le champ code accepte l'hexadécimal exact de la charte de votre revue.</p>
     </div>
 
     <div class="dk-sec"><h4>Équipe</h4>
@@ -1546,6 +1559,22 @@ async function _openSettings() {
   insp.querySelectorAll('[data-delrub]').forEach(b => b.onclick = async () => {
     try { await _api('/rubrique/' + b.dataset.delrub, { method: 'DELETE' }); await _loadIssue(true); _openSettings(); }
     catch (e) { _toast(e.message, true); }
+  });
+  // Recolorer une rubrique : pipette native OU code hexadécimal de la charte.
+  const setRubColor = async (id, raw) => {
+    let c = String(raw || '').trim();
+    if (/^[0-9a-fA-F]{6}$/.test(c)) c = '#' + c;
+    if (!/^#[0-9a-fA-F]{6}$/.test(c)) { _toast('Code couleur invalide — attendu #RRGGBB (ex. #C9A227)', true); return; }
+    try {
+      await _api('/rubrique/' + id, { method: 'PATCH', body: { color: c } });
+      _toast('Couleur de rubrique mise à jour.');
+      await _loadIssue(true); _openSettings();
+    } catch (e) { _toast(e.message, true); }
+  };
+  insp.querySelectorAll('[data-rubcolor]').forEach(i => i.addEventListener('change', () => setRubColor(i.dataset.rubcolor, i.value)));
+  insp.querySelectorAll('[data-rubhex]').forEach(i => {
+    i.addEventListener('keydown', e => { if (e.key === 'Enter') setRubColor(i.dataset.rubhex, i.value); });
+    i.addEventListener('change', () => setRubColor(i.dataset.rubhex, i.value));
   });
   insp.querySelectorAll('[data-delmember]').forEach(b => b.onclick = async () => {
     try { await _api('/publication/' + _pubId + '/member/' + b.dataset.delmember, { method: 'DELETE' }); _toast('Membre retiré.'); _openSettings(); }

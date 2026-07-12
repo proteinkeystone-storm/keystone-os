@@ -185,6 +185,15 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
   position: relative; cursor: pointer; transition: border-color .18s, transform .18s, box-shadow .18s;
 }
 .dk-pcard:hover { border-color: rgba(127, 127, 127, .45); transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0, 0, 0, .28); }
+/* La couleur de rubrique habille la carte : liseré épais en haut + fond
+   teinté (30 % article, 14 % page vide pré-assignée) — lisible d'un coup
+   d'œil, y compris en mini-cartes. Les états ambre/rouge gardent la bordure. */
+.dk-pcard.rubbed { background: var(--dk-rub-tint); }
+.dk-pcard.rubbed::before {
+  content: ''; position: absolute; top: -1px; left: -1px; right: -1px; height: 5px;
+  background: var(--dk-rub); border-radius: 11px 11px 0 0; pointer-events: none;
+}
+.dk-frise-wrap[data-size="0"] .dk-pcard.rubbed::before { height: 3px; border-radius: 7px 7px 0 0; }
 .dk-pcard.sel { border-color: var(--dk-gold); box-shadow: 0 0 0 1px var(--dk-gold); }
 .dk-pcard.ambre { border-color: rgba(230, 162, 60, .55); }
 .dk-pcard.rouge { border-color: rgba(229, 72, 77, .7); }
@@ -377,6 +386,17 @@ html.light-mode .dk-field input, html.light-mode .dk-field select { color-scheme
   display: flex; align-items: center; gap: 10px; padding: 9px 11px;
   border: 1px solid var(--dk-line); border-radius: 11px; margin-bottom: 7px;
 }
+.dk-banc-item input[type="color"] {
+  width: 26px; height: 26px; padding: 0; border: 1px solid var(--dk-line);
+  border-radius: 8px; background: none; cursor: pointer; flex: 0 0 auto;
+}
+.dk-hex {
+  width: 86px; flex: 0 0 auto; padding: 6px 8px; border-radius: 8px;
+  font: inherit; font-size: 12px; font-variant-numeric: tabular-nums;
+  text-transform: uppercase; letter-spacing: 0.02em;
+  background: rgba(127, 127, 127, .1); border: 1px solid rgba(127, 127, 127, .25); color: inherit;
+}
+.dk-hex:focus { outline: none; border-color: var(--dk-gold); }
 .dk-banc-info { flex: 1; min-width: 0; }
 .dk-banc-title { font-weight: 700; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dk-banc-meta { font-size: 11px; color: var(--dk-tx2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
