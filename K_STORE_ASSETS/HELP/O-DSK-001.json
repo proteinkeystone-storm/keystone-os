@@ -1,18 +1,30 @@
 {
   "title": "desK",
-  "tldr": "desK est le chemin de fer vivant de votre revue : chaque page du numéro devient une carte dans une frise horizontale, partagée par toute l'équipe. Chaque article affiche sa marge réelle avant le bouclage — tant qu'elle tient, rien ne s'allume ; quand elle se consume, la carte passe à l'ambre puis au rouge, et l'inspecteur vous tend la décision : relancer, ou basculer sur un remplaçant préparé au banc. Vous pouvez même simuler un report de remise et voir la date d'impression réagir en direct, sans rien écrire. La maquette reste dans InDesign : desK est le cockpit autour. Vos contributeurs, eux, ne changent rien à leurs habitudes — ils restent dans l'e-mail.",
+  "tldr": "desK est le chemin de fer vivant de votre revue : chaque page du numéro devient une carte dans une grille de planches partagée par toute l'équipe — le chemin de fer papier au mur, avec un curseur de taille à la InDesign. Chaque article affiche sa marge réelle avant le bouclage — tant qu'elle tient, rien ne s'allume ; quand elle se consume, la carte passe à l'ambre puis au rouge, et l'inspecteur vous tend la décision : relancer, ou basculer sur un remplaçant préparé au banc. Le marbre garde votre stock d'articles d'un numéro à l'autre : au bouclage, les publiés sont marqués, les non-utilisés y retournent avec la mention du report. La maquette reste dans InDesign : desK est le cockpit autour. Vos contributeurs, eux, ne changent rien à leurs habitudes — ils restent dans l'e-mail.",
   "key_points": [
     "Démarrer : créez votre publication (la revue et son équipe), puis un numéro — indiquez le nombre de pages et les quatre jalons (bouclage, fin de maquette, envoi imprimeur, parution). Le chemin de fer se génère, couverture et 4ᵉ de couv posées d'office.",
-    "Lire la frise : molette ou glisser pour parcourir ; « Dense » montre tout le numéro d'un coup d'œil, comme le chemin de fer papier. Le rail des jalons en haut est la ligne de vie du numéro, avec la marge restante de chacun.",
-    "La carte-page : rubrique, titre, contributeur, statut et marge. Cliquez pour ouvrir l'inspecteur (la frise reste visible) : fiche complète, banc des remplaçants, historique, actions. Un emplacement en pointillés attend qu'on lui réserve un article.",
-    "Les gestes : glissez une carte sur une autre pour échanger les pages ; « Copie reçue » pointe l'arrivée d'un texte en un clic ; « Basculer » remplace le titulaire par un remplaçant du banc (confirmation sobre, l'ancien reste au stock) ; le simulateur de report montre l'impact d'un retard EN DIRECT — rien n'est écrit tant que vous n'appliquez pas.",
-    "L'équipe : dans les réglages, invitez un membre par son e-mail — l'invitation s'active à sa prochaine ouverture de desK (il lui faut une licence Keystone). Tout le monde voit la même frise ; chaque carte garde la trace « modifié par X il y a N min ».",
-    "Les couleurs ne crient jamais pour rien : le rouge est réservé à la marge brûlée. Un simple retard n'allume rien tant que la marge tient — quand ça s'allume, c'est qu'une décision est requise."
+    "Lire la grille : les planches (doubles-pages soudées) reviennent à la ligne et défilent verticalement, le rail des jalons reste en haut — c'est la ligne de vie du numéro. Le curseur règle la taille des cartes : tout à gauche, le numéro entier d'un coup d'œil ; tout à droite, les cartes complètes.",
+    "La carte-page : rubrique, titre, contributeur, statut et marge. Une page peut porter PLUSIEURS articles (brèves, papier + encadré) : badge « n » sur la carte, et la marge affichée est la plus serrée de ses articles. Cliquez pour ouvrir l'inspecteur : chaque emplacement a son banc de remplaçants, son historique, ses actions.",
+    "Les gestes : glissez une carte SUR une autre pour échanger ; glissez-la ENTRE deux planches pour l'insérer — tout le contenu coule, sauf les pages figées qui restent ancrées (une pub vendue « page 30 » reste page 30). Maj+clic sélectionne une plage de pages, Cmd/Ctrl+clic ajoute : la barre du bas applique rubrique, contributeur, un dossier étalé sur plusieurs pages ou le figeage, en un geste.",
+    "Le marbre : la vue de votre stock d'articles, transversale aux numéros — filtrez par rubrique, fraîcheur ou statut, réservez un article sur une page en un clic. Chaque article a sa fraîcheur : intemporel, ou daté avec péremption — le marbre signale ce qui doit être publié maintenant ou jamais. Au passage du numéro en « imprimé », le rituel de bouclage marque les publiés et reverse les remplaçants non utilisés au marbre : un report est un événement banal, pas une anomalie.",
+    "Les couleurs ne crient jamais pour rien : le rouge est réservé à la marge brûlée. Un simple retard n'allume rien tant que la marge tient — quand ça s'allume, c'est qu'une décision est requise. Le simulateur de report montre l'impact d'un retard EN DIRECT, sans rien écrire tant que vous n'appliquez pas."
   ],
   "faq": [
     {
       "q": "Comment la marge est-elle calculée ?",
-      "a": "Simplement, pour que tout le monde puisse la comprendre : la copie sera prête au plus tôt à sa date de remise (ou aujourd'hui si elle est dépassée), puis il faut la relire et la maquetter. La marge est ce qui reste avant le jalon concerné. Un article déjà remis ne dépend plus du bouclage — seulement de la fin de maquette."
+      "a": "Simplement, pour que tout le monde puisse la comprendre : la copie sera prête au plus tôt à sa date de remise (ou aujourd'hui si elle est dépassée), puis il faut la relire et la maquetter. La marge est ce qui reste avant le jalon concerné. Un article déjà remis ne dépend plus du bouclage — seulement de la fin de maquette. Quand une page porte plusieurs articles, sa carte affiche la marge la plus serrée."
+    },
+    {
+      "q": "Que devient un article remplacé ou non utilisé au bouclage ?",
+      "a": "Il retourne au marbre avec la mention de son report — rien n'est perdu. À l'ouverture du numéro suivant, desK vous signale les articles reportés qui attendent. Un article « daté » avec une date de péremption est signalé quand il doit être publié maintenant ou jamais : fini le stock faussement rassurant plein de papiers morts."
+    },
+    {
+      "q": "Comment monter un dossier de 10 pages sans le faire page par page ?",
+      "a": "Sélectionnez les pages d'un trait (clic sur la première, Maj+clic sur la dernière), puis « Étaler un article » dans la barre du bas : l'article devient titulaire de toutes les pages, marquées « suite » à partir de la deuxième. La même barre applique une rubrique, un contributeur ou fige des pages, en un seul geste."
+    },
+    {
+      "q": "Pourquoi certaines pages ne bougent-elles pas quand je repagine ?",
+      "a": "Ce sont les pages figées (couverture, 4ᵉ de couv, publicités vendues, sommaire) : elles restent ancrées à leur numéro de page et le contenu coule autour d'elles — une pub vendue « page 30 » reste page 30. Pour les déplacer quand même, cochez « déplacer aussi les figées » dans la barre de sélection."
     },
     {
       "q": "desK remplace-t-il InDesign ou la relecture ?",
@@ -23,22 +35,20 @@
       "a": "Jamais. Ils continuent d'envoyer leurs textes par e-mail comme ils l'ont toujours fait. Vous pointez « copie reçue » en un clic. L'adresse de dépôt qui range toute seule les contributions arrive dans une prochaine version."
     },
     {
-      "q": "Que devient un article remplacé au bouclage ?",
-      "a": "Il reste dans votre stock d'articles avec la mention de son remplacement — rien n'est perdu. Vous pourrez le réserver sur un autre numéro : un report est un événement banal de la vie d'une revue, pas une anomalie."
-    },
-    {
       "q": "Peut-on gérer plusieurs revues ?",
       "a": "Oui, dès le premier jour : chaque publication a son équipe, ses rubriques, ses numéros. Le sélecteur en haut passe de l'une à l'autre."
     },
     {
       "q": "Consomme-t-il des crédits IA ?",
-      "a": "Non. Le cœur de desK — frise, marges, pointage, bascule, équipe — fonctionne sans aucune intelligence artificielle, à volonté."
+      "a": "Non. Le cœur de desK — grille, marges, marbre, pointage, bascule, équipe — fonctionne sans aucune intelligence artificielle, à volonté."
     }
   ],
   "shortcuts": [
-    { "keys": "Molette / glisser le fond", "desc": "Parcourir la frise" },
+    { "keys": "Curseur en haut de la grille", "desc": "Taille des cartes (mémorisée)" },
     { "keys": "Clic sur une carte", "desc": "Ouvrir l'inspecteur" },
-    { "keys": "Glisser une carte", "desc": "Échanger deux pages" },
-    { "keys": "Échap", "desc": "Fermer l'inspecteur" }
+    { "keys": "Maj+clic / Cmd+clic", "desc": "Sélectionner plusieurs pages" },
+    { "keys": "Glisser SUR une carte", "desc": "Échanger deux pages" },
+    { "keys": "Glisser ENTRE deux planches", "desc": "Insérer — le contenu coule" },
+    { "keys": "Échap", "desc": "Fermer l'inspecteur / la sélection" }
   ]
 }

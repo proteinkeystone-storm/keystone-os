@@ -149,12 +149,14 @@ import { handleNetworkHealth, handleNetworkBootstrap,
          handleCategoryCreate, handleCategoryUpdate, handleCategoryDelete,
          handleContactCreate, handleContactUpdate, handleContactDelete,
          handleActivityList, handleActivityCreate, handleActivityDelete } from './routes/network.js';
-// desK — chemin de fer vivant (Pad O-DSK-001 · DK-1). Tenant = LA PUBLICATION.
+// desK — chemin de fer vivant (Pad O-DSK-001 · DK-2). Tenant = LA PUBLICATION.
 import { handleDeskHealth, handleDeskBootstrap, handlePubCreate, handlePubPatch,
          handleTeamList, handleTeamInvite, handleTeamRemove,
          handleRubCreate, handleRubPatch, handleRubDelete,
          handleIssueCreate, handleIssueGet, handleIssuePatch, handleIssueSwap,
-         handlePagePatch, handleArtCreate, handleArtPatch, handleArtDelete } from './routes/desk.js';
+         handleIssueMove, handleIssueBatch,
+         handlePagePatch, handleSlotCreate, handleSlotPatch, handleSlotDelete,
+         handleArtCreate, handleArtPatch, handleArtDelete } from './routes/desk.js';
 // Key-Ring (Sonnette) — ORDRE 3 : « Sonner » Web Push + boucle retour.
 import { handleKeyringRing, handleKeyringRingStatus, handleKeyringRespond, handleKeyringRespondGet,
          handleKeyringPushSubscribe, handleKeyringPushUnsubscribe, handleKeyringPushStatus, handleKeyringPushList,
@@ -323,8 +325,17 @@ export default {
       if (dkIssue && method === 'PATCH') return handleIssuePatch(request, env, dkIssue[1]);
       const dkSwap = path.match(/^\/api\/desk\/issue\/([A-Za-z0-9-]+)\/swap$/);
       if (dkSwap && method === 'POST') return handleIssueSwap(request, env, dkSwap[1]);
+      const dkMove = path.match(/^\/api\/desk\/issue\/([A-Za-z0-9-]+)\/move$/);
+      if (dkMove && method === 'POST') return handleIssueMove(request, env, dkMove[1]);
+      const dkBatch = path.match(/^\/api\/desk\/issue\/([A-Za-z0-9-]+)\/batch$/);
+      if (dkBatch && method === 'POST') return handleIssueBatch(request, env, dkBatch[1]);
       const dkPage = path.match(/^\/api\/desk\/page\/([A-Za-z0-9-]+)$/);
       if (dkPage && method === 'PATCH') return handlePagePatch(request, env, dkPage[1]);
+      const dkSlotC = path.match(/^\/api\/desk\/page\/([A-Za-z0-9-]+)\/slot$/);
+      if (dkSlotC && method === 'POST') return handleSlotCreate(request, env, dkSlotC[1]);
+      const dkSlot = path.match(/^\/api\/desk\/slot\/([A-Za-z0-9-]+)$/);
+      if (dkSlot && method === 'PATCH')  return handleSlotPatch(request, env, dkSlot[1]);
+      if (dkSlot && method === 'DELETE') return handleSlotDelete(request, env, dkSlot[1]);
       const dkArtC = path.match(/^\/api\/desk\/publication\/([A-Za-z0-9-]+)\/article$/);
       if (dkArtC && method === 'POST') return handleArtCreate(request, env, dkArtC[1]);
       const dkArt = path.match(/^\/api\/desk\/article\/([A-Za-z0-9-]+)$/);

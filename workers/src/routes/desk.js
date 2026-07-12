@@ -1,10 +1,13 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Routes desK (Pad O-DSK-001) · DK-1 (socle partagé)
+   KEYSTONE OS — Routes desK (Pad O-DSK-001) · DK-2 (marbre & bascule)
 
    Chemin de fer vivant d'une revue (DESK_BRIEF.md). DK-1 = publications,
    membres/invitations, rubriques, numéros + jalons, cartes-pages,
-   articles (embryon du marbre, complété en DK-2), échange de pages,
-   pointage, bascule — le cœur, ZÉRO IA.
+   articles, échange de pages, pointage, bascule. DK-2 = marbre complet
+   (rituel de bouclage, fraîcheur/péremption, historique inter-numéros)
+   + MULTI-ARTICLES PAR PAGE (dk_page_slots, §2.4) + DÉPLACEMENT PAR
+   INSERTION avec pages figées ancrées (§3.5) + OPÉRATIONS PAR LOT
+   (sélection multiple, §3.5). Le cœur reste ZÉRO IA.
 
    GET    /api/desk/health                    Public — santé du moteur
    GET    /api/desk/bootstrap                 { me, publications } (+ accepte les invites par e-mail)
@@ -20,10 +23,19 @@
    GET    /api/desk/issue/:id                 { issue, pages, articles } du numéro
    PATCH  /api/desk/issue/:id                 Thème / statut / jalons
    POST   /api/desk/issue/:id/swap            Échanger le contenu de deux pages
-   PATCH  /api/desk/page/:id                  Réserver / libérer / banc / figer
+   POST   /api/desk/issue/:id/move            Déplacer 1..N pages par insertion (figées ancrées)
+   POST   /api/desk/issue/:id/batch           Opération par lot sur une sélection de pages
+   PATCH  /api/desk/page/:id                  Figer / libérer / rubrique de page
+   POST   /api/desk/page/:id/slot             Ajouter un emplacement (article) sur la page
+   PATCH  /api/desk/slot/:id                  Titulaire (bascule) / banc d'un emplacement
+   DELETE /api/desk/slot/:id                  Retirer l'emplacement (l'article reste au marbre)
    POST   /api/desk/publication/:id/article   Créer un article
-   PATCH  /api/desk/article/:id               Statut (pointage), remise, contenu
-   DELETE /api/desk/article/:id               Supprimer (retiré des pages/bancs)
+   PATCH  /api/desk/article/:id               Statut (pointage), remise, fraîcheur, contenu
+   DELETE /api/desk/article/:id               Supprimer (retiré des emplacements/bancs)
+
+   Le passage d'un numéro au statut « imprime » déclenche le RITUEL DE
+   BOUCLAGE (§4) : titulaires → « publie » (histo), remplaçants non
+   utilisés → reversés au marbre (histo du report), bancs vidés.
 
    ⚠ TENANT = LA PUBLICATION (pas la personne) : chaque table métier
    porte pub_id ; l'accès passe par dk_members (pub_id ↔ claims.sub).
@@ -34,7 +46,7 @@
 import { json, err, parseBody, generateId, getAllowedOrigin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 
-const DK_ENGINE_VERSION = 'DK-1';
+const DK_ENGINE_VERSION = 'DK-2';
 
 const MAX_NAME_LEN   = 160;
 const MAX_TITLE_LEN  = 240;
@@ -45,8 +57,10 @@ const MAX_RUBRIQUES  = 30;
 const MAX_ISSUES     = 200;
 const MAX_PAGES      = 400;     // par numéro
 const MAX_ARTICLES   = 2000;    // par publication
-const MAX_BANC       = 8;       // remplaçants par carte
+const MAX_BANC       = 8;       // remplaçants par emplacement
 const MAX_HISTO      = 40;      // entrées d'historique conservées par article
+const MAX_SLOTS      = 12;      // emplacements (articles) par page — brèves, papier + encadré…
+const MAX_BATCH_NS   = 120;     // pages par opération de lot
 
 const ART_STATUS  = ['propose', 'attendu', 'remis', 'relu', 'maquette', 'publie', 'abandonne'];
 const ISSUE_STATUS = ['preparation', 'production', 'boucle', 'imprime'];
@@ -111,8 +125,27 @@ async function _ensureSchema(env) {
        notes TEXT NOT NULL DEFAULT '', histo TEXT NOT NULL DEFAULT '[]',
        created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`,
     `CREATE INDEX IF NOT EXISTS idx_dk_articles_pub ON dk_articles(pub_id)`,
+    // DK-2 : emplacements ordonnés par page (§2.4) — une page peut porter
+    // plusieurs articles de plusieurs contributeurs. Le banc vit par emplacement.
+    `CREATE TABLE IF NOT EXISTS dk_page_slots (
+       id TEXT PRIMARY KEY, page_id TEXT NOT NULL, pub_id TEXT NOT NULL,
+       position INTEGER NOT NULL DEFAULT 0, art_id TEXT,
+       banc TEXT NOT NULL DEFAULT '[]')`,
+    `CREATE INDEX IF NOT EXISTS idx_dk_slots_page ON dk_page_slots(page_id, position)`,
   ];
   for (const sql of stmts) { await env.DB.prepare(sql).run(); }
+  // DK-2 : rubrique pré-assignée au niveau de la page (monter un dossier sur
+  // des pages encore vides). ALTER idempotent (échoue en silence si déjà là).
+  try { await env.DB.prepare(`ALTER TABLE dk_pages ADD COLUMN rub_id TEXT`).run(); } catch (_) {}
+  // Migration DK-1 → DK-2 : l'ancien art_id/banc de la page devient l'emplacement 0.
+  await env.DB.prepare(
+    `INSERT INTO dk_page_slots (id, page_id, pub_id, position, art_id, banc)
+     SELECT lower(hex(randomblob(16))), p.id, p.pub_id, 0, p.art_id, COALESCE(p.banc, '[]')
+     FROM dk_pages p
+     WHERE p.art_id IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM dk_page_slots s WHERE s.page_id = p.id)`).run();
+  // Les colonnes héritées ne sont plus la source de vérité — on les vide.
+  await env.DB.prepare(`UPDATE dk_pages SET art_id = NULL, banc = '[]' WHERE art_id IS NOT NULL`).run();
   _schemaReady = true;
 }
 
@@ -182,7 +215,8 @@ function _byName(u) { return u.name || (u.email ? u.email.split('@')[0] : 'un me
 const PUB_COLS   = 'id, name, owner_sub, created_at';
 const RUB_COLS   = 'id, name, color, position';
 const ISSUE_COLS = 'id, pub_id, num, theme, status, jalons, created_at';
-const PAGE_COLS  = 'id, issue_id, n, kind, fixe_tag, fixe_title, art_id, banc, updated_at, updated_by';
+const PAGE_COLS  = 'id, issue_id, n, kind, fixe_tag, fixe_title, rub_id, updated_at, updated_by';
+const SLOT_COLS  = 'id, page_id, position, art_id, banc';
 const ART_COLS   = 'id, title, rub_id, contrib, status, due, fresh, perime, notes, histo, created_at, updated_at';
 
 // ── Health (public) ─────────────────────────────────────────────
@@ -385,11 +419,15 @@ export async function handleIssueGet(request, env, issueId) {
   try {
     const issue = await env.DB.prepare(`SELECT ${ISSUE_COLS} FROM dk_issues WHERE id = ?`).bind(issueId).first();
     const pages = (await env.DB.prepare(`SELECT ${PAGE_COLS} FROM dk_pages WHERE issue_id = ? ORDER BY n`).bind(issueId).all()).results || [];
-    // DK-1 : tous les articles de la publication voyagent avec le numéro
-    // (sert au banc + à la réservation). La vue marbre arrive en DK-2.
+    // Emplacements ordonnés des pages du numéro (multi-articles, DK-2 §2.4).
+    const slots = (await env.DB.prepare(
+      `SELECT s.${SLOT_COLS.split(', ').join(', s.')} FROM dk_page_slots s
+       JOIN dk_pages p ON p.id = s.page_id WHERE p.issue_id = ? ORDER BY p.n, s.position`).bind(issueId).all()).results || [];
+    // Tous les articles de la publication voyagent avec le numéro : c'est le
+    // marbre (réservoir transversal) — la vue marbre du front filtre dedans.
     const articles = (await env.DB.prepare(`SELECT ${ART_COLS} FROM dk_articles WHERE pub_id = ? ORDER BY updated_at DESC LIMIT ${MAX_ARTICLES}`).bind(pubId).all()).results || [];
     const rubriques = (await env.DB.prepare(`SELECT ${RUB_COLS} FROM dk_rubriques WHERE pub_id = ? ORDER BY position`).bind(pubId).all()).results || [];
-    return json({ ok: true, issue, pages, articles, rubriques, now: new Date().toISOString() }, 200, origin);
+    return json({ ok: true, issue, pages, slots, articles, rubriques, now: new Date().toISOString() }, 200, origin);
   } catch (e) {
     return err('Lecture impossible : ' + (e && e.message || 'erreur'), 500, origin);
   }
@@ -401,6 +439,8 @@ export async function handleIssuePatch(request, env, issueId) {
   const u = await memberGate(request, env, origin, pubId);
   if (u.error) return u.error;
   const body = await parseBody(request);
+  const cur = await env.DB.prepare(`SELECT ${ISSUE_COLS} FROM dk_issues WHERE id = ?`).bind(issueId).first();
+  if (!cur) return err('Numéro introuvable', 404, origin);
   const sets = [], vals = [];
   if (body.theme !== undefined) { sets.push('theme = ?'); vals.push(_s(String(body.theme).trim(), MAX_TITLE_LEN)); }
   if (body.status !== undefined) { if (!ISSUE_STATUS.includes(body.status)) return err('Statut inconnu', 400, origin); sets.push('status = ?'); vals.push(body.status); }
@@ -408,10 +448,52 @@ export async function handleIssuePatch(request, env, issueId) {
   if (!sets.length) return err('Rien à modifier', 400, origin);
   vals.push(issueId);
   await env.DB.prepare(`UPDATE dk_issues SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
-  return json({ ok: true }, 200, origin);
+  // Rituel de bouclage (§4) : au PASSAGE en « imprime » seulement.
+  let boucle = null;
+  if (body.status === 'imprime' && cur.status !== 'imprime') {
+    boucle = await _bouclerIssue(env, cur, _byName(u));
+  }
+  return json({ ok: true, boucle }, 200, origin);
 }
 
-// Échange du CONTENU de deux pages (repagination) — transactionnel.
+/* Rituel de bouclage (§4) — tri automatique au passage en « imprime » :
+   les titulaires en page sont marqués publiés (avec la page), les articles
+   restés au banc sont reversés au marbre avec la mention du report, et les
+   bancs du numéro sont vidés. Sobre, explicable, historisé.               */
+async function _bouclerIssue(env, issue, by) {
+  const slots = (await env.DB.prepare(
+    `SELECT s.art_id, s.banc, p.n FROM dk_page_slots s
+     JOIN dk_pages p ON p.id = s.page_id WHERE p.issue_id = ? ORDER BY p.n, s.position`).bind(issue.id).all()).results || [];
+  const titulaires = new Map();           // art_id → première page où il est titulaire
+  const bancIds = new Set();
+  for (const s of slots) {
+    if (s.art_id && !titulaires.has(s.art_id)) titulaires.set(s.art_id, s.n);
+    let b = []; try { b = JSON.parse(s.banc || '[]'); } catch (_) {}
+    if (Array.isArray(b)) b.forEach(id => bancIds.add(id));
+  }
+  for (const id of titulaires.keys()) bancIds.delete(id);
+  let published = 0, reversed = 0;
+  for (const [artId, n] of titulaires) {
+    const a = await env.DB.prepare('SELECT id, status, histo FROM dk_articles WHERE id = ?').bind(artId).first();
+    if (!a || a.status === 'publie' || a.status === 'abandonne') continue;
+    await env.DB.prepare(`UPDATE dk_articles SET status = 'publie', histo = ?, updated_at = datetime('now') WHERE id = ?`)
+      .bind(_histoPush(a.histo, `Publié au n° ${issue.num} (p. ${n}) — bouclage par ${by}`), artId).run();
+    published++;
+  }
+  for (const artId of bancIds) {
+    const a = await env.DB.prepare('SELECT id, status, histo FROM dk_articles WHERE id = ?').bind(artId).first();
+    if (!a || a.status === 'publie' || a.status === 'abandonne') continue;
+    await env.DB.prepare(`UPDATE dk_articles SET histo = ?, updated_at = datetime('now') WHERE id = ?`)
+      .bind(_histoPush(a.histo, `Reversé au marbre après le n° ${issue.num} (préparé au banc, non utilisé)`), artId).run();
+    reversed++;
+  }
+  await env.DB.prepare(
+    `UPDATE dk_page_slots SET banc = '[]'
+     WHERE page_id IN (SELECT id FROM dk_pages WHERE issue_id = ?)`).bind(issue.id).run();
+  return { published, reversed };
+}
+
+// Échange du CONTENU de deux pages (drop SUR une carte) — transactionnel.
 export async function handleIssueSwap(request, env, issueId) {
   const origin = getAllowedOrigin(env, request);
   const pubId = await pubOf(env, 'dk_issues', issueId);
@@ -424,16 +506,174 @@ export async function handleIssueSwap(request, env, issueId) {
   const pb = await env.DB.prepare(`SELECT ${PAGE_COLS} FROM dk_pages WHERE issue_id = ? AND n = ?`).bind(issueId, nb).first();
   if (!pa || !pb) return err('Page introuvable', 404, origin);
   const by = _byName(u);
+  // Contenu + emplacements suivent (page_id des slots échangés via pivot).
   await env.DB.batch([
-    env.DB.prepare(`UPDATE dk_pages SET kind = ?, fixe_tag = ?, fixe_title = ?, art_id = ?, banc = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?`)
-      .bind(pb.kind, pb.fixe_tag, pb.fixe_title, pb.art_id, pb.banc, by, pa.id),
-    env.DB.prepare(`UPDATE dk_pages SET kind = ?, fixe_tag = ?, fixe_title = ?, art_id = ?, banc = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?`)
-      .bind(pa.kind, pa.fixe_tag, pa.fixe_title, pa.art_id, pa.banc, by, pb.id),
+    env.DB.prepare(`UPDATE dk_pages SET kind = ?, fixe_tag = ?, fixe_title = ?, rub_id = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?`)
+      .bind(pb.kind, pb.fixe_tag, pb.fixe_title, pb.rub_id, by, pa.id),
+    env.DB.prepare(`UPDATE dk_pages SET kind = ?, fixe_tag = ?, fixe_title = ?, rub_id = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?`)
+      .bind(pa.kind, pa.fixe_tag, pa.fixe_title, pa.rub_id, by, pb.id),
+    env.DB.prepare(`UPDATE dk_page_slots SET page_id = 'dk_pivot' WHERE page_id = ?`).bind(pa.id),
+    env.DB.prepare(`UPDATE dk_page_slots SET page_id = ? WHERE page_id = ?`).bind(pa.id, pb.id),
+    env.DB.prepare(`UPDATE dk_page_slots SET page_id = ? WHERE page_id = 'dk_pivot'`).bind(pb.id),
   ]);
   return json({ ok: true }, 200, origin);
 }
 
-// ── Cartes-pages ────────────────────────────────────────────────
+/* Déplacement par INSERTION (§3.5 révisé) — le geste fréquent du métier :
+   1..N pages glissent vers une position et TOUT LE CONTENU COULE, sauf les
+   pages figées qui restent ANCRÉES à leur numéro (une pub vendue « page 30 »
+   ne bouge pas) — le flux coule autour d'elles. `embark:true` = embarquer
+   explicitement les figées de la sélection. `to` = insérer AVANT la page n
+   (n = dernière + 1 pour la fin). Transactionnel, une seule trace.        */
+export async function handleIssueMove(request, env, issueId) {
+  const origin = getAllowedOrigin(env, request);
+  const pubId = await pubOf(env, 'dk_issues', issueId);
+  const u = await memberGate(request, env, origin, pubId);
+  if (u.error) return u.error;
+  const body = await parseBody(request);
+  const to = parseInt(body.to, 10);
+  const embark = !!body.embark;
+  let from = Array.isArray(body.from) ? body.from.map(x => parseInt(x, 10)).filter(Number.isFinite) : [];
+  if (!from.length || !Number.isFinite(to)) return err('Déplacement invalide', 400, origin);
+  const pages = (await env.DB.prepare(`SELECT ${PAGE_COLS} FROM dk_pages WHERE issue_id = ? ORDER BY n`).bind(issueId).all()).results || [];
+  const byN = new Map(pages.map(p => [p.n, p]));
+  from = [...new Set(from)].sort((a, b) => a - b).filter(n => byN.has(n));
+  if (!embark) from = from.filter(n => byN.get(n).kind !== 'fixe');
+  if (!from.length) return err('Rien à déplacer — les pages figées restent ancrées à leur numéro', 400, origin);
+  const fromSet = new Set(from);
+
+  // Le contenu d'une page (tout sauf son numéro) coule ; les figées hors
+  // sélection gardent leur numéro ; le bloc déplacé s'insère dans le flux.
+  const contentOf = p => ({ kind: p.kind, fixe_tag: p.fixe_tag, fixe_title: p.fixe_title, rub_id: p.rub_id, srcId: p.id });
+  const anchored = new Map(), moved = [], flow = [];
+  for (const p of pages) {
+    if (fromSet.has(p.n)) moved.push(contentOf(p));
+    else if (p.kind === 'fixe') anchored.set(p.n, contentOf(p));
+    else flow.push({ n: p.n, c: contentOf(p) });
+  }
+  let idx = 0;
+  for (const f of flow) { if (f.n < to) idx++; }
+  const newFlow = flow.map(f => f.c);
+  newFlow.splice(idx, 0, ...moved);
+
+  const by = _byName(u);
+  const stmts = [];
+  const remap = new Map();                 // page_id d'origine → page_id de destination
+  let fi = 0;
+  for (const p of pages) {
+    const c = anchored.get(p.n) || newFlow[fi++];
+    if (c.srcId === p.id) continue;
+    remap.set(c.srcId, p.id);
+    stmts.push(env.DB.prepare(
+      `UPDATE dk_pages SET kind = ?, fixe_tag = ?, fixe_title = ?, rub_id = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?`)
+      .bind(c.kind, c.fixe_tag, c.fixe_title, c.rub_id, by, p.id));
+  }
+  if (!stmts.length) return json({ ok: true, moved: 0 }, 200, origin);
+  // Les emplacements suivent leur contenu (mise à jour par id de slot : pas
+  // de collision possible, tout part de l'état AVANT déplacement).
+  const slotRows = (await env.DB.prepare(
+    `SELECT s.id, s.page_id FROM dk_page_slots s JOIN dk_pages p ON p.id = s.page_id WHERE p.issue_id = ?`).bind(issueId).all()).results || [];
+  for (const s of slotRows) {
+    const dst = remap.get(s.page_id);
+    if (dst) stmts.push(env.DB.prepare('UPDATE dk_page_slots SET page_id = ? WHERE id = ?').bind(dst, s.id));
+  }
+  await env.DB.batch(stmts);
+  return json({ ok: true, moved: from.length }, 200, origin);
+}
+
+/* Opération PAR LOT sur une sélection de pages (§3.5) — un dossier de 10+
+   pages ne se monte pas page par page. Un seul appel, une seule trace.
+   op ∈ rubrique {rub_id} · contrib {contrib} · fixe {fixe_tag} · libere ·
+   spread {art_id} (réserver le même article étalé — pages « suite »).     */
+export async function handleIssueBatch(request, env, issueId) {
+  const origin = getAllowedOrigin(env, request);
+  const pubId = await pubOf(env, 'dk_issues', issueId);
+  const u = await memberGate(request, env, origin, pubId);
+  if (u.error) return u.error;
+  const body = await parseBody(request);
+  const op = String(body.op || '');
+  let ns = Array.isArray(body.ns) ? body.ns.map(x => parseInt(x, 10)).filter(Number.isFinite) : [];
+  ns = [...new Set(ns)].sort((a, b) => a - b).slice(0, MAX_BATCH_NS);
+  if (!ns.length) return err('Aucune page sélectionnée', 400, origin);
+  const all = (await env.DB.prepare(`SELECT ${PAGE_COLS} FROM dk_pages WHERE issue_id = ? ORDER BY n`).bind(issueId).all()).results || [];
+  const byN = new Map(all.map(p => [p.n, p]));
+  const pages = ns.map(n => byN.get(n)).filter(Boolean);
+  if (!pages.length) return err('Pages introuvables', 400, origin);
+  const ids = pages.map(p => p.id);
+  const ph = ids.map(() => '?').join(', ');
+  const slotRows = (await env.DB.prepare(
+    `SELECT ${SLOT_COLS} FROM dk_page_slots WHERE page_id IN (${ph}) ORDER BY page_id, position`).bind(...ids).all()).results || [];
+  const slotsByPage = new Map();
+  for (const s of slotRows) { if (!slotsByPage.has(s.page_id)) slotsByPage.set(s.page_id, []); slotsByPage.get(s.page_id).push(s); }
+
+  const by = _byName(u);
+  const stmts = [];
+  const touch = p => stmts.push(env.DB.prepare(
+    `UPDATE dk_pages SET updated_at = datetime('now'), updated_by = ? WHERE id = ?`).bind(by, p.id));
+  let done = 0, skipped = 0;
+
+  if (op === 'rubrique') {
+    let rubId = null;
+    if (body.rub_id) {
+      const r = await env.DB.prepare('SELECT id FROM dk_rubriques WHERE id = ? AND pub_id = ?').bind(body.rub_id, pubId).first();
+      if (!r) return err('Rubrique inconnue', 400, origin);
+      rubId = r.id;
+    }
+    // Rubrique de page (pré-assignation) + rubrique du titulaire s'il existe.
+    const artIds = new Set();
+    for (const p of pages) {
+      stmts.push(env.DB.prepare(`UPDATE dk_pages SET rub_id = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?`).bind(rubId, by, p.id));
+      const s0 = (slotsByPage.get(p.id) || [])[0];
+      if (s0 && s0.art_id) artIds.add(s0.art_id);
+      done++;
+    }
+    for (const id of artIds) stmts.push(env.DB.prepare(`UPDATE dk_articles SET rub_id = ?, updated_at = datetime('now') WHERE id = ? AND pub_id = ?`).bind(rubId, id, pubId));
+  } else if (op === 'contrib') {
+    const contrib = _s(String(body.contrib || '').trim(), MAX_NAME_LEN);
+    const artIds = new Set();
+    for (const p of pages) {
+      const s0 = (slotsByPage.get(p.id) || [])[0];
+      if (s0 && s0.art_id) { artIds.add(s0.art_id); touch(p); done++; } else skipped++;
+    }
+    if (!artIds.size) return err('Aucun article titulaire sur ces pages', 400, origin);
+    for (const id of artIds) stmts.push(env.DB.prepare(`UPDATE dk_articles SET contrib = ?, updated_at = datetime('now') WHERE id = ? AND pub_id = ?`).bind(contrib, id, pubId));
+  } else if (op === 'fixe') {
+    const tag = _s(String(body.fixe_tag || 'Figée').trim(), 80) || 'Figée';
+    for (const p of pages) {
+      if ((slotsByPage.get(p.id) || []).length) { skipped++; continue; }   // une page qui porte des articles ne se fige pas par lot
+      stmts.push(env.DB.prepare(`UPDATE dk_pages SET kind = 'fixe', fixe_tag = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?`).bind(tag, by, p.id));
+      done++;
+    }
+  } else if (op === 'libere') {
+    for (const p of pages) {
+      if (p.kind !== 'fixe') { skipped++; continue; }
+      stmts.push(env.DB.prepare(`UPDATE dk_pages SET kind = 'vide', fixe_tag = NULL, fixe_title = NULL, updated_at = datetime('now'), updated_by = ? WHERE id = ?`).bind(by, p.id));
+      done++;
+    }
+  } else if (op === 'spread') {
+    const a = await env.DB.prepare('SELECT id FROM dk_articles WHERE id = ? AND pub_id = ?').bind(body.art_id || '', pubId).first();
+    if (!a) return err('Article inconnu dans cette publication', 400, origin);
+    for (const p of pages) {
+      const sl = slotsByPage.get(p.id) || [];
+      if (p.kind === 'fixe') { skipped++; continue; }
+      if (sl.some(s => s.art_id === a.id)) { skipped++; continue; }
+      if (sl.length >= MAX_SLOTS) { skipped++; continue; }
+      stmts.push(env.DB.prepare(
+        `INSERT INTO dk_page_slots (id, page_id, pub_id, position, art_id) VALUES (?, ?, ?, ?, ?)`)
+        .bind(generateId(), p.id, pubId, sl.length, a.id));
+      stmts.push(env.DB.prepare(`UPDATE dk_pages SET kind = 'article', updated_at = datetime('now'), updated_by = ? WHERE id = ?`).bind(by, p.id));
+      done++;
+    }
+  } else {
+    return err('Opération inconnue', 400, origin);
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+  return json({ ok: true, done, skipped }, 200, origin);
+}
+
+// ── Cartes-pages (figer / libérer / rubrique de page) ──────────
+// Depuis DK-2, la réservation d'articles passe par les EMPLACEMENTS
+// (/page/:id/slot, /slot/:id) — plus d'art_id/banc au niveau page.
 export async function handlePagePatch(request, env, pageId) {
   const origin = getAllowedOrigin(env, request);
   const pubId = await pubOf(env, 'dk_pages', pageId);
@@ -441,21 +681,107 @@ export async function handlePagePatch(request, env, pageId) {
   if (u.error) return u.error;
   const body = await parseBody(request);
   const sets = [], vals = [];
-  if (body.kind !== undefined) { if (!PAGE_KINDS.includes(body.kind)) return err('Type de page inconnu', 400, origin); sets.push('kind = ?'); vals.push(body.kind); }
+  if (body.kind !== undefined) {
+    if (!PAGE_KINDS.includes(body.kind)) return err('Type de page inconnu', 400, origin);
+    if (body.kind !== 'article') {
+      const n = (await env.DB.prepare('SELECT COUNT(*) AS n FROM dk_page_slots WHERE page_id = ?').bind(pageId).first())?.n || 0;
+      if (n) return err('Cette page porte encore des articles — retirez-les d’abord', 400, origin);
+    }
+    sets.push('kind = ?'); vals.push(body.kind);
+  }
   if (body.fixe_tag !== undefined) { sets.push('fixe_tag = ?'); vals.push(_s(String(body.fixe_tag).trim(), 80)); }
   if (body.fixe_title !== undefined) { sets.push('fixe_title = ?'); vals.push(_s(String(body.fixe_title).trim(), MAX_TITLE_LEN)); }
-  if (body.art_id !== undefined) {
-    if (body.art_id !== null) {
-      const owns = await env.DB.prepare('SELECT id FROM dk_articles WHERE id = ? AND pub_id = ?').bind(body.art_id, pubId).first();
-      if (!owns) return err('Article inconnu dans cette publication', 400, origin);
+  if (body.rub_id !== undefined) {
+    let rubId = null;
+    if (body.rub_id) {
+      const r = await env.DB.prepare('SELECT id FROM dk_rubriques WHERE id = ? AND pub_id = ?').bind(body.rub_id, pubId).first();
+      if (!r) return err('Rubrique inconnue', 400, origin);
+      rubId = r.id;
     }
-    sets.push('art_id = ?'); vals.push(body.art_id);
+    sets.push('rub_id = ?'); vals.push(rubId);
   }
-  if (body.banc !== undefined) { sets.push('banc = ?'); vals.push(_idArr(body.banc, MAX_BANC)); }
   if (!sets.length) return err('Rien à modifier', 400, origin);
   sets.push("updated_at = datetime('now')", 'updated_by = ?');
   vals.push(_byName(u), pageId);
   await env.DB.prepare(`UPDATE dk_pages SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
+  return json({ ok: true }, 200, origin);
+}
+
+/* ── Emplacements (multi-articles par page, §2.4) ────────────────
+   Chaque emplacement = un titulaire + son banc de remplaçants ordonné.
+   La carte affiche l'article principal (position 0) + badge « n articles » ;
+   la marge de la carte = min des marges de ses articles (côté front).     */
+async function _slotGate(request, env, origin, slotId) {
+  const s = await env.DB.prepare(`SELECT ${SLOT_COLS}, pub_id FROM dk_page_slots WHERE id = ?`).bind(slotId).first();
+  if (!s) return { error: err('Emplacement introuvable', 404, origin) };
+  const u = await memberGate(request, env, origin, s.pub_id);
+  if (u.error) return u;
+  return { u, slot: s };
+}
+function _touchPage(env, pageId, by) {
+  return env.DB.prepare(`UPDATE dk_pages SET updated_at = datetime('now'), updated_by = ? WHERE id = ?`).bind(by, pageId);
+}
+
+export async function handleSlotCreate(request, env, pageId) {
+  const origin = getAllowedOrigin(env, request);
+  const pubId = await pubOf(env, 'dk_pages', pageId);
+  const u = await memberGate(request, env, origin, pubId);
+  if (u.error) return u.error;
+  const body = await parseBody(request);
+  const page = await env.DB.prepare(`SELECT ${PAGE_COLS} FROM dk_pages WHERE id = ?`).bind(pageId).first();
+  if (!page) return err('Page introuvable', 404, origin);
+  if (page.kind === 'fixe') return err('Page figée — libérez-la avant d’y réserver un article', 400, origin);
+  const owns = await env.DB.prepare('SELECT id FROM dk_articles WHERE id = ? AND pub_id = ?').bind(body.art_id || '', pubId).first();
+  if (!owns) return err('Article inconnu dans cette publication', 400, origin);
+  const existing = (await env.DB.prepare(`SELECT ${SLOT_COLS} FROM dk_page_slots WHERE page_id = ? ORDER BY position`).bind(pageId).all()).results || [];
+  if (existing.some(s => s.art_id === owns.id)) return err('Cet article est déjà sur cette page', 400, origin);
+  if (existing.length >= MAX_SLOTS) return err('Limite d’articles atteinte sur cette page', 403, origin);
+  const id = generateId();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO dk_page_slots (id, page_id, pub_id, position, art_id) VALUES (?, ?, ?, ?, ?)')
+      .bind(id, pageId, pubId, existing.length, owns.id),
+    env.DB.prepare(`UPDATE dk_pages SET kind = 'article', updated_at = datetime('now'), updated_by = ? WHERE id = ?`).bind(_byName(u), pageId),
+  ]);
+  return json({ ok: true, slot: { id, page_id: pageId, position: existing.length, art_id: owns.id, banc: '[]' } }, 200, origin);
+}
+
+export async function handleSlotPatch(request, env, slotId) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _slotGate(request, env, origin, slotId);
+  if (g.error) return g.error;
+  const { u, slot } = g;
+  const body = await parseBody(request);
+  const sets = [], vals = [];
+  if (body.art_id !== undefined) {
+    const owns = await env.DB.prepare('SELECT id FROM dk_articles WHERE id = ? AND pub_id = ?').bind(body.art_id || '', slot.pub_id).first();
+    if (!owns) return err('Article inconnu dans cette publication', 400, origin);
+    const dup = await env.DB.prepare('SELECT id FROM dk_page_slots WHERE page_id = ? AND art_id = ? AND id != ?').bind(slot.page_id, owns.id, slotId).first();
+    if (dup) return err('Cet article est déjà sur cette page', 400, origin);
+    sets.push('art_id = ?'); vals.push(owns.id);
+  }
+  if (body.banc !== undefined) { sets.push('banc = ?'); vals.push(_idArr(body.banc, MAX_BANC)); }
+  if (body.position !== undefined && Number.isFinite(Number(body.position))) { sets.push('position = ?'); vals.push(Number(body.position)); }
+  if (!sets.length) return err('Rien à modifier', 400, origin);
+  vals.push(slotId);
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE dk_page_slots SET ${sets.join(', ')} WHERE id = ?`).bind(...vals),
+    _touchPage(env, slot.page_id, _byName(u)),
+  ]);
+  return json({ ok: true }, 200, origin);
+}
+
+export async function handleSlotDelete(request, env, slotId) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _slotGate(request, env, origin, slotId);
+  if (g.error) return g.error;
+  const { u, slot } = g;
+  await env.DB.prepare('DELETE FROM dk_page_slots WHERE id = ?').bind(slotId).run();
+  // Retasser les positions ; une page sans emplacement redevient vide.
+  const rest = (await env.DB.prepare(`SELECT id FROM dk_page_slots WHERE page_id = ? ORDER BY position`).bind(slot.page_id).all()).results || [];
+  const stmts = rest.map((s, i) => env.DB.prepare('UPDATE dk_page_slots SET position = ? WHERE id = ?').bind(i, s.id));
+  if (!rest.length) stmts.push(env.DB.prepare(`UPDATE dk_pages SET kind = 'vide', updated_at = datetime('now'), updated_by = ? WHERE id = ? AND kind = 'article'`).bind(_byName(u), slot.page_id));
+  else stmts.push(_touchPage(env, slot.page_id, _byName(u)));
+  await env.DB.batch(stmts);
   return json({ ok: true }, 200, origin);
 }
 
@@ -477,10 +803,10 @@ export async function handleArtCreate(request, env, pubId) {
   }
   const id = generateId();
   await env.DB.prepare(
-    `INSERT INTO dk_articles (id, pub_id, title, rub_id, contrib, status, due, fresh, histo)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    `INSERT INTO dk_articles (id, pub_id, title, rub_id, contrib, status, due, fresh, perime, histo)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(id, pubId, title, rubId, _s(String(body.contrib || '').trim(), MAX_NAME_LEN), status,
-      _date(body.due), body.fresh === 'date' ? 'date' : 'intemporel',
+      _date(body.due), body.fresh === 'date' ? 'date' : 'intemporel', _date(body.perime),
       JSON.stringify(['Créé par ' + _byName(u)])).run();
   const article = await env.DB.prepare(`SELECT ${ART_COLS} FROM dk_articles WHERE id = ?`).bind(id).first();
   return json({ ok: true, article }, 200, origin);
@@ -532,18 +858,27 @@ export async function handleArtDelete(request, env, artId) {
   const pubId = await pubOf(env, 'dk_articles', artId);
   const u = await memberGate(request, env, origin, pubId);
   if (u.error) return u.error;
-  // Le retirer proprement des pages (titulaire) et des bancs.
-  const pages = (await env.DB.prepare('SELECT id, art_id, banc FROM dk_pages WHERE pub_id = ?').bind(pubId).all()).results || [];
-  for (const pg of pages) {
-    let banc = []; try { banc = JSON.parse(pg.banc || '[]'); } catch (_) {}
-    const inBanc = Array.isArray(banc) && banc.includes(artId);
-    if (pg.art_id === artId || inBanc) {
-      await env.DB.prepare(`UPDATE dk_pages SET art_id = ?, kind = ?, banc = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?`)
-        .bind(pg.art_id === artId ? null : pg.art_id,
-              pg.art_id === artId ? 'vide' : pg.kind,
-              JSON.stringify((banc || []).filter(x => x !== artId)),
-              _byName(u), pg.id).run();
+  const by = _byName(u);
+  // Le retirer proprement des emplacements (titulaire) et des bancs.
+  const slots = (await env.DB.prepare(`SELECT ${SLOT_COLS} FROM dk_page_slots WHERE pub_id = ?`).bind(pubId).all()).results || [];
+  const touched = new Set();
+  for (const s of slots) {
+    let banc = []; try { banc = JSON.parse(s.banc || '[]'); } catch (_) {}
+    if (!Array.isArray(banc)) banc = [];
+    if (s.art_id === artId) {
+      await env.DB.prepare('DELETE FROM dk_page_slots WHERE id = ?').bind(s.id).run();
+      touched.add(s.page_id);
+    } else if (banc.includes(artId)) {
+      await env.DB.prepare('UPDATE dk_page_slots SET banc = ? WHERE id = ?')
+        .bind(JSON.stringify(banc.filter(x => x !== artId)), s.id).run();
+      touched.add(s.page_id);
     }
+  }
+  for (const pageId of touched) {
+    const rest = (await env.DB.prepare('SELECT id FROM dk_page_slots WHERE page_id = ? ORDER BY position').bind(pageId).all()).results || [];
+    for (let i = 0; i < rest.length; i++) await env.DB.prepare('UPDATE dk_page_slots SET position = ? WHERE id = ?').bind(i, rest[i].id).run();
+    if (!rest.length) await env.DB.prepare(`UPDATE dk_pages SET kind = 'vide', updated_at = datetime('now'), updated_by = ? WHERE id = ? AND kind = 'article'`).bind(by, pageId).run();
+    else await _touchPage(env, pageId, by).run();
   }
   await env.DB.prepare('DELETE FROM dk_articles WHERE id = ?').bind(artId).run();
   return json({ ok: true }, 200, origin);

@@ -1,7 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════
-   desK — Pad O-DSK-001 (préfixe dk-, aucun style partagé)
-   Portage fidèle du harnais validé (_design-lab/desk-harness.html).
-   La coquille (topbar, ws-*) vient de workspace.css.
+   desK — Pad O-DSK-001 (préfixe dk-, aucun style partagé) · DK-2
+   Grille de planches EN RANGÉES (chemin de fer papier au mur) +
+   curseur de taille des cartes (data-size 0..3) + sélection multiple
+   + barre d'insertion + vue marbre. Coquille (topbar, ws-*) =
+   workspace.css.
    ═══════════════════════════════════════════════════════════════ */
 
 .dk-app {
@@ -118,31 +120,58 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
 .dk-seg button { padding: 5px 11px; font-size: 12px; color: var(--dk-tx2); background: none; border: none; cursor: pointer; font-family: inherit; }
 .dk-seg button.on { background: rgba(201, 162, 39, .16); color: var(--dk-gold); font-weight: 700; }
 
-/* ── La frise ──────────────────────────────────────────────────── */
-.dk-frise-wrap { flex: 1; min-height: 0; position: relative; }
+/* Curseur de taille des cartes (à la InDesign, panneau Pages) */
+.dk-sizer { display: inline-flex; align-items: center; gap: 7px; color: var(--dk-tx3); flex: 0 0 auto; }
+.dk-sizer input[type="range"] { width: 92px; accent-color: var(--dk-gold); }
+
+/* ── La frise : grille de planches en rangées (§3.4 révisé) ────── */
+.dk-frise-wrap { flex: 1; min-height: 0; position: relative; overflow: hidden; }
 .dk-frise {
-  height: 100%; overflow-x: auto; overflow-y: hidden;
-  display: flex; align-items: center; gap: 22px; padding: 14px 24px 26px;
-  cursor: grab;
+  height: 100%; overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-wrap: wrap; align-content: flex-start; align-items: flex-start;
+  gap: 18px 16px; padding: 14px 24px 26px;
+  user-select: none; -webkit-user-select: none;
 }
-.dk-frise.dragging-bg { cursor: grabbing; user-select: none; }
-/* Dense = chemin de fer papier : tout le numéro d'un coup d'œil */
-.dk-frise-wrap.dense { --dk-card-w: 44px; --dk-card-h: 62px; }
-.dk-frise-wrap.dense .dk-frise {
-  gap: 12px 10px; flex-wrap: wrap; align-content: flex-start; align-items: flex-start;
-  overflow-y: auto; overflow-x: hidden; padding: 14px 18px 24px;
+/* Crans du curseur — les planches restent soudées 2 par 2, chaque cran
+   révèle ce qui tient lisiblement. 0 = mini (tout le numéro d'un œil). */
+.dk-frise-wrap[data-size="0"] { --dk-card-w: 44px; --dk-card-h: 62px; }
+.dk-frise-wrap[data-size="1"] { --dk-card-w: 96px; --dk-card-h: 128px; }
+.dk-frise-wrap[data-size="2"] { --dk-card-w: 148px; --dk-card-h: 190px; }
+.dk-frise-wrap[data-size="3"] { --dk-card-w: 186px; --dk-card-h: 238px; }
+.dk-frise-wrap[data-size="0"] .dk-pc-title, .dk-frise-wrap[data-size="0"] .dk-pc-contrib,
+.dk-frise-wrap[data-size="0"] .dk-pc-badges, .dk-frise-wrap[data-size="0"] .dk-pc-marge,
+.dk-frise-wrap[data-size="0"] .dk-pc-fixe-tag, .dk-frise-wrap[data-size="0"] .dk-pc-vide-txt,
+.dk-frise-wrap[data-size="0"] .dk-pc-status span:not(.dk-pc-status-dot),
+.dk-frise-wrap[data-size="0"] .dk-pc-rub span:not(.dk-pc-dot) { display: none; }
+.dk-frise-wrap[data-size="0"] .dk-pcard { padding: 6px; gap: 4px; border-radius: 8px; }
+.dk-frise-wrap[data-size="0"] .dk-pcard:hover { transform: none; }
+.dk-frise-wrap[data-size="0"] .dk-pc-foot { flex-direction: row; align-items: center; margin-top: auto; }
+.dk-frise-wrap[data-size="0"] .dk-pc-rub { min-height: 0; }
+.dk-frise-wrap[data-size="0"] .dk-pc-dot { width: 9px; height: 9px; }
+.dk-frise-wrap[data-size="0"] .dk-planche-pages { gap: 2px; }
+.dk-frise-wrap[data-size="0"] .dk-frise { gap: 12px 10px; padding: 14px 18px 24px; }
+.dk-frise-wrap[data-size="1"] .dk-pc-contrib, .dk-frise-wrap[data-size="1"] .dk-pc-marge,
+.dk-frise-wrap[data-size="1"] .dk-pc-badges, .dk-frise-wrap[data-size="1"] .dk-pc-vide-txt,
+.dk-frise-wrap[data-size="1"] .dk-pc-status span:not(.dk-pc-status-dot),
+.dk-frise-wrap[data-size="1"] .dk-pc-rub span:not(.dk-pc-dot) { display: none; }
+.dk-frise-wrap[data-size="1"] .dk-pcard { padding: 8px; gap: 4px; }
+.dk-frise-wrap[data-size="1"] .dk-pc-title { font-size: 10.5px; -webkit-line-clamp: 4; }
+.dk-frise-wrap[data-size="1"] .dk-pc-foot { flex-direction: row; align-items: center; }
+.dk-frise-wrap[data-size="1"] .dk-pc-fixe-tag { font-size: 9px; }
+.dk-frise-wrap[data-size="3"] .dk-pc-title { font-size: 14.5px; -webkit-line-clamp: 4; }
+
+/* Barre d'insertion (déplacement par insertion, §3.5 révisé) */
+.dk-insbar {
+  position: absolute; width: 3px; border-radius: 2px; background: var(--dk-gold);
+  box-shadow: 0 0 8px rgba(201, 162, 39, .6); pointer-events: none; z-index: 5;
 }
-.dk-frise-wrap.dense .dk-pc-title, .dk-frise-wrap.dense .dk-pc-contrib,
-.dk-frise-wrap.dense .dk-pc-badges, .dk-frise-wrap.dense .dk-pc-marge,
-.dk-frise-wrap.dense .dk-pc-fixe-tag, .dk-frise-wrap.dense .dk-pc-vide-txt,
-.dk-frise-wrap.dense .dk-pc-status span:not(.dk-pc-status-dot),
-.dk-frise-wrap.dense .dk-pc-rub span:not(.dk-pc-dot) { display: none; }
-.dk-frise-wrap.dense .dk-pcard { padding: 6px; gap: 4px; border-radius: 8px; }
-.dk-frise-wrap.dense .dk-pcard:hover { transform: none; }
-.dk-frise-wrap.dense .dk-pc-foot { flex-direction: row; align-items: center; margin-top: auto; }
-.dk-frise-wrap.dense .dk-pc-rub { min-height: 0; }
-.dk-frise-wrap.dense .dk-pc-dot { width: 9px; height: 9px; }
-.dk-frise-wrap.dense .dk-planche-pages { gap: 2px; }
+/* Compteur sur le fantôme d'un drag multiple */
+.dk-drag-count {
+  position: absolute; top: -8px; right: -8px; min-width: 22px; height: 22px;
+  border-radius: 11px; background: var(--dk-gold); color: #17130a;
+  font-size: 12px; font-weight: 900; display: inline-flex; align-items: center;
+  justify-content: center; padding: 0 6px;
+}
 
 .dk-planche { display: flex; flex-direction: column; gap: 7px; flex: 0 0 auto; }
 .dk-planche-pages { display: flex; gap: 3px; }
@@ -163,6 +192,12 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
 .dk-pcard.flip { transition: transform .32s cubic-bezier(.22, 1, .36, 1); }
 .dk-pcard.locked { cursor: default; }
 .dk-pcard.drop-hint { outline: 2px dashed var(--dk-gold); outline-offset: 3px; }
+/* Sélection multiple (Maj+clic plage, Cmd/Ctrl+clic) */
+.dk-pcard.msel { border-color: var(--dk-gold); box-shadow: 0 0 0 1.5px var(--dk-gold); }
+.dk-pcard.msel::after {
+  content: ''; position: absolute; top: -5px; right: -5px; width: 11px; height: 11px;
+  border-radius: 50%; background: var(--dk-gold); box-shadow: 0 0 0 2px var(--ws-surface, #1c2234);
+}
 
 .dk-pc-rub { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--dk-tx2); min-height: 14px; }
 .dk-pc-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
@@ -188,8 +223,90 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
 }
 .dk-pcard.vide:hover { border-color: var(--dk-gold); color: var(--dk-gold); }
 .dk-pc-vide-txt { font-size: 11px; line-height: 1.35; }
+.dk-pc-rub-vide { position: absolute; top: 8px; left: 9px; right: 9px; justify-content: center; }
 .dk-pcard.fixe { background: rgba(127, 127, 127, .1); }
 .dk-pc-fixe-tag { font-size: 10px; color: var(--dk-tx3); border: 1px solid var(--dk-line); border-radius: 6px; padding: 1px 6px; align-self: flex-start; }
+
+/* ── Barre d'action de la sélection multiple ───────────────────── */
+.dk-mselbar {
+  position: fixed; left: 50%; bottom: 20px; transform: translate(-50%, 16px);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center;
+  background: rgba(22, 22, 26, .93); border: 1px solid rgba(201, 162, 39, .4);
+  border-radius: 14px; padding: 9px 14px; z-index: 10004;
+  opacity: 0; pointer-events: none; transition: opacity .22s, transform .22s;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  max-width: min(94vw, 760px); color: #fff;
+}
+.dk-mselbar.on { opacity: 1; pointer-events: auto; transform: translate(-50%, 0); }
+.dk-mselbar-count { font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.dk-mselbar-embark { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: rgba(255, 255, 255, .75); cursor: pointer; }
+.dk-mselbar-embark input { accent-color: var(--dk-gold); }
+.dk-mselbar-pop { position: relative; width: 0; }
+.dk-mselbar-pop .dk-menu {
+  position: absolute; bottom: 14px; right: -8px; top: auto; left: auto;
+}
+.dk-menu-form { display: flex; gap: 8px; padding: 10px; align-items: center; min-width: 280px; }
+.dk-menu-form input[type="text"] {
+  flex: 1; min-width: 0; padding: 8px 11px; border-radius: 9px; font: inherit; font-size: 13px;
+  background: rgba(127, 127, 127, .1); border: 1px solid rgba(127, 127, 127, .25); color: inherit;
+}
+.dk-menu-form input:focus { outline: none; border-color: var(--dk-gold); }
+
+/* ── Emplacements multiples (inspecteur) ───────────────────────── */
+.dk-slotchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.dk-slotchip {
+  border: 1px solid var(--dk-line); border-radius: 9px; padding: 4px 9px;
+  font: inherit; font-size: 11.5px; color: var(--dk-tx2); background: rgba(127, 127, 127, .06);
+  cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dk-slotchip.on { border-color: var(--dk-gold); color: var(--dk-gold); font-weight: 700; background: rgba(201, 162, 39, .1); }
+
+/* ── Le marbre (§4) — liste sobre, PAS une seconde frise ───────── */
+.dk-marbre-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.dk-marbre-head { display: flex; gap: 9px; padding: 12px 18px 10px; flex-wrap: wrap; flex: 0 0 auto; }
+.dk-marbre-q {
+  flex: 1 1 220px; min-width: 0; padding: 8px 12px; border-radius: 10px; font: inherit; font-size: 13px;
+  background: rgba(127, 127, 127, .08); border: 1px solid rgba(127, 127, 127, .22); color: inherit;
+}
+.dk-marbre-q:focus { outline: none; border-color: var(--dk-gold); }
+.dk-marbre-head select {
+  padding: 8px 10px; border-radius: 10px; font: inherit; font-size: 12.5px;
+  background: rgba(127, 127, 127, .08); border: 1px solid rgba(127, 127, 127, .22); color: inherit;
+}
+.dk-marbre-report {
+  margin: 0 18px 8px; padding: 8px 13px; border: 1px solid rgba(201, 162, 39, .4);
+  background: rgba(201, 162, 39, .07); border-radius: 11px; font-size: 12.5px;
+}
+.dk-marbre-list { flex: 1; overflow-y: auto; padding: 0 18px 24px; }
+.dk-mrow {
+  display: flex; align-items: center; gap: 11px; padding: 10px 12px;
+  border: 1px solid var(--dk-line); border-radius: 12px; margin-bottom: 7px; cursor: pointer;
+  transition: border-color .15s;
+}
+.dk-mrow:hover { border-color: rgba(201, 162, 39, .55); }
+.dk-mrow-main { flex: 1; min-width: 0; }
+.dk-mrow-title { font-weight: 800; font-size: 13.5px; letter-spacing: -0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-mrow-meta { font-size: 11.5px; color: var(--dk-tx2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-mrow-meta .rouge { color: var(--dk-rouge); font-weight: 700; }
+.dk-mrow-meta .ambre { color: var(--dk-ambre); font-weight: 700; }
+.dk-mrow-chips { display: flex; gap: 5px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; max-width: 40%; }
+.dk-mchip {
+  font-size: 10px; border: 1px solid var(--dk-line); border-radius: 7px; padding: 1.5px 7px;
+  color: var(--dk-tx2); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.dk-mchip.on { border-color: rgba(201, 162, 39, .55); color: var(--dk-gold); }
+.dk-mchip.libre { border-style: dashed; }
+.dk-mchip.report { border-color: rgba(109, 141, 214, .55); color: #6d8dd6; }
+
+/* Réserver depuis le marbre : grille des pages du numéro */
+.dk-pagepick { display: flex; flex-wrap: wrap; gap: 5px; }
+.dk-pagepick-btn {
+  min-width: 34px; height: 30px; border-radius: 8px; border: 1px dashed rgba(127, 127, 127, .35);
+  background: none; color: inherit; font: inherit; font-size: 12px; cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.dk-pagepick-btn:hover { border-color: var(--dk-gold); color: var(--dk-gold); }
+.dk-pagepick-btn.has { border-style: solid; background: rgba(127, 127, 127, .08); }
 
 /* ── Inspecteur (latéral desktop / feuille du bas mobile) ─────── */
 .dk-insp {
@@ -215,11 +332,19 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
 .dk-kv strong.ambre { color: var(--dk-ambre); }
 .dk-kv strong.rouge { color: var(--dk-rouge); }
 .dk-kv strong.vert { color: var(--dk-vert); }
+/* Le voile n'existe QUE sur mobile (feuille du bas). Sur desktop,
+   l'inspecteur est un panneau latéral et la frise reste INTERACTIVE
+   (§3.4 : pas un modal — le contexte reste visible ; la sélection
+   multiple et le clic de carte à carte fonctionnent inspecteur ouvert). */
 .dk-veil {
   position: fixed; inset: 0; background: rgba(0, 0, 0, .38); z-index: 10001;
   opacity: 0; pointer-events: none; transition: opacity .25s;
+  display: none;
 }
-.dk-insp.on ~ .dk-veil, .dk-veil.on { opacity: 1; pointer-events: auto; }
+@media (max-width: 820px) {
+  .dk-veil { display: block; }
+  .dk-insp.on ~ .dk-veil, .dk-veil.on { opacity: 1; pointer-events: auto; }
+}
 
 /* Champs de l'inspecteur */
 .dk-field { display: block; margin-bottom: 11px; font-size: 12.5px; }
@@ -279,13 +404,20 @@ html.light-mode .dk-field input, html.light-mode .dk-field select { color-scheme
 
 /* ── Mobile : consultation + pointage (§3.6) ───────────────────── */
 @media (max-width: 820px) {
-  .dk-app { --dk-card-w: 128px; --dk-card-h: 168px; }
   .dk-pub-btn { max-width: 170px; }
   .dk-rail { padding: 8px 12px 7px; }
   .dk-jalon { min-width: 128px; padding: 6px 10px; }
   .dk-ferbar { padding: 8px 12px 0; flex-wrap: wrap; }
   .dk-btn-txt { display: none; }
-  .dk-frise { gap: 14px; padding: 12px 14px 22px; }
+  .dk-frise { gap: 14px 10px; padding: 12px 14px 22px; }
+  .dk-frise-wrap[data-size="2"] { --dk-card-w: 128px; --dk-card-h: 168px; }
+  .dk-frise-wrap[data-size="3"] { --dk-card-w: 150px; --dk-card-h: 196px; }
+  .dk-sizer input[type="range"] { width: 70px; }
+  .dk-marbre-head { padding: 10px 12px 8px; }
+  .dk-marbre-list { padding: 0 12px 20px; }
+  .dk-marbre-report { margin: 0 12px 8px; }
+  .dk-mrow-chips { display: none; }
+  .dk-mselbar { bottom: 12px; padding: 8px 10px; gap: 6px; }
   .dk-form-grid { grid-template-columns: 1fr; }
   .dk-insp {
     top: auto; left: 0; right: 0; bottom: 0; width: 100%; max-width: none;
