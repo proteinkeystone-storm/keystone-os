@@ -656,6 +656,71 @@ async function _sensorQrTop(env, tenantId, limit = 5) {
   } catch (e) { return { top: [] }; }
 }
 
+// desK (O-DSK-001) : tenant = LA PUBLICATION, pas la personne. Un membre
+// (dk_members.sub = claims.sub) peut appartenir à plusieurs publications → on
+// agrège les signaux de TOUTES ses publications. Surtout PAS padTenant : desK
+// ne range pas l'admin sous 'default' (l'appartenance est nominative, comme
+// Pulsa/owner_sub). Sans sub → 0.
+//   - inbox      : contributions e-mail « à trier » en attente (action, §5.3).
+//   - overdue    : copies réservées sur un numéro vivant dont la remise est
+//                  passée — proxy explicable de la marge consommée (§3.3).
+//   - bouclage   : jalon de bouclage le plus proche (≤ 7 j, peut être passé).
+//   - issuesLive : numéros en préparation/production (état permanent informatif).
+async function _sensorDesk(env, sub) {
+  const empty = { inbox: 0, overdue: 0, overdueNum: '', bouclageDays: null, bouclageNum: '', issuesLive: 0 };
+  if (!sub) return empty;
+  try {
+    const pubRows = (await env.DB.prepare(
+      `SELECT pub_id FROM dk_members WHERE sub = ?`
+    ).bind(sub).all().catch(() => null))?.results || [];
+    const pubIds = pubRows.map(r => r.pub_id).filter(Boolean);
+    if (!pubIds.length) return empty;
+    const ph = pubIds.map(() => '?').join(',');
+    const today = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+
+    // Contributions à trier (bac §5.3), toutes publications confondues.
+    const inboxRow = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM dk_inbox WHERE pub_id IN (${ph}) AND status = 'pending'`
+    ).bind(...pubIds).first().catch(() => null);
+
+    // Copies en retard : article qui attend encore sa copie (propose/attendu),
+    // réservé sur une page d'un numéro vivant, échéance dépassée.
+    const overdueRow = await env.DB.prepare(
+      `SELECT COUNT(DISTINCT a.id) AS n, MIN(i.num) AS num
+         FROM dk_articles a
+         JOIN dk_page_slots s ON s.art_id = a.id
+         JOIN dk_pages p ON p.id = s.page_id
+         JOIN dk_issues i ON i.id = p.issue_id
+        WHERE a.pub_id IN (${ph})
+          AND i.status IN ('preparation','production')
+          AND a.status IN ('propose','attendu')
+          AND a.due IS NOT NULL AND a.due != '' AND a.due < ?`
+    ).bind(...pubIds, today).first().catch(() => null);
+
+    // Numéros vivants + leur jalon de bouclage (JSON parsé en JS).
+    const issues = (await env.DB.prepare(
+      `SELECT num, jalons FROM dk_issues WHERE pub_id IN (${ph}) AND status IN ('preparation','production')`
+    ).bind(...pubIds).all().catch(() => null))?.results || [];
+    let bouclageDays = null, bouclageNum = '';
+    const todayMs = new Date(today + 'T00:00:00Z').getTime();
+    for (const it of issues) {
+      let d = null;
+      try { d = (JSON.parse(it.jalons || '{}') || {}).bouclage || null; } catch (_) {}
+      if (!d) continue;
+      const days = Math.round((new Date(d + 'T00:00:00Z').getTime() - todayMs) / 86400000);
+      if (days > 7) continue;                 // trop loin → pas encore un signal
+      if (bouclageDays === null || days < bouclageDays) { bouclageDays = days; bouclageNum = String(it.num || ''); }
+    }
+    return {
+      inbox: inboxRow?.n || 0,
+      overdue: overdueRow?.n || 0,
+      overdueNum: (overdueRow && overdueRow.num != null) ? String(overdueRow.num) : '',
+      bouclageDays, bouclageNum,
+      issuesLive: issues.length,
+    };
+  } catch (e) { return empty; }
+}
+
 // ── Récupération du Pilotable actif le plus prioritaire ───────────
 async function _fetchActivePilotable(env, audience) {
   await ensureLivingSchema(env);
@@ -689,7 +754,7 @@ async function _fetchActivePilotable(env, audience) {
 // variantIndex : permet la ROTATION entre les candidats (pas toujours
 // le top-score). On trie par pertinence puis on pioche le N-ième.
 function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [], feedback = {}, preferTopic = null) {
-  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, network = {}, relances = {}, clientSensors = {} } = sensors;
+  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, network = {}, relances = {}, desk = {}, clientSensors = {} } = sensors;
   // Les candidats "tendance" (mémoire des chiffres) sont injectés en tête
   // avec un score élevé : un delta réel est plus parlant qu'un total brut.
   const candidates = Array.isArray(extraCandidates) ? [...extraCandidates] : [];
@@ -756,6 +821,32 @@ function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [],
     candidates.push({
       text: `${social.failed24h} publication${social.failed24h > 1 ? 's' : ''} non aboutie${social.failed24h > 1 ? 's' : ''} — à reprendre dans Social Manager.`,
       score: 87, topic: 'social',
+    });
+  }
+
+  // desK : contributions e-mail « à trier » (§5.3) = action nette du jour.
+  if (desk.inbox > 0) {
+    candidates.push({
+      text: `${desk.inbox} contribution${desk.inbox > 1 ? 's' : ''} à trier dans desK.`,
+      score: 88, topic: 'desk',
+    });
+  }
+  // desK : copies en retard sur un numéro vivant (marge consommée §3.3).
+  if (desk.overdue > 0) {
+    candidates.push({
+      text: `${desk.overdue} copie${desk.overdue > 1 ? 's' : ''} en retard${desk.overdueNum ? ' au n° ' + desk.overdueNum : ''} — relancer ou basculer.`,
+      score: 86, topic: 'desk',
+    });
+  }
+  // desK : bouclage rédactionnel proche (ou déjà dépassé).
+  if (desk.bouclageDays !== null && desk.bouclageDays !== undefined) {
+    const d = desk.bouclageDays;
+    const num = desk.bouclageNum ? ' du n° ' + desk.bouclageNum : '';
+    candidates.push({
+      text: d < 0 ? `Bouclage${num} dépassé de ${-d} jour${-d > 1 ? 's' : ''}.`
+          : d === 0 ? `Bouclage${num} aujourd'hui.`
+          : `Bouclage${num} ${d === 1 ? 'demain' : 'dans ' + d + ' jours'}.`,
+      score: d <= 0 ? 82 : (d <= 3 ? 66 : 48), topic: 'desk',
     });
   }
 
@@ -877,7 +968,7 @@ const LIVING_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 // Construit les prompts système + user à partir des signaux (partagé
 // Llama/Claude). Retourne null si aucun signal exploitable.
 function _buildAiPrompts(sensors, firstName, variantIndex) {
-  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, network = {}, relances = {}, clientSensors = {} } = sensors;
+  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, network = {}, relances = {}, desk = {}, clientSensors = {} } = sensors;
   const focus = (clientSensors && clientSensors.focus) || {};
   const _topQr = (Array.isArray(qrtop.top) && qrtop.top[0]) ? qrtop.top[0] : null;
   let signals = [
@@ -885,6 +976,9 @@ function _buildAiPrompts(sensors, firstName, variantIndex) {
     smartagent.recent24h > 0 ? { t: `Smart Agent : ${smartagent.recent24h} question(s) restée(s) sans réponse, un trou à combler`, topic: 'smartagent' } : null,
     keynapse.soonLabel ? { t: `Rappel imminent : ${keynapse.soonLabel}`, topic: 'keynapse' } : null,
     social.failed24h > 0 ? { t: `Social Manager : ${social.failed24h} publication(s) non abouties à reprendre`, topic: 'social' } : null,
+    desk.inbox > 0 ? { t: `desK : ${desk.inbox} contribution(s) à trier`, topic: 'desk' } : null,
+    desk.overdue > 0 ? { t: `desK : ${desk.overdue} copie(s) en retard${desk.overdueNum ? ' au n° ' + desk.overdueNum : ''}`, topic: 'desk' } : null,
+    (desk.bouclageDays !== null && desk.bouclageDays !== undefined && desk.bouclageDays <= 3) ? { t: `desK : bouclage ${desk.bouclageDays < 0 ? 'dépassé' : desk.bouclageDays === 0 ? "aujourd'hui" : 'dans ' + desk.bouclageDays + ' j'}${desk.bouclageNum ? ' (n° ' + desk.bouclageNum + ')' : ''}`, topic: 'desk' } : null,
     pulsa.responses24h > 0 ? { t: `Key Form : ${pulsa.responses24h} nouvelles réponses 24h`, topic: 'pulsa' } : null,
     _topQr ? { t: `Smart QR top : ${_topQr.name}, ${_topQr.scans7d} scans sur 7j (${_topQr.trend === 'up' ? 'en hausse' : _topQr.trend === 'down' ? 'en repli' : 'stable'})`, topic: 'smartqr' } : null,
     smartqr.scans24h   > 0 ? { t: `Smart QR : ${smartqr.scans24h} scans dernières 24h au total`, topic: 'smartqr' } : null,
@@ -1194,7 +1288,7 @@ export async function handleLivingBoard(request, env) {
     ? clientSensors.followedSite.slice(0, 64) : null;
 
   // ── Collecte capteurs serveur en parallèle ──────────────────────
-  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, relances, pilotable, followedQr, followedSite] = await Promise.all([
+  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, relances, pilotable, followedQr, followedSite, desk] = await Promise.all([
     _sensorSmartQR(env, padTenant),
     _sensorQrTop(env, padTenant),
     _sensorPulsa(env, lookupHmac),
@@ -1211,9 +1305,11 @@ export async function handleLivingBoard(request, env) {
     _fetchActivePilotable(env, plan),
     _sensorFollowedQr(env, padTenant, followedQrId),
     _sensorFollowedSite(env, padTenant, followedSiteId),
+    // desK : tenant = publication (dk_members.sub), PAS padTenant.
+    _sensorDesk(env, lookupHmac),
   ]);
 
-  const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, relances, clientSensors };
+  const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, relances, desk, clientSensors };
 
   // Chiffres bruts pour la ligne de jauges (Niveau 2, #6). Le focus vient
   // du client (mesuré dans l'onglet). ghostQuota peut être null (anonyme/admin).
@@ -1248,6 +1344,14 @@ export async function handleLivingBoard(request, env) {
     // Sceau (S5) : accusés de lecture + sceaux en attente.
     sceauOpened7d:   sceau.opened7d  || 0,
     sceauActive:     sceau.active    || 0,
+    // desK (DK-5) : bac à trier + copies en retard + bouclage proche + numéros
+    // vivants (agrégés sur toutes les publications du membre).
+    deskInbox:        desk.inbox        || 0,
+    deskOverdue:      desk.overdue      || 0,
+    deskOverdueNum:   desk.overdueNum   || '',
+    deskBouclageDays: (desk.bouclageDays == null ? null : desk.bouclageDays),
+    deskBouclageNum:  desk.bouclageNum  || '',
+    deskIssuesLive:   desk.issuesLive   || 0,
   };
 
   // ── Mémoire des chiffres (Chantier 1) ───────────────────────────
@@ -1364,7 +1468,7 @@ export async function handleLivingBoard(request, env) {
 // Enregistre une impression (phrase affichée) ou un engagement (outil
 // ouvert après la phrase). Requiert JWT (tenant). Sans JWT → no-op.
 // Body : { topic, type: 'impression' | 'engagement' }
-const _VALID_TOPICS = ['smartqr', 'pulsa', 'annonces', 'kodex', 'brainstorming', 'ghostwriter', 'ambiance', 'focus', 'smartagent', 'keynapse', 'sentinel', 'social', 'keybrand'];
+const _VALID_TOPICS = ['smartqr', 'pulsa', 'annonces', 'kodex', 'brainstorming', 'ghostwriter', 'ambiance', 'focus', 'smartagent', 'keynapse', 'sentinel', 'social', 'keybrand', 'desk'];
 
 export async function handleLivingFeedback(request, env) {
   const origin = getAllowedOrigin(env, request);

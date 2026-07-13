@@ -195,7 +195,16 @@ export function openNetwork(opts = {}) {
   document.body.style.overflow = 'hidden';
   document.addEventListener('keydown', _onKey);
   window.addEventListener('resize', _onResize);
-  _boot();   // cache → rendu instantané, puis API (« waou » au 1er paint réel)
+  // Réception inter-pads (suggestion, ex. desK DK-5) : ouvrir directement le
+  // formulaire « nouveau contact » pré-rempli. On attend le boot pour que le
+  // sélecteur de catégorie soit peuplé (le seed reste valable sinon).
+  const _seed = (opts && opts.createContact && typeof opts.createContact === 'object') ? opts.createContact : null;
+  const boot = _boot();   // cache → rendu instantané, puis API (« waou » au 1er paint réel)
+  if (_seed) {
+    Promise.resolve(boot).then(() => {
+      if (_root) _openContactForm({ kind: 'person', ..._seed });
+    });
+  }
 }
 export function closeNetwork() {
   if (!_root) return;

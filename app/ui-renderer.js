@@ -5829,6 +5829,28 @@ function _padReadoutData(id, m) {
             }
             return null;
         }
+        case 'O-DSK-001': {                        // desK — chemin de fer d'une revue
+            // Priorité : à trier (bac §5.3) > copies en retard > bouclage proche >
+            // état permanent (numéros en cours). Les deux premiers = actions
+            // (halo nouveauté) ; bouclage/numéros = informatif (quiet).
+            const inbox = +m.deskInbox || 0;
+            if (inbox > 0) return { label: 'À trier', num: String(inbox),
+                                    sub: inbox > 1 ? 'contributions' : 'contribution', signal: inbox };
+            const overdue = +m.deskOverdue || 0;
+            if (overdue > 0) return { label: 'En retard', num: String(overdue),
+                                      sub: overdue > 1 ? 'copies' : 'copie', signal: overdue };
+            const bd = (m.deskBouclageDays == null) ? null : +m.deskBouclageDays;
+            if (bd != null && bd <= 3) {
+                const txt = bd < 0 ? ('J+' + (-bd)) : (bd === 0 ? 'J' : ('J−' + bd));
+                return { label: 'Bouclage', num: txt,
+                         sub: m.deskBouclageNum ? ('n° ' + m.deskBouclageNum) : '', signal: 0, quiet: true };
+            }
+            // Etat permanent : numéros en préparation/production (informatif).
+            const live = +m.deskIssuesLive || 0;
+            if (live > 0) return { label: live > 1 ? 'Numéros' : 'Numéro', num: String(live),
+                                   sub: 'en cours', signal: 0, quiet: true };
+            return null;
+        }
     }
     return null;
 }

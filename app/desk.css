@@ -559,3 +559,20 @@ html.light-mode .dk-bac-select { color-scheme: light; }
   .dk-insp.on { transform: translateY(0); }
   .dk-insp::before { content: ''; display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--dk-tx3); margin: 8px auto 0; flex: 0 0 auto; }
 }
+
+/* ── DK-6 · Pré-impression (contrôle du PDF final) ── */
+.dk-pp-run { display: flex; align-items: center; gap: 10px; padding: 14px 2px; color: var(--dk-tx2); font-size: 13px; }
+.dk-pp-verdict { display: flex; align-items: flex-start; gap: 11px; padding: 13px; margin: 12px 0 4px;
+  border: 1px solid var(--dk-line); border-radius: 12px; }
+.dk-pp-verdict strong { display: block; font-size: 14px; font-weight: 800; letter-spacing: -0.01em; }
+.dk-pp-verdict .dk-note { margin-top: 2px; }
+.dk-pp-verdict.ok { border-color: rgba(76, 195, 138, .5); background: rgba(76, 195, 138, .08); }
+.dk-pp-verdict.ok svg { color: var(--dk-vert, #4cc38a); flex: 0 0 auto; }
+.dk-pp-verdict.warn { border-color: rgba(230, 162, 60, .5); background: rgba(230, 162, 60, .08); }
+.dk-pp-verdict.warn svg { color: var(--dk-ambre); flex: 0 0 auto; }
+.dk-pp-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dk-pp-list li { font-size: 12.5px; line-height: 1.4; padding-left: 12px; position: relative; color: var(--dk-tx2); }
+.dk-pp-list li::before { content: '•'; position: absolute; left: 0; }
+.dk-pp-list li.rouge { color: var(--dk-rouge); }
+.dk-pp-list li.ambre { color: var(--dk-ambre); }
+.dk-pp-line.rouge { color: var(--dk-rouge); font-size: 13px; padding: 10px 2px; }

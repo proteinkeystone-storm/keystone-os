@@ -43,6 +43,7 @@ import { icon }                               from './lib/ui-icons.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
+import { openGhostwriterChained }             from './ghostwriter.js';   // DK-5 : passerelle relecture (round-trip → relu)
 
 const WORKSPACE_META = { id: 'O-DSK-001', name: 'desK' };
 // dk_api (localStorage) = override de dev/test — jamais posé en usage normal.
@@ -84,6 +85,7 @@ let _size = (() => { const v = parseInt(localStorage.getItem('dk_cardsize'), 10)
 let _msel = new Set(), _mselAnchor = null, _embark = false;
 let _mf = { q: '', rub: '', fresh: '', statut: 'vivant' };   // filtres du marbre
 let _toastTimer = null;
+let _ppFile = null;             // DK-6 : PDF final retenu en mémoire (contrôle + pont booK)
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -192,6 +194,7 @@ export function closeDesk() {
   _root = null; _me = null; _pubs = []; _pubId = null; _issueId = null;
   _D = null; _selN = null; _selSlot = 0; _offline = false; _view = 'fer';
   _msel = new Set(); _mselAnchor = null; _embark = false;
+  _ppFile = null;
   document.body.style.overflow = '';
 }
 
@@ -541,6 +544,41 @@ function _relanceDraft(a) {
   return { subject, body };
 }
 
+/* ═══════════ DK-5 · Passerelles (Ghost Writer / networK) ═══════════
+   §7 du brief : réutiliser l'existant, ne RIEN dupliquer.
+   - Ghost Writer : la copie part en relecture (ortho/typo/style) dans le modal
+     léger, PAR-DESSUS desK (aller-retour) — au retour, on marque l'article
+     « relu » via l'action déjà là. AUCUN moteur de relecture ici.
+   - networK : SUGGESTION seulement (jamais d'aspiration §7) — ouvre networK
+     avec le formulaire « nouveau contact » pré-rempli du contributeur. Le
+     réseau reste le coffre PERSONNEL de chacun ; desK ne fait que proposer. */
+function _hasCopy(a) { return !!(a && typeof a.notes === 'string' && a.notes.trim()); }
+function _passerellesHTML(a) {
+  const gw  = _hasCopy(a) && a.status !== 'abandonne';
+  const net = !!(a && a.contrib);
+  if (!gw && !net) return '';
+  return `<div class="dk-sec"><h4>Passerelles</h4><div class="dk-btn-row">
+      ${gw  ? `<button class="dk-btn" data-act="gw">${icon('ghostwriter', 14)} Relire avec Ghost Writer</button>` : ''}
+      ${net ? `<button class="dk-btn" data-act="tonet">${icon('network', 14)} Ajouter à networK</button>` : ''}
+    </div>
+    <p class="dk-note">${gw ? 'Ghost Writer relit la copie (orthographe, typo, style) — au retour, marquez l’article « relu ».' : ''}${gw && net ? ' ' : ''}${net ? 'networK vous suggère d’ajouter le contributeur à votre réseau personnel.' : ''}</p>
+  </div>`;
+}
+function _bindPasserelles(insp, a) {
+  insp.querySelector('[data-act="gw"]')?.addEventListener('click', () => {
+    try { openGhostwriterChained(a.notes || ''); }   // modal léger, par-dessus desK (round-trip)
+    catch (e) { _toast('Ghost Writer indisponible.', true); }
+  });
+  insp.querySelector('[data-act="tonet"]')?.addEventListener('click', async () => {
+    const c = _contribByName(a.contrib);
+    const seed = { kind: 'person', name: a.contrib };
+    if (c && c.email) seed.email = c.email;
+    // networK est un workspace plein écran : on ferme desK avant (piège z-index).
+    closeDesk();
+    try { const m = await import('./ui-renderer.js'); m.openTool('O-NET-001', { createContact: seed }); } catch (_) {}
+  });
+}
+
 // Upload d'une liste de fichiers vers le casier d'une page (présigné ou direct).
 async function _uploadFiles(page, fileList, refresh) {
   const files = [...(fileList || [])];
@@ -641,6 +679,7 @@ function _renderFer() {
       <span class="dk-ferbar-issue">n° ${_esc(_D.issue.num)}${_D.issue.theme ? ' · ' + _esc(_D.issue.theme) : ''} · ${_D.pages.length} pages</span>
       <span class="dk-ferbar-spacer"></span>
       ${_relancesDues().length ? `<button class="dk-btn ghost small dk-relbtn" data-act="relances" title="Copies en attente à relancer">${icon('bell', 14)}<span class="dk-btn-txt"> Relances (${_relancesDues().length})</span></button>` : ''}
+      <button class="dk-btn ghost small" data-act="prepress" title="Contrôle du PDF final & édition numérique booK">${icon('printer', 14)}<span class="dk-btn-txt"> Pré-impression</span></button>
       <button class="dk-btn ghost small" data-act="newart">${icon('plus', 14)}<span class="dk-btn-txt"> Article</span></button>
     </div>
     ${(_D.inbox || []).length ? `<button class="dk-bacstrip" data-act="bac">${icon('mail', 15)}<span>${_D.inbox.length} contribution${_D.inbox.length > 1 ? 's' : ''} à rattacher</span><span class="dk-bacstrip-go">trier ${icon('chevron-right', 13)}</span></button>` : ''}
@@ -655,6 +694,7 @@ function _renderFer() {
   });
   main.querySelector('[data-act="newart"]').addEventListener('click', () => _openArtForm());
   main.querySelector('[data-act="relances"]')?.addEventListener('click', () => _openRelanceList());
+  main.querySelector('[data-act="prepress"]')?.addEventListener('click', () => _openPrepress());
   if (_view === 'fer') {
     _renderFrise();
     const sizer = main.querySelector('[data-k="size"]');
@@ -1224,6 +1264,7 @@ function _openInspMarbre(artId) {
       <p class="dk-note">Chiffre + = la page porte déjà un article ; le vôtre s'y ajoutera (brèves, encadré…).</p>
     </div>` : ''}
     ${histo.length ? `<div class="dk-sec"><h4>Historique</h4>${histo.slice(0, 20).map(h => `<div class="dk-histo">${_esc(h)}</div>`).join('')}</div>` : ''}
+    ${_passerellesHTML(a)}
     <div class="dk-sec"><h4>Actions</h4><div class="dk-btn-row">
       <button class="dk-btn" data-act="editart">${icon('edit-3', 14)} Modifier</button>
       ${(STATUS[a.status] || {}).needsCopy && a.contrib ? `<button class="dk-btn ${_relanceInfo(a) ? 'primary' : ''}" data-act="relancem">${icon('mail', 14)} Relancer</button>` : ''}
@@ -1234,6 +1275,7 @@ function _openInspMarbre(artId) {
   insp.classList.add('on');
   _root.querySelector('[data-slot="veil"]').classList.add('on');
   _bindFileButtons(insp, () => _openInspMarbre(a.id));
+  _bindPasserelles(insp, a);
   insp.querySelectorAll('[data-pg]').forEach(b => b.onclick = async () => {
     try {
       await _api('/page/' + b.dataset.pg + '/slot', { method: 'POST', body: { art_id: a.id } });
@@ -1464,6 +1506,8 @@ function _renderInspArticle(insp, p) {
 
     ${histo.length ? `<div class="dk-sec"><h4>Historique</h4>${histo.slice(0, 8).map(h => `<div class="dk-histo">${_esc(h)}</div>`).join('')}</div>` : ''}
 
+    ${_passerellesHTML(a)}
+
     <div class="dk-sec"><h4>Actions</h4><div class="dk-btn-row">
       ${st.needsCopy ? `<button class="dk-btn primary" data-act="pointer">${icon('check', 14)} Copie reçue</button>` : ''}
       ${a.status === 'remis' ? `<button class="dk-btn" data-act="markrelu">${icon('check', 14)} Marquer relu</button>` : ''}
@@ -1477,6 +1521,7 @@ function _renderInspArticle(insp, p) {
 
   insp.querySelectorAll('[data-slotidx]').forEach(b => b.onclick = () => { _selSlot = parseInt(b.dataset.slotidx, 10); _openInsp(p.n, true); });
   _bindCasier(insp, p, () => _openInsp(p.n, true));
+  _bindPasserelles(insp, a);
   insp.querySelector('[data-act="relance"]')?.addEventListener('click', () => _openRelanceForm(a, () => _openInsp(p.n, true)));
 
   const patchArt = async (body, msg) => {
@@ -1878,6 +1923,139 @@ function _openArtForm(page, existing, onDone, bancSlot) {
       back();
     } catch (e) { _toast(e.message, true); }
   };
+}
+
+/* ═══════════ DK-6 · Pré-impression & édition numérique ═══════════
+   §8 : le PDF final (export InDesign) confronté au chemin de fer, EN
+   CLIENT (pdf.js vendorisé, comme booK) — nombre de pages + articles à
+   leur place. Restitution « prêt à imprimer » / liste courte de blocages.
+   Puis §7 : « Créer l'édition numérique » → le même PDF devient un
+   flipbook booK. ZÉRO worker ; le fichier ne quitte JAMAIS l'appareil. */
+function _ppNorm(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+// Titre « présent » dans le texte d'une page (tolérant au restyle InDesign) :
+// au moins la moitié des mots signifiants (≥ 4 car.) du titre s'y retrouvent.
+function _ppTitleInText(title, normText) {
+  const toks = _ppNorm(title).split(' ').filter(w => w.length >= 4);
+  if (!toks.length) { const whole = _ppNorm(title); return !!whole && normText.includes(whole); }
+  const hit = toks.filter(w => normText.includes(w)).length;
+  return hit / toks.length >= 0.5;
+}
+
+function _openPrepress() {
+  if (!_D || !_D.issue) return;
+  const insp = _root.querySelector('[data-slot="insp"]');
+  insp.innerHTML = _inspShell('Pré-impression & édition',
+    `<div class="dk-insp-rub">n° ${_esc(_D.issue.num)}${_D.issue.theme ? ' · ' + _esc(_D.issue.theme) : ''} · ${_D.pages.length} pages au chemin de fer</div>`,
+    `<div class="dk-sec"><h4>Le PDF final (export InDesign)</h4>
+      <p class="dk-note">Confrontez votre PDF au chemin de fer — nombre de pages, articles à leur place. Le fichier ne quitte pas votre appareil.</p>
+      <div class="dk-btn-row">
+        <button class="dk-btn primary" data-act="ppfile">${icon('file-text', 14)} ${_ppFile ? 'Choisir un autre PDF' : 'Choisir le PDF…'}</button>
+        <input type="file" data-k="ppfile" accept="application/pdf,.pdf" style="display:none">
+      </div>
+      ${_ppFile ? `<p class="dk-note" style="margin-top:6px">Fichier retenu : <strong>${_esc(_ppFile.name)}</strong> · ${_fmtSize(_ppFile.size)}</p>` : ''}
+      <div data-slot="ppresult"></div>
+    </div>`);
+  _bindClose(insp);
+  insp.classList.add('on');
+  _root.querySelector('[data-slot="veil"]').classList.add('on');
+  const input = insp.querySelector('[data-k="ppfile"]');
+  insp.querySelector('[data-act="ppfile"]').onclick = () => input.click();
+  input.addEventListener('change', () => {
+    const f = input.files && input.files[0];
+    input.value = '';
+    if (!f) return;
+    if (!/pdf$/i.test(f.name) && f.type !== 'application/pdf') { _toast('Un PDF est attendu.', true); return; }
+    _ppFile = f;
+    _openPrepress();          // ré-affiche l'entête (nom du fichier) puis analyse
+  });
+  if (_ppFile) _prepressCheck();
+}
+
+async function _prepressCheck() {
+  const box = _root && _root.querySelector('[data-slot="ppresult"]');
+  if (!box || !_ppFile) return;
+  box.innerHTML = `<div class="dk-pp-run"><span class="dk-spin"></span> Analyse du PDF…</div>`;
+  let doc;
+  try {
+    // pdf.js sert UNIQUEMENT à l'analyse, dans le pad (comme l'import booK).
+    const pdfjsLib = await import('/app/vendor/pdfjs/pdf.min.mjs');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/app/vendor/pdfjs/pdf.worker.min.mjs';
+    doc = await pdfjsLib.getDocument({ data: await _ppFile.arrayBuffer() }).promise;
+  } catch (e) {
+    box.innerHTML = `<p class="dk-pp-line rouge">PDF illisible : ${_esc(e.message || String(e))}</p>${_bookBtnHTML()}`;
+    _bindBookBtn(box);
+    return;
+  }
+  const numPages = doc.numPages;
+  const expected = _D.pages.length;
+  // Texte de chaque page (léger : pas de rendu). Cap de sécurité.
+  const CAP = 500, upto = Math.min(numPages, CAP), texts = {};
+  for (let i = 1; i <= upto; i++) {
+    try {
+      const page = await doc.getPage(i);
+      const tc = await page.getTextContent();
+      texts[i] = _ppNorm(tc.items.map(it => it.str).join(' '));
+      page.cleanup();
+    } catch (_) { texts[i] = ''; }
+  }
+  try { doc.destroy(); } catch (_) {}
+  if (!_root || !_root.contains(box)) return;   // panneau fermé entre-temps
+
+  // Confrontation article ↔ page attendue (n° de page = n de la carte).
+  const warnings = [];
+  for (const p of _D.pages) {
+    if (p.kind !== 'article') continue;
+    for (const s of _slotsOf(p)) {
+      const a = _artById(s.art_id);
+      if (!a) continue;
+      const onPage = texts[p.n] !== undefined ? texts[p.n] : '';
+      if (_ppTitleInText(a.title, onPage)) continue;      // à sa place ✓
+      let elsewhere = null;
+      for (let i = 1; i <= upto; i++) { if (i !== p.n && _ppTitleInText(a.title, texts[i] || '')) { elsewhere = i; break; } }
+      warnings.push({ art: a.title, page: p.n, elsewhere, empty: onPage.replace(/\s/g, '').length < 12 });
+    }
+  }
+  const countOk = numPages === expected;
+  const problems = warnings.length + (countOk ? 0 : 1);
+  let html = '';
+  if (!problems) {
+    html += `<div class="dk-pp-verdict ok">${icon('check-circle', 22)}<div><strong>Prêt à imprimer.</strong><span class="dk-note">${numPages} pages, chaque article à sa place.</span></div></div>`;
+  } else {
+    html += `<div class="dk-pp-verdict warn">${icon('alert-triangle', 22)}<div><strong>${problems} point${problems > 1 ? 's' : ''} à vérifier avant impression.</strong></div></div>`;
+    html += `<ul class="dk-pp-list">`;
+    if (!countOk) html += `<li class="rouge">${numPages} page${numPages > 1 ? 's' : ''} dans le PDF, ${expected} au chemin de fer — écart de ${Math.abs(numPages - expected)}.</li>`;
+    for (const w of warnings) {
+      const tail = w.elsewhere ? ` — trouvé p. ${w.elsewhere}` : (w.empty ? ' — page vide ou photo pleine page' : ' — introuvable');
+      html += `<li class="ambre">« ${_esc(w.art)} » attendu p. ${w.page}${tail}.</li>`;
+    }
+    html += `</ul><p class="dk-note">Contrôle déterministe (texte du PDF vs titres du chemin de fer). Un article très restylé ou entièrement en image peut passer pour « introuvable ».</p>`;
+  }
+  html += _bookBtnHTML();
+  box.innerHTML = html;
+  _bindBookBtn(box);
+}
+
+function _bookBtnHTML() {
+  return `<div class="dk-sec"><h4>Édition numérique</h4>
+    <p class="dk-note">Transformez ce PDF en flipbook feuilletable dans booK — l'édition numérique de votre numéro.</p>
+    <div class="dk-btn-row"><button class="dk-btn" data-act="tobook">${icon('book', 14)} Créer l'édition numérique</button></div>
+  </div>`;
+}
+function _bindBookBtn(box) {
+  box.querySelector('[data-act="tobook"]')?.addEventListener('click', () => _toBook());
+}
+// Pont booK (§7) : le PDF retenu part en flipbook. Workspace plein écran →
+// on ferme desK avant (piège z-index) ; le File voyage en mémoire via opts.
+async function _toBook() {
+  if (!_ppFile) { _toast('Choisissez d’abord le PDF final.', true); return; }
+  const pub = _pubs.find(p => p.id === _pubId);
+  const title = (pub ? pub.name : 'Revue') + ' — n° ' + (_D.issue ? _D.issue.num : '');
+  const file = _ppFile;
+  closeDesk();
+  try { const m = await import('./ui-renderer.js'); m.openTool('O-BOK-001', { importPdf: file, title }); } catch (_) {}
 }
 
 /* ═══════════════════ Réglages (publication / numéro / équipe) ══ */

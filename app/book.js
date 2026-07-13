@@ -72,7 +72,7 @@ const _libPut = ed => _tx('readwrite', st => st.put(ed));
 const _libDel = id => _tx('readwrite', st => st.delete(id));
 
 // ── Ouverture / fermeture du workspace ──────────────────────────
-export function openBook() {
+export function openBook(opts = {}) {
   if (_root) return;
   _ed = null; _dirty = false;
   _root = document.createElement('div');
@@ -126,6 +126,16 @@ export function openBook() {
   });
   document.addEventListener('keydown', _onKey);
   _renderShelf();
+
+  // Réception inter-pads (ex. desK DK-6 : « Créer l'édition numérique ») :
+  // démarrer un nouveau flipbook depuis un PDF déjà en main (File), titre
+  // pré-rempli. On ouvre l'éditeur puis on importe (async, avec sa progression).
+  if (opts && opts.importPdf instanceof File) {
+    const ed = newEdition();
+    if (opts.title) ed.title = String(opts.title).slice(0, 120);
+    _openEditor(ed);
+    _addFiles([opts.importPdf]);
+  }
 }
 
 export function closeBook() {
