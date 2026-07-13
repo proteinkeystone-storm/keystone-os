@@ -99,28 +99,49 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
   border-bottom: 1px solid var(--dk-line); padding: 10px 0 6px;
 }
 .dk-rail::-webkit-scrollbar { display: none; }
-.dk-tl { position: relative; height: 84px; min-width: max(560px, calc(var(--tl-n, 4) * 150px)); margin: 0 90px; }
+.dk-tl { position: relative; height: 96px; min-width: max(560px, calc(var(--tl-n, 4) * 150px)); margin: 0 105px; }
 .dk-tl-track {
-  position: absolute; left: 0; right: 0; top: 37px; height: 2px;
+  position: absolute; left: 0; right: 0; top: 46px; height: 2px;
   background: var(--dk-line); border-radius: 1px;
 }
 .dk-tl-track i {
   display: block; height: 100%; border-radius: 1px;
   background: linear-gradient(90deg, rgba(201, 162, 39, .35), var(--dk-gold));
 }
-.dk-tl-node {
-  position: absolute; top: 0; transform: translateX(-50%);
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  width: 150px; text-align: center;
+/* Tick « aujourd'hui » : là où le temps en est, fin du remplissage doré. */
+.dk-tl-now {
+  position: absolute; top: 41px; width: 2px; height: 12px; border-radius: 1px;
+  background: var(--dk-gold); transform: translateX(-50%); box-shadow: 0 0 6px rgba(201, 162, 39, .55);
 }
-.dk-tl-name { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--dk-tx3); height: 15px; }
+.dk-tl-nowlbl {
+  position: absolute; top: 24px; transform: translateX(-50%);
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--dk-gold); opacity: .85;
+}
+/* Nœud : tout est ancré à la LIGNE (absolu) — un nom sur 2 lignes (jalons
+   fusionnés) ne décale jamais le point. */
+.dk-tl-node { position: absolute; top: 0; height: 100%; width: 150px; transform: translateX(-50%); text-align: center; }
+.dk-tl-name {
+  position: absolute; left: 50%; bottom: 54px; transform: translateX(-50%);
+  width: 100%; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--dk-tx3); line-height: 1.35;
+}
+.dk-tl-name .ambre { color: var(--dk-ambre); }
+.dk-tl-name .rouge { color: var(--dk-rouge); }
 .dk-tl-dot {
-  width: 13px; height: 13px; border-radius: 50%; box-sizing: border-box; margin: 5px 0 4px;
+  position: absolute; left: 50%; top: 40.5px; transform: translateX(-50%);
+  width: 13px; height: 13px; border-radius: 50%; box-sizing: border-box;
   border: 2.5px solid var(--dk-tx3); background: var(--ws-bg, #0d0f14);
 }
 .dk-tl-node.passed .dk-tl-dot { border-color: var(--dk-gold); background: var(--dk-gold); }
-.dk-tl-days { font-size: 17px; font-weight: 900; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
-.dk-tl-meta { font-size: 11px; color: var(--dk-tx3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dk-tl-days {
+  position: absolute; left: 50%; top: 56px; transform: translateX(-50%);
+  font-size: 17px; font-weight: 900; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1;
+}
+.dk-tl-meta {
+  position: absolute; left: 50%; top: 76px; transform: translateX(-50%);
+  width: 100%; font-size: 11px; color: var(--dk-tx3); font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .dk-tl-node.ambre .dk-tl-dot { border-color: var(--dk-ambre); }
 .dk-tl-node.ambre .dk-tl-days, .dk-tl-node.ambre .dk-tl-meta { color: var(--dk-ambre); }
 .dk-tl-node.rouge .dk-tl-dot { border-color: var(--dk-rouge); }
@@ -388,9 +409,15 @@ html.light-mode .dk-pcard.rubbed .dk-pc-marge, html.light-mode .dk-pcard.rubbed.
 .dk-insp-title { font-weight: 900; font-size: 18px; line-height: 1.25; letter-spacing: -0.02em; }
 .dk-insp-close { color: var(--dk-tx2); padding: 6px; border-radius: 8px; flex: 0 0 auto; background: none; border: none; cursor: pointer; }
 .dk-insp-close:hover { background: rgba(127, 127, 127, .12); color: inherit; }
-.dk-insp-body { flex: 1; overflow-y: auto; padding: 4px 18px 24px; }
-.dk-sec { margin-top: 16px; }
-.dk-sec h4 { font-size: 11px; color: var(--dk-tx3); font-weight: 700; margin-bottom: 8px; }
+.dk-insp-body { flex: 1; overflow-y: auto; padding: 4px 16px 24px; }
+/* Zones ENCADRÉES (retour Stéphane 2026-07-13) : chaque section de fiche est
+   une carte — l'œil découpe la modale sans lire. */
+.dk-sec {
+  margin-top: 12px; padding: 12px 13px;
+  border: 1px solid var(--dk-line); border-radius: 14px;
+  background: rgba(127, 127, 127, .045);
+}
+.dk-sec h4 { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--dk-tx3); font-weight: 700; margin-bottom: 9px; }
 .dk-kv { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 3px 0; }
 .dk-kv span { color: var(--dk-tx2); }
 .dk-kv strong { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; }
@@ -591,19 +618,32 @@ html.light-mode .dk-bac-select { color-scheme: light; }
 .dk-pp-line.rouge { color: var(--dk-rouge); font-size: 13px; padding: 10px 2px; }
 
 /* ── Inspecteur ergonomique : vitals + stepper + plis (2026-07-13) ── */
-.dk-vitals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 4px; }
+/* La carte « état » n'a pas de titre : la première zone se lit d'elle-même. */
+.dk-sec-state { margin-top: 14px; }
+.dk-vitals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .dk-vital {
-  display: flex; flex-direction: column; gap: 3px; padding: 10px 11px;
-  border: 1px solid var(--dk-line); border-radius: 12px;
-  background: rgba(127, 127, 127, .05); min-width: 0;
+  display: flex; flex-direction: column; gap: 3px; padding: 9px 11px;
+  border: 1px solid var(--dk-line); border-radius: 11px;
+  background: rgba(127, 127, 127, .06); min-width: 0;
 }
 .dk-vital-k { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--dk-tx3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dk-vital-v { font-size: 18px; font-weight: 900; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .dk-vital-v.ambre { color: var(--dk-ambre); }
 .dk-vital-v.rouge { color: var(--dk-rouge); }
 .dk-vital-v.vert  { color: var(--dk-vert, #4cc38a); }
-.dk-vital-v.dk-vital-txt { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dk-vitals-sub { font-size: 11px; color: var(--dk-tx3); margin: 4px 2px 0; }
+.dk-vitals-sub { font-size: 11px; color: var(--dk-tx3); margin: 6px 2px 0; }
+/* Contributeur : rangée pleine largeur — le nom COMPLET, jamais tronqué. */
+.dk-contact { display: flex; align-items: center; gap: 10px; margin-top: 10px; min-width: 0; }
+.dk-contact-av {
+  width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(201, 162, 39, .16); border: 1px solid rgba(201, 162, 39, .35);
+  color: var(--dk-gold); font-size: 12px; font-weight: 800; letter-spacing: .02em;
+}
+.dk-contact-info { flex: 1; min-width: 0; }
+.dk-contact-name { font-size: 14px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.dk-contact-sub { font-size: 11px; color: var(--dk-tx3); }
+.dk-contact .dk-btn { flex: 0 0 auto; }
 
 .dk-steps { display: flex; align-items: flex-start; margin: 12px 0 4px; }
 .dk-step {
@@ -634,9 +674,13 @@ html.light-mode .dk-bac-select { color-scheme: light; }
 .dk-step-pub { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; color: var(--dk-vert, #4cc38a); padding: 2px 0 0 4px; }
 .dk-step-flag { font-size: 12px; color: var(--dk-tx3); border: 1px dashed var(--dk-line); border-radius: 10px; padding: 8px 12px; margin: 12px 0 4px; }
 
-.dk-fold { border-top: 1px solid var(--dk-line); margin-top: 16px; padding-top: 10px; }
+.dk-fold {
+  margin-top: 12px; padding: 12px 13px;
+  border: 1px solid var(--dk-line); border-radius: 14px;
+  background: rgba(127, 127, 127, .045);
+}
 .dk-fold summary {
-  font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--dk-tx3);
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--dk-tx3);
   cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; user-select: none;
 }
 .dk-fold summary::-webkit-details-marker { display: none; }

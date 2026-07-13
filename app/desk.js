@@ -710,52 +710,73 @@ function _renderFer() {
   _renderMselBar();
 }
 
-// Rail des jalons = TIMELINE graphique (retour Stéphane 2026-07-13 : moins de
-// lecture, plus instinctif). Une ligne de vie continue, un nœud par jalon
-// (plein = passé, cerclé = à venir, coloré par l'état de sa marge), le J−n en
-// GROS (la seule vraie question : combien de jours ?), la progression du temps
-// remplie en doré. Noms courts ; le nom complet vit dans le title.
+// Rail des jalons = TIMELINE graphique v2 (retours Stéphane 2026-07-13).
+// COHÉRENCE : l'axe est PROPORTIONNEL AUX DATES — même date = même endroit
+// (l'espacement égal « mentait » : deux J−64 se retrouvaient éloignés). Les
+// jalons trop proches À L'ÉCRAN fusionnent en un seul nœud (noms empilés),
+// l'ordre visuel = l'ordre réel des dates, et un tick doré marque AUJOURD'HUI
+// (le remplissage de la ligne = le temps déjà écoulé, il s'arrête au tick).
 const JALON_SHORT = { bouclage: 'Bouclage', maquette: 'Maquette', imprimeur: 'Imprimeur', parution: 'Parution' };
 function _renderRail() {
   const rail = _root.querySelector('[data-slot="rail"]');
   if (!rail) return;
   const j = _computeJalons();
   const t = Date.now();
-  const nodes = JALON_DEFS.map(def => ({ def, d: _jalonDate(def.key) })).filter(x => x.d);
-  if (!nodes.length) { rail.innerHTML = ''; return; }
-  const n = nodes.length;
-  // Progression du temps sur des nœuds à espacement égal : interpolation par
-  // segment (robuste même si les dates sont saisies dans le désordre).
-  let fill = 0;
-  if (n === 1) fill = t >= nodes[0].d.getTime() ? 100 : 0;
-  else if (t >= nodes[n - 1].d.getTime()) fill = 100;
-  else if (t > nodes[0].d.getTime()) {
-    for (let i = 0; i < n - 1; i++) {
-      const a = nodes[i].d.getTime(), b = nodes[i + 1].d.getTime();
-      if (t >= a && t < Math.max(a, b)) { fill = ((i + Math.min(1, Math.max(0, (t - a) / Math.max(1, b - a)))) / (n - 1)) * 100; break; }
-      if (t >= a) fill = ((i + 1) / (n - 1)) * 100;
-    }
-  }
-  rail.innerHTML = `<div class="dk-tl" style="--tl-n:${n}">
-    <div class="dk-tl-track"><i style="width:${fill.toFixed(1)}%"></i></div>
-    ${nodes.map((x, i) => {
-      const jmoins = Math.round((x.d.getTime() - t) / DAY);
-      const passed = x.d.getTime() < t;
-      let marge = null, cls = '';
+  const items = JALON_DEFS.map(def => ({ def, d: _jalonDate(def.key) })).filter(x => x.d)
+    .map(x => {
+      let marge = null;
       if (x.def.key === 'bouclage') marge = j.boucl;
       if (x.def.key === 'maquette') marge = j.maq;
-      if (marge !== null) cls = _stateOf(marge);
-      let meta = _fmtD(x.d);
-      if (marge !== null && cls) meta += ' · ' + _margeTxt(marge);
-      if (x.def.key === 'imprimeur' && j.impProj) { cls = 'rouge'; meta = `projeté ${_fmtD(j.impProj)} (+${j.retard} j)`; }
-      return `<div class="dk-tl-node ${cls}${passed ? ' passed' : ''}" style="left:${n === 1 ? 50 : (i / (n - 1)) * 100}%" title="${x.def.name} — ${_fmtD(x.d)}">
-        <span class="dk-tl-name">${JALON_SHORT[x.def.key] || x.def.name}</span>
-        <span class="dk-tl-dot"></span>
-        <span class="dk-tl-days">${jmoins >= 0 ? 'J−' + jmoins : 'J+' + (-jmoins)}</span>
-        <span class="dk-tl-meta">${meta}</span>
-      </div>`;
-    }).join('')}
+      let cls = (marge !== null) ? _stateOf(marge) : '';
+      let alert = (marge !== null && cls) ? _margeTxt(marge) : '';
+      if (x.def.key === 'imprimeur' && j.impProj) { cls = 'rouge'; alert = `projeté ${_fmtD(j.impProj)} (+${j.retard} j)`; }
+      return { name: JALON_SHORT[x.def.key] || x.def.name, full: x.def.name, time: x.d.getTime(), cls, alert };
+    })
+    .sort((a, b) => a.time - b.time);            // l'axe du temps commande, pas l'ordre de saisie
+  if (!items.length) { rail.innerHTML = ''; return; }
+
+  // Domaine : d'aujourd'hui (ou du 1er jalon passé) à la dernière échéance.
+  const t0 = Math.min(t, items[0].time);
+  const t1 = Math.max(items[items.length - 1].time, t0 + DAY);
+  const xOf = ms => Math.max(0, Math.min(100, ((ms - t0) / (t1 - t0)) * 100));
+  const nowX = xOf(t);
+
+  rail.innerHTML = `<div class="dk-tl" style="--tl-n:${items.length}">
+    <div class="dk-tl-track"><i style="width:${nowX.toFixed(2)}%"></i></div>
+    <span class="dk-tl-now" style="left:${nowX.toFixed(2)}%" title="Aujourd'hui"></span>
   </div>`;
+  const tl = rail.querySelector('.dk-tl');
+
+  // Fusion des jalons trop proches à l'écran (seuil en px, mesuré).
+  const W = Math.max(tl.clientWidth || 0, 320);
+  const minGap = (96 / W) * 100;
+  const clusters = [];
+  for (const it of items) {
+    const x = xOf(it.time);
+    const last = clusters[clusters.length - 1];
+    if (last && x - last.anchor < minGap) { last.items.push(it); last.x = (last.anchor + x) / 2; }
+    else clusters.push({ anchor: x, x, items: [it] });
+  }
+
+  tl.insertAdjacentHTML('beforeend', clusters.map(c => {
+    const passed = c.items.every(i => i.time < t);
+    const cls = c.items.some(i => i.cls === 'rouge') ? 'rouge' : (c.items.some(i => i.cls === 'ambre') ? 'ambre' : '');
+    const jmin = Math.round((Math.min(...c.items.map(i => i.time)) - t) / DAY);
+    const dates = [...new Set(c.items.map(i => _fmtD(i.time)))].join(' – ');
+    const alert = (c.items.find(i => i.alert) || {}).alert || '';
+    const wide = c.items.length > 1 ? ' style="width:210px"' : '';
+    return `<div class="dk-tl-node ${cls}${passed ? ' passed' : ''}" style="left:${c.x.toFixed(2)}%" title="${c.items.map(i => i.full + ' — ' + _fmtD(i.time)).join(' · ')}">
+      <span class="dk-tl-name"${wide}>${c.items.map(i => `<span class="${i.cls}">${i.name}</span>`).join(' · ')}</span>
+      <span class="dk-tl-dot"></span>
+      <span class="dk-tl-days">${jmin >= 0 ? 'J−' + jmin : 'J+' + (-jmin)}</span>
+      <span class="dk-tl-meta"${wide}>${dates}${alert ? ' · ' + alert : ''}</span>
+    </div>`;
+  }).join(''));
+
+  // Libellé « aujourd'hui » : seulement si aucun nœud ne l'écraserait.
+  if (!clusters.some(c => Math.abs(c.x - nowX) < (110 / W) * 100)) {
+    tl.insertAdjacentHTML('beforeend', `<span class="dk-tl-nowlbl" style="left:${nowX.toFixed(2)}%">aujourd'hui</span>`);
+  }
 }
 
 function _planches() {
@@ -1462,6 +1483,7 @@ function _renderInspVide(insp, p) {
    boutons « Copie reçue / Marquer relu / Maquetté »). */
 const PIPE = ['propose', 'attendu', 'remis', 'relu', 'maquette'];
 const STEP_MSG = { attendu: 'Marqué attendu.', remis: 'Copie reçue — marge recalculée.', relu: 'Marqué relu.', maquette: 'Marqué maquetté.' };
+const _initials = name => String(name || '').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '—';
 function _vitalsHTML(a, c) {
   const dead = a.status === 'abandonne';
   const done = _isDone(a);
@@ -1469,11 +1491,21 @@ function _vitalsHTML(a, c) {
   const cls = dead ? '' : (done ? 'vert' : _stateOf(c.marge));
   const margeVal = dead ? '—' : (done ? 'prêt' : (c.marge === null ? '—' : c.marge + ' j'));
   const margeLbl = (!dead && !done && c.marge !== null && c.marge < 0) ? 'Marge brûlée' : 'Marge';
+  const st = STATUS[a.status] || STATUS.propose;
+  const relDue = _relanceInfo(a);
+  const lastRel = _relancesOf(a.id)[0];
   return `<div class="dk-vitals">
       <div class="dk-vital"><span class="dk-vital-k">${margeLbl}</span><span class="dk-vital-v ${cls}">${margeVal}</span></div>
       <div class="dk-vital"><span class="dk-vital-k">Remise</span><span class="dk-vital-v">${a.due ? _fmtD(a.due) : '—'}</span></div>
-      <div class="dk-vital"><span class="dk-vital-k">Contributeur</span><span class="dk-vital-v dk-vital-txt">${_esc(a.contrib || '—')}</span></div>
     </div>
+    ${a.contrib ? `<div class="dk-contact">
+      <span class="dk-contact-av">${_esc(_initials(a.contrib))}</span>
+      <div class="dk-contact-info">
+        <div class="dk-contact-name">${_esc(a.contrib)}</div>
+        <div class="dk-contact-sub">${relDue ? (relDue.mode === 'avant' ? 'rappel suggéré avant l’échéance' : 'copie en attente — relance suggérée') : (lastRel ? 'relancé ' + _relTime(lastRel.sent_at) : 'contributeur')}</div>
+      </div>
+      ${st.needsCopy && !dead ? `<button class="dk-btn small ${relDue ? 'primary' : ''}" data-act="relance" title="Brouillon proposé, votre voix — le pointage « copie reçue » annule la relance de lui-même${lastRel ? '. Dernière : ' + _esc(lastRel.email) + ', ' + _relTime(lastRel.sent_at) : ''}">${icon('mail', 13)} Relancer</button>` : ''}
+    </div>` : ''}
     ${(!dead && !done) ? `<p class="dk-vitals-sub">Page prête le ${_fmtD(new Date(c.pageReady))}</p>` : ''}`;
 }
 function _stepsHTML(a) {
@@ -1503,18 +1535,18 @@ function _renderInspArticle(insp, p) {
   const histo = _histoOf(a);
   const canSim = st.needsCopy && a.due;
   const card = _computeCard(p);
-  const relDue = _relanceInfo(a);
-  const lastRel = _relancesOf(a.id)[0];
 
   insp.innerHTML = _inspShell(a.title,
     `<div class="dk-insp-rub"><span class="dk-pc-dot" style="background:${rub ? rub.color : '#8d93a8'}"></span>${_esc(rub ? rub.name : 'Sans rubrique')} · page ${p.n}</div>`,
-    `${slots.length > 1 ? `<div class="dk-slotchips">${slots.map((s, i) => {
+    `<div class="dk-sec dk-sec-state">
+    ${slots.length > 1 ? `<div class="dk-slotchips">${slots.map((s, i) => {
         const sa = _artById(s.art_id);
         return `<button class="dk-slotchip ${i === _selSlot ? 'on' : ''}" data-slotidx="${i}" title="${_esc(sa ? sa.title : '')}">${i + 1}. ${_esc(sa ? (sa.title.length > 18 ? sa.title.slice(0, 17) + '…' : sa.title) : '?')}</button>`;
       }).join('')}</div>
-      <p class="dk-note" style="margin:2px 0 0">${slots.length} articles sur cette page — marge de la carte : <strong class="${_stateOf(card.marge)}">${card.allDone ? 'prêt' : (_margeTxt(card.marge) || '—')}</strong> (la plus serrée).</p>` : ''}
+      <p class="dk-note" style="margin:2px 0 10px">${slots.length} articles sur cette page — marge de la carte : <strong class="${_stateOf(card.marge)}">${card.allDone ? 'prêt' : (_margeTxt(card.marge) || '—')}</strong> (la plus serrée).</p>` : ''}
     ${_vitalsHTML(a, c)}
     ${_stepsHTML(a)}
+    </div>
 
     ${canSim ? `<div class="dk-sec"><h4>Simuler un report de remise</h4>
       <div class="dk-sim" data-slot="sim">
@@ -1544,12 +1576,6 @@ function _renderInspArticle(insp, p) {
       <div class="dk-btn-row" style="margin-top:8px"><button class="dk-btn small ghost" data-act="addbanc">${icon('plus', 13)} Ajouter un remplaçant</button></div>
       <div data-slot="bancpick"></div>
     </div>
-
-    ${st.needsCopy && a.contrib ? `<div class="dk-sec"><h4>Relance</h4>
-      ${relDue ? `<p class="dk-relance-due">${relDue.mode === 'avant' ? 'Rappel suggéré avant l’échéance' : 'Copie en attente — relance suggérée'}${a.due ? ' (remise prévue le ' + _fmtD(a.due) + ')' : ''}.</p>` : ''}
-      ${lastRel ? `<p class="dk-note" style="margin-top:2px">Dernière relance : ${_esc(lastRel.email)} — ${_relTime(lastRel.sent_at)}${lastRel.sent_by ? ' (' + _esc(lastRel.sent_by) + ')' : ''}.</p>` : ''}
-      <div class="dk-btn-row"><button class="dk-btn small ${relDue ? 'primary' : ''}" data-act="relance" title="Brouillon proposé, votre voix — le pointage « copie reçue » annule la relance de lui-même">${icon('mail', 14)} Rédiger une relance</button></div>
-    </div>` : ''}
 
     ${_casierSectionHTML(p)}
 
