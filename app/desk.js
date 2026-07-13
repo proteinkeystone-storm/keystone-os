@@ -1961,8 +1961,49 @@ async function _openSettings() {
         <button class="dk-btn small" data-act="invite">Inviter</button>
       </div>
       <p class="dk-note">Le membre doit avoir une licence Keystone : l'invitation s'applique à sa prochaine ouverture de desK (même e-mail).</p>` : ''}
-    </div>`);
+    </div>
+
+    ${pub && pub.owner ? `<div class="dk-sec dk-danger"><h4>Supprimer la revue</h4>
+      <p class="dk-note">Efface définitivement <strong>${_esc(pub.name)}</strong> et TOUT son contenu : numéros, chemin de fer, marbre, casier, bac à trier, contributeurs, équipe. L'adresse de dépôt est libérée. Irréversible.</p>
+      <div data-slot="delpub"><button class="dk-btn ghost small dk-btn-danger" data-act="delpub">${icon('trash-2', 14)} Supprimer cette revue…</button></div>
+    </div>` : ''}`);
   _bindClose(insp);
+
+  insp.querySelector('[data-act="delpub"]')?.addEventListener('click', () => {
+    const box = insp.querySelector('[data-slot="delpub"]');
+    box.innerHTML = `<div class="dk-confirm">
+      Pour confirmer, saisissez le nom exact de la revue : <strong>${_esc(pub.name)}</strong>
+      <input type="text" class="dk-del-input" data-k="delconfirm" placeholder="${_esc(pub.name)}" spellcheck="false" autocomplete="off" style="margin-top:8px">
+      <div class="dk-btn-row" style="margin-top:8px">
+        <button class="dk-btn small dk-btn-danger" data-act="delyes" disabled>Supprimer définitivement</button>
+        <button class="dk-btn small" data-act="delno">Annuler</button>
+      </div></div>`;
+    const inp = box.querySelector('[data-k="delconfirm"]');
+    const yes = box.querySelector('[data-act="delyes"]');
+    inp.focus();
+    inp.addEventListener('input', () => { yes.disabled = inp.value.trim() !== pub.name; });
+    box.querySelector('[data-act="delno"]').onclick = () => _openSettings();
+    yes.onclick = async () => {
+      yes.disabled = true;
+      try {
+        await _api('/publication/' + _pubId, { method: 'DELETE', body: { confirm: inp.value.trim() } });
+        // Retirer la publication de l'état local et repartir proprement.
+        _pubs = _pubs.filter(p => p.id !== _pubId);
+        _closeInsp();
+        _toast('Revue supprimée.');
+        if (_pubs.length) {
+          _pubId = _pubs[0].id; _issueId = null; _D = null;
+          localStorage.removeItem('dk_last_pub'); localStorage.removeItem('dk_last_issue');
+          try { localStorage.removeItem('dk_cache_v1'); } catch (_) {}
+          _boot();
+        } else {
+          _pubId = null; _issueId = null; _D = null;
+          try { localStorage.removeItem('dk_cache_v1'); } catch (_) {}
+          _renderCreatePub();
+        }
+      } catch (e) { _toast(e.message, true); _openSettings(); }
+    };
+  });
 
   insp.querySelector('[data-act="renamepub"]')?.addEventListener('click', async () => {
     const name = insp.querySelector('[data-k="pubname"]').value.trim();

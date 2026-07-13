@@ -490,6 +490,16 @@ html.light-mode .dk-field input, html.light-mode .dk-field select { color-scheme
 .dk-iconbtn.arm { border-color: var(--dk-rouge); color: var(--dk-rouge); }
 .dk-pcard.dropfile { border-color: var(--dk-gold) !important; box-shadow: 0 0 0 2px rgba(201, 162, 39, .35); }
 .dk-relbtn { color: var(--dk-ambre); border-color: rgba(230, 162, 60, .45); }
+/* Zone de suppression — sobre, jamais un bouton rouge plein anxiogène */
+.dk-danger h4 { color: var(--dk-rouge); }
+.dk-btn-danger { color: var(--dk-rouge); border-color: rgba(229, 72, 77, .5); }
+.dk-btn-danger:hover:not(:disabled) { border-color: var(--dk-rouge); background: rgba(229, 72, 77, .08); }
+.dk-btn-danger:disabled { opacity: .45; cursor: not-allowed; }
+.dk-del-input {
+  width: 100%; padding: 8px 12px; border-radius: 10px; font: inherit; font-size: 13px;
+  background: rgba(127, 127, 127, .08); border: 1px solid rgba(229, 72, 77, .35); color: inherit;
+}
+.dk-del-input:focus { outline: none; border-color: var(--dk-rouge); }
 .dk-relance-due { font-size: 12.5px; color: var(--dk-ambre); font-weight: 700; margin: 0 0 6px; }
 .dk-banc-meta .rouge { color: var(--dk-rouge); font-weight: 700; }
 

@@ -150,7 +150,7 @@ import { handleNetworkHealth, handleNetworkBootstrap,
          handleContactCreate, handleContactUpdate, handleContactDelete,
          handleActivityList, handleActivityCreate, handleActivityDelete } from './routes/network.js';
 // desK — chemin de fer vivant (Pad O-DSK-001 · DK-3). Tenant = LA PUBLICATION.
-import { handleDeskHealth, handleDeskBootstrap, handlePubCreate, handlePubPatch,
+import { handleDeskHealth, handleDeskBootstrap, handlePubCreate, handlePubPatch, handlePubDelete,
          handleTeamList, handleTeamInvite, handleTeamRemove,
          handleRubCreate, handleRubPatch, handleRubDelete,
          handleIssueCreate, handleIssueGet, handleIssuePatch, handleIssueSwap,
@@ -312,6 +312,7 @@ export default {
       if (path === '/api/desk/publication' && method === 'POST') return handlePubCreate(request, env);
       const dkPub = path.match(/^\/api\/desk\/publication\/([A-Za-z0-9-]+)$/);
       if (dkPub && method === 'PATCH') return handlePubPatch(request, env, dkPub[1]);
+      if (dkPub && method === 'DELETE') return handlePubDelete(request, env, dkPub[1]);
       const dkTeam = path.match(/^\/api\/desk\/publication\/([A-Za-z0-9-]+)\/team$/);
       if (dkTeam && method === 'GET') return handleTeamList(request, env, dkTeam[1]);
       const dkInvite = path.match(/^\/api\/desk\/publication\/([A-Za-z0-9-]+)\/invite$/);

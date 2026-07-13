@@ -441,6 +441,44 @@ export async function handlePubPatch(request, env, pubId) {
   return json({ ok: true }, 200, origin);
 }
 
+/* DELETE /publication/:id — supprimer une revue et TOUT son contenu
+   (réservé au propriétaire). Confirmation par le nom exact côté client
+   ET revérifiée serveur (garde-fou contre une suppression accidentelle).
+   Cascade : pièces R2 du casier + du bac, puis toutes les tables dk_ de
+   ce tenant. L'adresse de dépôt (slug) est libérée pour un futur usage. */
+export async function handlePubDelete(request, env, pubId) {
+  const origin = getAllowedOrigin(env, request);
+  const u = await ownerGate(request, env, origin, pubId);
+  if (u.error) return u.error;
+  const pub = await env.DB.prepare('SELECT id, name FROM dk_publications WHERE id = ?').bind(pubId).first();
+  if (!pub) return err('Publication introuvable', 404, origin);
+  const body = await parseBody(request);
+  // Confirmation forte : le nom saisi doit correspondre exactement.
+  if (String(body.confirm || '').trim() !== pub.name) {
+    return err('Confirmation requise : saisissez le nom exact de la revue pour supprimer', 400, origin);
+  }
+  // Purge R2 d'abord (casier + pièces du bac non encore rangées).
+  if (env.DK_CASIER) {
+    const files = (await env.DB.prepare('SELECT r2_key FROM dk_files WHERE pub_id = ?').bind(pubId).all()).results || [];
+    for (const f of files) { if (f.r2_key) await env.DK_CASIER.delete(f.r2_key).catch(() => {}); }
+    const inbox = (await env.DB.prepare('SELECT attachments FROM dk_inbox WHERE pub_id = ?').bind(pubId).all()).results || [];
+    for (const r of inbox) {
+      let atts = []; try { atts = JSON.parse(r.attachments || '[]'); } catch (_) {}
+      for (const a of atts) { if (a && a.r2_key) await env.DK_CASIER.delete(a.r2_key).catch(() => {}); }
+    }
+  }
+  // Cascade D1 — toutes les tables métier portent pub_id (sauf dk_pages/slots
+  // qui l'ont aussi). dk_publications en dernier.
+  const tables = ['dk_files', 'dk_inbox', 'dk_habits', 'dk_email_log', 'dk_relances',
+    'dk_contribs', 'dk_page_slots', 'dk_pages', 'dk_articles', 'dk_issues',
+    'dk_rubriques', 'dk_invites', 'dk_members'];
+  for (const t of tables) {
+    await env.DB.prepare(`DELETE FROM ${t} WHERE pub_id = ?`).bind(pubId).run().catch(() => {});
+  }
+  await env.DB.prepare('DELETE FROM dk_publications WHERE id = ?').bind(pubId).run();
+  return json({ ok: true, deleted: pub.name }, 200, origin);
+}
+
 // ── Équipe ──────────────────────────────────────────────────────
 export async function handleTeamList(request, env, pubId) {
   const origin = getAllowedOrigin(env, request);
