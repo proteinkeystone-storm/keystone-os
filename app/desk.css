@@ -541,7 +541,6 @@ html.light-mode .dk-field input, html.light-mode .dk-field select { color-scheme
   background: rgba(127, 127, 127, .08); border: 1px solid rgba(229, 72, 77, .35); color: inherit;
 }
 .dk-del-input:focus { outline: none; border-color: var(--dk-rouge); }
-.dk-relance-due { font-size: 12.5px; color: var(--dk-ambre); font-weight: 700; margin: 0 0 6px; }
 .dk-banc-meta .rouge { color: var(--dk-rouge); font-weight: 700; }
 
 /* ── DK-4 · Bac « à trier » & adresse de dépôt ─────────────────── */

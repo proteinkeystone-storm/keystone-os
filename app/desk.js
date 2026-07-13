@@ -899,7 +899,7 @@ function _mselAction(act) {
   if (act === 'fixe') { _mselBatch('fixe', {}, r => `${r.done} page${r.done > 1 ? 's' : ''} figée${r.done > 1 ? 's' : ''}`); return; }
   if (act === 'libere') { _mselBatch('libere', {}, r => `${r.done} page${r.done > 1 ? 's' : ''} libérée${r.done > 1 ? 's' : ''}`); return; }
   if (act === 'rubrique') {
-    pop.innerHTML = `<div class="dk-menu dk-menu-up">
+    pop.innerHTML = `<div class="dk-menu">
       ${(_D.rubriques || []).map(r => `<button class="dk-menu-item" data-rub="${r.id}"><span class="dk-pc-dot" style="background:${r.color}"></span>${_esc(r.name)}</button>`).join('')}
       <button class="dk-menu-item" data-rub="">Sans rubrique</button></div>`;
     pop.querySelectorAll('[data-rub]').forEach(b => b.onclick = () => {
@@ -909,7 +909,7 @@ function _mselAction(act) {
     return;
   }
   if (act === 'contrib') {
-    pop.innerHTML = `<div class="dk-menu dk-menu-up dk-menu-form">
+    pop.innerHTML = `<div class="dk-menu dk-menu-form">
       <input type="text" data-k="mcontrib" maxlength="160" placeholder="Nom du contributeur">
       <button class="dk-btn small primary" data-act="mcontribok">Appliquer</button></div>`;
     const inp = pop.querySelector('[data-k="mcontrib"]');
@@ -923,7 +923,7 @@ function _mselAction(act) {
   }
   if (act === 'spread') {
     const cands = (_D.articles || []).filter(a => !['publie', 'abandonne'].includes(a.status));
-    pop.innerHTML = `<div class="dk-menu dk-menu-up">
+    pop.innerHTML = `<div class="dk-menu">
       ${cands.length ? cands.slice(0, 40).map(a => `<button class="dk-menu-item" data-sp="${a.id}">${_esc(a.title)}</button>`).join('')
         : `<div class="dk-menu-group">Aucun article disponible</div>`}</div>`;
     pop.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => {
