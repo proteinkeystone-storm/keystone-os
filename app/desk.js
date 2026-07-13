@@ -558,10 +558,9 @@ function _passerellesHTML(a) {
   const net = !!(a && a.contrib);
   if (!gw && !net) return '';
   return `<div class="dk-sec"><h4>Passerelles</h4><div class="dk-btn-row">
-      ${gw  ? `<button class="dk-btn" data-act="gw">${icon('ghostwriter', 14)} Relire avec Ghost Writer</button>` : ''}
-      ${net ? `<button class="dk-btn" data-act="tonet">${icon('network', 14)} Ajouter à networK</button>` : ''}
+      ${gw  ? `<button class="dk-btn" data-act="gw" title="Relecture ortho/typo/style dans Ghost Writer — au retour, marquez « relu »">${icon('ghostwriter', 14)} Relire avec Ghost Writer</button>` : ''}
+      ${net ? `<button class="dk-btn" data-act="tonet" title="Suggérer ${_esc(a.contrib || 'le contributeur')} à votre réseau personnel networK">${icon('network', 14)} Ajouter à networK</button>` : ''}
     </div>
-    <p class="dk-note">${gw ? 'Ghost Writer relit la copie (orthographe, typo, style) — au retour, marquez l’article « relu ».' : ''}${gw && net ? ' ' : ''}${net ? 'networK vous suggère d’ajouter le contributeur à votre réseau personnel.' : ''}</p>
   </div>`;
 }
 function _bindPasserelles(insp, a) {
@@ -621,7 +620,7 @@ function _casierSectionHTML(p) {
       <button class="dk-btn small" data-act="addfile">${icon('upload-cloud', 14)} Déposer des fichiers</button>
       <input type="file" data-k="fileinput" multiple style="display:none">
     </div>
-    <p class="dk-note">Casier de transmission éphémère — purgé ~30 j après l'impression du numéro. ${_fmtSize(q.used)} utilisés sur ${_fmtSize(q.max)}.</p>
+    <p class="dk-note" title="Casier de transmission éphémère — purgé ~30 j après l'impression du numéro">Purgé ~30 j après impression · ${_fmtSize(q.used)} / ${_fmtSize(q.max)}</p>
   </div>`;
 }
 function _bindCasier(insp, p, refresh) {
@@ -711,29 +710,52 @@ function _renderFer() {
   _renderMselBar();
 }
 
+// Rail des jalons = TIMELINE graphique (retour Stéphane 2026-07-13 : moins de
+// lecture, plus instinctif). Une ligne de vie continue, un nœud par jalon
+// (plein = passé, cerclé = à venir, coloré par l'état de sa marge), le J−n en
+// GROS (la seule vraie question : combien de jours ?), la progression du temps
+// remplie en doré. Noms courts ; le nom complet vit dans le title.
+const JALON_SHORT = { bouclage: 'Bouclage', maquette: 'Maquette', imprimeur: 'Imprimeur', parution: 'Parution' };
 function _renderRail() {
   const rail = _root.querySelector('[data-slot="rail"]');
   if (!rail) return;
   const j = _computeJalons();
   const t = Date.now();
-  rail.innerHTML = JALON_DEFS.map(def => {
-    const d = _jalonDate(def.key);
-    if (!d) return '';
-    const jmoins = Math.round((d.getTime() - t) / DAY);
-    let marge = null, cls = '', extra = '';
-    if (def.key === 'bouclage') marge = j.boucl;
-    if (def.key === 'maquette') marge = j.maq;
-    if (marge !== null) cls = _stateOf(marge);
-    if (def.key === 'imprimeur' && j.impProj) {
-      cls = 'rouge';
-      extra = `<span class="dk-jalon-marge"><strong>projeté : ${_fmtD(j.impProj)} (+${j.retard} j)</strong></span>`;
+  const nodes = JALON_DEFS.map(def => ({ def, d: _jalonDate(def.key) })).filter(x => x.d);
+  if (!nodes.length) { rail.innerHTML = ''; return; }
+  const n = nodes.length;
+  // Progression du temps sur des nœuds à espacement égal : interpolation par
+  // segment (robuste même si les dates sont saisies dans le désordre).
+  let fill = 0;
+  if (n === 1) fill = t >= nodes[0].d.getTime() ? 100 : 0;
+  else if (t >= nodes[n - 1].d.getTime()) fill = 100;
+  else if (t > nodes[0].d.getTime()) {
+    for (let i = 0; i < n - 1; i++) {
+      const a = nodes[i].d.getTime(), b = nodes[i + 1].d.getTime();
+      if (t >= a && t < Math.max(a, b)) { fill = ((i + Math.min(1, Math.max(0, (t - a) / Math.max(1, b - a)))) / (n - 1)) * 100; break; }
+      if (t >= a) fill = ((i + 1) / (n - 1)) * 100;
     }
-    return `<div class="dk-jalon ${cls}">
-      <span class="dk-jalon-name">${def.name}</span>
-      <span class="dk-jalon-date">${_fmtD(d)} · J${jmoins >= 0 ? '−' + jmoins : '+' + (-jmoins)}</span>
-      ${marge !== null ? `<span class="dk-jalon-marge">${_margeTxt(marge)}</span>` : (extra || '<span class="dk-jalon-marge">&nbsp;</span>')}
-    </div>`;
-  }).join('');
+  }
+  rail.innerHTML = `<div class="dk-tl" style="--tl-n:${n}">
+    <div class="dk-tl-track"><i style="width:${fill.toFixed(1)}%"></i></div>
+    ${nodes.map((x, i) => {
+      const jmoins = Math.round((x.d.getTime() - t) / DAY);
+      const passed = x.d.getTime() < t;
+      let marge = null, cls = '';
+      if (x.def.key === 'bouclage') marge = j.boucl;
+      if (x.def.key === 'maquette') marge = j.maq;
+      if (marge !== null) cls = _stateOf(marge);
+      let meta = _fmtD(x.d);
+      if (marge !== null && cls) meta += ' · ' + _margeTxt(marge);
+      if (x.def.key === 'imprimeur' && j.impProj) { cls = 'rouge'; meta = `projeté ${_fmtD(j.impProj)} (+${j.retard} j)`; }
+      return `<div class="dk-tl-node ${cls}${passed ? ' passed' : ''}" style="left:${n === 1 ? 50 : (i / (n - 1)) * 100}%" title="${x.def.name} — ${_fmtD(x.d)}">
+        <span class="dk-tl-name">${JALON_SHORT[x.def.key] || x.def.name}</span>
+        <span class="dk-tl-dot"></span>
+        <span class="dk-tl-days">${jmoins >= 0 ? 'J−' + jmoins : 'J+' + (-jmoins)}</span>
+        <span class="dk-tl-meta">${meta}</span>
+      </div>`;
+    }).join('')}
+  </div>`;
 }
 
 function _planches() {
@@ -1433,6 +1455,41 @@ function _renderInspVide(insp, p) {
   insp.querySelector('[data-act="newarthere"]').onclick = () => _openArtForm(p);
 }
 
+/* Refonte ergonomique (retour Stéphane 2026-07-13) : moins de lecture, plus
+   instinctif. Les 5 lignes clé/valeur deviennent 3 TUILES (la marge en gros,
+   colorée — la seule vraie question) ; le statut devient un STEPPER de
+   pipeline : un tap sur l'étape suivante avance l'article (remplace les
+   boutons « Copie reçue / Marquer relu / Maquetté »). */
+const PIPE = ['propose', 'attendu', 'remis', 'relu', 'maquette'];
+const STEP_MSG = { attendu: 'Marqué attendu.', remis: 'Copie reçue — marge recalculée.', relu: 'Marqué relu.', maquette: 'Marqué maquetté.' };
+function _vitalsHTML(a, c) {
+  const dead = a.status === 'abandonne';
+  const done = _isDone(a);
+  // ⚠ fix : un article abandonné n'a PAS de marge (le calcul la montrait).
+  const cls = dead ? '' : (done ? 'vert' : _stateOf(c.marge));
+  const margeVal = dead ? '—' : (done ? 'prêt' : (c.marge === null ? '—' : c.marge + ' j'));
+  const margeLbl = (!dead && !done && c.marge !== null && c.marge < 0) ? 'Marge brûlée' : 'Marge';
+  return `<div class="dk-vitals">
+      <div class="dk-vital"><span class="dk-vital-k">${margeLbl}</span><span class="dk-vital-v ${cls}">${margeVal}</span></div>
+      <div class="dk-vital"><span class="dk-vital-k">Remise</span><span class="dk-vital-v">${a.due ? _fmtD(a.due) : '—'}</span></div>
+      <div class="dk-vital"><span class="dk-vital-k">Contributeur</span><span class="dk-vital-v dk-vital-txt">${_esc(a.contrib || '—')}</span></div>
+    </div>
+    ${(!dead && !done) ? `<p class="dk-vitals-sub">Page prête le ${_fmtD(new Date(c.pageReady))}</p>` : ''}`;
+}
+function _stepsHTML(a) {
+  if (a.status === 'abandonne') return `<div class="dk-step-flag">abandonné — l'historique est conservé</div>`;
+  const idx = a.status === 'publie' ? PIPE.length : PIPE.indexOf(a.status);
+  return `<div class="dk-steps">
+    ${PIPE.map((k, i) => {
+      const state = i < idx ? 'done' : (i === idx ? 'on' : (i === idx + 1 ? 'next' : ''));
+      return `<button class="dk-step ${state}"${state === 'next' ? ` data-step="${k}" title="Passer à « ${STATUS[k].label} »"` : ' disabled'}>
+        <span class="dk-step-dot">${i < idx ? icon('check', 9) : ''}</span><span class="dk-step-lbl">${STATUS[k].label}</span>
+      </button>`;
+    }).join('')}
+    ${a.status === 'publie' ? `<span class="dk-step-pub">${icon('check-circle', 12)} publié</span>` : ''}
+  </div>`;
+}
+
 function _renderInspArticle(insp, p) {
   const slots = _slotsOf(p);
   if (_selSlot >= slots.length) _selSlot = 0;
@@ -1442,8 +1499,6 @@ function _renderInspArticle(insp, p) {
   const st = STATUS[a.status] || STATUS.propose;
   const rub = _rubById(a.rub_id);
   const c = _computeArt(a);
-  const done = _isDone(a);
-  const cls = done ? 'vert' : _stateOf(c.marge);
   const banc = _bancOf(slot).map(id => _artById(id)).filter(Boolean);
   const histo = _histoOf(a);
   const canSim = st.needsCopy && a.due;
@@ -1458,13 +1513,8 @@ function _renderInspArticle(insp, p) {
         return `<button class="dk-slotchip ${i === _selSlot ? 'on' : ''}" data-slotidx="${i}" title="${_esc(sa ? sa.title : '')}">${i + 1}. ${_esc(sa ? (sa.title.length > 18 ? sa.title.slice(0, 17) + '…' : sa.title) : '?')}</button>`;
       }).join('')}</div>
       <p class="dk-note" style="margin:2px 0 0">${slots.length} articles sur cette page — marge de la carte : <strong class="${_stateOf(card.marge)}">${card.allDone ? 'prêt' : (_margeTxt(card.marge) || '—')}</strong> (la plus serrée).</p>` : ''}
-    <div class="dk-sec"><h4>Article</h4>
-      ${_kv('Contributeur', a.contrib || '—')}
-      ${_kv('Statut', st.label)}
-      ${_kv('Remise prévue', a.due ? _fmtD(a.due) : '—')}
-      ${_kv('Page prête le', _fmtD(new Date(c.pageReady)))}
-      ${_kv('Marge', done ? 'prêt' : (_margeTxt(c.marge) || '—'), cls)}
-    </div>
+    ${_vitalsHTML(a, c)}
+    ${_stepsHTML(a)}
 
     ${canSim ? `<div class="dk-sec"><h4>Simuler un report de remise</h4>
       <div class="dk-sim" data-slot="sim">
@@ -1498,20 +1548,16 @@ function _renderInspArticle(insp, p) {
     ${st.needsCopy && a.contrib ? `<div class="dk-sec"><h4>Relance</h4>
       ${relDue ? `<p class="dk-relance-due">${relDue.mode === 'avant' ? 'Rappel suggéré avant l’échéance' : 'Copie en attente — relance suggérée'}${a.due ? ' (remise prévue le ' + _fmtD(a.due) + ')' : ''}.</p>` : ''}
       ${lastRel ? `<p class="dk-note" style="margin-top:2px">Dernière relance : ${_esc(lastRel.email)} — ${_relTime(lastRel.sent_at)}${lastRel.sent_by ? ' (' + _esc(lastRel.sent_by) + ')' : ''}.</p>` : ''}
-      <div class="dk-btn-row"><button class="dk-btn small ${relDue ? 'primary' : ''}" data-act="relance">${icon('mail', 14)} Rédiger une relance</button></div>
-      <p class="dk-note">Brouillon proposé, votre voix : vous ajustez avant l'envoi. Le pointage « copie reçue » annule la relance de lui-même.</p>
+      <div class="dk-btn-row"><button class="dk-btn small ${relDue ? 'primary' : ''}" data-act="relance" title="Brouillon proposé, votre voix — le pointage « copie reçue » annule la relance de lui-même">${icon('mail', 14)} Rédiger une relance</button></div>
     </div>` : ''}
 
     ${_casierSectionHTML(p)}
 
-    ${histo.length ? `<div class="dk-sec"><h4>Historique</h4>${histo.slice(0, 8).map(h => `<div class="dk-histo">${_esc(h)}</div>`).join('')}</div>` : ''}
+    ${histo.length ? `<details class="dk-fold"><summary>Historique (${histo.length})</summary>${histo.slice(0, 8).map(h => `<div class="dk-histo">${_esc(h)}</div>`).join('')}</details>` : ''}
 
     ${_passerellesHTML(a)}
 
     <div class="dk-sec"><h4>Actions</h4><div class="dk-btn-row">
-      ${st.needsCopy ? `<button class="dk-btn primary" data-act="pointer">${icon('check', 14)} Copie reçue</button>` : ''}
-      ${a.status === 'remis' ? `<button class="dk-btn" data-act="markrelu">${icon('check', 14)} Marquer relu</button>` : ''}
-      ${a.status === 'relu' ? `<button class="dk-btn" data-act="markmaq">${icon('check', 14)} Maquetté</button>` : ''}
       <button class="dk-btn" data-act="editart">${icon('edit-3', 14)} Modifier</button>
       <button class="dk-btn" data-act="unreserve">Retirer de la page</button>
       ${slots.length < 12 ? `<button class="dk-btn ghost" data-act="addslot">${icon('plus', 14)} Ajouter un article ici</button>` : ''}
@@ -1533,10 +1579,10 @@ function _renderInspArticle(insp, p) {
       _writeCache(); _renderFrise(); _renderRail(); _openInsp(p.n, true);
     } catch (e) { _toast(e.message, true); }
   };
-  insp.querySelector('[data-act="pointer"]')?.addEventListener('click', () =>
-    patchArt({ status: 'remis' }, 'Copie reçue — marge recalculée.'));
-  insp.querySelector('[data-act="markrelu"]')?.addEventListener('click', () => patchArt({ status: 'relu' }, 'Marqué relu.'));
-  insp.querySelector('[data-act="markmaq"]')?.addEventListener('click', () => patchArt({ status: 'maquette' }, 'Marqué maquetté.'));
+  // Stepper : un tap sur l'étape SUIVANTE avance l'article (une seule étape
+  // cliquable — le retour arrière passe par « Modifier », choix assumé).
+  insp.querySelectorAll('.dk-step[data-step]').forEach(b =>
+    b.addEventListener('click', () => patchArt({ status: b.dataset.step }, STEP_MSG[b.dataset.step] || 'Statut mis à jour.')));
   insp.querySelector('[data-act="editart"]').addEventListener('click', () => _openArtForm(p, a));
   insp.querySelector('[data-act="unreserve"]').addEventListener('click', async () => {
     try {

@@ -93,24 +93,38 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
 .dk-menu-item.on { color: var(--dk-gold); font-weight: 700; }
 .dk-menu-new { color: var(--dk-tx2); }
 
-/* ── Rail des jalons ───────────────────────────────────────────── */
+/* ── Rail des jalons = timeline graphique (refonte 2026-07-13) ──── */
 .dk-rail {
-  display: flex; align-items: stretch; gap: 10px; padding: 12px 18px 10px;
-  border-bottom: 1px solid var(--dk-line); flex: 0 0 auto; overflow-x: auto; scrollbar-width: none;
+  flex: 0 0 auto; overflow-x: auto; scrollbar-width: none;
+  border-bottom: 1px solid var(--dk-line); padding: 10px 0 6px;
 }
 .dk-rail::-webkit-scrollbar { display: none; }
-.dk-jalon {
-  display: flex; flex-direction: column; gap: 1px; padding: 7px 13px;
-  border: 1px solid var(--dk-line); border-radius: 11px; min-width: 148px; flex: 0 0 auto;
-  background: rgba(127, 127, 127, .05);
+.dk-tl { position: relative; height: 84px; min-width: max(560px, calc(var(--tl-n, 4) * 150px)); margin: 0 90px; }
+.dk-tl-track {
+  position: absolute; left: 0; right: 0; top: 37px; height: 2px;
+  background: var(--dk-line); border-radius: 1px;
 }
-.dk-jalon-name { font-size: 11px; color: var(--dk-tx3); }
-.dk-jalon-date { font-weight: 900; font-size: 13.5px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-.dk-jalon-marge { font-size: 11.5px; color: var(--dk-tx2); font-variant-numeric: tabular-nums; }
-.dk-jalon.ambre { border-color: rgba(230, 162, 60, .5); }
-.dk-jalon.ambre .dk-jalon-marge { color: var(--dk-ambre); font-weight: 700; }
-.dk-jalon.rouge { border-color: rgba(229, 72, 77, .55); }
-.dk-jalon.rouge .dk-jalon-marge { color: var(--dk-rouge); font-weight: 700; }
+.dk-tl-track i {
+  display: block; height: 100%; border-radius: 1px;
+  background: linear-gradient(90deg, rgba(201, 162, 39, .35), var(--dk-gold));
+}
+.dk-tl-node {
+  position: absolute; top: 0; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  width: 150px; text-align: center;
+}
+.dk-tl-name { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--dk-tx3); height: 15px; }
+.dk-tl-dot {
+  width: 13px; height: 13px; border-radius: 50%; box-sizing: border-box; margin: 5px 0 4px;
+  border: 2.5px solid var(--dk-tx3); background: var(--ws-bg, #0d0f14);
+}
+.dk-tl-node.passed .dk-tl-dot { border-color: var(--dk-gold); background: var(--dk-gold); }
+.dk-tl-days { font-size: 17px; font-weight: 900; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.dk-tl-meta { font-size: 11px; color: var(--dk-tx3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dk-tl-node.ambre .dk-tl-dot { border-color: var(--dk-ambre); }
+.dk-tl-node.ambre .dk-tl-days, .dk-tl-node.ambre .dk-tl-meta { color: var(--dk-ambre); }
+.dk-tl-node.rouge .dk-tl-dot { border-color: var(--dk-rouge); }
+.dk-tl-node.rouge .dk-tl-days, .dk-tl-node.rouge .dk-tl-meta { color: var(--dk-rouge); font-weight: 700; }
 
 /* ── Barre au-dessus de la frise ───────────────────────────────── */
 .dk-ferbar { display: flex; align-items: center; gap: 12px; padding: 8px 18px 0; flex: 0 0 auto; }
@@ -536,8 +550,7 @@ html.light-mode .dk-bac-select { color-scheme: light; }
 /* ── Mobile : consultation + pointage (§3.6) ───────────────────── */
 @media (max-width: 820px) {
   .dk-pub-btn { max-width: 170px; }
-  .dk-rail { padding: 8px 12px 7px; }
-  .dk-jalon { min-width: 128px; padding: 6px 10px; }
+  .dk-rail { padding: 8px 0 5px; }
   .dk-ferbar { padding: 8px 12px 0; flex-wrap: wrap; }
   .dk-btn-txt { display: none; }
   .dk-frise { gap: 14px 10px; padding: 12px 14px 22px; }
@@ -576,3 +589,67 @@ html.light-mode .dk-bac-select { color-scheme: light; }
 .dk-pp-list li.rouge { color: var(--dk-rouge); }
 .dk-pp-list li.ambre { color: var(--dk-ambre); }
 .dk-pp-line.rouge { color: var(--dk-rouge); font-size: 13px; padding: 10px 2px; }
+
+/* ── Inspecteur ergonomique : vitals + stepper + plis (2026-07-13) ── */
+.dk-vitals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 4px; }
+.dk-vital {
+  display: flex; flex-direction: column; gap: 3px; padding: 10px 11px;
+  border: 1px solid var(--dk-line); border-radius: 12px;
+  background: rgba(127, 127, 127, .05); min-width: 0;
+}
+.dk-vital-k { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--dk-tx3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dk-vital-v { font-size: 18px; font-weight: 900; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.dk-vital-v.ambre { color: var(--dk-ambre); }
+.dk-vital-v.rouge { color: var(--dk-rouge); }
+.dk-vital-v.vert  { color: var(--dk-vert, #4cc38a); }
+.dk-vital-v.dk-vital-txt { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dk-vitals-sub { font-size: 11px; color: var(--dk-tx3); margin: 4px 2px 0; }
+
+.dk-steps { display: flex; align-items: flex-start; margin: 12px 0 4px; }
+.dk-step {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: none; border: none; padding: 2px 0 4px; cursor: default;
+  font-family: inherit; color: var(--dk-tx3); position: relative; min-width: 0;
+}
+.dk-step::before {           /* liaison entre les points */
+  content: ''; position: absolute; top: 8px; left: -50%; width: 100%; height: 2px;
+  background: var(--dk-line);
+}
+.dk-step:first-child::before { display: none; }
+.dk-step.done::before, .dk-step.on::before { background: var(--dk-gold); }
+.dk-step-dot {
+  width: 15px; height: 15px; border-radius: 50%; box-sizing: border-box; z-index: 1;
+  border: 2px solid var(--dk-line); background: var(--ws-surface, #1c2234);
+  display: inline-flex; align-items: center; justify-content: center; color: #1a1c22;
+}
+.dk-step.done .dk-step-dot { background: var(--dk-gold); border-color: var(--dk-gold); }
+.dk-step.on .dk-step-dot { border-color: var(--dk-gold); box-shadow: 0 0 0 3px rgba(201, 162, 39, .22); }
+.dk-step.next { cursor: pointer; }
+.dk-step.next .dk-step-dot { border-style: dashed; border-color: var(--dk-gold); }
+.dk-step.next:hover .dk-step-dot { background: rgba(201, 162, 39, .25); }
+.dk-step.next:hover .dk-step-lbl { color: var(--dk-gold); }
+.dk-step-lbl { font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.dk-step.on .dk-step-lbl { color: var(--dk-tx1, #fff); font-weight: 800; }
+.dk-step.done .dk-step-lbl { color: var(--dk-tx2); }
+.dk-step-pub { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; color: var(--dk-vert, #4cc38a); padding: 2px 0 0 4px; }
+.dk-step-flag { font-size: 12px; color: var(--dk-tx3); border: 1px dashed var(--dk-line); border-radius: 10px; padding: 8px 12px; margin: 12px 0 4px; }
+
+.dk-fold { border-top: 1px solid var(--dk-line); margin-top: 16px; padding-top: 10px; }
+.dk-fold summary {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--dk-tx3);
+  cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; user-select: none;
+}
+.dk-fold summary::-webkit-details-marker { display: none; }
+.dk-fold summary::after { content: '›'; font-size: 14px; transition: transform .18s; transform: rotate(90deg); }
+.dk-fold[open] summary::after { transform: rotate(-90deg); }
+.dk-fold .dk-histo { margin-top: 8px; }
+
+/* Mobile — APRÈS les règles de base (même spécificité : l'ordre source
+   tranche, piège networK .nk-fiche-nav déjà mordu). Breakpoint aligné
+   sur les blocs desK existants (820). */
+@media (max-width: 820px) {
+  .dk-tl { margin: 0 66px; min-width: max(480px, calc(var(--tl-n, 4) * 128px)); }
+  .dk-tl-node { width: 128px; }
+  .dk-vitals { gap: 6px; }
+  .dk-vital-v { font-size: 16px; }
+}
