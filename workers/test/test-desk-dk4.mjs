@@ -92,15 +92,15 @@ async function main() {
   ok(d.data.email && d.data.email.slug === slug, 'payload expose l\'adresse (slug)', d.data.email);
 
   // 3 · Gardes de l'injection
-  r = await inject({ to: `redaction-${slug}@test.dk`, from_email: 'x@y.z', subject: 'x', body: 'x' }, 'mauvais-secret');
+  r = await inject({ to: `${slug}@test.dk`, from_email: 'x@y.z', subject: 'x', body: 'x' }, 'mauvais-secret');
   ok(r.status === 401, 'injection sans secret admin → 401');
-  r = await inject({ to: 'redaction-inexistante@test.dk', from_email: 'x@y.z', subject: 'x', body: 'x' });
+  r = await inject({ to: 'inexistante-xyz@test.dk', from_email: 'x@y.z', subject: 'x', body: 'x' });
   ok(r.status === 400 && r.data.reason === 'adresse', 'adresse inconnue → rejet propre');
 
   // 4 · Étage 1 — rapprochement déterministe AUTO (expéditeur connu, article placé)
   const jpg = Buffer.from(crypto.randomBytes(1500)).toString('base64');
   r = await inject({
-    to: `redaction-${slug}@test.dk`, from_email: 'dupont@contrib.dk4', from_name: 'Col. Dupont',
+    to: `${slug}@test.dk`, from_email: 'dupont@contrib.dk4', from_name: 'Col. Dupont',
     subject: 'Ma copie', body: 'Voici mon papier complet pour le prochain numéro.',
     attachments: [{ name: 'cavalerie.jpg', b64: jpg }, { name: 'virus.exe', b64: jpg }],
   });
@@ -118,19 +118,19 @@ async function main() {
   ok(dl.status === 200 && dl.data.url, 'pièce issue de l\'e-mail téléchargeable');
 
   // 5 · Étage 1 — expéditeur connu mais article SANS page → bac pré-coché
-  r = await inject({ to: `redaction-${slug}@test.dk`, from_email: 'martin@contrib.dk4', from_name: 'Martin', subject: 'papier', body: 'Le portrait promis, en pièce jointe.', attachments: [{ name: 'portrait.pdf', b64: jpg }] });
+  r = await inject({ to: `${slug}@test.dk`, from_email: 'martin@contrib.dk4', from_name: 'Martin', subject: 'papier', body: 'Le portrait promis, en pièce jointe.', attachments: [{ name: 'portrait.pdf', b64: jpg }] });
   ok(r.status === 200 && r.data.mode === 'bac' && r.data.suggestion.via === 'expediteur', 'article non placé → bac, suggestion expéditeur', r.data);
   d = await call(A, '/issue/' + issueId);
   ok(d.data.inbox.length === 1, 'bac : 1 entrée en attente');
   const rowMartin = d.data.inbox[0];
 
   // 6 · Étage 2 — recoupement lexical (expéditeur inconnu)
-  r = await inject({ to: `redaction-${slug}@test.dk`, from_email: 'nouveau@contrib.dk4', subject: 'Histoire du recrutement alsacien — version finale', body: 'Ci-joint le texte.' });
+  r = await inject({ to: `${slug}@test.dk`, from_email: 'nouveau@contrib.dk4', subject: 'Histoire du recrutement alsacien — version finale', body: 'Ci-joint le texte.' });
   ok(r.status === 200 && r.data.mode === 'bac' && r.data.suggestion.via === 'titre' && r.data.suggestion.art_id === a3.id, 'objet ≈ titre attendu → suggestion « titre »', r.data.suggestion);
   const rowTitre = r.data.inboxId;
 
   // 7 · Étage 2 — spontané sans indice (IA coupée) → bac sans suggestion
-  r = await inject({ to: `redaction-${slug}@test.dk`, from_email: 'poete@libre.dk4', from_name: 'Le Poète', subject: 'Un texte libre pour vous', body: 'Quelques vers pour la revue, si le cœur vous en dit. '.repeat(3) });
+  r = await inject({ to: `${slug}@test.dk`, from_email: 'poete@libre.dk4', from_name: 'Le Poète', subject: 'Un texte libre pour vous', body: 'Quelques vers pour la revue, si le cœur vous en dit. '.repeat(3) });
   ok(r.status === 200 && r.data.mode === 'bac' && r.data.suggestion.kind === 'spontane' && r.data.suggestion.via === 'aucune', 'spontané inconnu (IA off) → bac sans pari', r.data.suggestion);
   const rowPoete = r.data.inboxId;
 
@@ -158,7 +158,7 @@ async function main() {
   ok(d.data.contribs.some(c => c.name === 'Le Poète' && c.email === 'poete@libre.dk4'), 'e-mail du nouveau contributeur mémorisé');
 
   // 9 · Habitude apprise → suggestion déterministe au mail suivant
-  r = await inject({ to: `redaction-${slug}@test.dk`, from_email: 'poete@libre.dk4', subject: 'Encore des textes', body: 'Une nouvelle salve de propositions pour vous.' });
+  r = await inject({ to: `${slug}@test.dk`, from_email: 'poete@libre.dk4', subject: 'Encore des textes', body: 'Une nouvelle salve de propositions pour vous.' });
   ok(r.status === 200 && r.data.suggestion.via === 'habitude' && r.data.suggestion.rub_id === rubHistoire.id, 'mails du Poète → rubrique Histoire (habitude, sans IA)', r.data.suggestion);
   const rowHabit = r.data.inboxId;
 

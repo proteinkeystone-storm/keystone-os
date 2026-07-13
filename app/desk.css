@@ -503,9 +503,9 @@ html.light-mode .dk-field input, html.light-mode .dk-field select { color-scheme
 }
 html.light-mode .dk-bac-select { color-scheme: light; }
 .dk-bac-new { margin: 4px 0 0 22px; }
-.dk-slug-row { flex-wrap: wrap; align-items: center; }
-.dk-slug-row input { flex: 1; min-width: 110px; }
-.dk-slug-fix { font-size: 12.5px; color: var(--dk-tx3); white-space: nowrap; }
+.dk-slug-row { flex-wrap: wrap; align-items: center; gap: 6px; }
+.dk-slug-row input { flex: 1 1 160px; min-width: 140px; text-align: right; }
+.dk-slug-fix { font-size: 13px; color: var(--dk-tx2); white-space: nowrap; }
 .dk-bac-addr { font-size: 13.5px; margin: 2px 0 4px; user-select: all; }
 
 /* ── Mobile : consultation + pointage (§3.6) ───────────────────── */

@@ -17,7 +17,7 @@
 // gabarit déterministe ZÉRO IA, on ajuste puis Resend).
 //
 // DK-4 : le bac « à trier » (§5.3) — les e-mails des contributeurs
-// arrivent sur redaction-<slug>@ (worker), la digestion rattache le
+// arrivent sur <slug>@ (worker), la digestion rattache le
 // sûr toute seule et pose le doute ICI : bandeau en tête de frise,
 // suggestion pré-cochée, confirmation 1 clic, spontanés → marbre.
 // Chaque confirmation apprend (e-mail du contributeur, habitude de
@@ -1905,11 +1905,10 @@ async function _openSettings() {
     ${(() => {
       const em = _D?.email || {};
       const slug = em.slug || pub?.slug || '';
-      const addr = em.domain && slug ? `redaction-${slug}@${em.domain}` : null;
+      const addr = em.domain && slug ? `${slug}@${em.domain}` : null;
       return `<div class="dk-sec"><h4>Adresse de dépôt (contributions par e-mail)</h4>
         ${pub && pub.owner ? `<div class="dk-form-row dk-slug-row">
-          <span class="dk-slug-fix">redaction-</span>
-          <input type="text" data-k="pubslug" maxlength="40" value="${_esc(slug)}" spellcheck="false">
+          <input type="text" data-k="pubslug" maxlength="40" value="${_esc(slug)}" spellcheck="false" placeholder="l-epaulette">
           <span class="dk-slug-fix">@${_esc(em.domain || '…')}</span>
           <button class="dk-btn small" data-act="saveslug">Enregistrer</button>
         </div>` : (addr ? `<p class="dk-bac-addr"><strong>${_esc(addr)}</strong></p>` : '')}

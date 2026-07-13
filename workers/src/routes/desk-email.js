@@ -2,9 +2,11 @@
    KEYSTONE OS — desK · DK-4 : l'adresse de dépôt & la digestion
    (DESK_BRIEF §5.2-5.3 — les contributeurs restent dans l'e-mail)
 
-   Une adresse PAR publication : redaction-<slug>@<DK_EMAIL_DOMAIN>.
-   Cloudflare Email Routing (catch-all redaction-*@) route vers le
-   handler email() du worker → parse MIME (postal-mime) → digestion.
+   Une adresse PAR publication : <slug>@<DK_EMAIL_DOMAIN> — le domaine
+   porte déjà « redaction » (redaction-pks.com), donc l'avant-@ = le
+   slug seul (ex. l-epaulette@redaction-pks.com). Cloudflare Email
+   Routing (catch-all *@) route vers le handler email() du worker →
+   parse MIME (postal-mime) → digestion.
 
    LA DIGESTION — 3 étages, du sûr vers l'incertain :
    1. RAPPROCHEMENT DÉTERMINISTE (gratuit, ~80 % du flux) :
@@ -80,8 +82,9 @@ function _htmlToText(html) {
 export async function digestEmail(env, mail) {
   await ensureDeskSchema(env);
 
-  // L'adresse porte le tenant : redaction-<slug>@… → publication.
-  const m = /^redaction-([a-z0-9-]+)@/.exec(String(mail.to || '').toLowerCase());
+  // L'adresse porte le tenant : <slug>@… → publication (le domaine
+  // porte déjà « redaction »). Sous-adressage toléré (slug+detail@).
+  const m = /^([a-z0-9-]+)(?:\+[^@]*)?@/.exec(String(mail.to || '').toLowerCase());
   if (!m) return { ok: false, reason: 'adresse' };
   const pub = await env.DB.prepare('SELECT id, name FROM dk_publications WHERE slug = ?').bind(m[1]).first();
   if (!pub) return { ok: false, reason: 'adresse' };
