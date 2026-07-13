@@ -121,7 +121,10 @@ BYOK_ROUTING = "off"
 # admin (POST /api/desk/email-inject) — utile en secours.
 # DK_EMAIL_IA = "off" coupe l'étage 2 IA (suggestion de rubrique des
 # spontanés via callLLM/Mistral inclus) — le bac reste la vérité.
-# DK_EMAIL_DOMAIN = "exemple.fr"
+# Domaine dédié au courrier (zone Cloudflare, Email Routing catch-all
+# → worker keystone-os-api), acheté 2026-07-13. Adresses de dépôt =
+# redaction-<slug>@redaction-pks.com.
+DK_EMAIL_DOMAIN = "redaction-pks.com"
 
 # ── SDQR — RGPD (Sprint SDQR-5) ─────────────────────────────
 # Rétention des logs de scan en jours (purge auto via Cron, voir [triggers])
