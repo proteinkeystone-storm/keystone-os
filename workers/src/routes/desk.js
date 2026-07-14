@@ -242,6 +242,12 @@ async function _ensureSchema(env) {
   for (const p of noSlug) {
     await env.DB.prepare('UPDATE dk_publications SET slug = ? WHERE id = ?').bind(await _freeSlug(env, p.name), p.id).run();
   }
+  // Numérotation d'affichage (option par publication) : l'ordre PHYSIQUE des
+  // pages (dk_pages.n) ne bouge JAMAIS ; ces deux réglages ne changent QUE le
+  // folio affiché. cover_unnumbered = la 1re page est « Couverture » sans folio ;
+  // first_folio = numéro de la page qui suit la couverture (0 pour L'Épaulette).
+  try { await env.DB.prepare(`ALTER TABLE dk_publications ADD COLUMN cover_unnumbered INTEGER DEFAULT 0`).run(); } catch (_) {}
+  try { await env.DB.prepare(`ALTER TABLE dk_publications ADD COLUMN first_folio INTEGER DEFAULT 1`).run(); } catch (_) {}
   _schemaReady = true;
 }
 
@@ -325,7 +331,7 @@ function _histoPush(histoJSON, line) {
 }
 function _byName(u) { return u.name || (u.email ? u.email.split('@')[0] : 'un membre'); }
 
-const PUB_COLS   = 'id, name, owner_sub, slug, created_at';
+const PUB_COLS   = 'id, name, owner_sub, slug, cover_unnumbered, first_folio, created_at';
 const RUB_COLS   = 'id, name, color, position';
 const ISSUE_COLS = 'id, pub_id, num, theme, status, jalons, created_at';
 const PAGE_COLS  = 'id, issue_id, n, kind, fixe_tag, fixe_title, rub_id, updated_at, updated_by';
@@ -384,7 +390,8 @@ export async function handleDeskBootstrap(request, env) {
     for (const p of pubs) {
       const issues = (await env.DB.prepare(
         `SELECT ${ISSUE_COLS} FROM dk_issues WHERE pub_id = ? ORDER BY created_at DESC LIMIT 40`).bind(p.id).all()).results || [];
-      out.push({ id: p.id, name: p.name, slug: p.slug || null, owner: p.owner_sub === u.sub, issues });
+      out.push({ id: p.id, name: p.name, slug: p.slug || null, owner: p.owner_sub === u.sub,
+        cover_unnumbered: !!p.cover_unnumbered, first_folio: Number.isFinite(p.first_folio) ? p.first_folio : 1, issues });
     }
     return json({ ok: true, engine: DK_ENGINE_VERSION, me: { sub: u.sub, name: u.name }, publications: out }, 200, origin);
   } catch (e) {
@@ -434,6 +441,15 @@ export async function handlePubPatch(request, env, pubId) {
     const taken = await env.DB.prepare('SELECT id FROM dk_publications WHERE slug = ? AND id != ?').bind(slug, pubId).first();
     if (taken) return err('Cette adresse est déjà prise par une autre publication', 409, origin);
     sets.push('slug = ?'); vals.push(slug);
+  }
+  // Numérotation d'affichage (option §L'Épaulette) — ne touche PAS l'ordre physique.
+  if (body.cover_unnumbered !== undefined) {
+    sets.push('cover_unnumbered = ?'); vals.push(body.cover_unnumbered ? 1 : 0);
+  }
+  if (body.first_folio !== undefined) {
+    const f = parseInt(body.first_folio, 10);
+    if (!Number.isFinite(f) || f < -5 || f > 20) return err('Numéro de départ invalide (entre -5 et 20)', 400, origin);
+    sets.push('first_folio = ?'); vals.push(f);
   }
   if (!sets.length) return err('Rien à modifier', 400, origin);
   vals.push(pubId);

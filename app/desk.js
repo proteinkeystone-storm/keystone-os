@@ -407,6 +407,32 @@ function _computeArt(a, simDue) {
 }
 function _stateOf(marge) { return marge === null ? '' : (marge < 0 ? 'rouge' : (marge <= AMBRE_SEUIL ? 'ambre' : '')); }
 function _margeTxt(m) { return m === null ? '' : (m < 0 ? 'marge brûlée (' + m + ' j)' : 'marge ' + m + ' j'); }
+
+/* ═══ Numérotation d'affichage (option par publication) ═══
+   L'ordre PHYSIQUE des pages (p.n) ne bouge JAMAIS — il pilote le drag, le
+   move, la confrontation au PDF. Ces helpers ne changent QUE le folio AFFICHÉ.
+   Demande L'Épaulette : la couverture est hors numérotation (« Couverture »),
+   la page qui suit démarre à 0, donc le sommaire (3ᵉ page physique) porte le 1. */
+function _numOpt() {
+  const pub = _pubs.find(p => p.id === _pubId) || {};
+  return { cover: !!pub.cover_unnumbered, first: Number.isFinite(pub.first_folio) ? pub.first_folio : 1 };
+}
+function _dispN(n) {                     // folio affiché ; null = couverture non numérotée
+  const o = _numOpt();
+  if (o.cover && n === 1) return null;
+  return o.first + (n - (o.cover ? 2 : 1));
+}
+function _pn(n) { const d = _dispN(n); return d === null ? 'couv.' : String(d); }   // pour « p. X », toasts…
+function _pageLabel(p) {                 // en-tête de fiche : « page 3 » ou « Couverture »
+  const d = _dispN(p.n);
+  return d === null ? (p.fixe_tag || p.fixe_title || 'Couverture') : 'page ' + d;
+}
+function _plancheLabel(pl) {             // libellé sous une planche de la frise
+  const o = _numOpt();
+  if (o.cover && pl.length === 1 && pl[0].n === 1)
+    return _esc(pl[0].fixe_tag || pl[0].fixe_title || 'Couverture');
+  return pl.length === 2 ? _pn(pl[0].n) + '–' + _pn(pl[1].n) : _pn(pl[0].n);
+}
 function _artById(id) { return (_D.articles || []).find(a => a.id === id) || null; }
 function _rubById(id) { return (_D.rubriques || []).find(r => r.id === id) || null; }
 // Teinte de rubrique pour les cartes (design Stéphane 2026-07-12 : bordure
@@ -844,7 +870,7 @@ function _renderFrise(keepScroll = true) {
     const html = `
     <div class="dk-planche">
       <div class="dk-planche-pages">${pl.map(p => { const h = _cardHTML(p, prev); prev = p; return h; }).join('')}</div>
-      <div class="dk-planche-num">${pl.length === 2 ? pl[0].n + '–' + pl[1].n : pl[0].n}</div>
+      <div class="dk-planche-num">${_plancheLabel(pl)}</div>
     </div>`;
     return html;
   }).join('');
@@ -1242,8 +1268,8 @@ function _renderMarbre() {
         const fresh = _freshInfo(a);
         const pl = _placementsOf(a.id);
         const chips = [];
-        pl.tit.forEach(n => chips.push(`<span class="dk-mchip on">p. ${n}</span>`));
-        pl.banc.forEach(n => chips.push(`<span class="dk-mchip">banc p. ${n}</span>`));
+        pl.tit.forEach(n => chips.push(`<span class="dk-mchip on">p. ${_pn(n)}</span>`));
+        pl.banc.forEach(n => chips.push(`<span class="dk-mchip">banc p. ${_pn(n)}</span>`));
         if (!chips.length && !['publie', 'abandonne'].includes(a.status)) chips.push(`<span class="dk-mchip libre">libre</span>`);
         return `<div class="dk-mrow" data-a="${a.id}">
           <span class="dk-pc-dot" style="background:${rub ? rub.color : '#8d93a8'}"></span>
@@ -1285,7 +1311,7 @@ function _openInspMarbre(artId) {
       ${_kv('Statut', st.label)}
       ${_kv('Remise prévue', a.due ? _fmtD(a.due) : '—')}
       ${_kv('Fraîcheur', fresh.label, fresh.cls)}
-      ${_kv('Dans ce numéro', pl.tit.length ? 'p. ' + pl.tit.join(', ') : (pl.banc.length ? 'au banc p. ' + pl.banc.join(', ') : 'libre'))}
+      ${_kv('Dans ce numéro', pl.tit.length ? 'p. ' + pl.tit.map(_pn).join(', ') : (pl.banc.length ? 'au banc p. ' + pl.banc.map(_pn).join(', ') : 'libre'))}
     </div>
     ${(() => {
       const myFiles = (_D.files || []).filter(f => f.art_id === a.id && f.status === 'ok');
@@ -1302,7 +1328,7 @@ function _openInspMarbre(artId) {
     ${vivant ? `<div class="dk-sec"><h4>Réserver sur une page du n° ${_esc(_D.issue.num)}</h4>
       <div class="dk-pagepick">${targets.slice(0, 200).map(p => {
         const nb = _slotsOf(p).length;
-        return `<button class="dk-pagepick-btn ${nb ? 'has' : ''}" data-pg="${p.id}" data-n="${p.n}" title="${nb ? nb + ' article(s) déjà sur cette page' : 'page vide'}">${p.n}${nb ? '+' : ''}</button>`;
+        return `<button class="dk-pagepick-btn ${nb ? 'has' : ''}" data-pg="${p.id}" data-n="${p.n}" title="${nb ? nb + ' article(s) déjà sur cette page' : 'page vide'}">${_pn(p.n)}${nb ? '+' : ''}</button>`;
       }).join('') || '<p class="dk-empty-line">Aucune page disponible.</p>'}</div>
       <p class="dk-note">Chiffre + = la page porte déjà un article ; le vôtre s'y ajoutera (brèves, encadré…).</p>
     </div>` : ''}
@@ -1322,7 +1348,7 @@ function _openInspMarbre(artId) {
   insp.querySelectorAll('[data-pg]').forEach(b => b.onclick = async () => {
     try {
       await _api('/page/' + b.dataset.pg + '/slot', { method: 'POST', body: { art_id: a.id } });
-      _toast('Article réservé sur la page ' + b.dataset.n + '.');
+      _toast('Article réservé sur la page ' + _pn(parseInt(b.dataset.n, 10)) + '.');
       await _loadIssue(true);
       if (_view === 'marbre') _renderMarbre();
       _openInspMarbre(a.id);
@@ -1397,13 +1423,13 @@ function _bindClose(insp) { insp.querySelector('[data-act="close"]').onclick = _
 
 function _renderInspFixe(insp, p) {
   insp.innerHTML = _inspShell(p.fixe_tag || 'Page figée', null,
-    `<div class="dk-sec"><h4>Page ${p.n} — ancrée à son numéro</h4>
+    `<div class="dk-sec"><h4>${_dispN(p.n) === null ? _esc(_pageLabel(p)) + ' — hors numérotation' : 'Page ' + _pn(p.n) + ' — ancrée à son numéro'}</h4>
       <label class="dk-field"><span>Intitulé</span><input type="text" data-k="fixe_title" maxlength="200" value="${_esc(p.fixe_title || '')}" placeholder="ex. Publicité — GMPA"></label>
       <div class="dk-btn-row">
         <button class="dk-btn primary" data-act="savefixe">Enregistrer</button>
         <button class="dk-btn" data-act="unfixe">Libérer la page</button>
       </div>
-      <p class="dk-note">Une page figée ne bouge pas quand le contenu coule autour (repagination) — une pub vendue « page ${p.n} » reste page ${p.n}.</p>
+      <p class="dk-note">Une page figée ne bouge pas quand le contenu coule autour (repagination) — une pub vendue « page ${_pn(p.n)} » reste page ${_pn(p.n)}.</p>
     </div>
     ${_casierSectionHTML(p)}
     ${p.updated_by ? `<p class="dk-modified">Modifié par ${_esc(p.updated_by)} ${_relTime(p.updated_at)}</p>` : ''}`);
@@ -1428,7 +1454,7 @@ function _renderInspVide(insp, p) {
   const placed = new Set((_D.slots || []).map(s => s.art_id).filter(Boolean));
   const libres = (_D.articles || []).filter(a => !placed.has(a.id) && !['publie', 'abandonne'].includes(a.status));
   const rubs = _D.rubriques || [];
-  insp.innerHTML = _inspShell('Emplacement libre — page ' + p.n, null,
+  insp.innerHTML = _inspShell('Emplacement libre — ' + _pageLabel(p), null,
     `<div class="dk-sec"><h4>Réserver un article</h4>
       ${libres.length ? libres.slice(0, 40).map(a => {
         const rub = _rubById(a.rub_id);
@@ -1456,14 +1482,14 @@ function _renderInspVide(insp, p) {
   insp.querySelectorAll('[data-act="reserve"]').forEach(b => b.onclick = async () => {
     try {
       await _api('/page/' + p.id + '/slot', { method: 'POST', body: { art_id: b.dataset.a } });
-      _toast('Article réservé sur la page ' + p.n + '.');
+      _toast('Article réservé sur la page ' + _pn(p.n) + '.');
       await _loadIssue(true); _openInsp(p.n, true);
     } catch (e) { _toast(e.message, true); }
   });
   insp.querySelector('[data-k="prerub"]').addEventListener('change', async e => {
     try {
       await _api('/page/' + p.id, { method: 'PATCH', body: { rub_id: e.target.value || null } });
-      _toast('Rubrique prévue sur la page ' + p.n + '.');
+      _toast('Rubrique prévue sur la page ' + _pn(p.n) + '.');
       await _loadIssue(true); _openInsp(p.n, true);
     } catch (err2) { _toast(err2.message, true); }
   });
@@ -1537,7 +1563,7 @@ function _renderInspArticle(insp, p) {
   const card = _computeCard(p);
 
   insp.innerHTML = _inspShell(a.title,
-    `<div class="dk-insp-rub"><span class="dk-pc-dot" style="background:${rub ? rub.color : '#8d93a8'}"></span>${_esc(rub ? rub.name : 'Sans rubrique')} · page ${p.n}</div>`,
+    `<div class="dk-insp-rub"><span class="dk-pc-dot" style="background:${rub ? rub.color : '#8d93a8'}"></span>${_esc(rub ? rub.name : 'Sans rubrique')} · ${_pageLabel(p)}</div>`,
     `<div class="dk-sec dk-sec-state">
     ${slots.length > 1 ? `<div class="dk-slotchips">${slots.map((s, i) => {
         const sa = _artById(s.art_id);
@@ -1638,7 +1664,7 @@ function _renderInspArticle(insp, p) {
     box.querySelectorAll('[data-addslot]').forEach(bp => bp.onclick = async () => {
       try {
         await _api('/page/' + p.id + '/slot', { method: 'POST', body: { art_id: bp.dataset.addslot } });
-        _toast('Article ajouté sur la page ' + p.n + '.');
+        _toast('Article ajouté sur la page ' + _pn(p.n) + '.');
         await _loadIssue(true); _selSlot = _slotsOf(p).length - 1; _openInsp(p.n, true);
       } catch (e) { _toast(e.message, true); }
     });
@@ -1862,7 +1888,7 @@ function _openRelanceList() {
         return `<div class="dk-banc-item">
           <div class="dk-banc-info">
             <div class="dk-banc-title">${_esc(a.title)}</div>
-            <div class="dk-banc-meta">${_esc(a.contrib || '—')} · ${pl.tit.length ? 'p. ' + pl.tit.join(', ') : 'au marbre'}${a.due ? ' · remise le ' + _fmtD(a.due) : ''}${late > 0 ? ` · <span class="rouge">${late} j de retard</span>` : (ri && ri.mode === 'avant' ? ' · rappel avant échéance' : '')}</div>
+            <div class="dk-banc-meta">${_esc(a.contrib || '—')} · ${pl.tit.length ? 'p. ' + pl.tit.map(_pn).join(', ') : 'au marbre'}${a.due ? ' · remise le ' + _fmtD(a.due) : ''}${late > 0 ? ` · <span class="rouge">${late} j de retard</span>` : (ri && ri.mode === 'avant' ? ' · rappel avant échéance' : '')}</div>
           </div>
           <button class="dk-btn small primary" data-rel="${a.id}">${icon('mail', 13)} Rédiger</button>
         </div>`;
@@ -1986,7 +2012,7 @@ function _openArtForm(page, existing, onDone, bancSlot) {
         const r = await _api('/publication/' + _pubId + '/article', { method: 'POST', body });
         if (page) await _api('/page/' + page.id + '/slot', { method: 'POST', body: { art_id: r.article.id } });
         else if (bancSlot) await _api('/slot/' + bancSlot.id, { method: 'PATCH', body: { banc: _bancOf(bancSlot).concat(r.article.id) } });
-        _toast(page ? 'Article créé et réservé page ' + page.n + '.'
+        _toast(page ? 'Article créé et réservé page ' + _pn(page.n) + '.'
           : bancSlot ? 'Article créé et posé au banc des remplaçants.'
           : 'Article créé — il attend au marbre.');
       }
@@ -2100,8 +2126,8 @@ async function _prepressCheck() {
     html += `<ul class="dk-pp-list">`;
     if (!countOk) html += `<li class="rouge">${numPages} page${numPages > 1 ? 's' : ''} dans le PDF, ${expected} au chemin de fer — écart de ${Math.abs(numPages - expected)}.</li>`;
     for (const w of warnings) {
-      const tail = w.elsewhere ? ` — trouvé p. ${w.elsewhere}` : (w.empty ? ' — page vide ou photo pleine page' : ' — introuvable');
-      html += `<li class="ambre">« ${_esc(w.art)} » attendu p. ${w.page}${tail}.</li>`;
+      const tail = w.elsewhere ? ` — trouvé p. ${_pn(w.elsewhere)}` : (w.empty ? ' — page vide ou photo pleine page' : ' — introuvable');
+      html += `<li class="ambre">« ${_esc(w.art)} » attendu p. ${_pn(w.page)}${tail}.</li>`;
     }
     html += `</ul><p class="dk-note">Contrôle déterministe (texte du PDF vs titres du chemin de fer). Un article très restylé ou entièrement en image peut passer pour « introuvable ».</p>`;
   }
@@ -2167,6 +2193,21 @@ async function _openSettings() {
           : `Le branchement e-mail arrive — cette adresse s'activera avec le domaine de dépôt. Le bac « à trier » et la digestion sont déjà prêts.`}</p>
       </div>`;
     })()}
+
+    ${pub && pub.owner ? (() => {
+      const o = _numOpt();
+      return `<div class="dk-sec"><h4>Numérotation des pages</h4>
+        <label class="dk-field dk-field-row"><span>Style</span><select data-k="numstyle">
+          <option value="standard" ${!o.cover ? 'selected' : ''}>Standard — 1, 2, 3…</option>
+          <option value="cover" ${o.cover ? 'selected' : ''}>Couverture hors numérotation</option>
+        </select></label>
+        <label class="dk-field dk-field-row" data-slot="numstart" style="${o.cover ? '' : 'display:none'}"><span>La page suivant la couverture porte le n°</span>
+          <input type="number" data-k="firstfolio" min="-5" max="20" step="1" value="${o.cover ? o.first : 0}"></label>
+        <div class="dk-btn-row"><button class="dk-btn small primary" data-act="savenum">Enregistrer</button>
+          <span class="dk-note" data-slot="numpreview" style="align-self:center"></span></div>
+        <p class="dk-note">La couverture s'affiche « Couverture » sans folio ; la numérotation reprend au numéro choisi (0 pour L'Épaulette, le sommaire devient alors « 1 »). L'ordre réel des pages ne change pas — seul le folio affiché change.</p>
+      </div>`;
+    })() : ''}
 
     ${_D?.issue ? `<div class="dk-sec"><h4>Jalons du n° ${_esc(_D.issue.num)}</h4>
       ${JALON_DEFS.map(j => `<label class="dk-field dk-field-row"><span>${j.name}</span><input type="date" data-jalon="${j.key}" value="${jalons[j.key] || ''}"></label>`).join('')}
@@ -2271,6 +2312,39 @@ async function _openSettings() {
       await _loadIssue(true); _openSettings();
     } catch (e) { _toast(e.message, true); }
   });
+  // Numérotation d'affichage (option §L'Épaulette) — aperçu vivant + save.
+  {
+    const styleSel = insp.querySelector('[data-k="numstyle"]');
+    const startRow = insp.querySelector('[data-slot="numstart"]');
+    const startInp = insp.querySelector('[data-k="firstfolio"]');
+    const preview  = insp.querySelector('[data-slot="numpreview"]');
+    if (styleSel) {
+      const paint = () => {
+        const cover = styleSel.value === 'cover';
+        if (startRow) startRow.style.display = cover ? '' : 'none';
+        const first = cover ? (parseInt(startInp.value, 10) || 0) : 1;
+        // Aperçu linéaire : couverture (ou 1er folio) puis les suivants.
+        const seq = [cover ? 'Couverture' : String(first)];
+        let k = cover ? first : first + 1;
+        for (let i = 0; i < 5; i++) { seq.push(String(k)); k++; }
+        if (preview) preview.textContent = 'Aperçu : ' + seq.join(' · ') + ' …';
+      };
+      paint();
+      styleSel.addEventListener('change', paint);
+      startInp?.addEventListener('input', paint);
+    }
+    insp.querySelector('[data-act="savenum"]')?.addEventListener('click', async () => {
+      const cover = styleSel.value === 'cover';
+      const body = { cover_unnumbered: cover, first_folio: cover ? (parseInt(startInp.value, 10) || 0) : 1 };
+      try {
+        await _api('/publication/' + _pubId, { method: 'PATCH', body });
+        if (pub) { pub.cover_unnumbered = cover; pub.first_folio = body.first_folio; }
+        _toast('Numérotation mise à jour.');
+        _renderFer();               // frise + rail reprennent le nouveau folio
+        _openSettings();
+      } catch (e) { _toast(e.message, true); }
+    });
+  }
   insp.querySelector('[data-act="savejalons"]')?.addEventListener('click', async () => {
     const body = {};
     insp.querySelectorAll('[data-jalon]').forEach(i => { if (i.value) body[i.dataset.jalon] = i.value; });
