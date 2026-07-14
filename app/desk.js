@@ -829,13 +829,16 @@ function _renderFer() {
   const main = _root.querySelector('[data-slot="main"]');
   main.classList.add('dk-main-fer');
   const marbreN = (_D.articles || []).filter(a => !['publie', 'abandonne'].includes(a.status)).length;
+  const newMarbre = _newMarbreCount();
+  const newCards = _newCardCount();
+  const newTotal = newMarbre + newCards;
   main.innerHTML = `
     ${_offline ? `<div class="dk-offline">Hors ligne — lecture seule sur la dernière version connue</div>` : ''}
     <div class="dk-rail" data-slot="rail"></div>
     <div class="dk-ferbar">
       <div class="dk-seg" data-slot="view">
         <button data-v="fer" class="${_view === 'fer' ? 'on' : ''}">Chemin de fer</button>
-        <button data-v="marbre" class="${_view === 'marbre' ? 'on' : ''}">Marbre${marbreN ? ' (' + marbreN + ')' : ''}</button>
+        <button data-v="marbre" class="${_view === 'marbre' ? 'on' : ''}">Marbre${marbreN ? ' (' + marbreN + ')' : ''}${newMarbre ? '<span class="dk-seg-new" title="' + newMarbre + ' nouvel article au marbre"></span>' : ''}</button>
       </div>
       ${_view === 'fer' ? `<div class="dk-sizer" title="Taille des cartes">
         ${icon('sliders', 13)}<input type="range" data-k="size" min="0" max="3" step="1" value="${_size}" aria-label="Taille des cartes">
@@ -847,11 +850,13 @@ function _renderFer() {
       <button class="dk-btn ghost small" data-act="newart">${icon('plus', 14)}<span class="dk-btn-txt"> Article</span></button>
     </div>
     ${(_D.inbox || []).length ? `<button class="dk-bacstrip" data-act="bac">${icon('mail', 15)}<span>${_D.inbox.length} contribution${_D.inbox.length > 1 ? 's' : ''} à rattacher</span><span class="dk-bacstrip-go">trier ${icon('chevron-right', 13)}</span></button>` : ''}
+    ${newTotal ? `<div class="dk-newstrip"><span class="dk-newstrip-dot"></span><span class="dk-newstrip-txt">${_newLabel(newCards, newMarbre)}</span><button class="dk-newstrip-clear" data-act="markseen">Tout marquer comme vu</button></div>` : ''}
     ${_view === 'fer'
       ? `<div class="dk-frise-wrap" data-size="${_size}"><div class="dk-frise" data-slot="frise"></div></div>`
       : `<div class="dk-marbre-wrap" data-slot="marbre"></div>`}`;
   _renderRail();
   main.querySelector('[data-act="bac"]')?.addEventListener('click', () => _openBacList());
+  main.querySelector('[data-act="markseen"]')?.addEventListener('click', () => { _markAllSeen(); _renderFer(); });
   main.querySelector('[data-slot="view"]').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     if (_view !== b.dataset.v) { _view = b.dataset.v; _clearMsel(); _renderFer(); }
@@ -953,8 +958,82 @@ function _planches() {
   return out;
 }
 
+/* ═══════ Signal « nouvel article » (§3.6) : halo + pastille qui pulse ═══════
+   Quand un article ARRIVE sur une page (réservé, copie reçue par e-mail, dossier
+   étalé) ou AU MARBRE (créé), la carte pulse en doré jusqu'à ce qu'on l'ouvre.
+   « Vu » = PAR APPAREIL (localStorage) : `base` posée à la 1re ouverture du numéro
+   (rien d'existant ne pulse), `acked[cible]` = dernière arrivée acquittée. Doré
+   volontaire — PAS le langage ambre/rouge des échéances (une arrivée est neutre).
+   L'horodatage d'arrivée vient du worker (slot/pièce/article `created_at`).      */
+function _nowStamp() { return new Date().toISOString().slice(0, 19).replace('T', ' '); }
+function _seenKey() { return 'dk_seen_v1_' + _issueId; }
+function _seenState() {
+  let st = null;
+  try { st = JSON.parse(localStorage.getItem(_seenKey()) || 'null'); } catch (_) {}
+  if (!st || typeof st !== 'object') { st = { base: _nowStamp(), acked: {} }; _seenSave(st); }
+  if (!st.acked || typeof st.acked !== 'object') st.acked = {};
+  return st;
+}
+function _seenSave(st) { try { localStorage.setItem(_seenKey(), JSON.stringify(st)); } catch (_) {} }
+// Arrivée d'un article SUR une page : max des created_at des slots (réservation /
+// copie e-mail rafraîchie côté worker) et des pièces reçues. PAS a.created_at (un
+// vieil article réservé aujourd'hui doit pulser par le slot, pas par sa création).
+function _cardArrivalTs(p) {
+  let ts = '';
+  for (const s of _slotsOf(p)) {
+    if (s.created_at && s.created_at > ts) ts = s.created_at;
+    for (const f of (_D.files || [])) {
+      if (f.art_id === s.art_id && f.status === 'ok' && f.created_at && f.created_at > ts) ts = f.created_at;
+    }
+  }
+  return ts;
+}
+// Arrivée d'un article AU MARBRE : sa création + ses pièces reçues.
+function _artArrivalTs(a) {
+  if (!a) return '';
+  let ts = a.created_at || '';
+  for (const f of (_D.files || [])) {
+    if (f.art_id === a.id && f.status === 'ok' && f.created_at && f.created_at > ts) ts = f.created_at;
+  }
+  return ts;
+}
+function _isNew(ts, targetId) {
+  if (!ts) return false;
+  const st = _seenState();
+  return ts > st.base && ts > (st.acked[targetId] || '');
+}
+function _ackSeen(targetId, ts) {
+  if (!ts || !targetId) return;
+  const st = _seenState();
+  if (ts > (st.acked[targetId] || '')) { st.acked[targetId] = ts; _seenSave(st); }
+}
+function _markAllSeen() { const st = _seenState(); st.base = _nowStamp(); st.acked = {}; _seenSave(st); }
+// L'utilisateur vient LUI-MÊME de poser/créer : on acquitte pour ne pas lui
+// pulser sa propre action. À appeler APRÈS _loadIssue (created_at à jour).
+function _ackCardById(pageId) { const p = (_D?.pages || []).find(x => x.id === pageId); if (p) _ackSeen(p.id, _cardArrivalTs(p)); }
+function _ackArtById(artId) { const a = _artById(artId); if (a) _ackSeen(a.id, _artArrivalTs(a)); }
+function _cardIsNew(p) { return p && p.kind === 'article' && _slotsOf(p).length > 0 && _isNew(_cardArrivalTs(p), p.id); }
+function _marbreIsNew(a) { return _isNew(_artArrivalTs(a), a.id); }
+function _newCardCount() { return (_D?.pages || []).filter(_cardIsNew).length; }
+function _newMarbreCount() { return (_D?.articles || []).filter(a => !['publie', 'abandonne'].includes(a.status) && _marbreIsNew(a)).length; }
+function _newLabel(nc, nm) {
+  const t = nc + nm;
+  return `${t} nouvel${t > 1 ? 's' : ''} article${t > 1 ? 's' : ''} arrivé${t > 1 ? 's' : ''}${nc && nm ? ` — ${nc} en page, ${nm} au marbre` : (nm ? ' au marbre' : ' en page')}`;
+}
+// Rafraîchir le bandeau « nouveaux » sans re-render complet (après un ack ponctuel).
+function _refreshNewStrip() {
+  const strip = _root?.querySelector('.dk-newstrip');
+  if (!strip) return;
+  const nc = _newCardCount(), nm = _newMarbreCount();
+  if (!(nc + nm)) { strip.remove(); return; }
+  const txt = strip.querySelector('.dk-newstrip-txt');
+  if (txt) txt.textContent = _newLabel(nc, nm);
+}
+
 function _cardHTML(p, prevP) {
   const msel = _msel.has(p.n) ? ' msel' : '';
+  const isNew = _cardIsNew(p);
+  const newDot = isNew ? `<span class="dk-pc-new" title="Nouvel article arrivé"></span>` : '';
   const nFiles = _filesOf(p).filter(f => f.status === 'ok').length;
   const fileBadge = nFiles ? `<span class="dk-pc-badge">${icon('paperclip', 9)}${nFiles}</span>` : '';
   if (p.kind === 'fixe') {
@@ -987,7 +1066,8 @@ function _cardHTML(p, prevP) {
   if (slots.length > 1) badges.push(`<span class="dk-pc-badge">${icon('copy', 9)}${slots.length}</span>`);
   if (bancTotal) badges.push(`<span class="dk-pc-badge">${icon('users', 9)}${bancTotal}</span>`);
   if (fileBadge) badges.push(fileBadge);
-  return `<div class="dk-pcard ${cls}${msel}${rub ? ' rubbed' : ''}" data-n="${p.n}" data-art="${a.id}"${_rubVars(rub)}>
+  return `<div class="dk-pcard ${cls}${msel}${rub ? ' rubbed' : ''}${isNew ? ' dk-new' : ''}" data-n="${p.n}" data-art="${a.id}"${_rubVars(rub)}>
+    ${newDot}
     <div class="dk-pc-rub"><span>${_esc(rub ? rub.name : 'Sans rubrique')}${suite ? ' · suite' : ''}</span></div>
     <div class="dk-pc-title">${_esc(a.title)}</div>
     ${a.contrib ? `<div class="dk-pc-contrib">${_esc(a.contrib)}${slots.length > 1 ? ' +' + (slots.length - 1) : ''}</div>` : ''}
@@ -1051,9 +1131,12 @@ function _renderMselBar() {
 }
 async function _mselBatch(op, params, okMsg) {
   try {
-    const r = await _api('/issue/' + _issueId + '/batch', { method: 'POST', body: { ns: [..._msel], op, ...params } });
+    const sel = [..._msel];
+    const r = await _api('/issue/' + _issueId + '/batch', { method: 'POST', body: { ns: sel, op, ...params } });
     _toast(okMsg(r) + (r.skipped ? ` · ${r.skipped} ignorée${r.skipped > 1 ? 's' : ''}` : ''));
     await _loadIssue(true);
+    // Étaler un dossier = mon action → acquitter ces pages (pas de halo pour moi).
+    if (op === 'spread') sel.forEach(n => { const p = _D.pages.find(x => x.n === n); if (p) _ackSeen(p.id, _cardArrivalTs(p)); });
     _updateMselClasses();
   } catch (e) { _toast(e.message, true); }
 }
@@ -1410,10 +1493,10 @@ function _renderMarbre() {
         pl.tit.forEach(n => chips.push(`<span class="dk-mchip on">p. ${_pn(n)}</span>`));
         pl.banc.forEach(n => chips.push(`<span class="dk-mchip">banc p. ${_pn(n)}</span>`));
         if (!chips.length && !['publie', 'abandonne'].includes(a.status)) chips.push(`<span class="dk-mchip libre">libre</span>`);
-        return `<div class="dk-mrow" data-a="${a.id}">
+        return `<div class="dk-mrow${_marbreIsNew(a) ? ' dk-new' : ''}" data-a="${a.id}">
           <span class="dk-pc-dot" style="background:${rub ? rub.color : '#8d93a8'}"></span>
           <div class="dk-mrow-main">
-            <div class="dk-mrow-title">${_esc(a.title)}${_isReported(a) ? ' <span class="dk-mchip report">report</span>' : ''}</div>
+            <div class="dk-mrow-title">${_marbreIsNew(a) ? '<span class="dk-mrow-new" title="Nouvel article"></span>' : ''}${_esc(a.title)}${_isReported(a) ? ' <span class="dk-mchip report">report</span>' : ''}</div>
             <div class="dk-mrow-meta">${rub ? _esc(rub.name) : 'Sans rubrique'}${a.contrib ? ' · ' + _esc(a.contrib) : ''} · <span style="color:${st.dot}">●</span> ${st.label} · <span class="${fresh.cls}">${fresh.label}</span></div>
           </div>
           <div class="dk-mrow-chips">${chips.join('')}</div>
@@ -1434,6 +1517,15 @@ function _renderMarbre() {
 function _openInspMarbre(artId) {
   const a = _artById(artId);
   if (!a) return;
+  // Ouvrir une fiche marbre = « vu » : acquitte l'arrivée, éteint le halo.
+  if (_marbreIsNew(a)) {
+    _ackSeen(a.id, _artArrivalTs(a));
+    const row = _root.querySelector(`.dk-mrow[data-a="${a.id}"]`);
+    if (row) { row.classList.remove('dk-new'); row.querySelector('.dk-mrow-new')?.remove(); }
+    const seg = _root.querySelector('[data-slot="view"] [data-v="marbre"] .dk-seg-new');
+    if (seg && !_newMarbreCount()) seg.remove();
+    _refreshNewStrip();
+  }
   const insp = _root.querySelector('[data-slot="insp"]');
   const _sy = _inspScrollGet('marbre:' + artId);
   const rub = _rubById(a.rub_id);
@@ -1489,6 +1581,7 @@ function _openInspMarbre(artId) {
       await _api('/page/' + b.dataset.pg + '/slot', { method: 'POST', body: { art_id: a.id } });
       _toast('Article réservé sur la page ' + _pn(parseInt(b.dataset.n, 10)) + '.');
       await _loadIssue(true);
+      _ackCardById(b.dataset.pg);   // réservation par moi → pas de halo pour moi
       if (_view === 'marbre') _renderMarbre();
       _openInspMarbre(a.id);
     } catch (e) { _toast(e.message, true); }
@@ -1535,6 +1628,15 @@ function _openInsp(n, silent) {
   if (_selN !== n) _selSlot = 0;
   _selN = n;
   _root.querySelectorAll('.dk-pcard.sel').forEach(x => x.classList.remove('sel'));
+  // Ouvrir une carte = « vu » : on acquitte son arrivée et on éteint le halo.
+  if (_cardIsNew(p)) {
+    _ackSeen(p.id, _cardArrivalTs(p));
+    const el = _root.querySelector(`[data-slot="frise"] .dk-pcard[data-n="${n}"]`);
+    if (el) { el.classList.remove('dk-new'); el.querySelector('.dk-pc-new')?.remove(); }
+    const seg = _root.querySelector('[data-slot="view"] [data-v="marbre"] .dk-seg-new');
+    if (seg && !_newMarbreCount()) seg.remove();
+    _refreshNewStrip();
+  }
   _root.querySelector(`[data-slot="frise"] .dk-pcard[data-n="${n}"]`)?.classList.add('sel');
   const insp = _root.querySelector('[data-slot="insp"]');
   const _sy = _inspScrollGet('page:' + n);
@@ -1641,7 +1743,7 @@ function _renderInspVide(insp, p) {
     try {
       await _api('/page/' + p.id + '/slot', { method: 'POST', body: { art_id: b.dataset.a } });
       _toast('Article réservé sur la page ' + _pn(p.n) + '.');
-      await _loadIssue(true); _openInsp(p.n, true);
+      await _loadIssue(true); _ackCardById(p.id); _openInsp(p.n, true);
     } catch (e) { _toast(e.message, true); }
   });
   insp.querySelector('[data-k="prerub"]').addEventListener('change', async e => {
@@ -1825,7 +1927,7 @@ function _renderInspArticle(insp, p) {
       try {
         await _api('/page/' + p.id + '/slot', { method: 'POST', body: { art_id: bp.dataset.addslot } });
         _toast('Article ajouté sur la page ' + _pn(p.n) + '.');
-        await _loadIssue(true); _selSlot = _slotsOf(p).length - 1; _openInsp(p.n, true);
+        await _loadIssue(true); _ackCardById(p.id); _selSlot = _slotsOf(p).length - 1; _openInsp(p.n, true);
       } catch (e) { _toast(e.message, true); }
     });
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -2180,6 +2282,8 @@ function _openArtForm(page, existing, onDone, bancSlot) {
           : 'Article créé — il attend au marbre.');
       }
       await _loadIssue(true);
+      // Ma propre création/réservation ne doit pas me « pulser ».
+      if (!a && artId) { if (page) _ackCardById(page.id); else _ackArtById(artId); }
       if (_view === 'marbre') _renderMarbre();
       if (thenWrite && artId) _openWriter(artId, () => _openInspMarbre(artId));
       else back();

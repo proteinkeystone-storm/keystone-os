@@ -248,6 +248,11 @@ async function _rattacher(env, { pubId, art, pageId, issueId, pageN, atts, body,
   if (pageId) {
     await env.DB.prepare(`UPDATE dk_pages SET updated_at = datetime('now'), updated_by = ? WHERE id = ?`)
       .bind(by === 'digestion' ? 'la digestion' : by, pageId).run();
+    // Signal « nouvel article » (§3.6) : une copie qui arrive sur une page déjà
+    // servie rafraîchit l'horodatage d'arrivée du slot → la carte pulse même
+    // sans pièce jointe (copie texte seule). created_at = « dernière arrivée ici ».
+    await env.DB.prepare(`UPDATE dk_page_slots SET created_at = datetime('now') WHERE page_id = ? AND art_id = ?`)
+      .bind(pageId, art.id).run();
   }
   // L'e-mail du contributeur se mémorise tout seul (satellite §2).
   if (fromEmail && cur.contrib) {

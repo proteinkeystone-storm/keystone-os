@@ -169,7 +169,7 @@ async function _ensureSchema(env) {
     `CREATE TABLE IF NOT EXISTS dk_page_slots (
        id TEXT PRIMARY KEY, page_id TEXT NOT NULL, pub_id TEXT NOT NULL,
        position INTEGER NOT NULL DEFAULT 0, art_id TEXT,
-       banc TEXT NOT NULL DEFAULT '[]')`,
+       banc TEXT NOT NULL DEFAULT '[]', created_at TEXT)`,
     `CREATE INDEX IF NOT EXISTS idx_dk_slots_page ON dk_page_slots(page_id, position)`,
     // DK-3 : casier — pièces éphémères en R2, métadonnées ici (§6). Une pièce
     // vit sur une carte-page ; art_id (optionnel) sert la rétention prolongée
@@ -225,6 +225,11 @@ async function _ensureSchema(env) {
   // DK-3 : horodatage du passage en « imprimé » — point de départ du délai de
   // grâce du casier (purge post-impression, §6).
   try { await env.DB.prepare(`ALTER TABLE dk_issues ADD COLUMN imprime_at TEXT`).run(); } catch (_) {}
+  // Signal « nouvel article » (halo/pastille qui pulse §3.6) : horodatage de la
+  // POSE d'un emplacement sur une page (réservation, dossier étalé). NULL sur les
+  // slots antérieurs = jamais un signal — on ne pulse que ce qui arrive APRÈS
+  // l'activation. Détection d'arrivée côté client (max de created_at art/slot/pièce).
+  try { await env.DB.prepare(`ALTER TABLE dk_page_slots ADD COLUMN created_at TEXT`).run(); } catch (_) {}
   // Migration DK-1 → DK-2 : l'ancien art_id/banc de la page devient l'emplacement 0.
   await env.DB.prepare(
     `INSERT INTO dk_page_slots (id, page_id, pub_id, position, art_id, banc)
@@ -335,7 +340,7 @@ const PUB_COLS   = 'id, name, owner_sub, slug, cover_unnumbered, first_folio, cr
 const RUB_COLS   = 'id, name, color, position';
 const ISSUE_COLS = 'id, pub_id, num, theme, status, jalons, created_at';
 const PAGE_COLS  = 'id, issue_id, n, kind, fixe_tag, fixe_title, rub_id, updated_at, updated_by';
-const SLOT_COLS  = 'id, page_id, position, art_id, banc';
+const SLOT_COLS  = 'id, page_id, position, art_id, banc, created_at';
 const ART_COLS   = 'id, title, rub_id, contrib, status, due, fresh, perime, notes, histo, created_at, updated_at';
 const FILE_COLS  = 'id, issue_id, page_id, art_id, name, mime, size, status, uploaded_by, created_at';
 
@@ -897,7 +902,7 @@ export async function handleIssueBatch(request, env, issueId) {
       if (sl.some(s => s.art_id === a.id)) { skipped++; continue; }
       if (sl.length >= MAX_SLOTS) { skipped++; continue; }
       stmts.push(env.DB.prepare(
-        `INSERT INTO dk_page_slots (id, page_id, pub_id, position, art_id) VALUES (?, ?, ?, ?, ?)`)
+        `INSERT INTO dk_page_slots (id, page_id, pub_id, position, art_id, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))`)
         .bind(generateId(), p.id, pubId, sl.length, a.id));
       stmts.push(env.DB.prepare(`UPDATE dk_pages SET kind = 'article', updated_at = datetime('now'), updated_by = ? WHERE id = ?`).bind(by, p.id));
       done++;
@@ -1045,7 +1050,7 @@ export async function handleSlotCreate(request, env, pageId) {
   if (existing.length >= MAX_SLOTS) return err('Limite d’articles atteinte sur cette page', 403, origin);
   const id = generateId();
   await env.DB.batch([
-    env.DB.prepare('INSERT INTO dk_page_slots (id, page_id, pub_id, position, art_id) VALUES (?, ?, ?, ?, ?)')
+    env.DB.prepare("INSERT INTO dk_page_slots (id, page_id, pub_id, position, art_id, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")
       .bind(id, pageId, pubId, existing.length, owns.id),
     env.DB.prepare(`UPDATE dk_pages SET kind = 'article', updated_at = datetime('now'), updated_by = ? WHERE id = ?`).bind(_byName(u), pageId),
   ]);
