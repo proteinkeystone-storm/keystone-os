@@ -753,19 +753,28 @@ function _bindFileButtons(insp, refresh) {
       document.body.appendChild(link); link.click(); link.remove();
     } catch (e) { _toast(e.message, true); }
   });
-  // Suppression sobre en deux temps : le second clic confirme.
-  insp.querySelectorAll('[data-delf]').forEach(b => b.onclick = async () => {
-    if (!b.classList.contains('arm')) {
-      b.classList.add('arm'); b.title = 'Cliquer à nouveau pour supprimer';
-      setTimeout(() => b.classList.remove('arm'), 2600);
-      return;
-    }
-    try {
-      await _api('/casier/' + b.dataset.delf, { method: 'DELETE' });
-      _toast('Pièce supprimée.');
-      await _loadIssue(true);
-      if (refresh) refresh();
-    } catch (e) { _toast(e.message, true); }
+  // Suppression : confirmation INLINE claire (pas d'« armé 2 clics » à minuteur
+  // — invisible et fragile : un 2e clic hésitant ré-armait au lieu de supprimer).
+  insp.querySelectorAll('[data-delf]').forEach(b => b.onclick = () => {
+    const row = b.closest('.dk-file');
+    const id = b.dataset.delf;
+    if (!row || row.querySelector('.dk-file-confirm')) return;
+    const name = (row.querySelector('.dk-file-name')?.textContent || 'cette pièce').trim();
+    row.innerHTML = `<div class="dk-file-confirm">
+      <span class="dk-file-confirm-q">Supprimer « ${_esc(name)} » ?</span>
+      <span class="dk-file-confirm-acts">
+        <button class="dk-btn small dk-btn-danger" data-delyes>Supprimer</button>
+        <button class="dk-btn small" data-delno>Annuler</button>
+      </span></div>`;
+    row.querySelector('[data-delno]').onclick = () => { if (refresh) refresh(); };
+    row.querySelector('[data-delyes]').onclick = async () => {
+      try {
+        await _api('/casier/' + id, { method: 'DELETE' });
+        _toast('Pièce supprimée.');
+        await _loadIssue(true);
+        if (refresh) refresh();
+      } catch (e) { _toast(e.message, true); }
+    };
   });
 }
 
