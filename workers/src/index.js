@@ -154,7 +154,7 @@ import { handleDeskHealth, handleDeskBootstrap, handlePubCreate, handlePubPatch,
          handleTeamList, handleTeamInvite, handleTeamRemove,
          handleRubCreate, handleRubPatch, handleRubDelete,
          handleIssueCreate, handleIssueGet, handleIssuePatch, handleIssueSwap,
-         handleIssueMove, handleIssueBatch,
+         handleIssueMove, handleIssueBatch, handleIssueResize,
          handlePagePatch, handleSlotCreate, handleSlotPatch, handleSlotDelete,
          handleArtCreate, handleArtPatch, handleArtDelete,
          handleCasierRequest, handleCasierPut, handleCasierComplete,
@@ -335,6 +335,8 @@ export default {
       if (dkMove && method === 'POST') return handleIssueMove(request, env, dkMove[1]);
       const dkBatch = path.match(/^\/api\/desk\/issue\/([A-Za-z0-9-]+)\/batch$/);
       if (dkBatch && method === 'POST') return handleIssueBatch(request, env, dkBatch[1]);
+      const dkResize = path.match(/^\/api\/desk\/issue\/([A-Za-z0-9-]+)\/resize$/);
+      if (dkResize && method === 'POST') return handleIssueResize(request, env, dkResize[1]);
       const dkPage = path.match(/^\/api\/desk\/page\/([A-Za-z0-9-]+)$/);
       if (dkPage && method === 'PATCH') return handlePagePatch(request, env, dkPage[1]);
       const dkSlotC = path.match(/^\/api\/desk\/page\/([A-Za-z0-9-]+)\/slot$/);

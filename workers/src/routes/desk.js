@@ -909,6 +909,75 @@ export async function handleIssueBatch(request, env, issueId) {
   return json({ ok: true, done, skipped }, 200, origin);
 }
 
+/* Redimensionner un numéro : changer son NOMBRE DE PAGES en cours de route
+   (une revue grossit ou maigrit). Règle : la DERNIÈRE page (4ᵉ de couverture)
+   reste toujours en dernier — on ajoute / retire les pages JUSTE AVANT elle.
+   - agrandir : on insère des pages vides avant la dernière ;
+   - réduire  : on retire les pages juste avant la dernière, mais SEULEMENT si
+     elles sont vides (aucun article/emplacement, aucune pièce au casier, pas
+     figées). Sinon 409 avec la liste des pages qui bloquent — l'utilisateur
+     les libère/déplace d'abord (rien de surprenant, aucun contenu déplacé).   */
+export async function handleIssueResize(request, env, issueId) {
+  const origin = getAllowedOrigin(env, request);
+  const pubId = await pubOf(env, 'dk_issues', issueId);
+  const u = await memberGate(request, env, origin, pubId);
+  if (u.error) return u.error;
+  const issue = await env.DB.prepare('SELECT status FROM dk_issues WHERE id = ?').bind(issueId).first();
+  if (!issue) return err('Numéro introuvable', 404, origin);
+  if (issue.status === 'imprime') return err('Ce numéro est imprimé — son format est figé', 409, origin);
+
+  const body = await parseBody(request);
+  const target = parseInt(body.pages, 10);
+  if (!Number.isFinite(target) || target < 4 || target > MAX_PAGES)
+    return err(`Nombre de pages invalide (entre 4 et ${MAX_PAGES})`, 400, origin);
+
+  const pages = (await env.DB.prepare(`SELECT ${PAGE_COLS} FROM dk_pages WHERE issue_id = ? ORDER BY n`).bind(issueId).all()).results || [];
+  const N = pages.length;
+  if (!N) return err('Numéro sans pages', 400, origin);
+  if (target === N) return json({ ok: true, pages: N, added: 0, removed: 0 }, 200, origin);
+
+  const last = pages[pages.length - 1];         // la 4ᵉ de couverture (ou la dernière page)
+  const by = _byName(u);
+  const stmts = [];
+
+  if (target > N) {
+    // AGRANDIR : la dernière page glisse en fin, on insère du vide avant elle.
+    const delta = target - N;
+    stmts.push(env.DB.prepare(`UPDATE dk_pages SET n = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?`).bind(target, by, last.id));
+    for (let n = N; n <= target - 1; n++) {
+      stmts.push(env.DB.prepare(
+        `INSERT INTO dk_pages (id, issue_id, pub_id, n, kind, updated_by) VALUES (?, ?, ?, ?, 'vide', ?)`)
+        .bind(generateId(), issueId, pubId, n, by));
+    }
+    await env.DB.batch(stmts);
+    return json({ ok: true, pages: target, added: delta, removed: 0 }, 200, origin);
+  }
+
+  // RÉDUIRE : on retire les pages juste avant la dernière (n ∈ [target, N-1]).
+  const doomed = pages.filter(p => p.n >= target && p.n <= N - 1);
+  const ids = doomed.map(p => p.id);
+  // Vérifs de sécurité : rien de vivant dans la zone retirée.
+  const blockers = [];
+  const slotRows = ids.length ? (await env.DB.prepare(
+    `SELECT DISTINCT page_id FROM dk_page_slots WHERE page_id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results || [] : [];
+  const fileRows = ids.length ? (await env.DB.prepare(
+    `SELECT DISTINCT page_id FROM dk_files WHERE page_id IN (${ids.map(() => '?').join(',')}) AND status != 'rejete'`).bind(...ids).all()).results || [] : [];
+  const withSlots = new Set(slotRows.map(r => r.page_id));
+  const withFiles = new Set(fileRows.map(r => r.page_id));
+  for (const p of doomed) {
+    if (p.kind === 'fixe') blockers.push({ n: p.n, why: p.fixe_tag || 'figée' });
+    else if (withSlots.has(p.id)) blockers.push({ n: p.n, why: 'article' });
+    else if (withFiles.has(p.id)) blockers.push({ n: p.n, why: 'pièce au casier' });
+  }
+  if (blockers.length)
+    return err('Des pages à retirer ne sont pas vides : ' + blockers.map(b => 'p. ' + b.n + ' (' + b.why + ')').join(', ') + '. Libérez-les ou déplacez leur contenu d’abord.', 409, origin);
+
+  for (const id of ids) stmts.push(env.DB.prepare('DELETE FROM dk_pages WHERE id = ?').bind(id));
+  stmts.push(env.DB.prepare(`UPDATE dk_pages SET n = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?`).bind(target, by, last.id));
+  await env.DB.batch(stmts);
+  return json({ ok: true, pages: target, added: 0, removed: doomed.length }, 200, origin);
+}
+
 // ── Cartes-pages (figer / libérer / rubrique de page) ──────────
 // Depuis DK-2, la réservation d'articles passe par les EMPLACEMENTS
 // (/page/:id/slot, /slot/:id) — plus d'art_id/banc au niveau page.

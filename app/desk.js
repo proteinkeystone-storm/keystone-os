@@ -2220,6 +2220,15 @@ async function _openSettings() {
       </select></label>
       <div data-slot="statusconfirm"></div>
       <p class="dk-note">Passer en « imprimé » déclenche le rituel de bouclage : les articles en page sont marqués publiés, les remplaçants restés au banc sont reversés au marbre avec la mention du report.</p>
+    </div>
+
+    <div class="dk-sec"><h4>Nombre de pages du n° ${_esc(_D.issue.num)}</h4>
+      <label class="dk-field dk-field-row"><span>Ce numéro compte</span>
+        <span class="dk-pagesizer"><input type="number" data-k="pagecount" min="4" max="400" step="1" value="${_D.pages.length}"> pages</span></label>
+      <div class="dk-btn-row"><button class="dk-btn small primary" data-act="savepages">Appliquer</button>
+        <span class="dk-note" data-slot="pagehint" style="align-self:center">actuellement ${_D.pages.length} pages</span></div>
+      <div data-slot="pageconfirm"></div>
+      <p class="dk-note">On ajoute ou retire des pages vides <strong>juste avant la 4ᵉ de couverture</strong> — le reste du chemin de fer ne bouge pas. Réduire n'est possible que si les pages retirées sont vides (sinon desK vous dit lesquelles libérer).</p>
     </div>` : ''}
 
     <div class="dk-sec"><h4>Rubriques (liste fermée)</h4>
@@ -2343,6 +2352,39 @@ async function _openSettings() {
         _renderFer();               // frise + rail reprennent le nouveau folio
         _openSettings();
       } catch (e) { _toast(e.message, true); }
+    });
+  }
+  // Nombre de pages du numéro (redimensionnement §avant la 4ᵉ de couv).
+  {
+    const inp = insp.querySelector('[data-k="pagecount"]');
+    const hint = insp.querySelector('[data-slot="pagehint"]');
+    const cur = _D.pages.length;
+    inp?.addEventListener('input', () => {
+      const v = parseInt(inp.value, 10);
+      if (!Number.isFinite(v) || v === cur) { hint.textContent = 'actuellement ' + cur + ' pages'; return; }
+      hint.textContent = v > cur ? '+ ' + (v - cur) + ' page(s) avant la 4ᵉ de couv' : '− ' + (cur - v) + ' page(s) retirée(s)';
+    });
+    const apply = async () => {
+      const v = parseInt(inp.value, 10);
+      if (!Number.isFinite(v) || v < 4) { _toast('Nombre de pages invalide (min. 4).', true); return; }
+      try {
+        const r = await _api('/issue/' + _issueId + '/resize', { method: 'POST', body: { pages: v } });
+        _toast(r.added ? r.added + ' page(s) ajoutée(s).' : r.removed ? r.removed + ' page(s) retirée(s).' : 'Nombre de pages inchangé.');
+        await _loadIssue(true); _renderFer(); _openSettings();
+      } catch (e) { _toast(e.message, true); _openSettings(); }
+    };
+    insp.querySelector('[data-act="savepages"]')?.addEventListener('click', () => {
+      const v = parseInt(inp.value, 10);
+      const box = insp.querySelector('[data-slot="pageconfirm"]');
+      if (Number.isFinite(v) && v < cur) {     // réduction → confirmation sobre
+        box.innerHTML = `<div class="dk-confirm">Retirer ${cur - v} page(s) vide(s) avant la 4ᵉ de couverture ?
+          <div class="dk-btn-row" style="margin-top:8px">
+            <button class="dk-btn small primary" data-act="pgyes">Retirer</button>
+            <button class="dk-btn small" data-act="pgno">Annuler</button>
+          </div></div>`;
+        box.querySelector('[data-act="pgno"]').onclick = () => { box.innerHTML = ''; };
+        box.querySelector('[data-act="pgyes"]').onclick = apply;
+      } else apply();
     });
   }
   insp.querySelector('[data-act="savejalons"]')?.addEventListener('click', async () => {

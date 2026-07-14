@@ -572,6 +572,8 @@ html.light-mode .dk-bac-select { color-scheme: light; }
 .dk-slug-row input { flex: 1 1 160px; min-width: 140px; text-align: right; }
 .dk-slug-fix { font-size: 13px; color: var(--dk-tx2); white-space: nowrap; }
 .dk-bac-addr { font-size: 13.5px; margin: 2px 0 4px; user-select: all; }
+.dk-pagesizer { display: inline-flex; align-items: baseline; gap: 6px; font-size: 13px; color: var(--dk-tx2); }
+.dk-pagesizer input { width: 68px; text-align: right; }
 
 /* ── Mobile : consultation + pointage (§3.6) ───────────────────── */
 @media (max-width: 820px) {
