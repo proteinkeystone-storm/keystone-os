@@ -86,6 +86,7 @@ let _msel = new Set(), _mselAnchor = null, _embark = false;
 let _mf = { q: '', rub: '', fresh: '', statut: 'vivant' };   // filtres du marbre
 let _toastTimer = null;
 let _ppFile = null;             // DK-6 : PDF final retenu en mémoire (contrôle + pont booK)
+let _writer = null;             // éditeur d'article ouvert : { artId, timer, dirty, saving, back }
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -170,6 +171,7 @@ export function openDesk() {
     <aside class="dk-insp" data-slot="insp"></aside>
     <div class="dk-veil" data-slot="veil"></div>
     <div class="dk-mselbar" data-slot="mselbar"></div>
+    <div class="dk-writer" data-slot="writer"></div>
     <div class="dk-toast" data-slot="toast"></div>
   `;
   document.body.appendChild(_root);
@@ -188,6 +190,7 @@ export function openDesk() {
 export function closeDesk() {
   if (!_root) return;
   clearInterval(_pollTimer); clearTimeout(_toastTimer);
+  if (_writer) { clearTimeout(_writer.timer); _writer = null; }
   document.removeEventListener('keydown', _onKey);
   document.removeEventListener('visibilitychange', _onVisibility);
   _root.remove();
@@ -200,12 +203,13 @@ export function closeDesk() {
 
 function _onKey(e) {
   if (e.key !== 'Escape') return;
+  if (_root.querySelector('.dk-writer.on')) { _closeWriter(); return; }
   if (_root.querySelector('.dk-insp.on')) { _closeInsp(); return; }
   if (_msel.size) { _clearMsel(); return; }
   _onBack();
 }
-function _onBack() { closeDesk(); }
-function _onVisibility() { if (!document.hidden && _issueId) _loadIssue(true); }
+function _onBack() { if (_writer) { _closeWriter(); return; } closeDesk(); }
+function _onVisibility() { if (!document.hidden && _issueId && !_writer) _loadIssue(true); }
 
 // ── Boot : bootstrap → publication → numéro ─────────────────────
 async function _boot() {
@@ -226,7 +230,7 @@ async function _boot() {
     _issueId = pub.issues.find(i => i.id === localStorage.getItem('dk_last_issue'))?.id || pub.issues[0].id;
     await _loadIssue();
     clearInterval(_pollTimer);
-    _pollTimer = setInterval(() => { if (!document.hidden && _issueId) _loadIssue(true); }, POLL_MS);
+    _pollTimer = setInterval(() => { if (!document.hidden && _issueId && !_writer) _loadIssue(true); }, POLL_MS);
   } catch (e) {
     if (String(e.message) === 'offline' && cached) { _offline = true; _renderFer(); }
     else if (String(e.message) === 'offline') main.innerHTML = `<div class="dk-center dk-empty"><p>Impossible de joindre le serveur.<br>Vérifiez la connexion puis rouvrez desK.</p></div>`;
@@ -604,6 +608,88 @@ function _bindPasserelles(insp, a) {
   });
 }
 
+/* ═══════════ Éditeur d'article — écriture confortable ═══════════
+   La copie de l'article vit dans `notes` (durable, 60k côté worker — ce
+   n'est PAS le casier éphémère). Surface plein écran, colonne de lecture,
+   autosave débounce + à la fermeture. desK reste un chemin de fer : on écrit
+   le texte au fil (intertitres = lignes vides), pas de traitement de texte
+   riche. Le pont Ghost Writer reste là pour la relecture ortho/typo/style. */
+function _wordCount(s) { const t = String(s || '').trim(); return t ? t.split(/\s+/).length : 0; }
+function _copyBadge(a) {
+  const w = _wordCount(a && a.notes);
+  return w ? `${w} mot${w > 1 ? 's' : ''}` : 'aucun texte';
+}
+function _openWriter(artId, back) {
+  const a = _artById(artId);
+  if (!a) return;
+  const box = _root.querySelector('[data-slot="writer"]');
+  _writer = { artId, timer: null, dirty: false, saving: false, back: back || null };
+  box.innerHTML = `
+    <div class="dk-wr-bar">
+      <button class="dk-wr-close" data-act="wrback" aria-label="Fermer l'éditeur" title="Fermer (Échap)">${icon('chevron-left', 22)}<span>desK</span></button>
+      <div class="dk-wr-titlewrap">
+        <input class="dk-wr-title" data-k="wrtitle" maxlength="240" value="${_esc(a.title)}" placeholder="Titre de l'article" spellcheck="true">
+        <div class="dk-wr-sub">${_esc(_rubById(a.rub_id)?.name || 'Sans rubrique')}${a.contrib ? ' · ' + _esc(a.contrib) : ''}</div>
+      </div>
+      <div class="dk-wr-state" data-slot="wrstate"></div>
+    </div>
+    <div class="dk-wr-scroll">
+      <div class="dk-wr-col">
+        <textarea class="dk-wr-body" data-k="wrbody" spellcheck="true" placeholder="Écrivez l'article ici…&#10;&#10;Une ligne vide sépare les paragraphes. Le texte s'enregistre tout seul et voyage avec l'article d'un numéro à l'autre.">${_esc(a.notes || '')}</textarea>
+      </div>
+    </div>
+    <div class="dk-wr-foot"><span data-slot="wrcount"></span></div>`;
+  box.classList.add('on');
+  const ta = box.querySelector('[data-k="wrbody"]');
+  const title = box.querySelector('[data-k="wrtitle"]');
+  const count = box.querySelector('[data-slot="wrcount"]');
+  const state = box.querySelector('[data-slot="wrstate"]');
+  const setCount = () => { const w = _wordCount(ta.value); count.textContent = `${w} mot${w > 1 ? 's' : ''} · ${ta.value.length} car.`; };
+  const schedule = () => { _writer.dirty = true; state.textContent = '…'; clearTimeout(_writer.timer); _writer.timer = setTimeout(() => _saveWriter(), 900); };
+  setCount();
+  ta.addEventListener('input', () => { setCount(); schedule(); });
+  title.addEventListener('input', schedule);
+  box.querySelector('[data-act="wrback"]').addEventListener('click', () => _closeWriter());
+  ta.focus();
+}
+async function _saveWriter() {
+  if (!_writer) return;
+  const box = _root.querySelector('[data-slot="writer"]');
+  const ta = box?.querySelector('[data-k="wrbody"]');
+  const title = box?.querySelector('[data-k="wrtitle"]');
+  const state = box?.querySelector('[data-slot="wrstate"]');
+  if (!ta) return;
+  const a = _artById(_writer.artId);
+  const body = {};
+  const t = (title.value || '').trim();
+  if (t && (!a || t !== a.title)) body.title = t;
+  if (!a || ta.value !== (a.notes || '')) body.notes = ta.value;
+  if (!Object.keys(body).length) { _writer.dirty = false; if (state) state.textContent = 'Enregistré'; return; }
+  _writer.saving = true;
+  try {
+    await _api('/article/' + _writer.artId, { method: 'PATCH', body });
+    _writer.dirty = false;
+    if (a) { if (body.notes !== undefined) a.notes = body.notes; if (body.title !== undefined) a.title = body.title; }
+    if (state) state.textContent = 'Enregistré';
+  } catch (e) {
+    if (state) state.textContent = 'Non enregistré';
+    _toast('Écriture non enregistrée : ' + e.message, true);
+  } finally { _writer.saving = false; }
+}
+async function _closeWriter() {
+  if (!_writer) return;
+  const box = _root.querySelector('[data-slot="writer"]');
+  clearTimeout(_writer.timer);
+  if (_writer.dirty && !_writer.saving) await _saveWriter();
+  const { back, artId } = _writer;
+  _writer = null;
+  box.classList.remove('on');
+  box.innerHTML = '';
+  await _loadIssue(true);
+  if (_view === 'marbre') _renderMarbre();
+  if (back) back(); else _openInspMarbre(artId);
+}
+
 // Upload d'une liste de fichiers vers le casier d'une page (présigné ou direct).
 async function _uploadFiles(page, fileList, refresh) {
   const files = [...(fileList || [])];
@@ -681,6 +767,59 @@ function _bindFileButtons(insp, refresh) {
       if (refresh) refresh();
     } catch (e) { _toast(e.message, true); }
   });
+}
+
+// Déposer des pièces SUR un article, même au marbre (avant tout placement).
+// Imputé au numéro couramment consulté (endpoint /article/:id/casier).
+async function _uploadFilesToArt(art, fileList, refresh) {
+  const files = [...(fileList || [])];
+  if (!files.length) return;
+  if (!_D || _D.casier === 'off') { _toast('Le casier n’est pas configuré sur ce serveur.', true); return; }
+  for (const f of files) {
+    try {
+      _toast('Envoi de « ' + f.name + ' »…');
+      const req = await _api('/article/' + art.id + '/casier', { method: 'POST', body: { name: f.name, size: f.size, issue_id: _issueId } });
+      if (req.upload.mode === 'presigned') {
+        const put = await fetch(req.upload.url, { method: 'PUT', body: f, headers: { 'Content-Type': req.upload.content_type } });
+        if (!put.ok) throw new Error('le stockage a refusé le fichier (HTTP ' + put.status + ')');
+        await _api('/casier/' + req.file.id + '/complete', { method: 'POST' });
+      } else {
+        await _apiBlob('/casier/' + req.file.id + '/put', f);
+      }
+      _toast('« ' + f.name + ' » joint à l’article.');
+    } catch (e) { _toast('Échec de « ' + f.name + ' » : ' + e.message, true); }
+  }
+  await _loadIssue(true);
+  if (refresh) refresh();
+}
+// Section « Pièces jointes » de la fiche article (marbre) — upload compris.
+function _artCasierSectionHTML(a) {
+  if (!_D || _D.casier === 'off') return '';
+  const files = (_D.files || []).filter(f => f.art_id === a.id);
+  const q = _D.quota || { used: 0, max: 1 };
+  return `<div class="dk-sec"><h4>Pièces jointes (${files.filter(f => f.status === 'ok').length})</h4>
+    ${files.map(f => `<div class="dk-file">
+      <span class="dk-file-ico">${icon('paperclip', 13)}</span>
+      <div class="dk-file-info">
+        <div class="dk-file-name">${_esc(f.name)}</div>
+        <div class="dk-file-meta">${_fmtSize(f.size)}${f.uploaded_by ? ' · ' + _esc(f.uploaded_by) : ''}${f.page_id === '' ? ' · au marbre avec l’article' : ''}${f.status !== 'ok' ? ' · <em>envoi en cours…</em>' : ''}</div>
+      </div>
+      ${f.status === 'ok' ? `<button class="dk-iconbtn" data-dlf="${f.id}" title="Télécharger" aria-label="Télécharger">${icon('download', 14)}</button>` : ''}
+      <button class="dk-iconbtn" data-delf="${f.id}" title="Supprimer la pièce" aria-label="Supprimer">${icon('x', 14)}</button>
+    </div>`).join('') || `<p class="dk-empty-line">Aucune pièce — photo, PDF ou document. Déposez-les ci-dessous : elles suivent l’article, même avant sa mise en page.</p>`}
+    <div class="dk-btn-row" style="margin-top:8px">
+      <button class="dk-btn small" data-act="addartfile">${icon('upload-cloud', 14)} Joindre des fichiers</button>
+      <input type="file" data-k="artfileinput" multiple style="display:none">
+    </div>
+    <p class="dk-note" title="Casier de transmission éphémère — purgé ~30 j après l'impression du numéro">Imputé au n° courant · purgé ~30 j après impression · ${_fmtSize(q.used)} / ${_fmtSize(q.max)}</p>
+  </div>`;
+}
+function _bindArtCasier(insp, a, refresh) {
+  const input = insp.querySelector('[data-k="artfileinput"]');
+  if (!input) return;
+  insp.querySelector('[data-act="addartfile"]').onclick = () => input.click();
+  input.addEventListener('change', () => { _uploadFilesToArt(a, input.files, refresh); input.value = ''; });
+  _bindFileButtons(insp, refresh);
 }
 
 /* ═══════════════════ Le chemin de fer ═══════════════════ */
@@ -1314,18 +1453,15 @@ function _openInspMarbre(artId) {
       ${_kv('Fraîcheur', fresh.label, fresh.cls)}
       ${_kv('Dans ce numéro', pl.tit.length ? 'p. ' + pl.tit.map(_pn).join(', ') : (pl.banc.length ? 'au banc p. ' + pl.banc.map(_pn).join(', ') : 'libre'))}
     </div>
-    ${(() => {
-      const myFiles = (_D.files || []).filter(f => f.art_id === a.id && f.status === 'ok');
-      return myFiles.length ? `<div class="dk-sec"><h4>Pièces de l'article (${myFiles.length})</h4>
-        ${myFiles.map(f => `<div class="dk-file">
-          <span class="dk-file-ico">${icon('paperclip', 13)}</span>
-          <div class="dk-file-info"><div class="dk-file-name">${_esc(f.name)}</div>
-          <div class="dk-file-meta">${_fmtSize(f.size)}${f.uploaded_by ? ' · ' + _esc(f.uploaded_by) : ''}${f.page_id === '' ? ' · au marbre avec l’article' : ''}</div></div>
-          <button class="dk-iconbtn" data-dlf="${f.id}" title="Télécharger" aria-label="Télécharger">${icon('download', 14)}</button>
-          <button class="dk-iconbtn" data-delf="${f.id}" title="Supprimer la pièce" aria-label="Supprimer">${icon('x', 14)}</button>
-        </div>`).join('')}
-      </div>` : '';
-    })()}
+    <div class="dk-sec"><h4>Texte de l'article</h4>
+      ${_hasCopy(a)
+        ? `<p class="dk-wr-preview">${_esc((a.notes || '').trim().slice(0, 220))}${(a.notes || '').trim().length > 220 ? '…' : ''}</p>
+           <div class="dk-btn-row"><button class="dk-btn primary" data-act="write">${icon('edit-3', 14)} Éditer l'article</button>
+             <span class="dk-note" style="align-self:center">${_copyBadge(a)}</span></div>`
+        : `<p class="dk-empty-line">Pas encore de texte — écrivez l'article ici, confortablement.</p>
+           <div class="dk-btn-row"><button class="dk-btn primary" data-act="write">${icon('edit-3', 14)} Écrire l'article</button></div>`}
+    </div>
+    ${_artCasierSectionHTML(a)}
     ${vivant ? `<div class="dk-sec"><h4>Réserver sur une page du n° ${_esc(_D.issue.num)}</h4>
       <div class="dk-pagepick">${targets.slice(0, 200).map(p => {
         const nb = _slotsOf(p).length;
@@ -1345,8 +1481,9 @@ function _openInspMarbre(artId) {
   _inspScrollSet('marbre:' + artId, _sy);
   insp.classList.add('on');
   _root.querySelector('[data-slot="veil"]').classList.add('on');
-  _bindFileButtons(insp, () => _openInspMarbre(a.id));
+  _bindArtCasier(insp, a, () => _openInspMarbre(a.id));
   _bindPasserelles(insp, a);
+  insp.querySelector('[data-act="write"]')?.addEventListener('click', () => _openWriter(a.id, () => _openInspMarbre(a.id)));
   insp.querySelectorAll('[data-pg]').forEach(b => b.onclick = async () => {
     try {
       await _api('/page/' + b.dataset.pg + '/slot', { method: 'POST', body: { art_id: a.id } });
@@ -1631,7 +1768,8 @@ function _renderInspArticle(insp, p) {
     ${_passerellesHTML(a)}
 
     <div class="dk-sec"><h4>Actions</h4><div class="dk-btn-row">
-      <button class="dk-btn" data-act="editart">${icon('edit-3', 14)} Modifier</button>
+      <button class="dk-btn primary" data-act="write">${icon('edit-3', 14)} ${_hasCopy(a) ? 'Éditer le texte' : 'Écrire le texte'}</button>
+      <button class="dk-btn" data-act="editart">${icon('edit-3', 14)} Modifier la fiche</button>
       <button class="dk-btn" data-act="unreserve">Retirer de la page</button>
       ${slots.length < 12 ? `<button class="dk-btn ghost" data-act="addslot">${icon('plus', 14)} Ajouter un article ici</button>` : ''}
     </div><div data-slot="slotpick"></div></div>
@@ -1641,6 +1779,7 @@ function _renderInspArticle(insp, p) {
   insp.querySelectorAll('[data-slotidx]').forEach(b => b.onclick = () => { _selSlot = parseInt(b.dataset.slotidx, 10); _openInsp(p.n, true); });
   _bindCasier(insp, p, () => _openInsp(p.n, true));
   _bindPasserelles(insp, a);
+  insp.querySelector('[data-act="write"]')?.addEventListener('click', () => _openWriter(a.id, () => _openInsp(p.n, true)));
   insp.querySelector('[data-act="relance"]')?.addEventListener('click', () => _openRelanceForm(a, () => _openInsp(p.n, true)));
 
   const patchArt = async (body, msg) => {
@@ -2001,6 +2140,7 @@ function _openArtForm(page, existing, onDone, bancSlot) {
       <label class="dk-field" data-slot="perimefield" style="${a && a.fresh === 'date' ? '' : 'display:none'}"><span>Périmé après le (optionnel)</span><input type="date" data-k="perime" value="${a && a.perime ? a.perime : ''}"></label>
       <div class="dk-btn-row" style="margin-top:12px">
         <button class="dk-btn primary" data-act="saveart">${a ? 'Enregistrer' : 'Créer'}</button>
+        ${a ? '' : `<button class="dk-btn" data-act="savewrite">${icon('edit-3', 14)} Créer et écrire</button>`}
         <button class="dk-btn" data-act="cancelart">Annuler</button>
       </div>
     </div>`);
@@ -2017,7 +2157,7 @@ function _openArtForm(page, existing, onDone, bancSlot) {
     else _closeInsp();
   };
   insp.querySelector('[data-act="cancelart"]').onclick = back;
-  insp.querySelector('[data-act="saveart"]').onclick = async () => {
+  const doSave = async (thenWrite) => {
     const g = k => insp.querySelector(`[data-k="${k}"]`).value;
     if (!g('title').trim()) { _toast('Le titre est requis', true); return; }
     const body = {
@@ -2026,22 +2166,27 @@ function _openArtForm(page, existing, onDone, bancSlot) {
       fresh: g('fresh'), perime: g('fresh') === 'date' ? (g('perime') || null) : null,
     };
     try {
+      let artId = a ? a.id : null;
       if (a) {
         await _api('/article/' + a.id, { method: 'PATCH', body });
         _toast('Article mis à jour.');
       } else {
         const r = await _api('/publication/' + _pubId + '/article', { method: 'POST', body });
-        if (page) await _api('/page/' + page.id + '/slot', { method: 'POST', body: { art_id: r.article.id } });
-        else if (bancSlot) await _api('/slot/' + bancSlot.id, { method: 'PATCH', body: { banc: _bancOf(bancSlot).concat(r.article.id) } });
+        artId = r.article.id;
+        if (page) await _api('/page/' + page.id + '/slot', { method: 'POST', body: { art_id: artId } });
+        else if (bancSlot) await _api('/slot/' + bancSlot.id, { method: 'PATCH', body: { banc: _bancOf(bancSlot).concat(artId) } });
         _toast(page ? 'Article créé et réservé page ' + _pn(page.n) + '.'
           : bancSlot ? 'Article créé et posé au banc des remplaçants.'
           : 'Article créé — il attend au marbre.');
       }
       await _loadIssue(true);
       if (_view === 'marbre') _renderMarbre();
-      back();
+      if (thenWrite && artId) _openWriter(artId, () => _openInspMarbre(artId));
+      else back();
     } catch (e) { _toast(e.message, true); }
   };
+  insp.querySelector('[data-act="savewrite"]')?.addEventListener('click', () => doSave(true));
+  insp.querySelector('[data-act="saveart"]').onclick = () => doSave(false);
 }
 
 /* ═══════════ DK-6 · Pré-impression & édition numérique ═══════════
@@ -2177,6 +2322,25 @@ async function _toBook() {
   try { const m = await import('./ui-renderer.js'); m.openTool('O-BOK-001', { importPdf: file, title }); } catch (_) {}
 }
 
+// Réordonner une rubrique (front seul : la colonne `position` et le PATCH
+// existent côté worker depuis DK-2). On renormalise TOUTE la liste à 0..n-1
+// dans le nouvel ordre et on ne PATCHe que les positions qui bougent — robuste
+// même si un ancien `position` avait des trous (rubrique supprimée au milieu).
+async function _moveRub(id, dir) {
+  const rubs = (_D?.rubriques || []).slice();   // déjà trié par position
+  const i = rubs.findIndex(r => r.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= rubs.length) return;
+  [rubs[i], rubs[j]] = [rubs[j], rubs[i]];
+  try {
+    const patches = [];
+    rubs.forEach((r, idx) => { if (r.position !== idx) patches.push(_api('/rubrique/' + r.id, { method: 'PATCH', body: { position: idx } })); });
+    await Promise.all(patches);
+    await _loadIssue(true);
+    _openSettings();
+  } catch (e) { _toast(e.message, true); }
+}
+
 /* ═══════════════════ Réglages (publication / numéro / équipe) ══ */
 async function _openSettings() {
   if (!_pubId) return;
@@ -2254,8 +2418,12 @@ async function _openSettings() {
     </div>` : ''}
 
     <div class="dk-sec"><h4>Rubriques (liste fermée)</h4>
-      <div data-slot="rublist">${rubs.map(r => `
+      <div data-slot="rublist">${rubs.map((r, i) => `
         <div class="dk-banc-item">
+          <span class="dk-rub-move">
+            <button class="dk-movebtn" data-rubup="${r.id}" ${i === 0 ? 'disabled' : ''} title="Monter" aria-label="Monter">${icon('chevron-up', 13)}</button>
+            <button class="dk-movebtn" data-rubdown="${r.id}" ${i === rubs.length - 1 ? 'disabled' : ''} title="Descendre" aria-label="Descendre">${icon('chevron-down', 13)}</button>
+          </span>
           <input type="color" data-rubcolor="${r.id}" value="${_esc(r.color || '#8d93a8')}" title="Choisir la couleur">
           <div class="dk-banc-info"><div class="dk-banc-title">${_esc(r.name)}</div></div>
           <input type="text" class="dk-hex" data-rubhex="${r.id}" value="${_esc(r.color || '')}" maxlength="7" spellcheck="false" title="Code hexadécimal de votre charte (ex. #C9A227)">
@@ -2266,7 +2434,7 @@ async function _openSettings() {
         <input type="color" data-k="newrubcolor" value="#8d93a8" title="Couleur">
         <button class="dk-btn small" data-act="addrub">Ajouter</button>
       </div>
-      <p class="dk-note">La couleur habille les cartes de la rubrique (liseré + fond). Le champ code accepte l'hexadécimal exact de la charte de votre revue.</p>
+      <p class="dk-note">Les flèches réordonnent la liste — l'ordre choisi se retrouve partout (menus, sélecteurs, tri du chemin de fer). La couleur habille les cartes de la rubrique (liseré + fond). Le champ code accepte l'hexadécimal exact de la charte de votre revue.</p>
     </div>
 
     <div class="dk-sec"><h4>Équipe</h4>
@@ -2451,6 +2619,8 @@ async function _openSettings() {
     try { await _api('/rubrique/' + b.dataset.delrub, { method: 'DELETE' }); await _loadIssue(true); _openSettings(); }
     catch (e) { _toast(e.message, true); }
   });
+  insp.querySelectorAll('[data-rubup]').forEach(b => b.onclick = () => _moveRub(b.dataset.rubup, -1));
+  insp.querySelectorAll('[data-rubdown]').forEach(b => b.onclick = () => _moveRub(b.dataset.rubdown, 1));
   // Recolorer une rubrique : pipette native OU code hexadécimal de la charte.
   const setRubColor = async (id, raw) => {
     let c = String(raw || '').trim();

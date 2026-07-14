@@ -1290,6 +1290,57 @@ export async function handleCasierRequest(request, env, pageId) {
   return json({ ok: true, file: { id, page_id: pageId, art_id: artId, name, size, status: 'pending' }, upload, quota: { used: used + size, max: QUOTA_ISSUE } }, 200, origin);
 }
 
+// POST /article/:id/casier — déposer une pièce SUR un article au marbre, sans
+// attendre son placement (page_id = '', §6 « au marbre avec l'article »). Le
+// quota et la clé R2 s'imputent au numéro couramment consulté (issue_id du
+// corps). Miroir de handleCasierRequest ; complete/put/url/delete restent
+// partagés (indexés par fileId). Rétention prolongée tant que l'article vit.
+export async function handleArtCasierRequest(request, env, artId) {
+  const origin = getAllowedOrigin(env, request);
+  const pubId = await pubOf(env, 'dk_articles', artId);
+  const u = await memberGate(request, env, origin, pubId);
+  if (u.error) return u.error;
+  if (!env.DK_CASIER) return err('Casier non configuré sur ce serveur (bucket R2 absent)', 503, origin);
+  const art = await env.DB.prepare('SELECT id FROM dk_articles WHERE id = ? AND pub_id = ?').bind(artId, pubId).first();
+  if (!art) return err('Article introuvable', 404, origin);
+  const body = await parseBody(request);
+  const issue = await env.DB.prepare('SELECT id FROM dk_issues WHERE id = ? AND pub_id = ?').bind(body.issue_id || '', pubId).first();
+  if (!issue) return err('Numéro requis pour imputer le casier', 400, origin);
+
+  const name = _fileName(body.name);
+  const ext = _fileExt(body.name);
+  if (!FILE_EXTS[ext]) return err(`Type de fichier non accepté (.${ext || '?'}) — le casier transmet PDF, photos et textes`, 400, origin);
+  const size = parseInt(body.size, 10);
+  if (!Number.isFinite(size) || size <= 0) return err('Taille du fichier requise', 400, origin);
+  if (size > FILE_MAX_BYTES) return err(`Fichier trop lourd (max ${Math.round(FILE_MAX_BYTES / 1048576)} Mo)`, 413, origin);
+
+  const { n, used } = await _casierUsed(env, issue.id);
+  if (n >= MAX_FILES_ISSUE) return err('Limite de pièces atteinte sur ce numéro', 403, origin);
+  if (used + size > QUOTA_ISSUE) {
+    return err(`Quota du casier atteint pour ce numéro (${Math.round(used / 1048576)} Mo utilisés sur ${Math.round(QUOTA_ISSUE / 1048576)} Mo) — supprimez des pièces transmises`, 403, origin);
+  }
+
+  const id = generateId();
+  const key = `dk-casier/${pubId}/${issue.id}/${id}.${ext}`;
+  await env.DB.prepare(
+    `INSERT INTO dk_files (id, pub_id, issue_id, page_id, art_id, name, mime, size, r2_key, status, uploaded_by)
+     VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, 'pending', ?)`)
+    .bind(id, pubId, issue.id, artId, name, FILE_EXTS[ext], size, key, _byName(u)).run();
+
+  let upload;
+  if (r2PresignReady(env)) {
+    const url = await presignR2({
+      accountId: env.DK_R2_ACCOUNT_ID, accessKeyId: env.DK_R2_ACCESS_KEY_ID,
+      secretAccessKey: env.DK_R2_SECRET_ACCESS_KEY, bucket: env.DK_R2_BUCKET || 'keystone-desk-casier',
+      key, method: 'PUT', expires: FILE_URL_TTL,
+    });
+    upload = { mode: 'presigned', url, content_type: FILE_EXTS[ext] };
+  } else {
+    upload = { mode: 'direct', path: `/casier/${id}/put` };
+  }
+  return json({ ok: true, file: { id, page_id: '', art_id: artId, name, size, status: 'pending' }, upload, quota: { used: used + size, max: QUOTA_ISSUE } }, 200, origin);
+}
+
 // POST /casier/:id/put — repli direct : le body est STREAMÉ vers R2.
 export async function handleCasierPut(request, env, fileId) {
   const origin = getAllowedOrigin(env, request);

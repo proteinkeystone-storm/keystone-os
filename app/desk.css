@@ -482,6 +482,14 @@ html.light-mode .dk-field input, html.light-mode .dk-field select { color-scheme
   background: rgba(127, 127, 127, .1); border: 1px solid rgba(127, 127, 127, .25); color: inherit;
 }
 .dk-hex:focus { outline: none; border-color: var(--dk-gold); }
+.dk-rub-move { display: inline-flex; flex-direction: column; gap: 2px; flex: 0 0 auto; }
+.dk-movebtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 15px; padding: 0; border-radius: 6px;
+  border: 1px solid rgba(127, 127, 127, .25); background: none; color: var(--dk-tx2); cursor: pointer;
+}
+.dk-movebtn:hover:not(:disabled) { border-color: var(--dk-gold); color: inherit; }
+.dk-movebtn:disabled { opacity: .3; cursor: default; }
 .dk-banc-info { flex: 1; min-width: 0; }
 .dk-banc-title { font-weight: 700; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dk-banc-meta { font-size: 11px; color: var(--dk-tx2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -689,6 +697,49 @@ html.light-mode .dk-bac-select { color-scheme: light; }
 .dk-fold[open] summary::after { transform: rotate(-90deg); }
 .dk-fold .dk-histo { margin-top: 8px; }
 
+/* ── Éditeur d'article — écriture confortable (plein écran) ─────── */
+.dk-writer {
+  position: fixed; inset: 0; z-index: 10020; display: none;
+  flex-direction: column; background: var(--ws-bg, #0d0f14);
+}
+.dk-writer.on { display: flex; }
+.dk-wr-bar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 14px;
+  padding: 11px 18px; border-bottom: 1px solid var(--dk-line); background: var(--ws-surface, #1c2234);
+}
+.dk-wr-close {
+  display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto;
+  background: none; border: 1px solid var(--dk-line); border-radius: 10px;
+  padding: 7px 12px 7px 7px; color: var(--dk-tx2); cursor: pointer; font: inherit; font-size: 13px;
+}
+.dk-wr-close:hover { border-color: var(--dk-gold); color: inherit; }
+.dk-wr-titlewrap { flex: 1; min-width: 0; }
+.dk-wr-title {
+  width: 100%; background: none; border: none; outline: none; color: inherit;
+  font: inherit; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; padding: 0;
+}
+.dk-wr-title::placeholder { color: var(--dk-tx3); font-weight: 700; }
+.dk-wr-sub { font-size: 12px; color: var(--dk-tx3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-wr-state { flex: 0 0 auto; font-size: 12px; color: var(--dk-tx3); min-width: 82px; text-align: right; font-variant-numeric: tabular-nums; }
+.dk-wr-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.dk-wr-col { max-width: 720px; margin: 0 auto; padding: 30px 26px 96px; }
+.dk-wr-body {
+  display: block; width: 100%; min-height: 62vh; background: none; border: none; outline: none;
+  color: inherit; font: inherit; font-size: 17px; line-height: 1.75; resize: none;
+}
+.dk-wr-body::placeholder { color: var(--dk-tx3); line-height: 1.6; }
+.dk-wr-foot {
+  flex: 0 0 auto; padding: 8px 18px; border-top: 1px solid var(--dk-line);
+  font-size: 11.5px; color: var(--dk-tx3); text-align: right;
+  background: var(--ws-surface, #1c2234); font-variant-numeric: tabular-nums;
+}
+.dk-wr-preview {
+  font-size: 12.5px; color: var(--dk-tx2); line-height: 1.5; white-space: pre-wrap;
+  max-height: 82px; overflow: hidden; margin-bottom: 9px; padding: 9px 11px;
+  border: 1px solid var(--dk-line); border-radius: 10px;
+  -webkit-mask-image: linear-gradient(#000 58%, transparent); mask-image: linear-gradient(#000 58%, transparent);
+}
+
 /* Mobile — APRÈS les règles de base (même spécificité : l'ordre source
    tranche, piège networK .nk-fiche-nav déjà mordu). Breakpoint aligné
    sur les blocs desK existants (820). */
@@ -697,4 +748,8 @@ html.light-mode .dk-bac-select { color-scheme: light; }
   .dk-tl-node { width: 128px; }
   .dk-vitals { gap: 6px; }
   .dk-vital-v { font-size: 16px; }
+  .dk-wr-col { padding: 22px 18px 90px; }
+  .dk-wr-body { font-size: 16px; }
+  .dk-wr-bar { gap: 10px; padding: 9px 12px; }
+  .dk-wr-close span { display: none; }
 }

@@ -157,7 +157,7 @@ import { handleDeskHealth, handleDeskBootstrap, handlePubCreate, handlePubPatch,
          handleIssueMove, handleIssueBatch, handleIssueResize,
          handlePagePatch, handleSlotCreate, handleSlotPatch, handleSlotDelete,
          handleArtCreate, handleArtPatch, handleArtDelete,
-         handleCasierRequest, handleCasierPut, handleCasierComplete,
+         handleCasierRequest, handleArtCasierRequest, handleCasierPut, handleCasierComplete,
          handleCasierUrl, handleCasierDl, handleCasierDelete,
          handleContribUpsert, handleRelanceSend, sweepDeskCasier } from './routes/desk.js';
 // desK DK-4 — adresse de dépôt redaction-*@ : digestion des e-mails + bac à trier.
@@ -352,6 +352,8 @@ export default {
       // DK-3 — casier R2 (présigné ou direct streamé), contributeurs, relances.
       const dkCasierC = path.match(/^\/api\/desk\/page\/([A-Za-z0-9-]+)\/casier$/);
       if (dkCasierC && method === 'POST') return handleCasierRequest(request, env, dkCasierC[1]);
+      const dkArtCasier = path.match(/^\/api\/desk\/article\/([A-Za-z0-9-]+)\/casier$/);
+      if (dkArtCasier && method === 'POST') return handleArtCasierRequest(request, env, dkArtCasier[1]);
       const dkCasierPut = path.match(/^\/api\/desk\/casier\/([A-Za-z0-9-]+)\/put$/);
       if (dkCasierPut && method === 'POST') return handleCasierPut(request, env, dkCasierPut[1]);
       const dkCasierDone = path.match(/^\/api\/desk\/casier\/([A-Za-z0-9-]+)\/complete$/);
