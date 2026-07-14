@@ -1296,6 +1296,7 @@ function _openInspMarbre(artId) {
   const a = _artById(artId);
   if (!a) return;
   const insp = _root.querySelector('[data-slot="insp"]');
+  const _sy = _inspScrollGet('marbre:' + artId);
   const rub = _rubById(a.rub_id);
   const st = STATUS[a.status] || STATUS.propose;
   const fresh = _freshInfo(a);
@@ -1341,6 +1342,7 @@ function _openInspMarbre(artId) {
       <button class="dk-btn ghost" data-act="delart">${icon('trash-2', 14)} Supprimer</button>
     </div><div data-slot="confirm"></div></div>`);
   _bindClose(insp);
+  _inspScrollSet('marbre:' + artId, _sy);
   insp.classList.add('on');
   _root.querySelector('[data-slot="veil"]').classList.add('on');
   _bindFileButtons(insp, () => _openInspMarbre(a.id));
@@ -1398,11 +1400,13 @@ function _openInsp(n, silent) {
   _root.querySelectorAll('.dk-pcard.sel').forEach(x => x.classList.remove('sel'));
   _root.querySelector(`[data-slot="frise"] .dk-pcard[data-n="${n}"]`)?.classList.add('sel');
   const insp = _root.querySelector('[data-slot="insp"]');
+  const _sy = _inspScrollGet('page:' + n);
 
   if (p.kind === 'fixe') { _renderInspFixe(insp, p); }
   else if (!_slotsOf(p).length || !_artById((_slotsOf(p)[0] || {}).art_id)) { _renderInspVide(insp, p); }
   else { _renderInspArticle(insp, p); }
 
+  _inspScrollSet('page:' + n, _sy);
   insp.classList.add('on');
   _root.querySelector('[data-slot="veil"]').classList.add('on');
 }
@@ -1420,6 +1424,23 @@ function _inspShell(title, rubHTML, body) {
 }
 function _kv(k, v, cls) { return `<div class="dk-kv"><span>${k}</span><strong class="${cls || ''}">${_esc(v)}</strong></div>`; }
 function _bindClose(insp) { insp.querySelector('[data-act="close"]').onclick = _closeInsp; }
+
+// Défilement de l'inspecteur préservé entre deux rendus du MÊME panneau.
+// Chaque action reconstruit .dk-insp-body (insp.innerHTML = …) → sans ça, le
+// panneau « remonte en haut » à chaque clic/champ. On lit AVANT de remplacer
+// le HTML (_inspScrollGet), on restaure APRÈS (_inspScrollSet). La clé = le
+// panneau : re-rendre le même numéro/la même fiche préserve, en changer repart
+// en haut. (La frise, elle, garde déjà son scroll via _renderFrise keepScroll.)
+function _inspScrollGet(key) {
+  const insp = _root && _root.querySelector('[data-slot="insp"]');
+  return (insp && insp.dataset.panelKey === String(key)) ? (insp.querySelector('.dk-insp-body')?.scrollTop || 0) : 0;
+}
+function _inspScrollSet(key, y) {
+  const insp = _root && _root.querySelector('[data-slot="insp"]');
+  if (!insp) return;
+  insp.dataset.panelKey = String(key);
+  if (y > 0) { const b = insp.querySelector('.dk-insp-body'); if (b) b.scrollTop = y; }
+}
 
 function _renderInspFixe(insp, p) {
   insp.innerHTML = _inspShell(p.fixe_tag || 'Page figée', null,
@@ -2161,6 +2182,7 @@ async function _openSettings() {
   if (!_pubId) return;
   const insp = _root.querySelector('[data-slot="insp"]');
   const pub = _pubs.find(p => p.id === _pubId);
+  const _sy = _inspScrollGet('settings');   // avant le spinner (sinon on perd la position)
   insp.innerHTML = _inspShell('Réglages — ' + (pub ? pub.name : ''), null, `<div class="dk-center"><div class="dk-spin"></div></div>`);
   _bindClose(insp);
   insp.classList.add('on');
@@ -2455,6 +2477,7 @@ async function _openSettings() {
     try { await _api('/publication/' + _pubId + '/invite', { method: 'POST', body: { email } }); _toast('Invitation enregistrée pour ' + email + '.'); _openSettings(); }
     catch (e) { _toast(e.message, true); }
   });
+  _inspScrollSet('settings', _sy);   // restaure le défilement (ne « remonte » plus en haut)
 }
 
 // ── Toast ───────────────────────────────────────────────────────
