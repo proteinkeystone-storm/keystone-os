@@ -92,6 +92,8 @@ import { handleListPublic as handleMsgListPublic,
          handleRevoke     as handleMsgRevoke,
          handleRepublish  as handleMsgRepublish }                       from './routes/messages.js';
 import { json, err, corsOk, requireAdmin, getAllowedOrigin }           from './lib/auth.js';
+import { runBackup, handleBackupRun, handleBackupList, handleBackupObject, handleBackupRestore } from './routes/backup.js';
+import { runSelfCheck, handleOpsHealthGet, handleOpsHealthRunNow } from './routes/ops-health.js';
 // ── Sprint S1 (Auth v2 — multi-email pour plan MAX) ─────────
 import {
   handleLicenceMe       as handleLicenceMeV2Full,
@@ -208,6 +210,14 @@ export default {
     const method = request.method;
 
     try {
+      // ── HEAD sur n'importe quel /health → 200 (monitoring externe) ──
+      // UptimeRobot & co sondent souvent en HEAD ; nos /health répondent
+      // 200 en GET. On accepte HEAD pour toute route .../health afin que
+      // le monitoring « juste marche » (OPS-2 · filet worker-mort externe).
+      if (method === 'HEAD' && path.endsWith('/health')) {
+        return new Response(null, { status: 200, headers: { 'Access-Control-Allow-Origin': origin } });
+      }
+
       // ── Key Brand (Pad O-BRD-001 · KB-0) — charte graphique vivante ──
       if (path === '/api/keybrand/health' && method === 'GET')  return handleKeyBrandHealth(request, env);
       if (path === '/api/keybrand/charts' && method === 'GET')  return handleKeyBrandList(request, env);
@@ -975,6 +985,16 @@ export default {
       if (path === '/api/admin/export'       && method === 'GET')    return handleExport(request, env);
       if (path === '/api/admin/purge-tenant' && method === 'POST')   return handlePurgeTenant(request, env);
 
+      // ── Sauvegardes D1 hors-plateforme (OPS-1) ────────────────
+      if (path === '/api/admin/backup/run'     && method === 'POST')  return handleBackupRun(request, env);
+      if (path === '/api/admin/backup/list'    && method === 'GET')   return handleBackupList(request, env);
+      if (path === '/api/admin/backup/object'  && method === 'GET')   return handleBackupObject(request, env);
+      if (path === '/api/admin/backup/restore' && method === 'POST')  return handleBackupRestore(request, env);
+
+      // ── Sentinelle de soi (OPS-2) ─────────────────────────────
+      if (path === '/api/admin/ops-health'         && method === 'GET')  return handleOpsHealthGet(request, env);
+      if (path === '/api/admin/ops-health/run-now' && method === 'POST') return handleOpsHealthRunNow(request, env);
+
       if (path === '/api/admin/health'       && method === 'GET') {
         if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
         // Vérifie la connexion D1
@@ -1040,6 +1060,16 @@ export default {
       );
     }
 
+    // Sentinelle de soi (OPS-2) — toutes les 5 min : landing + /health
+    // représentatifs, e-mail Resend après 2 échecs consécutifs (anti-flap).
+    if (cron === '*/5 * * * *') {
+      ctx.waitUntil(
+        runSelfCheck(env)
+          .then(r => console.log('[ops-selfcheck]', JSON.stringify({ status: r.status, consecutive: r.consecutiveFails })))
+          .catch(e => console.warn('[ops-selfcheck] failed', e?.message || e))
+      );
+    }
+
     // Rappels web-push Keynapse échus — toutes les 5 min (même app fermée).
     if (cron === '*/5 * * * *') {
       ctx.waitUntil(
@@ -1056,6 +1086,18 @@ export default {
         sweepDueChecks(env)
           .then(r => console.log('[sentinel-sweep]', JSON.stringify(r)))
           .catch(e => console.warn('[sentinel-sweep] failed', e?.message || e))
+      );
+    }
+
+    // ── Sauvegardes D1 hors-plateforme (OPS-1) — hebdo, lundi 4h UTC ──
+    // 2e ligne de défense après le time-travel D1 30 j. Export NDJSON des
+    // tables vitales → R2 keystone-backups, purge auto 8 semaines. Dégrade
+    // proprement si le binding R2 BACKUPS est absent (no-op loggué).
+    if (cron === '0 4 * * 1') {
+      ctx.waitUntil(
+        runBackup(env, { now: new Date(event.scheduledTime) })
+          .then(r => console.log('[backup-weekly]', JSON.stringify(r)))
+          .catch(e => console.warn('[backup-weekly] failed', e?.message || e))
       );
     }
 

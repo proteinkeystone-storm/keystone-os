@@ -46,32 +46,15 @@ binding = "AI"
 binding     = "HELP_MEDIA"
 bucket_name = "keystone-help-media"
 
-# ── R2 — Sauvegardes D1 hors-plateforme (OPS-1 · SEPT_PROD_SPRINTS) ──
-# 2e ligne de défense après le time-travel D1 30 j. Export NDJSON hebdo
-# des tables vitales (cron « 0 4 * * 1 »), préfixe par date, rétention 8
-# semaines (purge auto). ⚠ CRÉER LE BUCKET AVANT LE PREMIER DEPLOY :
-#   npx wrangler r2 bucket create keystone-backups
-# (sinon `wrangler deploy` échoue). Dégrade proprement si absent (no-op).
-[[r2_buckets]]
-binding     = "BACKUPS"
-bucket_name = "keystone-backups"
-
-# ── R2 — Casier desK (Pad O-DSK-001 · DK-3, DESK_BRIEF §6) ────
-# Pièces ÉPHÉMÈRES des cartes-pages (PDF, photos HD, textes) — purge
-# auto 30 j après « imprimé » (cron 3h), quota doux 2 Go/numéro.
-# ⚠ CRÉER LE BUCKET AVANT LE PREMIER DEPLOY (sinon wrangler deploy échoue) :
-#   npx wrangler r2 bucket create keystone-desk-casier
-# Upload par défaut = mode DIRECT (streamé via le Worker, zéro setup).
-# Pour passer en PRÉSIGNÉ (navigateur → R2 sans transiter par le Worker) :
-#   1. dashboard R2 → API token « Object Read & Write » limité à ce bucket
-#   2. wrangler secret put DK_R2_ACCOUNT_ID / DK_R2_ACCESS_KEY_ID / DK_R2_SECRET_ACCESS_KEY
-#   3. CORS du bucket : AllowedOrigins = origines Keystone,
-#      AllowedMethods = GET, PUT · AllowedHeaders = content-type
-# Bascule sans redeploy — le Worker détecte les secrets à chaque requête.
+# ── R2 — Casier desK (DK-3) : simulé localement par wrangler dev --local ──
 [[r2_buckets]]
 binding     = "DK_CASIER"
 bucket_name = "keystone-desk-casier"
 
+# ── R2 — Sauvegardes D1 (OPS-1) : simulé localement par wrangler dev --local ──
+[[r2_buckets]]
+binding     = "BACKUPS"
+bucket_name = "keystone-backups"
 
 # ── Vectorize — index sémantique du coffre Kortex (Smart Agent, SA-2) ──
 # Embeddings @cf/baai/bge-m3 (multilingue/français, 1024 dims, cosine).
@@ -91,8 +74,6 @@ index_name = "keystone-kortex"
 # incluses sur Workers Paid puis 0,09 $/h. Utilisé UNIQUEMENT par l'audit
 # on-demand de Sentinel (jamais le cron) → coût borné. Dégrade proprement si
 # absent (perf = n/a, le reste de l'audit fonctionne).
-[browser]
-binding = "BROWSER"
 
 # ── Variables publiques (non-secrètes) ─────────────────────────
 # CSV multi-origin : production Vercel + previews + dev local.
@@ -116,26 +97,6 @@ KS_ALLOWED_ORIGIN = "https://protein-keystone.com,https://www.protein-keystone.c
 # Lu par lib/llm-router.js → byokRoutingEnabled(env).
 BYOK_ROUTING = "off"
 
-# ── desK DK-4 — adresse de dépôt e-mail (DESK_BRIEF §5.2) ─────
-# Le worker expose un handler email() (digestion 3 étages + bac).
-# ACTIVATION (quand le domaine porteur est tranché — il doit être une
-# zone Cloudflare : l'Email Routing n'existe pas sur un DNS Vercel) :
-#   1. Cloudflare dashboard → zone du domaine → Email → Email Routing
-#      → activer (pose les MX) ;
-#   2. Routing rules → Catch-all → action « Send to Worker » →
-#      keystone-os-api (les adresses redaction-<slug>@ sont dynamiques,
-#      une par publication → catch-all obligatoire) ;
-#   3. décommenter DK_EMAIL_DOMAIN (l'app affiche alors l'adresse de
-#      dépôt dans les réglages de chaque publication) + redeploy.
-# Sans DK_EMAIL_DOMAIN, tout DK-4 fonctionne déjà via l'injection
-# admin (POST /api/desk/email-inject) — utile en secours.
-# DK_EMAIL_IA = "off" coupe l'étage 2 IA (suggestion de rubrique des
-# spontanés via callLLM/Mistral inclus) — le bac reste la vérité.
-# Domaine dédié au courrier (zone Cloudflare, Email Routing catch-all
-# → worker keystone-os-api), acheté 2026-07-13. Adresses de dépôt =
-# redaction-<slug>@redaction-pks.com.
-DK_EMAIL_DOMAIN = "redaction-pks.com"
-
 # ── SDQR — RGPD (Sprint SDQR-5) ─────────────────────────────
 # Rétention des logs de scan en jours (purge auto via Cron, voir [triggers])
 SDQR_SCAN_RETENTION_DAYS = "90"
@@ -158,7 +119,6 @@ VAPID_PUBLIC = "BB0ytfuRYEoK1K6Y4SGGFbXhj6MbSTqsGnLG_gMypV_IVkGyWFiengfTRVyNJFUq
 # "0 3 * * *"   = maintenance quotidienne (purges, refresh tokens…)
 # "* * * * *"   = publication sociale réactive (posts programmés / réessais / vidéo IG·Threads « en traitement » → publiée en <1 min)
 # "*/5 * * * *" = rappels web-push Keynapse échus
-# "0 4 * * 1"   = sauvegarde D1 hebdo → R2 keystone-backups (OPS-1)
 crons = ["0 3 * * *", "* * * * *", "*/5 * * * *", "0 4 * * 1"]
 
 # ── Secrets à définir via `wrangler secret put` ───────────────
@@ -168,13 +128,6 @@ crons = ["0 3 * * *", "* * * * *", "*/5 * * * *", "0 4 * * 1"]
 # KS_GSC_CLIENT_SECRET  — Client Secret OAuth Google ; redirect URI à enregistrer
 #                         côté Google = <origine worker>/api/sentinel/gsc/callback
 #                         (scope demandé : webmasters.readonly, lecture seule)
-
-# ── OPS-2 · Sentinelle de soi (vars optionnelles, défauts sains) ──
-# KS_RESEND_KEY (secret) — requise pour que la sentinelle envoie ses e-mails
-#                          d'alerte/rétablissement (déjà utilisée ailleurs).
-# KS_OPS_ALERT_EMAIL     — destinataire des alertes (défaut protein.keystone@gmail.com)
-# KS_OPS_FAIL_THRESHOLD  — échecs consécutifs avant alerte (défaut 2, anti-flap)
-# KS_WORKER_URL / KS_LANDING_URL — bases surveillées (défauts = prod ; laisser vides)
 
 # ── Environnement de développement local ─────────────────────
 [dev]
