@@ -18,9 +18,7 @@ import { openSDQR }                              from './sdqr.js';
 import { openKodex }                             from './codex.js';
 import { openBrainstorming }                     from './brainstorming.js';
 import { openPulsa }                             from './pulsa.js';
-import { openVefaStudio }                        from './vefa-studio.js';
 import { openGhostwriterStudio }                 from './ghostwriter-studio.js';
-import { openAnnoncesImmo }                      from './annonces-immo.js';
 import { openSocialManager } from './social-manager.js';
 import { openSmartAgent }                        from './smart-agent.js';
 import { openKeynapse }                          from './keynapse.js';
@@ -2234,7 +2232,6 @@ export function openTool(padId, opts = {}) {
     // Certains artefacts ne suivent pas le pattern "modal pad" classique
     // (form → output) et nécessitent une fenêtre custom multi-écrans.
     // Routing par id : on intercepte AVANT la résolution PADS_DATA.
-    if (padId === 'O-IMM-002') { openAnnoncesImmo(); return; }
     if (padId === 'O-SOC-001') { openSocialManager(opts); return; }   // opts.compose = handoff (Ghost Writer → composer)
     if (padId === 'O-AGT-001') { openSmartAgent(opts); return; }      // Smart Agent — jumeau numérique de savoir-faire (SA-0)
     if (padId === 'O-Keyn-001') { openKeynapse(opts); return; }       // Keynapse — constellation de notes en bulles (KN-0)
@@ -2244,7 +2241,6 @@ export function openTool(padId, opts = {}) {
     if (padId === 'O-NET-001')  { openNetwork(opts); return; }        // networK — réseau relationnel vivant, V1 manuelle (NK-0)
     if (padId === 'O-BOK-001')  { openBook(opts); return; }           // booK — flipbooks souverains, export autoporté, zéro IA (BK-0)
     if (padId === 'O-DSK-001')  { openDesk(opts); return; }           // desK — chemin de fer vivant, tenant = publication (DK-1)
-    if (padId === 'O-IMM-010') { openVefaStudio(); return; }
     if (padId === 'A-COM-001') { openSDQR(opts); return; }   // opts.createVcard = handoff networK → QR vCard
     if (padId === 'A-COM-002') { openKodex(); return; }
     if (padId === 'A-COM-003') { openBrainstorming();  return; }

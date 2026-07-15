@@ -768,7 +768,10 @@ function normalizePad(pad) {
 // reçoit le slot DOM `#fabrique-sub-content` à remplir.
 const FABRIQUE_SUB_TABS = [
   { id: 'pads',    label: '📐 Pads',      render: renderFabriquePads,    desc: 'Outils & artefacts du dashboard utilisateur' },
-  { id: 'clauses', label: '📚 Clauses',   render: renderFabriqueClauses, desc: 'Bibliothèque de clauses partagées + locales' },
+  // Onglet « Clauses » (VEFA) retiré 2026-07-16 : produit VEFA déposé.
+  // Il tapait /api/data/clauses (401 sans JWT admin) → logout au clic.
+  // renderFabriqueClauses/renderClauses restent définis mais inatteignables
+  // (code mort dormant, nettoyage SDQR/admin dédié à venir).
   // Sprint à venir :
   // { id: 'templates', label: '📄 Templates', render: renderFabriqueTemplates, desc: 'Templates HTML sanctuarisés (VEFA, etc.)' },
   // { id: 'prompts',   label: '🤖 Prompts IA', render: renderFabriquePrompts,   desc: 'System prompts par tâche × moteur' },

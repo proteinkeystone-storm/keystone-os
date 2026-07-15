@@ -2315,10 +2315,11 @@ function _renderConciergeEditor(wrap) {
 
   let picker = '';
   if (vertical === 'immo') {
-    picker = segPicker([
-      { val: 'inline', strong: 'Saisie directe',    small: 'Programme immobilier, saisi ici.' },
-      { val: 'vefa',   strong: 'Depuis VEFA Studio', small: "J'importe le programme préparé dans VEFA Studio." },
-    ], source, 'data-cg-source');
+    // Source « vefa » (import depuis VEFA Studio) retirée 2026-07-16 : VEFA
+    // Studio déposé. Seule reste la saisie directe → pas de sélecteur utile.
+    // Les branches source==='vefa' plus bas deviennent inatteignables
+    // (aucune porte d'entrée : ni ce picker, ni le relai VEFA Studio).
+    picker = '';
   } else {
     const kfMode = _creating.cg_kf_mode === 'import' ? 'import' : 'direct';
     picker = segPicker([

@@ -158,7 +158,6 @@ function _simulateLocal(key) {
         return {
             valid: true, plan: 'Pro (simulé)', owner: 'Développement local',
             ownedAssets: [
-                'O-IMM-002', 'O-IMM-010',
                 'A-COM-001', 'A-COM-002', 'A-COM-003', 'A-COM-004',
             ],
         };
