@@ -92,6 +92,8 @@ import { handleListPublic as handleMsgListPublic,
          handleRevoke     as handleMsgRevoke,
          handleRepublish  as handleMsgRepublish }                       from './routes/messages.js';
 import { json, err, corsOk, requireAdmin, getAllowedOrigin }           from './lib/auth.js';
+import { runBackup, handleBackupRun, handleBackupList, handleBackupObject, handleBackupRestore } from './routes/backup.js';
+import { runSelfCheck, handleOpsHealthGet, handleOpsHealthRunNow } from './routes/ops-health.js';
 // ── Sprint S1 (Auth v2 — multi-email pour plan MAX) ─────────
 import {
   handleLicenceMe       as handleLicenceMeV2Full,
@@ -975,6 +977,16 @@ export default {
       if (path === '/api/admin/export'       && method === 'GET')    return handleExport(request, env);
       if (path === '/api/admin/purge-tenant' && method === 'POST')   return handlePurgeTenant(request, env);
 
+      // ── Sauvegardes D1 hors-plateforme (OPS-1) ────────────────
+      if (path === '/api/admin/backup/run'     && method === 'POST')  return handleBackupRun(request, env);
+      if (path === '/api/admin/backup/list'    && method === 'GET')   return handleBackupList(request, env);
+      if (path === '/api/admin/backup/object'  && method === 'GET')   return handleBackupObject(request, env);
+      if (path === '/api/admin/backup/restore' && method === 'POST')  return handleBackupRestore(request, env);
+
+      // ── Sentinelle de soi (OPS-2) ─────────────────────────────
+      if (path === '/api/admin/ops-health'         && method === 'GET')  return handleOpsHealthGet(request, env);
+      if (path === '/api/admin/ops-health/run-now' && method === 'POST') return handleOpsHealthRunNow(request, env);
+
       if (path === '/api/admin/health'       && method === 'GET') {
         if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
         // Vérifie la connexion D1
@@ -1040,6 +1052,16 @@ export default {
       );
     }
 
+    // Sentinelle de soi (OPS-2) — toutes les 5 min : landing + /health
+    // représentatifs, e-mail Resend après 2 échecs consécutifs (anti-flap).
+    if (cron === '*/5 * * * *') {
+      ctx.waitUntil(
+        runSelfCheck(env)
+          .then(r => console.log('[ops-selfcheck]', JSON.stringify({ status: r.status, consecutive: r.consecutiveFails })))
+          .catch(e => console.warn('[ops-selfcheck] failed', e?.message || e))
+      );
+    }
+
     // Rappels web-push Keynapse échus — toutes les 5 min (même app fermée).
     if (cron === '*/5 * * * *') {
       ctx.waitUntil(
@@ -1056,6 +1078,18 @@ export default {
         sweepDueChecks(env)
           .then(r => console.log('[sentinel-sweep]', JSON.stringify(r)))
           .catch(e => console.warn('[sentinel-sweep] failed', e?.message || e))
+      );
+    }
+
+    // ── Sauvegardes D1 hors-plateforme (OPS-1) — hebdo, lundi 4h UTC ──
+    // 2e ligne de défense après le time-travel D1 30 j. Export NDJSON des
+    // tables vitales → R2 keystone-backups, purge auto 8 semaines. Dégrade
+    // proprement si le binding R2 BACKUPS est absent (no-op loggué).
+    if (cron === '0 4 * * 1') {
+      ctx.waitUntil(
+        runBackup(env, { now: new Date(event.scheduledTime) })
+          .then(r => console.log('[backup-weekly]', JSON.stringify(r)))
+          .catch(e => console.warn('[backup-weekly] failed', e?.message || e))
       );
     }
 

@@ -1,0 +1,122 @@
+# ═══════════════════════════════════════════════════════════════
+# KEYSTONE OS — CI minimale (OPS-4 · SEPT_PROD_SPRINTS)
+# ───────────────────────────────────────────────────────────────
+# Attrape un push cassé AVANT que Vercel (front) ne le déploie et
+# AVANT un wrangler deploy (worker). Trois filets :
+#   1. syntax — `node --check` sur tout le JS (le front n'a AUCUN build
+#      qui valide la syntaxe : un app/*.js cassé part sinon direct en prod).
+#   2. unit   — tests unitaires autonomes (sceau, brand-extract), sans worker.
+#   3. e2e    — suites desK + backup + sentinelle contre `wrangler dev --local`.
+#
+# ⚠ package-lock.json est gitignoré → on fait `npm install` (pas `npm ci`).
+# ⚠ Les vars ci-dessous sont des secrets de TEST (pas les vrais), figés pour
+#   coller aux conventions des suites (JWT dk2-test-secret, admin dk4-admin).
+# ═══════════════════════════════════════════════════════════════
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Un push qui en remplace un autre annule le run précédent (économie).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  WRANGLER_SEND_METRICS: "false"
+
+jobs:
+  # ── 1. Syntaxe : le filet le plus rapide et le plus rentable ──
+  syntax:
+    name: node --check (tout le JS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: node --check sur app / scripts / workers/src
+        run: |
+          set -e
+          count=0
+          while IFS= read -r f; do
+            node --check "$f"
+            count=$((count+1))
+          done < <(find app scripts workers/src -type f \( -name '*.js' -o -name '*.mjs' \) -not -path '*/node_modules/*')
+          echo "✓ $count fichiers JS valides"
+
+  # ── 2. Tests unitaires autonomes (pas de worker) ──────────────
+  unit:
+    name: tests unitaires (sceau, brand-extract)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - name: sceau.test + brand-extract.test
+        run: |
+          set -e
+          node test/sceau.test.mjs
+          node test/brand-extract.test.mjs
+
+  # ── 3. Suites E2E contre wrangler dev --local ─────────────────
+  e2e:
+    name: E2E (desK, backup, sentinelle)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers
+    env:
+      # Les suites bk (backup/ops) signent/authentifient avec ces valeurs :
+      # on les aligne sur les vars du worker (dk2-test-secret / dk4-admin).
+      BK_JWT_SECRET: dk2-test-secret
+      BK_ADMIN: dk4-admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - name: Lancer le worker, migrer, jouer les suites
+        run: |
+          # Worker unifié (mêmes secrets de test pour toutes les suites).
+          npx wrangler dev --local -c wrangler.dktest.toml --port 8799 --test-scheduled \
+            --var KS_JWT_SECRET:dk2-test-secret --var "KS_ALLOWED_ORIGIN:*" \
+            --var KS_ADMIN_SECRET:dk4-admin --var DK_EMAIL_IA:off --var DK_CASIER_GRACE_DAYS:0 \
+            --var KS_ENCRYPTION_KEY:ci-encryption-key-32-chars-minimum-00 > /tmp/wrangler.log 2>&1 &
+          WPID=$!
+
+          # Attendre le boot (max 90 s).
+          up=0
+          for i in $(seq 1 90); do
+            if curl -sf http://127.0.0.1:8799/api/desk/health >/dev/null 2>&1; then up=1; break; fi
+            sleep 1
+          done
+          if [ "$up" != "1" ]; then echo "::error::worker jamais prêt"; cat /tmp/wrangler.log; exit 1; fi
+
+          # Schéma + migrations sur la D1 locale (les tables dk_*/nk_* s'auto-créent
+          # via _ensureSchema dans les handlers ; le reste vient des migrations).
+          for f in src/db/schema.sql migrations/*.sql; do
+            npx wrangler d1 execute keystone-os --local -c wrangler.dktest.toml --file="$f" >/dev/null 2>&1 || true
+          done
+
+          # Les suites : un échec (exit≠0) fait échouer le job.
+          set -e
+          for t in test-desk-dk2 test-desk-dk3 test-desk-dk4 test-desk-dk5-board \
+                   test-desk-artcasier test-desk-newsignal \
+                   test-backup-restore test-ops-health; do
+            echo "── $t ──"
+            node test/$t.mjs
+          done
+
+          kill $WPID 2>/dev/null || true
+      - name: Log worker si échec
+        if: failure()
+        run: cat /tmp/wrangler.log || true
