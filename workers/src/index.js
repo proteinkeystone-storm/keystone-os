@@ -210,6 +210,14 @@ export default {
     const method = request.method;
 
     try {
+      // ── HEAD sur n'importe quel /health → 200 (monitoring externe) ──
+      // UptimeRobot & co sondent souvent en HEAD ; nos /health répondent
+      // 200 en GET. On accepte HEAD pour toute route .../health afin que
+      // le monitoring « juste marche » (OPS-2 · filet worker-mort externe).
+      if (method === 'HEAD' && path.endsWith('/health')) {
+        return new Response(null, { status: 200, headers: { 'Access-Control-Allow-Origin': origin } });
+      }
+
       // ── Key Brand (Pad O-BRD-001 · KB-0) — charte graphique vivante ──
       if (path === '/api/keybrand/health' && method === 'GET')  return handleKeyBrandHealth(request, env);
       if (path === '/api/keybrand/charts' && method === 'GET')  return handleKeyBrandList(request, env);
