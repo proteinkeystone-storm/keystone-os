@@ -99,7 +99,6 @@
       ]
     },
     {
-      "//": "Pages agent public /a/* — EMBARQUABLES (iframe) par le site MICE. XFO ABSENT (ne gère pas plusieurs origines) → c'est la CSP frame-ancestors qui décide. Le reste des en-têtes = identique au global. CE BLOC + l'exclusion (?!a/) du global sont indissociables : sans l'exclusion, la CSP globale (frame-ancestors 'self') fusionnerait en intersection et re-bloquerait l'iframe, et XFO SAMEORIGIN serait ré-ajouté.",
       "source": "/a/(.*)",
       "headers": [
         { "key": "Strict-Transport-Security",           "value": "max-age=31536000; includeSubDomains; preload" },
@@ -110,7 +109,6 @@
       ]
     },
     {
-      "//": "Global — TOUT sauf /a/* (négative-lookahead : Key Form /f/, /app, /admin, /agent.html restent couverts). frame-ancestors 'self' + XFO SAMEORIGIN = protection anti-clickjacking préservée partout ailleurs.",
       "source": "/((?!a/).*)",
       "headers": [
         { "key": "Strict-Transport-Security",           "value": "max-age=31536000; includeSubDomains; preload" },
