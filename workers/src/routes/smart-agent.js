@@ -1772,6 +1772,7 @@ export function publicAgentMeta(agent, apiOrigin = '') {
     // couleur du bas (#rrggbb ou ''), URL absolue du filigrane (ou '') + opacité.
     theme: {
       bg_bottom:         sanitizeHexColor(thm.bg_bottom),
+      ui_color:          sanitizeHexColor(thm.ui_color),
       watermark:         (typeof thm.watermark_key === 'string' && SA_CARD_KEY_RE.test(thm.watermark_key)) ? (apiOrigin + '/api/smart-agent/card-img/' + thm.watermark_key) : '',
       watermark_opacity: (typeof thm.watermark_opacity === 'number' && thm.watermark_opacity >= 0 && thm.watermark_opacity <= 0.6) ? thm.watermark_opacity : 0.15,
     },
@@ -2254,6 +2255,7 @@ function validateAgentPayload(b, { partial = false } = {}) {
     // (réutilise une clé d'image déjà uploadée) + son opacité.
     theme: {
       bg_bottom:         sanitizeHexColor(thm.bg_bottom),
+      ui_color:          sanitizeHexColor(thm.ui_color),
       watermark_key:     (typeof thm.watermark_key === 'string' && SA_CARD_KEY_RE.test(thm.watermark_key)) ? thm.watermark_key : '',
       watermark_opacity: (typeof thm.watermark_opacity === 'number' && thm.watermark_opacity >= 0 && thm.watermark_opacity <= 0.6)
         ? Math.round(thm.watermark_opacity * 100) / 100 : 0.15,

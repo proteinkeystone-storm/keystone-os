@@ -311,6 +311,8 @@ function _onClick(e) {
     if (act === 'form-card-down') { _readAgentForm(); _moveCard(+actEl.dataset.i, 1); return; }
     if (act === 'form-bg')        { _readAgentForm(); _ag.form.themeBgBottom = (actEl.dataset.hex || '').replace(/^#/, '').toLowerCase(); _renderMainKeepScroll(); return; }
     if (act === 'form-bg-clear')  { _readAgentForm(); _ag.form.themeBgBottom = ''; _renderMainKeepScroll(); return; }
+    if (act === 'form-ui')        { _readAgentForm(); _ag.form.themeUiColor = (actEl.dataset.hex || '').replace(/^#/, '').toLowerCase(); _renderMainKeepScroll(); return; }
+    if (act === 'form-ui-clear')  { _readAgentForm(); _ag.form.themeUiColor = ''; _renderMainKeepScroll(); return; }
     if (act === 'form-wm-add')    { _pickWatermarkImage(); return; }
     if (act === 'form-wm-del')    { _readAgentForm(); _ag.form.themeWmKey = ''; _renderMainKeepScroll(); return; }
     if (act === 'form-delete')  { _deleteAgent(_ag.form?.id); return; }
@@ -815,6 +817,7 @@ function _openForm(agent) {
         // Apparence de la page publique : couleur du bas (sans #, en interne)
         // + filigrane (clé d'image réutilisée + opacité 0..1).
         themeBgBottom:  (agent?.config?.theme?.bg_bottom || '').replace(/^#/, '').toLowerCase(),
+        themeUiColor:   (agent?.config?.theme?.ui_color || '').replace(/^#/, '').toLowerCase(),
         themeWmKey:     agent?.config?.theme?.watermark_key || '',
         themeWmOpacity: (typeof agent?.config?.theme?.watermark_opacity === 'number') ? agent.config.theme.watermark_opacity : 0.15,
         // Lot 3 — cartes-photos cliquables (copie éditable).
@@ -889,6 +892,7 @@ function _agentFormHTML() {
       : `<p class="sa-field-hint" style="margin-top:14px;">Les cartes-photos de la page publique se configureront ici une fois l'agent créé.</p>`;
 
     const SA_SWATCHES = [['Indigo','221a52'],['Sarcelle','0f6e56'],['Bordeaux','72243e'],['Bleu roi','0c447c'],['Forêt','27500a'],['Bronze','633806']];
+    const SA_UI_SWATCHES = [['Indigo','6f6cf0'],['Sarcelle','12b3a6'],['Émeraude','10b981'],['Bleu','3b82f6'],['Ambre','e0a83c'],['Rose','e0518a']];
     const _wmPct = Math.round((typeof d.themeWmOpacity === 'number' ? d.themeWmOpacity : 0.15) * 100);
     const appearanceSection = !isNew ? `
       <label class="sa-field" style="margin-top:14px;"><span class="sa-field-label">Apparence de la page publique (optionnel) — le haut du dégradé reste sombre</span></label>
@@ -903,6 +907,17 @@ function _agentFormHTML() {
           <span class="sa-appear-grid">#</span>
           <input class="sa-input" data-field="themeBgBottom" value="${_escAttr(d.themeBgBottom)}" maxlength="6" placeholder="221a52" style="width:120px;text-transform:uppercase;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">
           <button type="button" class="sa-appear-clear" data-act="form-bg-clear" title="Revenir au thème par défaut">${icon('refresh-cw', 14)} Défaut</button>
+        </div>
+        <div class="sa-appear-row">
+          <span class="sa-appear-lbl">Couleur des éléments (barre du haut, bouton vocal)</span>
+          <div class="sa-swatches">
+            ${SA_UI_SWATCHES.map(s => `<button type="button" class="sa-swatch${(d.themeUiColor || '').toLowerCase() === s[1] ? ' is-sel' : ''}" data-act="form-ui" data-hex="${s[1]}" style="background:#${s[1]}" title="${s[0]}" aria-label="${s[0]}"></button>`).join('')}
+          </div>
+        </div>
+        <div class="sa-appear-hex">
+          <span class="sa-appear-grid">#</span>
+          <input class="sa-input" data-field="themeUiColor" value="${_escAttr(d.themeUiColor)}" maxlength="6" placeholder="6f6cf0" style="width:120px;text-transform:uppercase;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">
+          <button type="button" class="sa-appear-clear" data-act="form-ui-clear" title="Revenir à l'indigo par défaut">${icon('refresh-cw', 14)} Défaut</button>
         </div>
         <div class="sa-appear-row">
           <span class="sa-appear-lbl">Filigrane (plein cadre)</span>
@@ -1230,6 +1245,7 @@ function _readAgentForm() {
     const wu = get('[data-field="websiteUrl"]'); if (wu) d.websiteUrl = wu.value.trim();
     const wl = get('[data-field="websiteLabel"]'); if (wl) d.websiteLabel = wl.value.trim();
     const tb = get('[data-field="themeBgBottom"]'); if (tb) d.themeBgBottom = tb.value.trim().replace(/^#/, '').toLowerCase();
+    const tu = get('[data-field="themeUiColor"]'); if (tu) d.themeUiColor = tu.value.trim().replace(/^#/, '').toLowerCase();
     const wo = get('[data-field="themeWmOpacity"]'); if (wo) d.themeWmOpacity = (+wo.value || 0) / 100;
     const ph = get('[data-field="phone"]');      if (ph) d.phone = ph.value.trim();
     const fb = get('[data-field="fallback"]'); if (fb) d.fallback = fb.value.trim();
@@ -1357,7 +1373,7 @@ function _agentPayload() {
             scope:    { fallback_text: d.fallback,
                         fallback_variants: (d.fallbackVariants || []).filter(v => v && v.trim()) },
             contact:  { website_url: d.websiteUrl || '', website_label: d.websiteLabel || '', phone: d.phone || '' },
-            theme:    { bg_bottom: d.themeBgBottom || '', watermark_key: d.themeWmKey || '', watermark_opacity: (typeof d.themeWmOpacity === 'number' ? d.themeWmOpacity : 0.15) },
+            theme:    { bg_bottom: d.themeBgBottom || '', ui_color: d.themeUiColor || '', watermark_key: d.themeWmKey || '', watermark_opacity: (typeof d.themeWmOpacity === 'number' ? d.themeWmOpacity : 0.15) },
             cards:    (d.cards || []).filter(c => c.img && c.q).map(c => ({ img: c.img, q: c.q, alt: c.alt || '', title: c.title || '', title_i18n: (c.title_i18n && Object.keys(c.title_i18n).length) ? c.title_i18n : {} })),
         },
     };

@@ -25,6 +25,14 @@
       --sa-border:  #dde3ec;
       --sa-bg:      #eef1f5;
       --sa-danger:  #e05c5c;
+      /* Accent des éléments interactifs du v2 (barre du haut + bouton d'envoi).
+         Défauts = l'indigo d'origine ; surchargés par theme.ui_color (applyTheme,
+         dérivés calculés en JS — pas de dépendance color-mix). */
+      --sav2-brand:   #6f6cf0;
+      --sav2-brand-2: #5046d6;
+      --sav2-brand-lt:#c2c0ff;
+      --sav2-brand-tx:rgba(196,194,255,.82);
+      --sav2-brand-sh:rgba(80,70,214,.5);
     }
 
     html, body { height: 100%; }
@@ -280,13 +288,13 @@
     /* Header : lien URL (gauche) · téléphone · onde voix (droite) */
     .sav2-top { display: flex; align-items: center; gap: 11px; padding: calc(env(safe-area-inset-top,0px) + 16px) 16px 6px; }
     .sav2-url { flex: 1; min-width: 0; height: 46px; display: flex; align-items: center; gap: 11px; padding: 0 16px;
-      border: 2px solid #c2c0ff; border-radius: 24px; background: rgba(255,255,255,.045); text-decoration: none; }
-    .sav2-url-globe { flex-shrink: 0; color: #c2c0ff; display: flex; align-items: center; justify-content: center; }
+      border: 2px solid var(--sav2-brand-lt); border-radius: 24px; background: rgba(255,255,255,.045); text-decoration: none; }
+    .sav2-url-globe { flex-shrink: 0; color: var(--sav2-brand-lt); display: flex; align-items: center; justify-content: center; }
     .sav2-url-globe svg { width: 22px; height: 22px; }
-    .sav2-url-txt { font-size: 14px; letter-spacing: .01em; color: rgba(196,194,255,.82); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sav2-url-txt { font-size: 14px; letter-spacing: .01em; color: var(--sav2-brand-tx); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .sav2-top-spacer { flex: 1; }
     .sav2-top-btn { flex-shrink: 0; width: 46px; height: 46px; border-radius: 50%; background: transparent; border: none; cursor: pointer;
-      color: #c2c0ff; display: flex; align-items: center; justify-content: center; text-decoration: none;
+      color: var(--sav2-brand-lt); display: flex; align-items: center; justify-content: center; text-decoration: none;
       -webkit-tap-highlight-color: transparent; transition: transform .12s; }
     .sav2-top-btn:active { transform: scale(.92); }
     .sav2-top-btn svg { width: 46px; height: 46px; display: block; }
@@ -364,8 +372,8 @@
     .sav2-mic svg { width: 23px; height: 23px; }
     .sav2-mic.is-listening { color: #e0484f; }
     .sav2-send { flex-shrink: 0; width: 42px; height: 42px; border-radius: 50%; border: none; cursor: pointer;
-      background: linear-gradient(135deg,#6f6cf0,#5046d6); color: #fff; display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 4px 14px rgba(80,70,214,.5); -webkit-tap-highlight-color: transparent; transition: transform .12s; }
+      background: linear-gradient(135deg,var(--sav2-brand),var(--sav2-brand-2)); color: #fff; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 14px var(--sav2-brand-sh); -webkit-tap-highlight-color: transparent; transition: transform .12s; }
     .sav2-send:active { transform: scale(.92); }
     .sav2-send:disabled { opacity: .5; }
     .sav2-send svg { width: 22px; height: 22px; }
@@ -1363,6 +1371,22 @@
     // blanc lisible quelle que soit la couleur choisie.
     function applyTheme(meta) {
       const th = (meta && meta.theme) ? meta.theme : {};
+      // Accent des éléments interactifs (barre du haut + bouton d'envoi) : un
+      // seul hex choisi par l'agent, décliné en JS (foncé pour le dégradé, clair
+      // pour les icônes/bordure) — pas de dépendance color-mix. Défauts (indigo)
+      // gardés si absent.
+      const ui = (typeof th.ui_color === 'string' && /^#[0-9a-f]{6}$/i.test(th.ui_color)) ? th.ui_color : '';
+      if (ui) {
+        const rgb = [1, 3, 5].map(i => parseInt(ui.slice(i, i + 2), 16));
+        const dark = rgb.map(c => Math.round(c * 0.76));                      // −24 % → fin de dégradé
+        const lt   = rgb.map(c => Math.round(c + (255 - c) * 0.55));          // +55 % blanc → clair
+        const rs = document.documentElement.style;
+        rs.setProperty('--sav2-brand', ui);
+        rs.setProperty('--sav2-brand-2', 'rgb(' + dark.join(',') + ')');
+        rs.setProperty('--sav2-brand-lt', 'rgb(' + lt.join(',') + ')');
+        rs.setProperty('--sav2-brand-tx', 'rgba(' + lt.join(',') + ',.88)');
+        rs.setProperty('--sav2-brand-sh', 'rgba(' + rgb.join(',') + ',.5)');
+      }
       const bottom = (typeof th.bg_bottom === 'string' && /^#[0-9a-f]{6}$/i.test(th.bg_bottom)) ? th.bg_bottom : '';
       if (bottom) {
         document.body.style.background =
