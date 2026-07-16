@@ -265,6 +265,12 @@ function _buildShell() {
             const out = e.target.parentElement && e.target.parentElement.querySelector('[data-slot="wm-opv"]');
             if (out) out.textContent = e.target.value + '%';
         }
+        // Champ « À revérifier le » : le hint suit la saisie en direct (le
+        // sélecteur natif peut AFFICHER la date du jour sur un champ vide —
+        // le hint est la seule vérité lisible ; il doit donc coller à value).
+        if (e.target && e.target.matches && e.target.matches('[data-field="__review"]')) {
+            _updateReviewHint(e.target.value);
+        }
     });
     bindRatingButton(_root, WORKSPACE_META.id);
     bindHelpButton(_root, WORKSPACE_META.id);
@@ -383,6 +389,11 @@ function _onClick(e) {
     if (act === 'ed-type')      { _kx.editType = actEl.dataset.v; _renderMain(); return; }
     if (act === 'ed-save')      { _saveEditor(actEl.dataset.status || null); return; }
     if (act === 'ed-status')    { _saveEditor(actEl.dataset.v); return; }
+    if (act === 'ed-review-clear') {
+        const inp = _root.querySelector('[data-field="__review"]');
+        if (inp) { inp.value = ''; _updateReviewHint(''); }
+        return;
+    }
     if (act === 'ed-delete')    { _deleteUnit(_kx.editing?.id, true); return; }
     // ── Extraction ──
     if (act === 'ex-close')     { _closeExtract(); return; }
@@ -2515,6 +2526,19 @@ function _openEditor(unit) {
     _renderMain();
 }
 
+// Hint du champ « À revérifier le » — la seule vérité lisible : le date-picker
+// natif AFFICHE parfois la date du jour sur un champ vide (piège signalé en
+// prod : l'utilisateur croit ses fiches périmées alors que review_at = NULL).
+function _reviewHintHTML(dateStr) {
+    return dateStr
+        ? 'À cette date, la fiche sera mise en <strong>quarantaine</strong> (retirée du service) jusqu’à votre revalidation.'
+        : '<strong>Aucune date : cette fiche ne périme jamais.</strong> Le sélecteur peut afficher la date du jour — tant que rien n’est saisi, rien ne se déclenche.';
+}
+function _updateReviewHint(dateStr) {
+    const hint = _root?.querySelector('[data-slot="review-hint"]');
+    if (hint) hint.innerHTML = _reviewHintHTML(dateStr);
+}
+
 function _editorHTML() {
     const isNew = !_kx.editing;
     const type  = isNew ? _kx.editType : _kx.editing.type;
@@ -2575,7 +2599,11 @@ function _editorHTML() {
         </label>
         <label class="sa-field">
           <span class="sa-field-label">À revérifier le (optionnel)</span>
-          <input class="sa-input" type="date" data-field="__review" value="${_escAttr((u.review_at || '').slice(0, 10))}">
+          <span class="sa-review-row">
+            <input class="sa-input" type="date" data-field="__review" value="${_escAttr((u.review_at || '').slice(0, 10))}">
+            <button type="button" class="sa-btn sa-review-clear" data-act="ed-review-clear" title="Effacer la date — la fiche ne périme jamais">${icon('x', 14)} Jamais</button>
+          </span>
+          <span class="sa-field-hint" data-slot="review-hint">${_reviewHintHTML((u.review_at || '').slice(0, 10))}</span>
         </label>
       </div>
 
