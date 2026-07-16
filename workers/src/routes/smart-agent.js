@@ -286,9 +286,18 @@ async function ensureSmartAgentSchema(env) {
   // ALTER idempotent (SQLite n'a pas ADD COLUMN IF NOT EXISTS).
   await safe('ALTER TABLE kortex_units ADD COLUMN agent_id TEXT');
   await safe('CREATE INDEX IF NOT EXISTS idx_kortex_units_agent ON kortex_units(tenant_id, agent_id, status)');
+  // Audit 2026-07-16 — FTS v2 : l'index lexical porte tenant_id + vault_id
+  // (UNINDEXED = stockés, filtrables en WHERE, hors du corpus indexé). Le
+  // cloisonnement se fait DANS la requête MATCH : le top-K lexical est celui
+  // DU COFFRE INTERROGÉ. Avant (v1 globale), les fiches des autres tenants —
+  // et des autres agents du même tenant — évinçaient les bonnes fiches du
+  // top-20 AVANT le filtre D1 : dilution silencieuse, croissante avec chaque
+  // client. L'ancienne kortex_units_fts est migrée puis supprimée (SQL one-shot).
   await safe(`
-    CREATE VIRTUAL TABLE IF NOT EXISTS kortex_units_fts USING fts5(
+    CREATE VIRTUAL TABLE IF NOT EXISTS kortex_units_fts_v2 USING fts5(
       unit_id UNINDEXED,
+      tenant_id UNINDEXED,
+      vault_id UNINDEXED,
       title,
       body_text
     )
@@ -615,11 +624,11 @@ function validateUnit(type, title, rawBody) {
 // Seules les fiches VALIDÉES sont indexées : une fiche en brouillon ou
 // en quarantaine ne doit jamais pouvoir être servie par la recherche.
 async function _ftsSync(env, unit) {
-  await env.DB.prepare('DELETE FROM kortex_units_fts WHERE unit_id = ?').bind(unit.id).run();
+  await env.DB.prepare('DELETE FROM kortex_units_fts_v2 WHERE unit_id = ?').bind(unit.id).run();
   if (unit.status === 'validated') {
     await env.DB
-      .prepare('INSERT INTO kortex_units_fts (unit_id, title, body_text) VALUES (?, ?, ?)')
-      .bind(unit.id, unit.title, unit.body_text)
+      .prepare('INSERT INTO kortex_units_fts_v2 (unit_id, tenant_id, vault_id, title, body_text) VALUES (?, ?, ?, ?, ?)')
+      .bind(unit.id, unit.tenant_id || '', unit.vault_id || '', unit.title, unit.body_text)
       .run();
   }
 }
@@ -830,7 +839,10 @@ export async function handleKortexUnitUpdate(request, env, unitId) {
     nextReview, nextSource, unitId, gate.tenant,
   ).run();
 
-  await _ftsSync(env, { id: unitId, status: nextStatus, title: nextTitle.trim(), body_text: nextBodyText });
+  await _ftsSync(env, {
+    id: unitId, status: nextStatus, title: nextTitle.trim(), body_text: nextBodyText,
+    tenant_id: gate.tenant, vault_id: cur.vault_id || await _privateVaultOf(env, gate.tenant, cur.agent_id),
+  });
   if (nextStatus === 'validated') {
     // SA-4.4 — indexer dans le coffre de la fiche (fallback : privé de l'agent).
     const vid = cur.vault_id || await _privateVaultOf(env, gate.tenant, cur.agent_id);
@@ -857,7 +869,7 @@ export async function handleKortexUnitDelete(request, env, unitId) {
     .prepare('DELETE FROM kortex_units WHERE id = ? AND tenant_id = ?')
     .bind(unitId, gate.tenant)
     .run();
-  await env.DB.prepare('DELETE FROM kortex_units_fts WHERE unit_id = ?').bind(unitId).run();
+  await env.DB.prepare('DELETE FROM kortex_units_fts_v2 WHERE unit_id = ?').bind(unitId).run();
   await _vectorDelete(env, [unitId]);
 
   if (!res.meta?.changes) return err('Fiche introuvable', 404, origin);
@@ -1352,16 +1364,21 @@ export async function handleGapStructure(request, env, gapId) {
 //    SA-4.4). Retourne des LIGNES brutes (rows D1) + la provenance ;
 //    les handlers façonnent la sortie.
 async function _retrieve(env, tenant, q, { topk = SEARCH_TOPK, vaultIds = [], focusMatches = [] } = {}) {
-  // ── Liste lexicale (FTS5 — index global ; le cloisonnement par coffre
-  //    est appliqué à la jointure D1 ci-dessous via vault_id).
+  // ── Liste lexicale (FTS5 v2 — cloisonnée DANS l'index : le top-K est
+  //    celui du tenant, et des coffres demandés s'il y en a). La jointure D1
+  //    plus bas reste l'autorité finale (statut validé + revérification).
   const _ftsList = async (m) => {
-    const { results } = await env.DB.prepare(`
-      SELECT unit_id, bm25(kortex_units_fts) AS rank
-        FROM kortex_units_fts
-       WHERE kortex_units_fts MATCH ?
-       ORDER BY rank
-       LIMIT ${FETCH_TOPK}
-    `).bind(m).all();
+    let sql = `
+      SELECT unit_id, bm25(kortex_units_fts_v2) AS rank
+        FROM kortex_units_fts_v2
+       WHERE kortex_units_fts_v2 MATCH ? AND tenant_id = ?`;
+    const binds = [m, tenant];
+    if (vaultIds.length) {
+      sql += ` AND vault_id IN (${vaultIds.map(() => '?').join(',')})`;
+      binds.push(...vaultIds);
+    }
+    sql += ` ORDER BY rank LIMIT ${FETCH_TOPK}`;
+    const { results } = await env.DB.prepare(sql).bind(...binds).all();
     return results.map(r => r.unit_id);
   };
   // Audit 2026-07-16 : `degraded` trace toute panne d'infrastructure de
@@ -2496,7 +2513,7 @@ export async function handleAgentDelete(request, env, agentId) {
       .bind(agentId, gate.tenant).all();
     if (uIds.length) await _vectorDelete(env, uIds.map(r => r.id));
     for (const r of uIds) {
-      await env.DB.prepare('DELETE FROM kortex_units_fts WHERE unit_id = ?').bind(r.id).run();
+      await env.DB.prepare('DELETE FROM kortex_units_fts_v2 WHERE unit_id = ?').bind(r.id).run();
     }
     // SA-8.2 — vecteurs des trous de l'agent (namespace gaps::), ids préfixés.
     const { results: gIds } = await env.DB
@@ -2695,7 +2712,7 @@ export async function handleKortexVaultDelete(request, env, vaultId) {
     .bind(vaultId, gate.tenant).all();
   if (uIds.length) await _vectorDelete(env, uIds.map(r => r.id));
   for (const r of uIds) {
-    await env.DB.prepare('DELETE FROM kortex_units_fts WHERE unit_id = ?').bind(r.id).run();
+    await env.DB.prepare('DELETE FROM kortex_units_fts_v2 WHERE unit_id = ?').bind(r.id).run();
   }
   await env.DB.prepare('DELETE FROM kortex_units WHERE vault_id = ? AND tenant_id = ?').bind(vaultId, gate.tenant).run();
   await env.DB.prepare('DELETE FROM kortex_vaults WHERE id = ? AND tenant_id = ?').bind(vaultId, gate.tenant).run();
@@ -3731,10 +3748,23 @@ export async function handleSmartAgentLifecycle(env) {
   await ensureSmartAgentSchema(env);
   let quarantined = 0, usagePurged = 0, sessionsPurged = 0, error = null;
   try {
+    // Audit 2026-07-16 — la quarantaine purge AUSSI FTS + Vectorize. Avant,
+    // la fiche périmée restait dans les deux index : elle remontait, occupait
+    // des rangs RRF, puis mourait à la jointure D1 — des slots gaspillés en
+    // silence. La revalidation ré-indexe (update → _ftsSync + _vectorUpsert).
+    const { results: qIds } = await env.DB.prepare(
+      "SELECT id FROM kortex_units WHERE status = 'validated' AND review_at IS NOT NULL AND review_at < date('now')"
+    ).all();
     const q = await env.DB.prepare(
       "UPDATE kortex_units SET status = 'quarantine', updated_at = datetime('now') WHERE status = 'validated' AND review_at IS NOT NULL AND review_at < date('now')"
     ).run();
     quarantined = q?.meta?.changes ?? 0;
+    if (qIds.length) {
+      await _vectorDelete(env, qIds.map(r => r.id));
+      for (const r of qIds) {
+        await env.DB.prepare('DELETE FROM kortex_units_fts_v2 WHERE unit_id = ?').bind(r.id).run();
+      }
+    }
     const u = await env.DB.prepare(
       `DELETE FROM sa_public_usage WHERE day < date('now', '-${PUBLIC_RETENTION_DAYS} days')`
     ).run();
