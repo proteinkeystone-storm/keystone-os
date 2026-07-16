@@ -32,12 +32,24 @@ export function corsOk(origin = '*') {
   });
 }
 
+// ── Comparaison à temps constant ──────────────────────────────
+// Évite qu'un attaquant déduise le secret octet par octet en mesurant
+// le temps de réponse (une comparaison `!==` court-circuite au 1er octet
+// différent). Même logique que _safeEq côté Stripe (lib/stripe.js).
+function _safeEq(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 // ── Vérification token Admin ──────────────────────────────────
 export function requireAdmin(request, env) {
   const header = request.headers.get('Authorization') || '';
   const token  = header.replace(/^Bearer\s+/i, '').trim();
-  if (!env.KS_ADMIN_SECRET || token !== env.KS_ADMIN_SECRET) return false;
-  return true;
+  if (!env.KS_ADMIN_SECRET || !token) return false;
+  return _safeEq(token, env.KS_ADMIN_SECRET);
 }
 
 // ── Vérification token Device ─────────────────────────────────

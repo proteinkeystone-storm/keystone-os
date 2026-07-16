@@ -14,10 +14,13 @@
 
    Lecture :
      SELECT * FROM audit_logs ORDER BY ts DESC LIMIT 100;
-   Purge :
-     DELETE FROM audit_logs WHERE ts < datetime('now', '-2 years');
-   (rétention 2 ans pour accountability — à arbitrer)
+   Rétention : 2 ans (accountability RGPD). Purge automatique via
+   purgeAuditLogs(), branchée sur le cron quotidien (index.js, bloc
+   '0 3 * * *'). Fenêtre configurable par KS_AUDIT_RETENTION_DAYS.
    ═══════════════════════════════════════════════════════════════ */
+
+// Rétention par défaut alignée sur la page publique /securite (2 ans).
+const DEFAULT_AUDIT_RETENTION_DAYS = 730;
 
 let _schemaReady = false;
 
@@ -71,5 +74,28 @@ export async function audit(env, entry) {
     ).run();
   } catch (e) {
     console.error('[audit] failed', e.message);
+  }
+}
+
+/**
+ * Purge les entrées d'audit au-delà de la fenêtre de rétention.
+ * Best-effort (idempotent, sûr à rejouer). Appelée par le cron quotidien.
+ *
+ * @param {object} env  Worker env (env.DB requis)
+ * @returns {{ purged: number, retentionDays: number }}
+ */
+export async function purgeAuditLogs(env) {
+  try {
+    await _ensureSchema(env);
+    const days = parseInt(env.KS_AUDIT_RETENTION_DAYS, 10) || DEFAULT_AUDIT_RETENTION_DAYS;
+    const res = await env.DB
+      .prepare(`DELETE FROM audit_logs WHERE ts < datetime('now', ?)`)
+      .bind(`-${days} days`)
+      .run();
+    const purged = res?.meta?.changes ?? 0;
+    return { purged, retentionDays: days };
+  } catch (e) {
+    console.error('[audit] purge failed', e.message);
+    return { purged: 0, retentionDays: 0 };
   }
 }

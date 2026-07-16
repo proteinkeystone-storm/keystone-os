@@ -61,6 +61,7 @@ import { handleLeadCapture, handleLeadsList }                           from './
 import { handleRatingSubmit, handleRatingsAdmin }                       from './routes/ratings.js';
 import { handleTestimonialSubmit, handleTestimonialsPublic, handleTestimonialsAdmin, handleTestimonialModerate } from './routes/testimonials.js';
 import { handleTrack, handleFunnel, pruneTrackEvents }                  from './routes/track.js';
+import { purgeAuditLogs }                                              from './lib/audit.js';
 import { handleUploadAsset, handleGetAsset, handleListAssets, handleDeleteAsset } from './routes/kodex-assets.js';
 import { handlePulsaUpsert, handlePulsaList, handlePulsaGet, handlePulsaDelete } from './routes/pulsa-forms.js';
 import { handlePulsaPublic } from './routes/pulsa-public.js';
@@ -1145,6 +1146,12 @@ export default {
         pruneTrackEvents(env)
           .then(r => console.log('[track-prune]', JSON.stringify(r)))
           .catch(e => console.warn('[track-prune] failed', e?.message || e))
+      );
+      // Journal d'audit — purge au-delà de la rétention (2 ans, alignée /securite).
+      ctx.waitUntil(
+        purgeAuditLogs(env)
+          .then(r => console.log('[audit-purge]', JSON.stringify(r)))
+          .catch(e => console.warn('[audit-purge] failed', e?.message || e))
       );
       // Sceau — purge des secrets expirés (détruit chiffré + clé OPRF).
       ctx.waitUntil(
