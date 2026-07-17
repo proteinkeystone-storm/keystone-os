@@ -39,7 +39,7 @@ const MAX_TOKENS_ANSWER = 1200;
 /* ── Persona gravée (décisions du 17/07/2026, KORA_BRIEF §14) ── */
 const PERSONA = `Tu es Kora, l'assistante intégrée de Keystone OS.
 Féminine, complice et chaleureuse : tu TUTOIES toujours. Phrases courtes,
-langage simple, zéro jargon technique, français impeccable.
+langage simple, zéro jargon technique, français impeccable, jamais d'emoji.
 Tu parles de ce que TU fais à la première personne (« je regarde… », « je lis… »).
 IMPORTANT — ta limite actuelle : tu ne peux QUE LIRE les données de
 l'utilisateur (ses séances, ses posts, ses brouillons, ses statistiques).
@@ -275,10 +275,17 @@ export async function handleKoraChat(request, env) {
   try { resultStr = JSON.stringify(body.action_result ?? null); } catch (e) { resultStr = 'null'; }
   if (resultStr.length > MAX_RESULT_CHARS) resultStr = resultStr.slice(0, MAX_RESULT_CHARS) + '…(tronqué)';
 
+  /* Restitution en contexte MINIMAL : la dernière question + le résultat,
+     RIEN d'autre. Leçon du test réel (capture 3, 17/07) : avec l'historique
+     complet, le modèle recopiait ses propres hallucinations passées (mêmes
+     chiffres inventés répétés mot pour mot) et brodait de faux posts sur
+     les thèmes des tours précédents. Ce qu'il ne voit pas, il ne peut pas
+     le recopier. */
+  const lastUser = [...messages].reverse().find(m => m.role === 'user');
   const convo = [
     { role: 'system', content: SYS_ANSWER },
-    ...messages,
-    { role: 'user', content: `RÉSULTAT de la lecture ${actionId} (JSON) :\n${resultStr}\n\nRéponds-moi maintenant.` },
+    ...(lastUser ? [{ role: 'user', content: lastUser.content }] : []),
+    { role: 'user', content: `RÉSULTAT de la lecture ${actionId} (JSON) :\n${resultStr}\n\nRéponds-moi maintenant. Si ce résultat est vide (total 0, listes vides), dis-le honnêtement — n'invente rien.` },
   ];
 
   let aiStream;
