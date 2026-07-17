@@ -43,6 +43,7 @@ import { handleSaveUserKey, handleDeleteUserKey, handleListUserKeys }   from './
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
 import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './routes/ghostwriter.js';
+import { handleKoraChat }                                               from './routes/kora.js';
 import { handleAiCreditsQuota }                                         from './routes/ai-credits.js';
 import { handleBrainstormingAgentRespond, handleBrainstormingSynthesize, handleBrainstormingPostIdeas, handleBrainstormingPickRoster } from './routes/brainstorming.js';
 import { handleFetchSource } from './routes/content-source.js';
@@ -618,6 +619,12 @@ export default {
       // Pré-requis : binding [ai] dans wrangler.toml (cf. ghostwriter.js).
       if (path === '/api/ghostwriter/rewrite' && method === 'POST') {
         return handleGhostwriterRewrite(request, env);
+      }
+      // ── Kora (agent-OS, V1 lecture) — boucle decide/answer ────
+      // 2 phases orchestrées par le client (actions = kora-actions.js) ;
+      // 1 crédit/tour (tool 'kora'), réponse finale en streaming SSE.
+      if (path === '/api/kora/chat' && (method === 'POST' || method === 'OPTIONS')) {
+        return handleKoraChat(request, env);
       }
       // Phase 2 — quota serveur par licence (DEMO=1 / STARTER=3 /
       // PRO=10 / MAX=50 / ADMIN=∞). Lecture seule, pas de bump.

@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const KORA_CSS_V = '1';
+const KORA_CSS_V = '2';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
 
 /* ── Shader (verbatim harnais kora-galet-morph.html) ── */
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -176,13 +176,14 @@ export function koraClose() {
   if (_log) _log.innerHTML = '';
 }
 export function koraSay(html) {
-  if (!_inited || !_log) return;
+  if (!_inited || !_log) return null;
   const d = document.createElement('div');
   d.className = 'kora-line';
-  d.innerHTML = html;                 // appelant de confiance (boucle Kora), pas de contenu user brut
+  d.innerHTML = html;                 // appelant de confiance (la boucle échappe le contenu user/modèle)
   _log.appendChild(d);
   requestAnimationFrame(() => d.classList.add('kora-on'));
   _log.scrollTop = _log.scrollHeight;
+  return d;                           // la boucle streame dedans (textContent += chunk)
 }
 export function koraRing(target) {
   const el = typeof target === 'string' ? document.querySelector(target) : target;
@@ -296,6 +297,10 @@ export function initKora() {
   _inited = true;
   _last = performance.now();
   requestAnimationFrame(_frame);
+
+  /* la boucle conversationnelle (decide/answer + catalogue lecture) */
+  import('./kora-loop.js').then(m => m.initKoraLoop(_panel))
+    .catch(e => console.warn('[kora] boucle indisponible', e));
 
   /* accès console pour la validation (pas une API produit) */
   window.kora = { state: koraState, open: koraOpen, close: koraClose,
