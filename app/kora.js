@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const KORA_CSS_V = '2';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
+const KORA_CSS_V = '3';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
 
 /* ── Shader (verbatim harnais kora-galet-morph.html) ── */
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -150,7 +150,7 @@ let _gl = null, _U = null, _cv = null, _dock = null, _panel = null, _sub = null,
 let _radSmooth = 8;
 let _simT = 0, _last = 0, _acc = 0;
 let _level0 = 0;               // niveau voix (le vocal s'y branchera)
-let _ringed = new Set();
+let _ringed = new Map();       // cible → calque .kora-ringbox
 
 function _lerp(a, b, k) { return a + (b - a) * k; }
 
@@ -185,21 +185,36 @@ export function koraSay(html) {
   _log.scrollTop = _log.scrollHeight;
   return d;                           // la boucle streame dedans (textContent += chunk)
 }
+/* Anneaux = calques superposés (les cartes ont overflow:hidden — un
+   pseudo-élément serait clippé). Le calque épouse position + rayon
+   réels de la cible, ré-alignés à chaque frame par la boucle. */
+function _placeRing(el, box) {
+  const r = el.getBoundingClientRect();
+  const rad = (parseFloat(getComputedStyle(el).borderRadius) || 12) + 3;
+  box.style.left = (r.left - 3) + 'px';
+  box.style.top = (r.top - 3) + 'px';
+  box.style.width = (r.width + 6) + 'px';
+  box.style.height = (r.height + 6) + 'px';
+  box.style.borderRadius = rad + 'px';
+}
 export function koraRing(target) {
   const el = typeof target === 'string' ? document.querySelector(target) : target;
-  if (!el) return null;
-  el.classList.add('kora-ring');
-  _ringed.add(el);
+  if (!el || _ringed.has(el)) return el || null;
+  const box = document.createElement('div');
+  box.className = 'kora-ringbox';
+  document.body.appendChild(box);
+  _placeRing(el, box);
+  _ringed.set(el, box);
   return el;
 }
 export function koraUnring(target) {
   const el = typeof target === 'string' ? document.querySelector(target) : target;
-  if (!el) return;
-  el.classList.remove('kora-ring');
-  _ringed.delete(el);
+  const box = el ? _ringed.get(el) : null;
+  if (box) box.remove();
+  if (el) _ringed.delete(el);
 }
 export function koraClearRings() {
-  for (const el of _ringed) el.classList.remove('kora-ring');
+  for (const box of _ringed.values()) box.remove();
   _ringed.clear();
 }
 
@@ -323,6 +338,12 @@ function _frame(now) {
   const step = _acc; _acc = 0;
 
   _dock.classList.toggle('kora-mini', resting);
+
+  /* les anneaux suivent leur cible (scroll, resize, réorganisation) */
+  for (const [el, box] of _ringed) {
+    if (!el.isConnected) { box.remove(); _ringed.delete(el); continue; }
+    _placeRing(el, box);
+  }
 
   const target = STATES[_stateName];
   const k = 1 - Math.exp(-step * 3.2);
