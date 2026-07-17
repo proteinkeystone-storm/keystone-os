@@ -112,10 +112,13 @@ function _actionsBlock(raw) {
   return list.length ? list.join('\n') : null;
 }
 function _extractText(res) {
-  return (res?.response
-    || res?.result?.response
-    || res?.choices?.[0]?.message?.content
-    || '').trim();
+  /* Piège attrapé au wrangler tail (17/07, « .trim is not a function ») :
+     quand le modèle répond un JSON pur, Workers AI le PARSE lui-même et
+     `response` arrive en OBJET — le 502 frappait donc quand le modèle
+     obéissait le mieux. Objet → re-stringifié, _parseDecision s'en charge. */
+  const v = res?.response ?? res?.result?.response ?? res?.choices?.[0]?.message?.content ?? '';
+  if (typeof v === 'string') return v.trim();
+  try { return JSON.stringify(v) || ''; } catch (e) { return ''; }
 }
 /* Parse défensif de la décision. Leçon du 1er contact réel (17/07) :
    le modèle peut émettre PLUSIEURS objets JSON (il « rattrape » la
