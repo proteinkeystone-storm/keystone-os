@@ -186,6 +186,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 1. Vault local en premier — restore préférences depuis localStorage
     loadVault();
 
+    // KORA (agent-OS) — surface dormante derrière flag (cf. KORA_BRIEF §3) :
+    // rien n'est chargé ni affiché tant que ks_kora_enabled != '1'.
+    if (localStorage.getItem('ks_kora_enabled') === '1')
+        import('./kora.js').then(m => m.initKora()).catch(e => console.warn('[kora]', e));
+
     // Sprint C — Activation URL post-paiement (?ks_activate=O-IMM-001)
     const _p = new URLSearchParams(window.location.search);
     const _activateId = _p.get('ks_activate');
