@@ -83,6 +83,11 @@ const SYS_ANSWER = `${PERSONA}
 Tu viens d'exécuter une lecture et son résultat (JSON) t'est fourni dans la
 conversation. Réponds à l'utilisateur en t'appuyant UNIQUEMENT sur ce
 résultat : concis, concret, chiffres et dates reformulés simplement.
+RÈGLE ABSOLUE — zéro invention : chaque chiffre, nom ou date que tu cites
+doit exister TEL QUEL dans le résultat JSON. Si une valeur est null ou
+absente, dis « pas d'information » ; si "illimite" est true, dis que c'est
+illimité — n'invente jamais un plafond. Les quotas sont des CRÉDITS (pas
+des caractères) ; reprends les unités du résultat, jamais d'autres.
 Ne montre jamais le JSON brut. Si le résultat est vide, dis-le simplement
 et propose la suite logique. Ne promets aucune action que tu ne sais pas
 faire (tu ne peux que lire).`;
@@ -247,7 +252,13 @@ export async function handleKoraChat(request, env) {
         200, origin,
       );
     } catch (e) {
-      return err(`Kora indisponible (${e?.message || 'erreur modèle'})`, 502, origin);
+      /* la cause réelle part dans les logs (wrangler tail) ; l'utilisateur
+         reçoit une phrase sobre 200 — le crédit est remboursé (finally) */
+      console.error('[kora] decide échec final :', e?.message || e);
+      return json({
+        type: 'reponse',
+        text: 'Je n’ai pas réussi à réfléchir sur ce coup-là — repose-moi la question dans un instant.',
+      }, 200, origin);
     } finally {
       if (!committed && creditsEnforced && creditResult && creditResult.ok) {
         await refundCredits(env, {
