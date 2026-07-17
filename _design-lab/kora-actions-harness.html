@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KORA — Catalogue d'actions V1 (lecture)</title>
+<!-- ═══════════════════════════════════════════════════════════════
+     HARNAIS — teste le catalogue d'actions LECTURE de Kora
+     (app/kora-actions.js) sur les VRAIES données de l'origine :
+     ouvert sur protein-keystone.com, il lit ton localStorage réel
+     et appelle le worker avec ton ks_jwt. Aucune écriture, jamais.
+     ═══════════════════════════════════════════════════════════════ -->
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;
+    background:#0a0c1c;color:#e8e9f5;letter-spacing:-.02em;min-height:100dvh;
+    padding:26px 18px 60px;-webkit-font-smoothing:antialiased}
+  header{max-width:980px;margin:0 auto 20px}
+  h1{font-weight:900;font-size:20px;letter-spacing:.3em}
+  .sub{font-size:13px;color:rgba(232,233,245,.55);margin-top:6px;letter-spacing:-.01em}
+  .jwt{display:inline-block;margin-top:10px;font-size:12px;padding:5px 12px;border-radius:999px;
+    border:1px solid rgba(255,255,255,.12);color:rgba(232,233,245,.7)}
+  .jwt.on{border-color:rgba(64,240,161,.4);color:#7df0bb}
+  main{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+  .pad{background:rgba(16,17,34,.55);border:1px solid rgba(255,255,255,.07);
+    border-radius:16px;padding:16px 18px}
+  .pad h2{font-size:12px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;
+    color:rgba(232,233,245,.6);margin-bottom:12px}
+  .act{border-top:1px solid rgba(255,255,255,.06);padding:12px 0}
+  .act:first-of-type{border-top:none}
+  .act-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .act-label{font-size:14.5px;font-weight:700}
+  .act-id{font-size:11.5px;color:rgba(139,144,255,.85);font-family:ui-monospace,Menlo,monospace}
+  .act-target{font-size:11px;color:rgba(232,233,245,.4);font-family:ui-monospace,Menlo,monospace}
+  .act-desc{font-size:12.5px;color:rgba(232,233,245,.55);margin-top:4px;max-width:70ch}
+  .act-run{margin-left:auto;font:inherit;font-size:13px;font-weight:650;color:#c9ccff;
+    background:rgba(139,144,255,.14);border:1px solid rgba(139,144,255,.25);
+    border-radius:9px;padding:7px 18px;cursor:pointer}
+  .act-run:hover{background:rgba(139,144,255,.22)}
+  .act-params{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
+  .act-params label{font-size:11px;color:rgba(232,233,245,.5);display:flex;flex-direction:column;gap:3px}
+  .act-params input{font:inherit;font-size:12.5px;color:#e8e9f5;background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:6px 10px;width:180px}
+  .act-out{display:none;margin-top:10px;background:rgba(5,6,15,.7);border:1px solid rgba(255,255,255,.08);
+    border-radius:10px;padding:12px 14px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;
+    line-height:1.55;white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;
+    color:rgba(232,233,245,.85)}
+  .act-out.on{display:block}
+  .act-out.err{border-color:rgba(240,80,60,.4);color:#ffb3a6}
+  .act-out.ok{border-color:rgba(64,240,161,.25)}
+  .foot{max-width:980px;margin:26px auto 0;font-size:12px;color:rgba(232,233,245,.4)}
+</style>
+</head>
+<body>
+<header>
+  <h1>KORA</h1>
+  <div class="sub">Catalogue d'actions V1 — lecture seule · chaîne de contenu · les données lues sont celles de CETTE origine (ouvre-le sur protein-keystone.com pour tes vraies données)</div>
+  <span class="jwt" id="jwt">jwt : vérification…</span>
+</header>
+<main id="main"></main>
+<div class="foot">Chaque action déclare sa cible d'anneau (<code>target</code>) — en contexte réel, l'élément listé s'entourera du kora-ring pendant la lecture. Aucune action de ce catalogue n'écrit quoi que ce soit.</div>
+
+<script type="module">
+import { KORA_ACTIONS, runKoraAction } from '/app/kora-actions.js';
+
+const PADS = [
+  ['chaine', 'Chaîne de contenu'],
+  ['brainstorming', 'Brainstorming'],
+  ['ghostwriter', 'Ghost Writer'],
+  ['social', 'Social Manager'],
+];
+
+const jwtEl = document.getElementById('jwt');
+const hasJwt = !!localStorage.getItem('ks_jwt');
+jwtEl.textContent = hasJwt ? 'jwt : présent — les lectures API sont possibles' : 'jwt : absent — seules les lectures locales et publiques marcheront';
+jwtEl.classList.toggle('on', hasJwt);
+
+const main = document.getElementById('main');
+for (const [pad, title] of PADS) {
+  const actions = KORA_ACTIONS.filter(a => a.pad === pad);
+  if (!actions.length) continue;
+  const sec = document.createElement('section');
+  sec.className = 'pad';
+  sec.innerHTML = `<h2>${title}</h2>`;
+  for (const a of actions) {
+    const el = document.createElement('div');
+    el.className = 'act';
+    const params = (a.params || []).map(p =>
+      `<label>${p.name}${p.required ? ' (requis)' : ''}<input data-param="${p.name}" data-type="${p.type}" placeholder="${p.desc || ''}"></label>`
+    ).join('');
+    el.innerHTML = `
+      <div class="act-head">
+        <span class="act-label">${a.label}</span>
+        <span class="act-id">${a.id}</span>
+        <span class="act-target">→ ${a.target}</span>
+        <button class="act-run">Lire</button>
+      </div>
+      <div class="act-desc">${a.desc}</div>
+      ${params ? `<div class="act-params">${params}</div>` : ''}
+      <div class="act-out"></div>`;
+    const out = el.querySelector('.act-out');
+    el.querySelector('.act-run').addEventListener('click', async () => {
+      out.className = 'act-out on';
+      out.textContent = '…';
+      const args = {};
+      el.querySelectorAll('[data-param]').forEach(inp => {
+        const v = inp.value.trim();
+        if (v) args[inp.dataset.param] = inp.dataset.type === 'number' ? Number(v) : v;
+      });
+      const t0 = performance.now();
+      const res = await runKoraAction(a.id, args);
+      const ms = Math.round(performance.now() - t0);
+      out.className = 'act-out on ' + (res.ok ? 'ok' : 'err');
+      out.textContent = (res.ok ? `OK (${ms} ms)\n` : `ERREUR (${ms} ms)\n`) +
+        JSON.stringify(res.ok ? res.data : { error: res.error }, null, 2);
+    });
+    sec.appendChild(el);
+  }
+  main.appendChild(sec);
+}
+</script>
+</body>
+</html>
