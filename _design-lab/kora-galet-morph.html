@@ -90,11 +90,20 @@
   .hint b{color:rgba(232,233,245,.75)}
   #fps{position:fixed;top:8px;right:12px;font-size:11px;color:rgba(232,233,245,.4);z-index:60}
   #galet{touch-action:manipulation}
-  /* gate iPhone : la topbar doit tenir sur un écran étroit (test perf, pas design) */
+  /* ── MOBILE (brief §3) : la fenêtre devient une FEUILLE PLEIN ÉCRAN,
+     la pastille garde des proportions de bouton, les réglages se replient ── */
   @media (max-width:640px){
     .crumb,.tb-note,.hint{display:none}
     .topbar{gap:8px;padding:0 10px}
-    #tune{width:200px;left:8px;bottom:8px}
+    #dock{width:140px}
+    #dock.mini{width:44px}
+    #fps{top:auto;bottom:10px;right:12px}
+    #tune{width:190px;left:8px;bottom:8px;padding:9px 12px}
+    #tune .tune-body{display:none}
+    #tune.open .tune-body{display:block}
+    #tune .tt::after{content:' — toucher pour déplier'}
+    #tune.open .tt::after{content:''}
+    #card{padding:18px 20px}
   }
 </style>
 </head>
@@ -126,12 +135,14 @@
   <div class="hint">Le galet <b>reste au header</b> (témoin des 5 modes) · clique-le : fenêtre de dialogue <b>sobre</b> (liseré 1px + souffle de couleur en bas) · Kora <b>entoure ce qu’elle touche</b> · Échap pour ranger · guide-moi aux curseurs</div>
   <div id="tune">
     <div class="tt">RÉGLAGES — guide-moi</div>
+    <div class="tune-body">
     <label>Bordure 1px <output id="oBord">0.10</output></label><input type="range" id="tBord" min="0" max="0.35" step="0.01" value="0.10">
     <label>Dégradé bas <output id="oGrad">0.16</output></label><input type="range" id="tGrad" min="0" max="0.5" step="0.01" value="0.16">
     <label>Rayon coins <output id="oRad">14</output>px</label><input type="range" id="tRad" min="8" max="24" step="1" value="14">
     <label>Fond panneau <output id="oFond">0.92</output></label><input type="range" id="tFond" min="0.5" max="1" step="0.02" value="0.92">
     <button id="micBtn" class="cta" style="margin-top:12px;width:100%;padding:8px 0;font-size:12.5px"
       title="Vrai micro : amplitude → uLevel · le scénario reste en Écoute tant que le micro est actif">Micro off — Écoute simulée</button>
+    </div>
   </div>
   <div id="fps"></div>
 
@@ -296,7 +307,14 @@ let mode = 'pastille';           // pastille | carte
 let box  = null;                 // boîte animée {x,y,w,h}
 let vel  = {x:0,y:0,w:0,h:0};    // ressort
 function dockRect(){ const r = document.getElementById('dock').getBoundingClientRect(); return {x:r.left, y:r.top, w:r.width, h:r.height}; }
-function zoneRect(){ const r = document.getElementById('zone').getBoundingClientRect(); return {x:r.left+10, y:r.top+10, w:r.width-20, h:r.height-30}; }
+const isMobile = () => matchMedia('(max-width:640px)').matches;
+function zoneRect(){
+  /* mobile (brief §3) : la fenêtre = FEUILLE PLEIN ÉCRAN sous la topbar ;
+     desktop : la zone droite du Split 60/40 */
+  if (isMobile()) return { x:8, y:64, w:innerWidth-16, h:innerHeight-72 };
+  const r = document.getElementById('zone').getBoundingClientRect();
+  return {x:r.left+10, y:r.top+10, w:r.width-20, h:r.height-30};
+}
 /* la pastille ne voyage plus : elle EST le témoin permanent du header */
 
 /* ── Scénario auto en mode carte : le cycle de vie de Kora ── */
@@ -352,6 +370,9 @@ const tn = { Bord:document.getElementById('tBord'), Grad:document.getElementById
 const to = { Bord:'oBord', Grad:'oGrad', Rad:'oRad', Fond:'oFond' };
 for (const k in tn) tn[k].addEventListener('input', () =>
   document.getElementById(to[k]).textContent = (+tn[k].value).toFixed(k === 'Rad' ? 0 : 2));
+/* mobile : le panneau réglages se replie sur son titre */
+document.querySelector('#tune .tt').addEventListener('click', () =>
+  document.getElementById('tune').classList.toggle('open'));
 addEventListener('keydown', e => { if (e.key === 'Escape') retract(); });
 
 /* ── VRAI MICRO (gate voix) : AnalyserNode → amplitude lissée → uLevel ──
