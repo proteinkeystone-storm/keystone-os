@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05060f">
+<title>KORA — Le Galet (superellipse paramétrique)</title>
+<!-- ═══════════════════════════════════════════════════════════════
+     PROTO design — KORA « Le Galet » (exploration 2026-07-16)
+     Alternative à l'orbe : SUPERELLIPSE (courbe de Lamé, la forme des
+     icônes Apple). |x/a|^n + |y/b|^n = 1 — un seul exposant n fait
+     glisser du cercle (n=2) au rectangle (n→∞). LA FORME EST L'ÉTAT :
+       · Repos        — n respire 3.4↔4.2, aurore intérieure lente
+       · Écoute       — s'arrondit (n→2.6), lames verticales sur la voix
+       · Réflexion    — tissage type Lissajous, lent, froid
+       · Travail      — COMÈTE qui parcourt le périmètre + plasma vif
+       · Besoin de toi— or Keystone, double « toc » discret
+     Autonome (zéro dépendance), WebGL 1, veille énergie au repos.
+     GATE iPhone avant tout câblage — même méthode que l'orbe.
+     ═══════════════════════════════════════════════════════════════ -->
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',Arial,sans-serif;
+    background:
+      radial-gradient(90% 70% at 50% 30%, rgba(80,70,190,.14), transparent 60%),
+      linear-gradient(180deg,#05060f 0%,#0a0b1c 60%,#0d0e24 100%);
+    color:#fff; min-height:100dvh; display:flex; flex-direction:column;
+    align-items:center; -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  }
+  header{padding:26px 16px 0; text-align:center}
+  h1{font-weight:900; letter-spacing:.42em; font-size:22px; margin-left:.42em}
+  .sub{color:rgba(200,200,235,.55); font-size:13px; margin-top:6px; letter-spacing:-.01em}
+  .badge{display:inline-flex; align-items:center; gap:8px; margin-top:14px;
+    font-size:13px; color:#c9c6ff; background:rgba(120,110,255,.10);
+    border:1px solid rgba(150,140,255,.22); padding:7px 16px; border-radius:999px}
+  .badge i{width:8px;height:8px;border-radius:50%;background:#8b86ff;display:inline-block}
+  .badge.gold i{background:#e8b84b}
+  #stage{position:relative; width:min(90vw,780px); aspect-ratio:16/9; margin:14px 0 8px}
+  canvas{position:absolute; inset:0; width:100%; height:100%; display:block}
+  #fps{position:fixed; right:10px; top:10px; font-size:10px; color:rgba(255,255,255,.25);
+    font-variant-numeric:tabular-nums}
+  .panel{width:min(92vw,880px); margin:0 0 26px; padding:16px 18px 14px;
+    background:rgba(16,17,34,.55); border:1px solid rgba(255,255,255,.07);
+    border-radius:20px; backdrop-filter:blur(18px) saturate(160%);
+    -webkit-backdrop-filter:blur(18px) saturate(160%)}
+  .states{display:flex; flex-wrap:wrap; gap:8px; justify-content:center}
+  .states button{
+    font:inherit; font-size:14px; font-weight:650; color:#e8e7ff;
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.10);
+    padding:9px 18px; border-radius:12px; cursor:pointer; transition:border-color .2s, background .2s}
+  .states button:hover{background:rgba(255,255,255,.09)}
+  .states button.on{border-color:#e8b84b; box-shadow:0 0 0 1px #e8b84b inset; background:rgba(232,184,75,.08)}
+  .sliders{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:6px 22px; margin-top:14px}
+  .sl label{display:flex; justify-content:space-between; font-size:11px; letter-spacing:.12em;
+    color:rgba(200,200,235,.5); text-transform:uppercase; margin-bottom:2px}
+  .sl output{color:rgba(230,230,255,.85); letter-spacing:0; font-variant-numeric:tabular-nums}
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:22px; background:transparent}
+  input[type=range]::-webkit-slider-runnable-track{height:3px; border-radius:2px; background:rgba(255,255,255,.14)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:16px; height:16px; border-radius:50%;
+    background:#fff; margin-top:-6.5px; box-shadow:0 1px 6px rgba(0,0,0,.5)}
+  .hint{text-align:center; font-size:12.5px; color:rgba(200,200,235,.45); margin-top:12px}
+  .hint b{color:rgba(230,230,255,.8)}
+</style>
+</head>
+<body>
+<header>
+  <h1>KORA</h1>
+  <div class="sub">Le Galet — superellipse de Lamé · la forme est l'état · 5 états</div>
+  <div class="badge" id="badge"><i></i><span id="badgeTxt">Repos</span></div>
+</header>
+
+<div id="stage"><canvas id="c"></canvas></div>
+<div id="fps"></div>
+
+<div class="panel">
+  <div class="states" id="states">
+    <button data-s="repos" class="on">Repos</button>
+    <button data-s="ecoute">Écoute</button>
+    <button data-s="reflexion">Réflexion</button>
+    <button data-s="travail">Travail</button>
+    <button data-s="besoin">Besoin de toi</button>
+    <button data-s="cycle">Cycle démo</button>
+    <button id="micBtn" title="Vrai micro : amplitude → uLevel (état Écoute)">Micro off</button>
+  </div>
+  <div class="sliders">
+    <div class="sl"><label>Vitesse <output id="oV">1.00</output></label>
+      <input type="range" id="sV" min="0.2" max="3" step="0.05" value="1"></div>
+    <div class="sl"><label>Galbe n <output id="oN">4.0</output></label>
+      <input type="range" id="sN" min="2" max="12" step="0.1" value="4"></div>
+    <div class="sl"><label>Ratio <output id="oR">2.10</output></label>
+      <input type="range" id="sR" min="1.2" max="3" step="0.05" value="2.1"></div>
+    <div class="sl"><label>Netteté <output id="oS">1.00</output></label>
+      <input type="range" id="sS" min="0" max="1" step="0.05" value="1"></div>
+    <div class="sl"><label>Bloom <output id="oB">0.00</output></label>
+      <input type="range" id="sB" min="0" max="1" step="0.05" value="0"></div>
+    <div class="sl"><label>Énergie <output id="oP">0.60</output></label>
+      <input type="range" id="sP" min="0" max="1" step="0.05" value="0.6"></div>
+  </div>
+  <div class="hint">Maintiens le galet = <b>Écoute</b> · Onde paramétrique : lobes pleins miroirs autour de l'axe, blanc aux chevauchements · <b>Netteté</b> doux↔net · galbe <b>n</b> cercle↔rectangle</div>
+</div>
+
+<script>
+'use strict';
+/* ── WebGL : superellipse SDF + lames lisses + comète périmétrique ── */
+const cv = document.getElementById('c');
+const gl = cv.getContext('webgl', {alpha:true, premultipliedAlpha:false, antialias:false});
+
+const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
+const FS = `
+precision highp float;
+uniform vec2  uRes;
+uniform float uT;        // temps (s), déjà multiplié par la vitesse
+uniform float uN;        // exposant de Lamé effectif (état + slider + respiration)
+uniform float uRatio;    // a/b — allongement horizontal
+uniform float uBloom;    // halo central
+uniform float uPlasma;   // énergie des lames intérieures
+uniform float uComet;    // 0..1 — comète périmétrique (Travail)
+uniform float uKnock;    // 0..1 — flash « Besoin de toi »
+uniform float uLevel;    // 0..1 — niveau « voix » (Écoute)
+uniform float uWeave;    // 0..1 — tissage Réflexion
+uniform vec3  uTintA;    // teinte 1 (lavande / or…)
+uniform vec3  uTintB;    // teinte 2 (cyan / ambre…)
+uniform vec3  uTintC;    // teinte 3 — la 3e voix de la palette de l'état
+uniform float uWhite;    // part de blanc : Travail (toutes couleurs) ↔ Besoin (teinte pure)
+uniform float uDim;      // luminosité globale de l'état
+uniform vec3  uLay;      // poids des 3 familles de lames (l'état = combien de lames)
+uniform float uSharp;    // 0 = duveteux (aurore) · 1 = net (rubans Siri)
+
+/* SDF superellipse normalisée : f<0 dedans, ~0 au bord. */
+float lame(vec2 q, float n, vec2 ab){
+  vec2 w = pow(abs(q)/ab, vec2(n));
+  return pow(w.x + w.y, 1.0/n) - 1.0;
+}
+/* Angle paramétrique inverse — pour situer un fragment le long du bord. */
+float edgeAngle(vec2 q, float n, vec2 ab){
+  vec2 s = sign(q) * pow(abs(q)/ab, vec2(n*0.5));
+  return atan(s.y, s.x); // -PI..PI
+}
+void main(){
+  vec2 uv = (gl_FragCoord.xy*2.0 - uRes) / min(uRes.x,uRes.y);
+  float b = 0.46;                       // demi-hauteur (barre basse)
+  vec2 ab = vec2(b*uRatio, b);
+  float f  = lame(uv, uN, ab);
+
+  /* ── Intérieur : ONDE — UN langage, des dialectes par état.
+     Lobes d'onde pleins, miroirs autour de l'axe (langage validé) ;
+     l'ÉCOUTE l'affine en filigrane (traits fins, corps discrets). ── */
+  vec3 col = vec3(0.0);
+  if (f < 0.02) {
+    vec2 q = uv / ab;
+    float t = uT;
+    float aa = mix(0.12, 0.018, uSharp);
+    float fr = mix(1.0, 0.62, uWeave);
+    float voiced = mix(1.0, 0.25 + 0.85*uLevel, clamp(uLevel*8.0, 0.0, 1.0));
+    float amp = uPlasma * 1.9 * voiced * (1.0 + uKnock*0.35);
+
+    float x = q.x, y = q.y;
+    vec3 acc = vec3(0.0);
+    /* crêtes étouffées sur l'axe : la couleur vit dans les corps */
+    float axAtt = smoothstep(0.015, 0.13, abs(y));
+    /* dialecte ÉCOUTE (uLevel actif) : crêtes fines ×4, corps discrets */
+    float fine = clamp(uLevel*1.4, 0.0, 1.0);
+    float kf = mix(1.0, 6.0, fine);
+    float bw = mix(1.0, 0.22, fine);
+    float cg = mix(1.0, 1.8, fine);
+    vec3 cC = uTintC;
+
+    { float c1 = 0.75*sin(t*0.33);
+      float env = 0.16 + 0.62*exp(-pow((x - c1)*1.8, 2.0)) + 0.30*exp(-pow((x + c1*0.7)*2.4, 2.0));
+      float yi = amp * uLay.x * env * sin(2.2*3.14159*x*fr + 1.0*t);
+      float dyy = abs(y) - abs(yi);
+      acc += uTintA * (smoothstep(aa, -aa*0.5, dyy)*0.72*bw + exp(-dyy*dyy*140.0*kf)*0.55*cg*axAtt); }
+    { float c1 = 0.75*sin(t*0.41 + 2.1);
+      float env = 0.14 + 0.58*exp(-pow((x - c1)*2.1, 2.0)) + 0.26*exp(-pow((x + c1*0.6)*2.6, 2.0));
+      float yi = amp * uLay.y * env * sin(3.1*3.14159*x*fr - 1.25*t);
+      float dyy = abs(y) - abs(yi);
+      acc += uTintB * (smoothstep(aa, -aa*0.5, dyy)*0.68*bw + exp(-dyy*dyy*150.0*kf)*0.50*cg*axAtt); }
+    { float c1 = 0.7*sin(t*0.27 + 4.2);
+      float env = 0.15 + 0.55*exp(-pow((x - c1)*1.6, 2.0));
+      float yi = amp * uLay.z * env * sin(1.7*3.14159*x*fr + 0.8*t);
+      float dyy = abs(y) - abs(yi);
+      acc += cC * (smoothstep(aa, -aa*0.5, dyy)*0.66*bw + exp(-dyy*dyy*130.0*kf)*0.50*cg*axAtt); }
+    { float c1 = 0.65*sin(t*0.37 + 1.3);
+      float env = 0.12 + 0.50*exp(-pow((x - c1)*2.2, 2.0));
+      float yi = amp * (uLay.x + uLay.y)*0.42*uWhite * env * sin(2.6*3.14159*x*fr - 0.55*t);
+      float dyy = abs(y) - abs(yi);
+      acc += vec3(0.93,0.95,1.0) * (smoothstep(aa, -aa*0.5, dyy)*0.15*bw + exp(-dyy*dyy*160.0*kf)*0.25*cg*axAtt); }
+
+    /* fil d'axe fin, teinté selon l'état */
+    acc += mix(uTintA, vec3(1.0), 0.10 + 0.22*uWhite) * exp(-y*y*1600.0) * 0.14;
+    /* blanc émergent aux chevauchements + vibrance */
+    float lum = dot(acc, vec3(0.35));
+    acc += vec3(1.0) * smoothstep(1.35, 2.4, lum) * 0.4 * (0.2 + 0.8*uWhite);
+    float lu = dot(acc, vec3(0.299, 0.587, 0.114));
+    acc = clamp(mix(vec3(lu), acc, 1.35), 0.0, 4.0);
+
+    vec3 ambient = mix(uTintA, uTintB, 0.4) * (0.12 + 0.08*uBloom);
+    float d = length(q);
+    float core = exp(-d*d*3.4) * 0.10 * uBloom;
+    vec3 inner = ambient + acc + vec3(core);
+    inner = inner / (1.0 + inner*0.30);
+    float inside = smoothstep(0.015, -0.03, f);
+    col += max(inner, 0.0) * inside;
+  }
+
+  /* ── Bord : liseré verre + comète paramétrique ── */
+  float rimSoft = exp(-abs(f)*26.0);
+  float rimLine = smoothstep(0.016, 0.002, abs(f));
+  float rim = mix(rimSoft, rimLine*1.15 + rimSoft*0.25, uSharp);
+  float topLight = 0.55 + 0.45 * clamp(-uv.y*1.4 + 0.3, 0.0, 1.0);
+  col += (uTintB*0.55 + vec3(0.65,0.65,0.95)*0.45) * rim * mix(0.55, 0.95, uSharp) * topLight;
+
+  if (uComet > 0.001) {
+    float aF = edgeAngle(uv, uN, ab);
+    float aC = mod(uT*1.35, 6.28318) - 3.14159;
+    float da = abs(atan(sin(aF-aC), cos(aF-aC)));          // distance angulaire
+    float trail = exp(-da*4.0) + 0.45*exp(-abs(atan(sin(aF-aC-0.7), cos(aF-aC-0.7)))*6.0);
+    col += mix(uTintB, vec3(1.0), 0.55) * exp(-abs(f)*22.0) * trail * 6.5 * uComet;
+  }
+
+  /* « Besoin de toi » : flash doux du liseré entier */
+  col += vec3(1.0, 0.82, 0.42) * rim * uKnock * 1.6;
+
+  col *= uDim;
+  /* légère vignette de scène */
+  float a = clamp(rim*1.2 + smoothstep(0.015,-0.03,f), 0.0, 1.0);
+  gl_FragColor = vec4(col, a);
+}`;
+
+function shader(type, src){
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, shader(gl.VERTEX_SHADER, VS));
+gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog); gl.useProgram(prog);
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+const loc = gl.getAttribLocation(prog, 'p');
+gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+const U = {}; for (const n of ['uRes','uT','uN','uRatio','uBloom','uPlasma','uComet','uKnock','uLevel','uWeave','uTintA','uTintB','uTintC','uDim','uLay','uSharp','uWhite'])
+  U[n] = gl.getUniformLocation(prog, n);
+gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+function resize(){
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const r = cv.getBoundingClientRect();
+  cv.width = r.width*dpr; cv.height = r.height*dpr;
+  gl.viewport(0,0,cv.width,cv.height);
+}
+addEventListener('resize', resize); resize();
+
+/* ── Machine à états — chaque état = cible de paramètres + teintes ──
+   Le rendu INTERPOLE en douceur vers la cible (aucune coupure). */
+/* Palettes par état — la couleur EST l'état (psychologie assumée) :
+   repos = bleu/violet (calme, nuit) · écoute = turquoise/vert (réceptif,
+   disponible) · réflexion = violet/indigo/orchidée (introspection) ·
+   travail = magenta/cyan/vert (toutes les couleurs = pleine capacité) ·
+   besoin = vermillon→corail→or (urgence CHALEUREUSE, jamais « erreur »). */
+const R_A=[0.49,0.42,0.94], R_B=[0.29,0.49,0.96], R_C=[0.63,0.42,0.96],
+      E_A=[0.10,0.88,0.62], E_B=[0.30,0.95,0.45], E_C=[0.15,0.75,0.85],
+      F_A=[0.54,0.36,0.94], F_B=[0.35,0.42,0.96], F_C=[0.78,0.42,0.88],
+      T_A=[1.0,0.25,0.68],  T_B=[0.13,0.82,1.0],  T_C=[0.25,0.94,0.63],
+      B_A=[0.94,0.16,0.10], B_B=[1.0,0.36,0.14],  B_C=[1.0,0.62,0.30];
+const STATES = {
+  repos:     { n:4.0,  ratio:2.50, speed:1.65, bloom:0.55, plasma:0.33, comet:0, level:0, weave:0,   knock:0, dim:0.95, A:R_A, B:R_B, C:R_C, white:0.65, breathe:0.45, lay:[0.55,0.35,0.30] },
+  ecoute:    { n:2.8,  ratio:1.63, speed:1.15, bloom:0.6,  plasma:0.53, comet:0, level:1, weave:0,   knock:0, dim:1.0,  A:E_A, B:E_B, C:E_C, white:0.40, breathe:0.12, lay:[1.0,0.9,0.8] },
+  reflexion: { n:8.5,  ratio:2.76, speed:1.50, bloom:0.5,  plasma:0.64, comet:0, level:0, weave:1,   knock:0, dim:0.9,  A:F_A, B:F_B, C:F_C, white:0.50, breathe:0.2, lay:[0.65,0.6,0.55] },
+  travail:   { n:4.5,  ratio:2.72, speed:2.19, bloom:0.65, plasma:0.43, comet:1, level:0, weave:0.2, knock:0, dim:1.15, A:T_A, B:T_B, C:T_C, white:0.30, breathe:0.06, lay:[0.95,0.85,0.75] },
+  besoin:    { n:11.4, ratio:2.57, speed:0.32, bloom:0.7,  plasma:0.34, comet:0, level:0, weave:0,   knock:1, dim:1.05, A:B_A, B:B_B, C:B_C, white:0.20, breathe:0.30, lay:[0.9,0.55,0.35] },
+};
+let stateName = 'repos', cycle = false, cycleIdx = 0;
+const ORDER = ['repos','ecoute','reflexion','travail','besoin'];
+const cur = Object.assign({}, STATES.repos, {A:[...STATES.repos.A], B:[...STATES.repos.B], C:[...STATES.repos.C], lay:[...STATES.repos.lay]});
+
+const $ = id => document.getElementById(id);
+const badge = $('badge'), badgeTxt = $('badgeTxt');
+const LABELS = { repos:'Repos', ecoute:'Écoute', reflexion:'Réflexion', travail:'Travail', besoin:'Besoin de toi' };
+function setState(s){
+  stateName = s;
+  badgeTxt.textContent = LABELS[s];
+  badge.classList.toggle('gold', s === 'besoin');
+  document.querySelectorAll('.states button').forEach(b =>
+    b.classList.toggle('on', b.dataset.s === s || (cycle && b.dataset.s === 'cycle')));
+}
+document.getElementById('states').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || !b.dataset.s) return;
+  if (b.dataset.s === 'cycle') { cycle = !cycle; b.classList.toggle('on', cycle); return; }
+  cycle = false; setState(b.dataset.s);
+});
+/* Maintien du galet = Écoute (comme l'orbe) */
+let held = false, before = 'repos';
+cv.addEventListener('pointerdown', () => { held = true; before = stateName; cycle = false; setState('ecoute'); });
+addEventListener('pointerup',   () => { if (held) { held = false; setState(before); } });
+
+/* ── VRAI MICRO (gate voix) : AnalyserNode → amplitude lissée → uLevel ──
+   Le micro exige un contexte sécurisé (localhost ou HTTPS) ; en réseau
+   local http://IP le bouton l'annonce et l'onde reste simulée. */
+const micBtn = document.getElementById('micBtn');
+let micOn = false, micLevel = 0, micAn = null, micBuf = null, micCtx = null, micStream = null;
+async function micStart(){
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    micBtn.textContent = 'Micro indisponible (HTTPS/localhost requis)'; return;
+  }
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true } });
+    micCtx = new (window.AudioContext || window.webkitAudioContext)();
+    await micCtx.resume();
+    micAn = micCtx.createAnalyser(); micAn.fftSize = 1024;
+    micCtx.createMediaStreamSource(micStream).connect(micAn);
+    micBuf = new Uint8Array(micAn.fftSize);
+    micOn = true; micBtn.textContent = 'Micro on'; micBtn.classList.add('on');
+    cycle = false; setState('ecoute');
+  } catch(e){ micBtn.textContent = 'Micro refusé'; }
+}
+function micStop(){
+  micOn = false; micLevel = 0;
+  if (micStream) micStream.getTracks().forEach(t => t.stop());
+  if (micCtx) micCtx.close();
+  micStream = micCtx = micAn = micBuf = null;
+  micBtn.textContent = 'Micro off'; micBtn.classList.remove('on');
+}
+micBtn.addEventListener('click', () => micOn ? micStop() : micStart());
+function micRead(dt){
+  if (!micOn || !micAn) return;
+  micAn.getByteTimeDomainData(micBuf);
+  let s = 0; for (let i = 0; i < micBuf.length; i++){ const v = (micBuf[i]-128)/128; s += v*v; }
+  const rms = Math.sqrt(s / micBuf.length);
+  const t = Math.min(1, Math.max(0, (rms - 0.012) * 5.5));   // plancher de bruit + gain parole
+  micLevel += (t - micLevel) * (1 - Math.exp(-dt * (t > micLevel ? 30 : 9)));  // attaque vive, retombée douce
+}
+
+/* Sliders (offsets utilisateur par-dessus l'état) */
+const sl = { V:$('sV'), N:$('sN'), R:$('sR'), B:$('sB'), P:$('sP'), S:$('sS') };
+const out = { V:$('oV'), N:$('oN'), R:$('oR'), B:$('oB'), P:$('oP'), S:$('oS') };
+for (const k in sl) sl[k].addEventListener('input', () => out[k].textContent = (+sl[k].value).toFixed(k==='N'?1:2));
+
+/* ── Boucle — veille énergie : 30 fps au repos, 60 sinon ── */
+const fpsEl = $('fps');
+let last = performance.now(), simT = 0, frames = 0, fpsT = 0, acc = 0;
+function lerp(a,b,k){ return a + (b-a)*k; }
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt = Math.min((now - last)/1000, 0.1); last = now;
+  const target = STATES[stateName];
+  const resting = stateName === 'repos' && !cycle;
+  acc += dt;
+  if (resting && acc < 1/30) return;      // veille : 30 fps suffisent à une respiration
+  const step = acc; acc = 0;
+
+  if (cycle) { cycleIdx += step; if (cycleIdx > 3.2) { cycleIdx = 0;
+    setState(ORDER[(ORDER.indexOf(stateName)+1) % ORDER.length]); } }
+
+  const k = 1 - Math.exp(-step*3.2);      // lissage exponentiel vers la cible
+  for (const p of ['n','ratio','speed','bloom','plasma','comet','level','weave','knock','dim','breathe','white'])
+    cur[p] = lerp(cur[p], target[p], k);
+  for (let i=0;i<3;i++){ cur.A[i]=lerp(cur.A[i],target.A[i],k); cur.B[i]=lerp(cur.B[i],target.B[i],k); cur.C[i]=lerp(cur.C[i],target.C[i],k); cur.lay[i]=lerp(cur.lay[i],target.lay[i],k); }
+
+  simT += step * cur.speed * (+sl.V.value);
+  const knock = cur.knock * (0.30 + 0.70 * Math.max(0, Math.sin(simT*2.6)) *
+                Math.max(0, Math.sin(simT*1.3)));
+  const breathe = Math.sin(simT*0.8) * cur.breathe
+                + knock * 0.35;                                // alarme : la FORME palpite au toc              // socle or + double toc doux
+  micRead(step);
+  const level = cur.level * (micOn ? (0.08 + 0.92*micLevel)
+                                   : (0.35 + 0.65*Math.abs(Math.sin(simT*2.1)*Math.sin(simT*0.83))));
+
+  gl.uniform2f(U.uRes, cv.width, cv.height);
+  gl.uniform1f(U.uT, simT);
+  gl.uniform1f(U.uN, Math.max(2, cur.n + breathe + (+sl.N.value - 4)));
+  gl.uniform1f(U.uRatio, cur.ratio * ((+sl.R.value)/2.1));
+  gl.uniform1f(U.uBloom, cur.bloom * (+sl.B.value)/0.55);
+  gl.uniform1f(U.uPlasma, cur.plasma * (+sl.P.value)/0.6);
+  gl.uniform1f(U.uComet, cur.comet);
+  gl.uniform1f(U.uKnock, knock);
+  gl.uniform1f(U.uLevel, level);
+  gl.uniform1f(U.uWeave, cur.weave);
+  gl.uniform3fv(U.uTintA, cur.A);
+  gl.uniform3fv(U.uTintB, cur.B);
+  gl.uniform3fv(U.uTintC, cur.C);
+  gl.uniform1f(U.uWhite, cur.white);
+  gl.uniform1f(U.uDim, cur.dim);
+  gl.uniform3fv(U.uLay, cur.lay);
+  gl.uniform1f(U.uSharp, +sl.S.value);
+  gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  frames++; fpsT += step;
+  if (fpsT >= 1) { fpsEl.textContent = frames + ' fps'; frames = 0; fpsT = 0; }
+}
+requestAnimationFrame(frame);
+
+/* Pilotage par URL pour captures : ?state=travail */
+const qs = new URLSearchParams(location.search).get('state');
+if (qs && STATES[qs]) {
+  setState(qs);
+  // Capture headless : on CLAQUE l'état (sans transition) — le lissage dt
+  // n'avance quasi pas sous le temps virtuel de Chrome, et une capture
+  // mi-transition ment sur les couleurs (leçon : besoin « rose » = violet
+  // du repos pas encore parti).
+  const t0 = STATES[qs];
+  for (const k of ['n','ratio','speed','bloom','plasma','comet','level','weave','knock','dim','breathe','white']) cur[k] = t0[k];
+  for (let i=0;i<3;i++){ cur.A[i]=t0.A[i]; cur.B[i]=t0.B[i]; cur.C[i]=t0.C[i]; cur.lay[i]=t0.lay[i]; }
+}
+if (qs === 'cycle') { cycle = true; }
+</script>
+</body>
+</html>

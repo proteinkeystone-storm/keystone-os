@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KORA — Morphing pastille → carte (Split 60/40)</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;
+    background:#0a0c1c; color:#e8e9f5; overflow:hidden; letter-spacing:-.02em;}
+  /* ── Fausse app Keystone (contexte de démonstration) ── */
+  .topbar{height:56px; display:flex; align-items:center; gap:14px; padding:0 18px;
+    background:rgba(13,15,32,.9); border-bottom:1px solid rgba(255,255,255,.07);}
+  .logo{font-weight:900; font-size:15px; letter-spacing:.06em}
+  .logo em{font-style:normal; color:#8b90ff}
+  .crumb{font-size:13px; color:rgba(232,233,245,.5)}
+  .tb-sp{flex:1}
+  .tb-ic{width:38px;height:38px;border-radius:9px;background:rgba(255,255,255,.06);}
+  .tb-btn.plus{width:44px;height:38px;border-radius:9px;background:#6366f1;color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;}
+  .tb-note{height:38px;border-radius:9px;background:rgba(255,255,255,.06);color:#c9ccff;
+    display:flex;align-items:center;padding:0 14px;font-size:13px;font-weight:650;}
+  /* Kora au repos = un bouton comme les autres ; active = elle prend SA largeur
+     en poussant naturellement les voisins vers la gauche (flexbox + transition) */
+  #dock{width:200px;height:38px;position:relative;flex:0 0 auto;
+    transition:width .38s cubic-bezier(.3,.9,.3,1);}
+  #dock.mini{width:44px;}
+  .main{display:flex; height:calc(100% - 56px);}
+  .pad{flex:1; padding:26px 30px; min-width:0;}
+  .pad h1{font-size:20px; font-weight:800; margin-bottom:18px; color:rgba(232,233,245,.9)}
+  .sk{border-radius:10px; background:rgba(255,255,255,.05); margin-bottom:12px;}
+  .sk.t{height:14px; width:70%} .sk.t2{height:14px; width:45%}
+  .sk.block{height:120px; width:100%} .sk.block2{height:180px; width:92%}
+  #zone{width:40%; max-width:560px; padding:20px; position:relative;}
+  /* ── Le galet : un canvas qui VOYAGE de la pastille à la carte ── */
+  #galet{position:fixed; z-index:50; cursor:pointer; background:transparent;}
+  #panel{position:fixed; z-index:49; opacity:0; overflow:hidden;
+    background:rgba(13,15,32,.92);
+    border:1px solid rgba(255,255,255,.10); pointer-events:none;
+    transform:translateY(8px); transition:opacity .28s ease, transform .28s ease;}
+  #panel.open{opacity:1; transform:none;}
+  /* le seul effet : un souffle de couleur d'état TOUT EN BAS (réf. pages Smart Agent) */
+  #panel::after{content:''; position:absolute; left:0; right:0; bottom:0; height:34%;
+    background:linear-gradient(180deg, transparent, var(--k1, #8b90ff));
+    opacity:var(--pgrad, 0.16); transition:opacity .4s; pointer-events:none;}
+  /* ── Curseurs de session guidée ── */
+  .cta{margin-top:16px; padding:10px 22px; border:none; border-radius:10px;
+    background:rgba(139,144,255,.14); color:#c9ccff; font-size:13.5px; font-weight:650;
+    font-family:inherit; letter-spacing:-.01em; cursor:pointer;}
+  /* ── Le CONTOUR KORA : quand elle touche un élément, son langage d'état
+     l'entoure — comète conique qui tourne + lueur, couleurs du mode ── */
+  @property --ka { syntax:'<angle>'; initial-value:0deg; inherits:false; }
+  .kring{position:relative;}
+  .kring::after{content:''; position:absolute; inset:-3px; border-radius:12px;
+    padding:1px; pointer-events:none;   /* trait 1px = même finesse que le liseré de Kora */
+    background:conic-gradient(from var(--ka), var(--k1), var(--k2) 30%, transparent 55%, transparent 78%, var(--k1));
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor; mask-composite:exclude;
+    animation:kspin 1.5s linear infinite;
+    filter:drop-shadow(0 0 4px var(--k1));}
+  @keyframes kspin { to { --ka:360deg; } }
+  /* couleurs du contour = le MODE de Kora */
+  body[data-kstate="travail"]   { --k1:#ff3fae; --k2:#22d0ff; }
+  body[data-kstate="reflexion"] { --k1:#8a5cf0; --k2:#c86ce0; }
+  body[data-kstate="ecoute"]    { --k1:#2ad4b8; --k2:#4de07a; }
+  body[data-kstate="besoin"]    { --k1:#f2b04c; --k2:#f24630; }
+  body[data-kstate="besoin"] .kring::after{ animation-duration:2.6s; }
+  #tune{position:fixed; left:14px; bottom:40px; z-index:70; width:250px;
+    background:rgba(13,15,32,.9); border:1px solid rgba(255,255,255,.09);
+    border-radius:12px; padding:12px 14px; backdrop-filter:blur(8px);}
+  #tune label{display:flex; justify-content:space-between; font-size:11px;
+    color:rgba(232,233,245,.6); margin:7px 0 2px; letter-spacing:.04em}
+  #tune input{width:100%; accent-color:#8b90ff}
+  #tune .tt{font-size:11px; font-weight:700; letter-spacing:.1em; color:rgba(232,233,245,.75)}
+  /* ── Overlay carte (voir Kora travailler) ── */
+  #card{position:fixed; z-index:51; pointer-events:none; opacity:0;
+    display:flex; flex-direction:column; padding:26px 30px; transition:opacity .25s;}
+  #card .kt{font-weight:900; font-size:13px; letter-spacing:.30em; color:rgba(232,233,245,.85)}
+  #card .ks{font-size:12px; color:rgba(232,233,245,.5); margin-top:3px}
+  #log{margin-top:auto; margin-bottom:26px; display:flex; flex-direction:column; gap:8px;}
+  .ln{font-size:13px; line-height:1.45; color:rgba(232,233,245,.88);
+    background:rgba(10,12,28,.55); border:1px solid rgba(255,255,255,.10);
+    border-radius:10px; padding:8px 12px; backdrop-filter:blur(6px);
+    opacity:0; transform:translateY(8px); transition:opacity .4s, transform .4s; max-width:92%;}
+  .ln.on{opacity:1; transform:none}
+  .ln b{color:#ffd67a}
+  .hint{position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
+    font-size:12.5px; color:rgba(232,233,245,.45); z-index:60;}
+  .hint b{color:rgba(232,233,245,.75)}
+  #fps{position:fixed;top:8px;right:12px;font-size:11px;color:rgba(232,233,245,.4);z-index:60}
+  #galet{touch-action:manipulation}
+  /* gate iPhone : la topbar doit tenir sur un écran étroit (test perf, pas design) */
+  @media (max-width:640px){
+    .crumb,.tb-note,.hint{display:none}
+    .topbar{gap:8px;padding:0 10px}
+    #tune{width:200px;left:8px;bottom:8px}
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <span class="logo">Key<em>Stone</em></span>
+    <span class="crumb">Ghost Writer · brouillon « Newsletter juillet »</span>
+    <span class="tb-sp"></span>
+    <span class="tb-btn plus">+</span><span class="tb-ic"></span><span class="tb-ic"></span><span class="tb-note">★ 5/5</span>
+    <div id="dock" class="mini"></div>
+  </div>
+  <div class="main">
+    <div class="pad">
+      <h1 id="elTitre">Newsletter juillet</h1>
+      <div class="sk t" id="elAccroche"></div><div class="sk t2"></div>
+      <div class="sk block" id="elCorps"></div>
+      <div class="sk t"></div>
+      <div class="sk block2" id="elObjet"></div>
+      <button class="cta" id="elPublier">Publier la newsletter</button>
+    </div>
+    <div id="zone"></div>
+  </div>
+  <div id="panel"></div>
+  <canvas id="galet" title="Kora"></canvas>
+  <div id="card">
+    <div><div class="kt">K O R A</div><div class="ks" id="sub">à l'écoute…</div></div>
+    <div id="log"></div>
+  </div>
+  <div class="hint">Le galet <b>reste au header</b> (témoin des 5 modes) · clique-le : fenêtre de dialogue <b>sobre</b> (liseré 1px + souffle de couleur en bas) · Kora <b>entoure ce qu’elle touche</b> · Échap pour ranger · guide-moi aux curseurs</div>
+  <div id="tune">
+    <div class="tt">RÉGLAGES — guide-moi</div>
+    <label>Bordure 1px <output id="oBord">0.10</output></label><input type="range" id="tBord" min="0" max="0.35" step="0.01" value="0.10">
+    <label>Dégradé bas <output id="oGrad">0.16</output></label><input type="range" id="tGrad" min="0" max="0.5" step="0.01" value="0.16">
+    <label>Rayon coins <output id="oRad">14</output>px</label><input type="range" id="tRad" min="8" max="24" step="1" value="14">
+    <label>Fond panneau <output id="oFond">0.92</output></label><input type="range" id="tFond" min="0.5" max="1" step="0.02" value="0.92">
+    <button id="micBtn" class="cta" style="margin-top:12px;width:100%;padding:8px 0;font-size:12.5px"
+      title="Vrai micro : amplitude → uLevel · le scénario reste en Écoute tant que le micro est actif">Micro off — Écoute simulée</button>
+  </div>
+  <div id="fps"></div>
+
+<script>
+const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
+const FS = `
+precision highp float;
+uniform vec2  uRes;
+uniform float uT;
+uniform vec2  uAB;       // demi-axes de la boîte animée
+uniform float uRad;      // rayon des coins (unités) — à peine rond ↔ pill (par mode)
+uniform float uBand;     // fraction BASSE occupée par l'onde (pastille = 1)
+uniform float uRimI;     // intensité du liseré
+uniform float uHaloI;    // intensité du halo extérieur
+uniform float uBloom;
+uniform float uPlasma;
+uniform float uComet;
+uniform float uKnock;
+uniform float uLevel;
+uniform float uWeave;
+uniform vec3  uTintA;
+uniform vec3  uTintB;
+uniform vec3  uTintC;
+uniform float uDim;
+uniform vec3  uLay;
+uniform float uSharp;
+uniform float uWhite;
+
+/* rectangle arrondi — le RAYON est l'état : à peine rond (tendu) ↔ pill complet */
+float sdBox(vec2 pp, vec2 b, float r){
+  vec2 d = abs(pp) - b + vec2(r);
+  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
+}
+
+void main(){
+  vec2 uv = (gl_FragCoord.xy - 0.5*uRes) / (0.5*min(uRes.x, uRes.y));
+  float f = sdBox(uv, uAB, min(uRad, uAB.y));
+  vec3 col = vec3(0.0);
+
+  /* ── L'onde (langage validé, réglages gravés) vit dans la BANDE BASSE ── */
+  if (f < 0.01) {
+    float hb = max(uAB.y * uBand, 1e-3);
+    float yc = -uAB.y * (1.0 - uBand);
+    vec2 q = vec2(uv.x / uAB.x, (uv.y - yc) / hb);
+    float bandMask = smoothstep(1.25, 0.92, abs(q.y));
+    float t = uT;
+    float aa = mix(0.12, 0.018, uSharp);
+    float fr = mix(1.0, 0.62, uWeave);
+    float voiced = mix(1.0, 0.25 + 0.85*uLevel, clamp(uLevel*8.0, 0.0, 1.0));
+    float amp = uPlasma * 1.9 * voiced * (1.0 + uKnock*0.35);
+
+    float x = q.x, y = q.y;
+    vec3 acc = vec3(0.0);
+    /* crêtes étouffées sur l'axe : la couleur vit dans les corps */
+    float axAtt = smoothstep(0.015, 0.13, abs(y));
+    /* dialecte ÉCOUTE (uLevel actif) : crêtes fines ×4, corps discrets */
+    float fine = clamp(uLevel*1.4, 0.0, 1.0);
+    float kf = mix(1.0, 6.0, fine);
+    float bw = mix(1.0, 0.22, fine);
+    float cg = mix(1.0, 1.8, fine);
+    vec3 cC = uTintC;
+
+    { float c1 = 0.75*sin(t*0.33);
+      float env = 0.16 + 0.62*exp(-pow((x - c1)*1.8, 2.0)) + 0.30*exp(-pow((x + c1*0.7)*2.4, 2.0));
+      float yi = amp * uLay.x * env * sin(2.2*3.14159*x*fr + 1.0*t);
+      float dyy = abs(y) - abs(yi);
+      acc += uTintA * (smoothstep(aa, -aa*0.5, dyy)*0.72*bw + exp(-dyy*dyy*140.0*kf)*0.55*cg*axAtt); }
+    { float c1 = 0.75*sin(t*0.41 + 2.1);
+      float env = 0.14 + 0.58*exp(-pow((x - c1)*2.1, 2.0)) + 0.26*exp(-pow((x + c1*0.6)*2.6, 2.0));
+      float yi = amp * uLay.y * env * sin(3.1*3.14159*x*fr - 1.25*t);
+      float dyy = abs(y) - abs(yi);
+      acc += uTintB * (smoothstep(aa, -aa*0.5, dyy)*0.68*bw + exp(-dyy*dyy*150.0*kf)*0.50*cg*axAtt); }
+    { float c1 = 0.7*sin(t*0.27 + 4.2);
+      float env = 0.15 + 0.55*exp(-pow((x - c1)*1.6, 2.0));
+      float yi = amp * uLay.z * env * sin(1.7*3.14159*x*fr + 0.8*t);
+      float dyy = abs(y) - abs(yi);
+      acc += cC * (smoothstep(aa, -aa*0.5, dyy)*0.66*bw + exp(-dyy*dyy*130.0*kf)*0.50*cg*axAtt); }
+    { float c1 = 0.65*sin(t*0.37 + 1.3);
+      float env = 0.12 + 0.50*exp(-pow((x - c1)*2.2, 2.0));
+      float yi = amp * (uLay.x + uLay.y)*0.42*uWhite * env * sin(2.6*3.14159*x*fr - 0.55*t);
+      float dyy = abs(y) - abs(yi);
+      acc += vec3(0.93,0.95,1.0) * (smoothstep(aa, -aa*0.5, dyy)*0.15*bw + exp(-dyy*dyy*160.0*kf)*0.25*cg*axAtt); }
+
+    /* fil d'axe fin, teinté selon l'état */
+    acc += mix(uTintA, vec3(1.0), 0.10 + 0.22*uWhite) * exp(-y*y*1600.0) * 0.14;
+    /* blanc émergent aux chevauchements + vibrance */
+    float lum = dot(acc, vec3(0.35));
+    acc += vec3(1.0) * smoothstep(1.35, 2.4, lum) * 0.4 * (0.2 + 0.8*uWhite);
+    float lu = dot(acc, vec3(0.299, 0.587, 0.114));
+    acc = clamp(mix(vec3(lu), acc, 1.35), 0.0, 4.0);
+    vec3 inner = acc / (1.0 + acc*0.30);
+    float inside = smoothstep(0.006, -0.02, f);
+    col += max(inner, 0.0) * inside * bandMask;
+  }
+
+  /* ── Contour : liseré fin, couleur d'état, discret ── */
+  float rimLine = smoothstep(0.014, 0.002, abs(f));
+  float rimSoft = exp(-abs(f)*30.0);
+  float topLight = 0.6 + 0.4 * clamp(-uv.y*1.2 + 0.3, 0.0, 1.0);
+  vec3 rimCol = uTintB*0.6 + vec3(0.65, 0.65, 0.95)*0.4;
+  col += rimCol * (rimLine*0.9 + rimSoft*0.18) * uRimI * topLight;
+  col += rimCol * exp(-abs(f)*7.0) * 0.05 * uHaloI * step(0.0, f);
+  /* Besoin de toi : toc doré sur le liseré (jamais la géométrie) */
+  col += vec3(1.0, 0.82, 0.42) * (rimLine + rimSoft*0.3) * uKnock * 1.2;
+
+  /* Travail : comète discrète sur le pourtour */
+  if (uComet > 0.001) {
+    float aF = atan(uv.y/max(uAB.y, 1e-3), uv.x/max(uAB.x, 1e-3));
+    float aC = mod(uT*1.35, 6.28318) - 3.14159;
+    float da = abs(atan(sin(aF-aC), cos(aF-aC)));
+    float trail = exp(-da*4.0) + 0.45*exp(-abs(atan(sin(aF-aC-0.7), cos(aF-aC-0.7)))*6.0);
+    col += mix(uTintB, vec3(1.0), 0.55) * exp(-abs(f)*24.0) * trail * 2.0 * uComet;
+  }
+
+  col *= uDim;
+  float a = clamp(max(max(col.r, col.g), col.b), 0.0, 1.0);
+  gl_FragColor = vec4(col, a);
+}
+`;
+
+/* Palettes par état — la couleur EST l'état (psychologie assumée) :
+   repos = bleu/violet (calme, nuit) · écoute = turquoise/vert (réceptif,
+   disponible) · réflexion = violet/indigo/orchidée (introspection) ·
+   travail = magenta/cyan/vert (toutes les couleurs = pleine capacité) ·
+   besoin = vermillon→corail→or (urgence CHALEUREUSE, jamais « erreur »). */
+const R_A=[0.49,0.42,0.94], R_B=[0.29,0.49,0.96], R_C=[0.63,0.42,0.96],
+      E_A=[0.10,0.88,0.62], E_B=[0.30,0.95,0.45], E_C=[0.15,0.75,0.85],
+      F_A=[0.54,0.36,0.94], F_B=[0.35,0.42,0.96], F_C=[0.78,0.42,0.88],
+      T_A=[1.0,0.25,0.68],  T_B=[0.13,0.82,1.0],  T_C=[0.25,0.94,0.63],
+      B_A=[0.94,0.16,0.10], B_B=[1.0,0.36,0.14],  B_C=[1.0,0.62,0.30];
+
+const STATES = {
+  repos:     { n:4.0,  ratio:2.50, speed:1.65, bloom:0.55, plasma:0.33, comet:0, level:0, weave:0,   knock:0, dim:0.95, A:R_A, B:R_B, C:R_C, white:0.65, breathe:0.45, lay:[0.55,0.35,0.30] },
+  ecoute:    { n:2.8,  ratio:1.63, speed:1.15, bloom:0.6,  plasma:0.53, comet:0, level:1, weave:0,   knock:0, dim:1.0,  A:E_A, B:E_B, C:E_C, white:0.40, breathe:0.12, lay:[1.0,0.9,0.8] },
+  reflexion: { n:8.5,  ratio:2.76, speed:1.50, bloom:0.5,  plasma:0.64, comet:0, level:0, weave:1,   knock:0, dim:0.9,  A:F_A, B:F_B, C:F_C, white:0.50, breathe:0.2, lay:[0.65,0.6,0.55] },
+  travail:   { n:4.5,  ratio:2.72, speed:2.19, bloom:0.65, plasma:0.43, comet:1, level:0, weave:0.2, knock:0, dim:1.15, A:T_A, B:T_B, C:T_C, white:0.30, breathe:0.06, lay:[0.95,0.85,0.75] },
+  besoin:    { n:11.4, ratio:2.57, speed:0.32, bloom:0.7,  plasma:0.34, comet:0, level:0, weave:0,   knock:1, dim:1.05, A:B_A, B:B_B, C:B_C, white:0.20, breathe:0.30, lay:[0.9,0.55,0.35] },
+};
+
+/* ═══ Runtime : galet voyageur ═══ */
+const cv = document.getElementById('galet');
+const gl = cv.getContext('webgl', { alpha: true, premultipliedAlpha: true });
+function sh(type, src){ const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+const prog = gl.createProgram();
+gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog); gl.useProgram(prog);
+const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+const la = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(la); gl.vertexAttribPointer(la, 2, gl.FLOAT, false, 0, 0);
+const U = {}; for (const n of ['uRes','uT','uAB','uRad','uBand','uRimI','uHaloI','uBloom','uPlasma','uComet','uKnock','uLevel','uWeave','uTintA','uTintB','uTintC','uDim','uLay','uSharp','uWhite'])
+  U[n] = gl.getUniformLocation(prog, n);
+gl.clearColor(0,0,0,0); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+/* état vivant (mêmes défauts gravés que le harnais) */
+let stateName = 'repos';
+const cur = Object.assign({}, STATES.repos, {A:[...STATES.repos.A], B:[...STATES.repos.B], C:[...STATES.repos.C], lay:[...STATES.repos.lay]});
+function lerp(a,b,k){ return a+(b-a)*k; }
+
+/* ── Morph : la BOÎTE voyage entre la pastille (dock) et la carte (zone) ── */
+let mode = 'pastille';           // pastille | carte
+let box  = null;                 // boîte animée {x,y,w,h}
+let vel  = {x:0,y:0,w:0,h:0};    // ressort
+function dockRect(){ const r = document.getElementById('dock').getBoundingClientRect(); return {x:r.left, y:r.top, w:r.width, h:r.height}; }
+function zoneRect(){ const r = document.getElementById('zone').getBoundingClientRect(); return {x:r.left+10, y:r.top+10, w:r.width-20, h:r.height-30}; }
+/* la pastille ne voyage plus : elle EST le témoin permanent du header */
+
+/* ── Scénario auto en mode carte : le cycle de vie de Kora ── */
+const SCRIPT = [
+  { st:'ecoute',    d:2.6, sub:'à l’écoute…',   sel:null,         log:null },
+  { st:'reflexion', d:3.0, sub:'je réfléchis…', sel:'#elTitre',   log:'Je relis ton brouillon et le ton de tes trois dernières newsletters.' },
+  { st:'travail',   d:2.2, sub:'je travaille…', sel:'#elAccroche',log:'▸ Accroche réécrite — 3 variantes' },
+  { st:'travail',   d:2.2, sub:'je travaille…', sel:'#elCorps',   log:'▸ Corps resserré (−18 % de longueur)' },
+  { st:'travail',   d:2.0, sub:'je travaille…', sel:'#elObjet',   log:'▸ Objet d’e-mail proposé : « Juillet, en 3 idées »' },
+  { st:'besoin',    d:5.0, sub:'besoin de toi', sel:'#elPublier', log:'<b>Deux versions finales.</b> Laquelle part en diffusion ? Le bouton t’attend.' },
+];
+let ringed = null;
+function setRing(sel){
+  if (ringed) ringed.classList.remove('kring');
+  ringed = sel ? document.querySelector(sel) : null;
+  if (ringed) ringed.classList.add('kring');
+}
+let scen = { i:-1, t:0 };
+const logEl = document.getElementById('log'), subEl = document.getElementById('sub');
+function scenStep(dt){
+  if (mode !== 'carte') return;
+  /* micro actif : on RESTE en Écoute (l'onde suit la voix) ; couper le micro reprend le cycle */
+  if (micOn && stateName === 'ecoute') return;
+  scen.t -= dt;
+  if (scen.t <= 0) {
+    scen.i = (scen.i + 1) % SCRIPT.length;
+    if (scen.i === 0) logEl.innerHTML = '';
+    const s = SCRIPT[scen.i];
+    stateName = s.st; subEl.textContent = s.sub;
+    document.body.dataset.kstate = s.st;
+    setRing(s.sel);
+    if (s.log) { const d = document.createElement('div'); d.className='ln'; d.innerHTML = s.log;
+      logEl.appendChild(d); requestAnimationFrame(()=>d.classList.add('on')); }
+    scen.t = s.d;
+  }
+}
+function deploy(){
+  mode = 'carte'; scen = { i:-1, t:0 };
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('card').style.opacity = 1;
+}
+function retract(){
+  mode = 'pastille'; stateName = 'repos';
+  setRing(null); document.body.dataset.kstate = 'repos';
+  document.getElementById('panel').classList.remove('open');
+  document.getElementById('card').style.opacity = 0;
+}
+cv.addEventListener('click', () => (mode === 'pastille' ? deploy() : retract()));
+const dock = document.getElementById('dock');
+let radSmooth = 12;
+const tn = { Bord:document.getElementById('tBord'), Grad:document.getElementById('tGrad'),
+             Rad:document.getElementById('tRad'), Fond:document.getElementById('tFond') };
+const to = { Bord:'oBord', Grad:'oGrad', Rad:'oRad', Fond:'oFond' };
+for (const k in tn) tn[k].addEventListener('input', () =>
+  document.getElementById(to[k]).textContent = (+tn[k].value).toFixed(k === 'Rad' ? 0 : 2));
+addEventListener('keydown', e => { if (e.key === 'Escape') retract(); });
+
+/* ── VRAI MICRO (gate voix) : AnalyserNode → amplitude lissée → uLevel ──
+   Contexte sécurisé requis (localhost/HTTPS) ; en réseau local http://IP
+   le bouton l'annonce et l'Écoute reste simulée (le gate iPhone = perf). */
+const micBtn = document.getElementById('micBtn');
+let micOn = false, micLevel = 0, micAn = null, micBuf = null, micCtx = null, micStream = null;
+async function micStart(){
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    micBtn.textContent = 'Micro indisponible (HTTPS/localhost requis)'; return;
+  }
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true } });
+    micCtx = new (window.AudioContext || window.webkitAudioContext)();
+    await micCtx.resume();
+    micAn = micCtx.createAnalyser(); micAn.fftSize = 1024;
+    micCtx.createMediaStreamSource(micStream).connect(micAn);
+    micBuf = new Uint8Array(micAn.fftSize);
+    micOn = true; micBtn.textContent = 'Micro on — parle, l’onde suit';
+  } catch(e){ micBtn.textContent = 'Micro refusé'; }
+}
+function micStop(){
+  micOn = false; micLevel = 0;
+  if (micStream) micStream.getTracks().forEach(t => t.stop());
+  if (micCtx) micCtx.close();
+  micStream = micCtx = micAn = micBuf = null;
+  micBtn.textContent = 'Micro off — Écoute simulée';
+}
+micBtn.addEventListener('click', () => micOn ? micStop() : micStart());
+function micRead(dt){
+  if (!micOn || !micAn) return;
+  micAn.getByteTimeDomainData(micBuf);
+  let s = 0; for (let i = 0; i < micBuf.length; i++){ const v = (micBuf[i]-128)/128; s += v*v; }
+  const rms = Math.sqrt(s / micBuf.length);
+  const t = Math.min(1, Math.max(0, (rms - 0.012) * 5.5));   // plancher de bruit + gain parole
+  micLevel += (t - micLevel) * (1 - Math.exp(-dt * (t > micLevel ? 30 : 9)));  // attaque vive, retombée douce
+}
+
+/* ── Boucle ── */
+const fpsEl = document.getElementById('fps');
+let last = performance.now(), simT = 0, frames = 0, fpsT = 0;
+const DPR = Math.min(devicePixelRatio || 1, 2);
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt = Math.min((now-last)/1000, 0.1); last = now;
+
+  dock.classList.toggle('mini', stateName === 'repos' && mode !== 'carte');
+  box = dockRect();                       /* la pastille suit le header (largeur animée) */
+  scenStep(dt);
+
+  /* transition d'état (mêmes constantes que le harnais) */
+  const target = STATES[stateName];
+  const k = 1 - Math.exp(-dt*3.2);
+  for (const p of ['n','ratio','speed','bloom','plasma','comet','level','weave','knock','dim','breathe','white'])
+    cur[p] = lerp(cur[p], target[p], k);
+  for (let i=0;i<3;i++){ cur.A[i]=lerp(cur.A[i],target.A[i],k); cur.B[i]=lerp(cur.B[i],target.B[i],k); cur.C[i]=lerp(cur.C[i],target.C[i],k); cur.lay[i]=lerp(cur.lay[i],target.lay[i],k); }
+
+  const knock = cur.knock * (0.30 + 0.70 * Math.max(0, Math.sin(simT*2.6)) * Math.max(0, Math.sin(simT*1.3)));
+  micRead(dt);
+  const level = cur.level * (micOn ? (0.08 + 0.92*micLevel)
+                                   : (0.35 + 0.65*Math.abs(Math.sin(simT*2.1)*Math.sin(simT*0.83))));
+  const breathe = Math.sin(simT*0.8) * cur.breathe + knock * 0.35;   /* la pastille respire/palpite */
+  simT += dt * cur.speed;
+
+  /* la boîte animée pilote canvas CSS + demi-axes du galet */
+  const pad = 22;                                   /* marge pour le halo */
+  cv.style.left = (box.x-pad)+'px'; cv.style.top = (box.y-pad)+'px';
+  const W = Math.max(2, box.w+pad*2), H = Math.max(2, box.h+pad*2);
+  cv.style.width = W+'px'; cv.style.height = H+'px';
+  const rw = Math.round(W*DPR), rh = Math.round(H*DPR);
+  if (cv.width !== rw || cv.height !== rh) { cv.width = rw; cv.height = rh; }
+  gl.viewport(0, 0, cv.width, cv.height);
+  /* Largeur FIXE (le header ne bouge pas) — le RAYON DES COINS porte l'état :
+     galbes gravés traduits en arrondi (n 2 → pill 24px · n 12 → 4px à peine rond),
+     la respiration/palpitation joue sur l'arrondi, pas sur la taille */
+  const mn = Math.min(W, H);
+  const abx = 0.94 * box.w / mn, aby = 0.94 * box.h / mn;
+  /* mini = coins des boutons voisins (9px) ; déployée = l'arrondi porte l'état */
+  const isMini = dock.classList.contains('mini');
+  const radTarget = isMini ? 9 + breathe * 1.5
+                           : Math.max(4, 19 - (Math.max(2, cur.n + breathe) - 2) * 1.6);
+  radSmooth += (radTarget - radSmooth) * (1 - Math.exp(-dt * 8));
+  const radPx = radSmooth;
+
+  /* fenêtre de dialogue : géométrie fixe (zone droite), apparition en fondu */
+  const z = zoneRect();
+  const card = document.getElementById('card');
+  card.style.left = z.x+'px'; card.style.top = z.y+'px';
+  card.style.width = z.w+'px'; card.style.height = z.h+'px';
+  card.style.opacity = (mode === 'carte') ? 1 : 0;
+  const panel = document.getElementById('panel');
+  panel.style.left = z.x+'px'; panel.style.top = z.y+'px';
+  panel.style.width = z.w+'px'; panel.style.height = z.h+'px';
+  panel.style.borderRadius = (+tn.Rad.value)+'px';
+  panel.style.background = `rgba(13,15,32,${+tn.Fond.value})`;
+  panel.style.borderColor = `rgba(255,255,255,${+tn.Bord.value})`;
+  panel.style.setProperty('--pgrad', +tn.Grad.value);
+
+
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.uniform2f(U.uRes, cv.width, cv.height);
+  gl.uniform1f(U.uT, simT);
+  gl.uniform2f(U.uAB, abx, aby);
+  gl.uniform1f(U.uRad, 2 * radPx / mn);
+  gl.uniform1f(U.uBand, 1.0);             /* pastille : l'onde vit partout */
+  gl.uniform1f(U.uRimI, 0.85);
+  gl.uniform1f(U.uHaloI, 0.4);
+  gl.uniform1f(U.uBloom, 0);                        /* choix Stéphane : zéro halo */
+  gl.uniform1f(U.uPlasma, cur.plasma);
+  gl.uniform1f(U.uComet, cur.comet);
+  gl.uniform1f(U.uKnock, knock);
+  gl.uniform1f(U.uLevel, level);
+  gl.uniform1f(U.uWeave, cur.weave);
+  gl.uniform1f(U.uDim, cur.dim);
+  gl.uniform3fv(U.uTintA, cur.A);
+  gl.uniform3fv(U.uTintB, cur.B);
+  gl.uniform3fv(U.uTintC, cur.C);
+  gl.uniform3fv(U.uLay, cur.lay);
+  gl.uniform1f(U.uSharp, 1.0);                      /* choix Stéphane : net max */
+  gl.uniform1f(U.uWhite, cur.white);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  frames++; fpsT += dt;
+  if (fpsT > 0.5) { fpsEl.textContent = Math.round(frames/fpsT)+' fps'; frames = 0; fpsT = 0; }
+}
+requestAnimationFrame(frame);
+
+/* capture : ?demo=carte claque le déploiement (pas de transition) */
+const qp = new URLSearchParams(location.search);
+const qd = qp.get('demo');
+if (qd === 'carte') {
+  deploy();
+  // &step=N : claque l'étape N du scénario (capture — le chrono réel
+  // n'avance pas sous le temps virtuel de Chrome headless)
+  const qstep = parseInt(qp.get('step'));
+  if (!isNaN(qstep)) {
+    const n = Math.max(0, Math.min(qstep, SCRIPT.length - 1));
+    for (let i = 0; i <= n; i++) {
+      const st = SCRIPT[i];
+      if (st.log) { const d = document.createElement('div'); d.className = 'ln on'; d.innerHTML = st.log; logEl.appendChild(d); }
+    }
+    const st = SCRIPT[n];
+    stateName = st.st; subEl.textContent = st.sub;
+    document.body.dataset.kstate = st.st;
+    setRing(st.sel);
+    scen.i = n; scen.t = st.d;
+    const t0 = STATES[st.st];
+    for (const k of ['n','ratio','speed','bloom','plasma','comet','level','weave','knock','dim','breathe','white']) cur[k] = t0[k];
+    for (let i = 0; i < 3; i++) { cur.A[i]=t0.A[i]; cur.B[i]=t0.B[i]; cur.C[i]=t0.C[i]; cur.lay[i]=t0.lay[i]; }
+  }
+}
+</script>
+</body>
+</html>
