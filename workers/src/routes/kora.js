@@ -53,12 +53,29 @@ function _sysDecide(actionsBlock) {
 ACTIONS DE LECTURE DISPONIBLES (ton catalogue, rien d'autre n'existe) :
 ${actionsBlock}
 
-Tu réponds UNIQUEMENT par un objet JSON, sans texte autour :
-- Si tu peux répondre sans lire de données : {"reponse":"ta réponse"}
-- S'il faut lire des données : {"action":"id.exact","args":{...},"annonce":"ce que tu t'apprêtes à lire, une phrase à la première personne"}
-Règles : n'invente JAMAIS un id d'action hors catalogue ; args = uniquement
-les paramètres déclarés ; si la demande est ambiguë entre 2 lectures, choisis
-la plus probable au lieu de poser une question.`;
+FORMAT DE SORTIE — règles absolues :
+- Tu réponds par UN SEUL objet JSON. Jamais deux. Aucun texte autour,
+  aucune balise \`\`\`.
+- Tu ne traites que la DERNIÈRE question de l'utilisateur (l'historique
+  n'est là que pour le contexte).
+- Lecture du catalogue : {"action":"id.exact","args":{...},"annonce":"une phrase à la première personne sur ce que tu vas lire"}
+- Réponse directe (salutation, explication, demande hors catalogue) : {"reponse":"ta réponse"}
+
+QUAND CHOISIR QUOI :
+- La demande correspond à une action du catalogue → TOUJOURS "action".
+  Lire ces données, tu SAIS le faire : ne dis jamais « je ne sais pas
+  encore » pour une lecture du catalogue.
+- La demande porte sur des données que le catalogue ne couvre pas
+  (ex. scans de QR codes) → {"reponse":"je ne sais pas encore lire ça — je peux te lire : tes séances de brainstorming, tes posts, tes réseaux…"}
+- La demande est de créer/modifier/supprimer/publier → {"reponse":"je ne peux pas encore le faire, ça vient. En attendant je peux te lire …"}
+- Ambiguïté entre 2 lectures → choisis la plus probable, ne pose pas de question.
+- N'invente JAMAIS un id hors catalogue ; args = uniquement les paramètres déclarés.
+
+EXEMPLES :
+Utilisateur : « qu'est-ce qui part cette semaine ? »
+Toi : {"action":"sm.upcoming_posts","args":{"days":7},"annonce":"Je regarde ce qui est programmé sur tes réseaux cette semaine."}
+Utilisateur : « salut, tu fais quoi ? »
+Toi : {"reponse":"Salut ! Je peux te lire tes séances de brainstorming, tes posts, l'état de tes réseaux… Demande-moi."}`;
 }
 
 const SYS_ANSWER = `${PERSONA}
@@ -95,23 +112,54 @@ function _extractText(res) {
     || res?.choices?.[0]?.message?.content
     || '').trim();
 }
-/* Parse défensif du JSON de décision (le modèle peut baver autour) */
+/* Parse défensif de la décision. Leçon du 1er contact réel (17/07) :
+   le modèle peut émettre PLUSIEURS objets JSON (il « rattrape » la
+   question précédente), des balises \`\`\`, ou du texte autour. On
+   extrait TOUS les objets équilibrés, on garde la DERNIÈRE décision
+   valide (= la dernière question), et on ne renvoie JAMAIS du JSON
+   brut comme texte à l'utilisateur. */
+function _jsonCandidates(raw) {
+  const out = [];
+  let depth = 0, start = -1, inStr = false, escp = false;
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i];
+    if (inStr) {
+      if (escp) escp = false;
+      else if (c === '\\') escp = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; continue; }
+    if (c === '{') { if (!depth) start = i; depth++; }
+    else if (c === '}' && depth > 0) { depth--; if (!depth && start >= 0) { out.push(raw.slice(start, i + 1)); start = -1; } }
+  }
+  return out;
+}
 function _parseDecision(raw) {
   if (!raw) return null;
-  const m = raw.match(/\{[\s\S]*\}/);
-  if (!m) return { reponse: raw.slice(0, 1200) };   // pas de JSON → texte direct
-  try {
-    const p = JSON.parse(m[0]);
-    if (typeof p.action === 'string' && p.action.trim()) {
-      return {
-        action : p.action.trim(),
-        args   : (p.args && typeof p.args === 'object') ? p.args : {},
-        annonce: typeof p.annonce === 'string' ? p.annonce.slice(0, 300) : '',
-      };
-    }
-    if (typeof p.reponse === 'string') return { reponse: p.reponse };
-  } catch (e) { /* fallback texte */ }
-  return { reponse: raw.replace(/^```json|```$/g, '').slice(0, 1200) };
+  const decisions = [];
+  for (const cand of _jsonCandidates(raw)) {
+    try {
+      const p = JSON.parse(cand);
+      if (typeof p.action === 'string' && p.action.trim()) {
+        decisions.push({
+          action : p.action.trim(),
+          args   : (p.args && typeof p.args === 'object') ? p.args : {},
+          annonce: typeof p.annonce === 'string' ? p.annonce.slice(0, 300) : '',
+        });
+      } else if (typeof p.reponse === 'string' && p.reponse.trim()) {
+        decisions.push({ reponse: p.reponse });
+      }
+    } catch (e) { /* candidat invalide, on continue */ }
+  }
+  if (decisions.length) return decisions[decisions.length - 1];
+  /* aucun JSON exploitable : texte direct, SAUF si ça ressemble à du
+     JSON/fence cassé → message sobre plutôt que du brut à l'écran */
+  const txt = raw.replace(/```[a-z]*\n?/g, '').trim();
+  if (!txt || txt.startsWith('{') || txt.includes('"action"') || txt.includes('"reponse"')) {
+    return { reponse: 'Je me suis emmêlée — reformule ta demande, je réessaie.' };
+  }
+  return { reponse: txt.slice(0, 1200) };
 }
 
 const _corsHeaders = (origin) => ({
@@ -167,11 +215,24 @@ export async function handleKoraChat(request, env) {
 
     try {
       const sys = _sysDecide(actionsBlock);
-      const res = await env.AI.run(KS_AI_MODEL, {
-        messages  : [{ role: 'system', content: sys }, ...messages],
-        max_tokens: MAX_TOKENS_DECIDE,
-        stream    : false,
-      });
+      /* température basse = choix d'action déterministe (leçon audit
+         retrieval Smart Agent) ; 1 réessai — le 1er contact réel a
+         montré des erreurs transitoires du modèle (« décision 502 ») */
+      let res = null, lastErr = null;
+      for (let attempt = 0; attempt < 2 && !res; attempt++) {
+        try {
+          res = await env.AI.run(KS_AI_MODEL, {
+            messages   : [{ role: 'system', content: sys }, ...messages],
+            max_tokens : MAX_TOKENS_DECIDE,
+            temperature: 0.15,
+            stream     : false,
+          });
+        } catch (e) {
+          lastErr = e;
+          console.error('[kora] decide AI.run tentative', attempt + 1, ':', e?.message || e);
+        }
+      }
+      if (!res) throw (lastErr || new Error('modèle indisponible'));
       const raw = _extractText(res);
       await recordUsage(env, 'kora', {
         usage: res?.usage, inText: sys + JSON.stringify(messages), outText: raw,
@@ -212,7 +273,7 @@ export async function handleKoraChat(request, env) {
   let aiStream;
   try {
     aiStream = await env.AI.run(KS_AI_MODEL, {
-      messages: convo, max_tokens: MAX_TOKENS_ANSWER, stream: true,
+      messages: convo, max_tokens: MAX_TOKENS_ANSWER, temperature: 0.3, stream: true,
     });
   } catch (e) {
     return err(`Kora indisponible (${e?.message || 'erreur modèle'})`, 502, origin);
