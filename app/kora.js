@@ -341,11 +341,12 @@ function _frame(now) {
   if (resting && _acc < 1/30) return;          // veille : 30 fps suffisent à respirer
   const step = _acc; _acc = 0;
 
-  /* économiseur/verrouillage actif → Kora s'efface entièrement
-     (nos z-index OS passeraient au-dessus du lock, inacceptable).
-     ⚠ l'overlay #ks-lockscreen vit dans le DOM dès le boot : c'est
-     sa classe ls-visible qui dit s'il est ACTIF (lockscreen.js:59) */
-  const locked = !!document.querySelector('#ks-lockscreen.ls-visible');
+  /* Kora s'efface : économiseur (nos z-index OS passeraient au-dessus
+     du lock) ET K-Store (surface boutique, aucune action Kora là — le
+     galet y flottait orphelin, retour Stéphane 18/07).
+     ⚠ ces overlays vivent dans le DOM éteints : tester la classe
+     d'activation, jamais la présence (leçon lockfix). */
+  const locked = !!document.querySelector('#ks-lockscreen.ls-visible, #ks-fullscreen.open');
   _cv.style.visibility = locked ? 'hidden' : 'visible';
   if (locked && _panel.classList.contains('kora-open')) koraClose();
 
