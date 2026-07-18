@@ -355,10 +355,16 @@ function _frame(now) {
      bouton, mêmes dimensions que ses voisins, l'extension les pousse
      par le flex. Outil fermé → retour dans la cc-bar. Visibilité
      RÉELLE testée (les overlays restent dans le DOM éteints). */
-  const toolbars = [...document.querySelectorAll('.ws-topbar-actions')]
+  const toolbars = [...document.querySelectorAll('.ws-topbar-actions, .sdqr-topbar-right')]
     .filter(el => el.getBoundingClientRect().width > 0);
   const host = toolbars.length ? toolbars[toolbars.length - 1] : _ccBar;
-  if (host && _dock.parentElement !== host) host.appendChild(_dock);
+  if (host && _dock.parentElement !== host) {
+    host.appendChild(_dock);
+    /* changement de contexte (dashboard ↔ outil, outil ↔ outil) : la
+       fenêtre ouverte se RANGE au lieu de se superposer au nouveau
+       décor (faille trouvée par Stéphane 18/07) */
+    if (_panel.classList.contains('kora-open')) koraClose();
+  }
 
   _dock.classList.toggle('kora-mini', resting);
 
