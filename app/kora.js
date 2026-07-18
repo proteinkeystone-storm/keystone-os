@@ -342,8 +342,10 @@ function _frame(now) {
   const step = _acc; _acc = 0;
 
   /* économiseur/verrouillage actif → Kora s'efface entièrement
-     (nos z-index OS passeraient au-dessus du lock, inacceptable) */
-  const locked = !!document.getElementById('ks-lockscreen');
+     (nos z-index OS passeraient au-dessus du lock, inacceptable).
+     ⚠ l'overlay #ks-lockscreen vit dans le DOM dès le boot : c'est
+     sa classe ls-visible qui dit s'il est ACTIF (lockscreen.js:59) */
+  const locked = !!document.querySelector('#ks-lockscreen.ls-visible');
   _cv.style.visibility = locked ? 'hidden' : 'visible';
   if (locked && _panel.classList.contains('kora-open')) koraClose();
 
