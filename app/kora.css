@@ -14,12 +14,25 @@
   background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
 }
 .kora-dock.kora-mini{ width:36px; }
-/* mode clair : l'onde a besoin d'un fond sombre pour exister — on la
-   sertit dans un écrin marine NET (plus de translucide boueux), bordure
-   et ombre calées sur les cc-btn clairs (retour Stéphane 18/07) */
+/* mode clair : MÊME habit que les boutons voisins (retour Stéphane 18/07 —
+   l'écrin marine était « mal taillé » ; la version nue des applis, validée,
+   fait foi : l'onde du shader porte son propre liseré, le dock ne fournit
+   que la carrosserie des voisins) */
 html.light-mode .kora-dock{
-  background:#101226; border-color:rgba(17,24,39,.18);
-  box-shadow:0 1px 2px rgba(15,23,42,.10);
+  background:#ffffff; border-color:rgba(17,24,39,.15);
+  box-shadow:0 1px 2px rgba(15,23,42,.04);
+}
+
+/* ── Dans les headers d'outils (.ws-topbar-actions) : vrai bouton,
+   mêmes dimensions que les .ws-iconbtn voisins (38×38, rayon 10) ;
+   étendu, il pousse les voisins par le flex — même geste que la cc-bar */
+.ws-topbar-actions .kora-dock{
+  height:38px; width:190px; border-radius:10px;
+  background:rgba(255,255,255,.03); border-color:var(--ws-border, rgba(255,255,255,.08));
+}
+.ws-topbar-actions .kora-dock.kora-mini{ width:38px; }
+html.light-mode .ws-topbar-actions .kora-dock{
+  background:#ffffff; border-color:rgba(17,24,39,.15);
 }
 
 /* ── La fenêtre POUSSE le dashboard (retour Stéphane 18/07) ──

@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const KORA_CSS_V = '5';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
+const KORA_CSS_V = '6';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
 
 /* ── Shader (verbatim harnais kora-galet-morph.html) ── */
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -146,7 +146,7 @@ const SUBTITLES = {
 let _inited = false;
 let _stateName = 'repos';
 let _cur = null;
-let _gl = null, _U = null, _cv = null, _dock = null, _panel = null, _sub = null, _log = null;
+let _gl = null, _U = null, _cv = null, _dock = null, _panel = null, _sub = null, _log = null, _ccBar = null;
 let _radSmooth = 8;
 let _simT = 0, _last = 0, _acc = 0;
 let _level0 = 0;               // niveau voix (le vocal s'y branchera)
@@ -245,6 +245,7 @@ export function initKora() {
   if (_inited) return;
   const bar = document.querySelector('.cc-bar');
   if (!bar) return;
+  _ccBar = bar;   // port d'attache du dock quand aucun outil n'est ouvert
 
   /* feuille de style dédiée, chargée à la demande (aucune trace si flag off) */
   if (!document.getElementById('kora-css')) {
@@ -302,13 +303,10 @@ export function initKora() {
   _cur = Object.assign({}, STATES.repos,
     { A:[...STATES.repos.A], B:[...STATES.repos.B], C:[...STATES.repos.C], lay:[...STATES.repos.lay] });
 
-  /* tap = ouvrir / ranger — sur le dock ET sur le canvas flottant :
-     dans un pad plein écran la topbar est recouverte, le galet
-     flottant (z-index OS) devient le seul bouton accessible */
-  const _toggle = () =>
-    _panel.classList.contains('kora-open') ? koraClose() : koraOpen();
-  _dock.addEventListener('click', _toggle);
-  _cv.addEventListener('click', _toggle);
+  /* tap = ouvrir / ranger (le dock est un vrai bouton partout —
+     cc-bar du dashboard ou .ws-topbar-actions des outils) */
+  _dock.addEventListener('click', () =>
+    _panel.classList.contains('kora-open') ? koraClose() : koraOpen());
   addEventListener('keydown', e => {
     if (e.key === 'Escape' && _panel.classList.contains('kora-open')) koraClose();
   });
@@ -351,15 +349,16 @@ function _frame(now) {
   _cv.style.visibility = locked ? 'hidden' : 'visible';
   if (locked && _panel.classList.contains('kora-open')) koraClose();
 
-  /* outil plein écran ouvert ? (⚠ les overlays Keystone peuvent RESTER
-     dans le DOM éteints — leçon lockfix : tester la VISIBILITÉ réelle,
-     jamais la simple présence) */
-  const covered = [...document.querySelectorAll('.ws-app:not(.wr-fullscreen), #wr-fullscreen.open, #gw-overlay')]
-    .some(el => el.getBoundingClientRect().width > 0);
-  /* le canvas n'est cliquable QUE dans ce cas (sinon son halo
-     intercepterait les boutons voisins de la cc-bar) */
-  _cv.style.pointerEvents = (covered && !locked) ? 'auto' : 'none';
-  _cv.style.cursor = covered ? 'pointer' : '';
+  /* MÊME ergonomie partout (retour Stéphane 18/07) : quand un outil
+     plein écran est ouvert, le dock est PHYSIQUEMENT déplacé dans son
+     header (.ws-topbar-actions, commun à tous les workspaces) — vrai
+     bouton, mêmes dimensions que ses voisins, l'extension les pousse
+     par le flex. Outil fermé → retour dans la cc-bar. Visibilité
+     RÉELLE testée (les overlays restent dans le DOM éteints). */
+  const toolbars = [...document.querySelectorAll('.ws-topbar-actions')]
+    .filter(el => el.getBoundingClientRect().width > 0);
+  const host = toolbars.length ? toolbars[toolbars.length - 1] : _ccBar;
+  if (host && _dock.parentElement !== host) host.appendChild(_dock);
 
   _dock.classList.toggle('kora-mini', resting);
 
@@ -386,15 +385,8 @@ function _frame(now) {
                                               : (0.35 + 0.65*Math.abs(Math.sin(_simT*2.1)*Math.sin(_simT*0.83))));
   const breathe = Math.sin(_simT*0.8) * _cur.breathe + knock * 0.35;
 
-  /* le canvas épouse le dock (largeur animée par le CSS) — SAUF quand
-     un outil couvre la topbar : le galet se reloge alors juste SOUS le
-     header de l'outil, à droite (retour test réel 18/07 : à sa place
-     topbar il entrait en collision visuelle avec les boutons de l'outil) */
-  let r = _dock.getBoundingClientRect();
-  if (covered) {
-    const w = r.width, h = r.height || 26;
-    r = { left: innerWidth - w - 14, top: 62, width: w, height: h };
-  }
+  /* le canvas épouse le dock, où qu'il vive (cc-bar ou header d'outil) */
+  const r = _dock.getBoundingClientRect();
   const pad = 14;
   _cv.style.left = (r.left - pad) + 'px'; _cv.style.top = (r.top - pad) + 'px';
   const W = Math.max(2, r.width + pad*2), H = Math.max(2, r.height + pad*2);
