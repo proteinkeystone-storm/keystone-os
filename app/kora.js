@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const KORA_CSS_V = '4';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
+const KORA_CSS_V = '5';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
 
 /* ── Shader (verbatim harnais kora-galet-morph.html) ── */
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -165,11 +165,13 @@ export function koraState(s) {
 export function koraOpen() {
   if (!_inited) return;
   _panel.classList.add('kora-open');
+  document.body.classList.add('kora-open');   // le dashboard se pousse à gauche
   requestAnimationFrame(() => _panel.classList.add('kora-in'));
 }
 export function koraClose() {
   if (!_inited) return;
   _panel.classList.remove('kora-in');
+  document.body.classList.remove('kora-open');
   setTimeout(() => _panel.classList.remove('kora-open'), 300);
   koraState('repos');
   koraClearRings();

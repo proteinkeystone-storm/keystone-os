@@ -14,7 +14,25 @@
   background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
 }
 .kora-dock.kora-mini{ width:36px; }
-html.light-mode .kora-dock{ background:rgba(13,15,32,.88); border-color:rgba(17,24,39,.18); }
+/* mode clair : l'onde a besoin d'un fond sombre pour exister — on la
+   sertit dans un écrin marine NET (plus de translucide boueux), bordure
+   et ombre calées sur les cc-btn clairs (retour Stéphane 18/07) */
+html.light-mode .kora-dock{
+  background:#101226; border-color:rgba(17,24,39,.18);
+  box-shadow:0 1px 2px rgba(15,23,42,.10);
+}
+
+/* ── La fenêtre POUSSE le dashboard (retour Stéphane 18/07) ──
+   Rien ne passe dessous : le contenu se réorganise à gauche. Desktop
+   seulement (mobile = feuille plein écran) ; les outils plein écran
+   gardent le recouvrement (leur colonne gauche reste visible). */
+@media (min-width:641px){
+  body.kora-open .main{
+    padding-right:calc(min(40vw, 560px) + 24px);
+    transition:padding-right .3s ease;
+  }
+  .main{ transition:padding-right .3s ease; }
+}
 /* le canvas WebGL voyage par-dessus le dock (position pilotée en JS).
    Z-index OS : au-dessus des workspaces (9999) ET du modal GW (99999) —
    dans un pad plein écran, la topbar est recouverte : le galet flottant
@@ -119,3 +137,31 @@ body[data-kora-state="besoin"]    { --kora-1:#f0b04c; --kora-2:#f0291a; }
   .kora-panel{ top:62px; left:8px; right:8px; bottom:8px; width:auto; }
   .kora-head{ padding:18px 20px 0; }
 }
+
+/* ── Mode clair de la fenêtre (retour Stéphane 18/07) ── */
+html.light-mode .kora-panel{
+  background:rgba(255,255,255,.97);
+  border-color:rgba(17,24,39,.12);
+  box-shadow:0 8px 30px rgba(15,23,42,.10);
+}
+html.light-mode .kora-panel::after{ opacity:.10; }
+html.light-mode .kora-title{ color:rgba(17,24,39,.85); }
+html.light-mode .kora-sub{ color:rgba(17,24,39,.5); }
+html.light-mode .kora-line{
+  color:rgba(17,24,39,.88);
+  background:rgba(15,23,42,.04); border-color:rgba(17,24,39,.10);
+}
+html.light-mode .kora-line b{ color:#b45309; }
+html.light-mode .kora-line.kora-user{
+  background:rgba(99,102,241,.10); border-color:rgba(99,102,241,.25);
+}
+html.light-mode .kora-input{
+  color:rgba(17,24,39,.9); background:rgba(15,23,42,.04);
+  border-color:rgba(17,24,39,.15);
+}
+html.light-mode .kora-input::placeholder{ color:rgba(17,24,39,.35); }
+html.light-mode .kora-input:focus{ border-color:rgba(99,102,241,.45); }
+html.light-mode .kora-send{
+  color:#4f46e5; background:rgba(99,102,241,.10); border-color:rgba(99,102,241,.25);
+}
+html.light-mode .kora-send:hover{ background:rgba(99,102,241,.18); }
