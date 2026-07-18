@@ -430,26 +430,30 @@ export const KORA_ACTIONS = [
   {
     id: 'chain.start', pad: 'chaine', mode: 'write',
     label: 'Démarrer la chaîne de contenu',
-    desc: "Lance la chaîne Brainstorming → Ghost Writer → Social pour un réseau donné : pose l'état de chaîne et ouvre l'étape idées (brief prérempli si fourni). Répond à « démarre la chaîne pour LinkedIn ».",
+    desc: "Lance la chaîne Brainstorming → Ghost Writer → Social : pose l'état de chaîne et ouvre l'étape idées (brief prérempli si fourni ; réseau optionnel — choisi dans l'outil sinon). C'est la voie pour RÉDIGER un contenu de qualité. Répond à « démarre la chaîne », « rédige-moi un article/post sur… ».",
     target: '#wr-chain-slot',
     params: [
-      { name: 'network', type: 'string', required: true, desc: 'facebook, instagram, linkedin, threads ou telegram' },
+      { name: 'network', type: 'string', required: false, desc: 'facebook, instagram, linkedin, threads ou telegram — si déjà connu' },
       { name: 'brief', type: 'string', required: false, desc: 'le sujet, si déjà connu' },
     ],
     run: async (args = {}) => {
       const nets = _validNetworks([args.network]);
-      if (!nets.length) throw new Error(`Réseau inconnu : ${args.network}. Choix : facebook, instagram, linkedin, threads, telegram.`);
+      if (args.network && !nets.length)
+        throw new Error(`Réseau inconnu : ${args.network}. Choix : facebook, instagram, linkedin, threads, telegram.`);
       _guardGwModal();
       if (document.querySelector('#wr-fullscreen.open'))
         throw new Error('Une séance de brainstorming est déjà ouverte — termine-la ou ferme-la, puis redemande-moi.');
       const { setChain } = await import('./lib/content-chain.js');
       const { openBrainstorming } = await import('./brainstorming.js');
-      setChain({ step: 'ideas', origin: 'kora', network: nets[0] });
+      /* sans réseau : la séance post-ideas affiche son sélecteur (natif) */
+      setChain({ step: 'ideas', origin: 'kora', network: nets[0] || null });
       const opts = { mode: 'post-ideas' };
       if (String(args.brief || '').trim()) opts.brief = String(args.brief).trim();
       openBrainstorming(opts);
-      return { fait: true, chaine: 'démarrée', reseau: nets[0], etape: 'idées (Brainstorming)',
-               brief: opts.brief ? _excerpt(opts.brief, 200) : null };
+      return { fait: true, chaine: 'démarrée', reseau: nets[0] || 'à choisir dans l’outil',
+               etape: 'idées (Brainstorming)',
+               brief: opts.brief ? _excerpt(opts.brief, 200) : null,
+               rappel: 'Le lancement de la séance reste à l’utilisateur — puis Ghost Writer rédigera.' };
     },
   },
   {
