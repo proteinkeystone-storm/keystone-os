@@ -323,10 +323,16 @@ export async function handleKoraChat(request, env) {
             if (!payload || payload === '[DONE]') continue;
             try {
               const j = JSON.parse(payload);
-              const chunk = j.response ?? j.choices?.[0]?.delta?.content ?? '';
-              /* PAS de `if (chunk)` : le token "0" est falsy en JS — c'est
-                 lui qui transformait « 2026 » en « 226 » (bug des zéros). */
-              if (typeof chunk === 'string' && chunk.length) { outText += chunk; send({ type: 'chunk', text: chunk }); }
+              const chunk = j.response ?? j.choices?.[0]?.delta?.content;
+              /* Workers AI sur-parse les tokens : un token numérique arrive
+                 en NOMBRE JSON (« 6 » → 6), et « 0 » est falsy. Donc : ni
+                 filtre par truthiness, ni filtre par typeof — on accepte
+                 chaînes ET nombres, converti explicitement en chaîne. */
+              if (chunk !== null && chunk !== undefined && chunk !== '') {
+                const s = String(chunk);
+                outText += s;
+                send({ type: 'chunk', text: s });
+              }
             } catch (e) { /* fragment non-JSON, on attend la suite */ }
           }
         }
