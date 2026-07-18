@@ -81,7 +81,7 @@ QUAND CHOISIR QUOI :
     dicte presque (« dis que la boutique ferme lundi ») → sm.compose_draft.
   · Il veut faire retravailler un texte existant → gw.rewrite_text.
 - La demande porte sur des données que le catalogue ne couvre pas
-  (ex. scans de QR codes) → {"reponse":"je ne sais pas encore lire ça — je peux te lire : tes séances de brainstorming, tes posts, tes réseaux…"}
+  (ex. tes e-mails, ta comptabilité) → {"reponse":"je ne sais pas encore lire ça — je peux te lire : tes séances de brainstorming, tes posts, tes réseaux, tes QR codes et leurs scans…"}
 - La demande est de publier/programmer/envoyer/supprimer → propose de
   PRÉPARER à la place : {"reponse":"publier, c'est ton geste — mais je peux te préparer le post dans le composer, dis-moi."}
 - Le message n'est PAS une demande (il t'informe, acquiesce, te remercie :
@@ -100,7 +100,7 @@ Toi : {"action":"sm.compose_draft","args":{"text":"La boutique ferme lundi pour 
 Utilisateur : « ok je lance la séance »
 Toi : {"reponse":"Parfait, je te laisse faire — dis-moi quand tu voudras que je regarde le résultat."}
 Utilisateur : « salut, tu fais quoi ? »
-Toi : {"reponse":"Salut ! Je peux te lire tes séances, tes posts, tes réseaux — et te préparer un post ou lancer un brainstorming. Demande-moi."}`;
+Toi : {"reponse":"Salut ! Je peux te lire tes séances, tes posts, tes réseaux, tes QR codes et leurs scans — et te préparer un post, un QR ou lancer un brainstorming. Demande-moi."}`;
 }
 
 const SYS_ANSWER = `${PERSONA}
@@ -153,10 +153,15 @@ function _capMessages(raw) {
 }
 function _actionsBlock(raw) {
   if (!Array.isArray(raw)) return null;
+  if (raw.length > MAX_ACTIONS)
+    console.error(`[kora] catalogue tronqué : ${raw.length} actions > MAX_ACTIONS=${MAX_ACTIONS} — les dernières sont invisibles du modèle`);
   const list = raw.slice(0, MAX_ACTIONS).map(a => {
     if (!a || typeof a.id !== 'string') return null;
+    /* le desc des params EST du routage aussi (valeurs admises : 7d|30d…,
+       réseaux, « nom même partiel ») — revue 19/07 : il était jeté, le
+       modèle inventait des valeurs (« month ») repliées en silence */
     const params = Array.isArray(a.params) && a.params.length
-      ? ' — args : ' + a.params.map(p => `${p.name}${p.required ? ' (requis)' : ''} [${p.type}]`).join(', ')
+      ? ' — args : ' + a.params.map(p => `${p.name}${p.required ? ' (requis)' : ''} [${p.type}]${p.desc ? ' : ' + String(p.desc).slice(0, 90) : ''}`).join(' · ')
       : '';
     const tag = a.mode === 'write' ? '[prépare]' : '[lecture]';
     return `- ${a.id} ${tag} : ${String(a.desc || a.label || '').slice(0, MAX_DESC_CHARS)}${params}`;

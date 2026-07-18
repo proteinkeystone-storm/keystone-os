@@ -38,7 +38,9 @@ function _push(role, content) {
 function _actionDefs() {
   return KORA_ACTIONS.map(a => ({
     id: a.id, label: a.label, desc: a.desc, mode: a.mode || 'read',
-    params: (a.params || []).map(p => ({ name: p.name, type: p.type, required: !!p.required })),
+    /* p.desc transmis : c'est lui qui porte les valeurs admises (7d|30d…,
+       réseaux) — jeté, le modèle les inventait (revue 19/07) */
+    params: (a.params || []).map(p => ({ name: p.name, type: p.type, required: !!p.required, desc: p.desc || '' })),
   }));
 }
 const _isMobile = () => matchMedia('(max-width:640px)').matches;

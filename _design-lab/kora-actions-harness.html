@@ -68,6 +68,7 @@ const PADS = [
   ['brainstorming', 'Brainstorming'],
   ['ghostwriter', 'Ghost Writer'],
   ['social', 'Social Manager'],
+  ['sdqr', 'Smart Dynamic QR'],
   ['os', 'OS'],
 ];
 
@@ -95,6 +96,7 @@ for (const [pad, title] of PADS) {
         <span class="act-label">${a.label}</span>
         <span class="act-id">${a.id}</span>
         <span class="act-target">→ ${a.target}</span>
+        ${(a.desc || '').length > 240 ? `<span class="act-target" style="color:#ffb36a">desc ${a.desc.length} car. &gt; 240 — tronquée pour le modèle</span>` : ''}
         ${isWrite
           ? '<span class="act-target" style="margin-left:auto">écriture — se teste dans l\'app (elle ouvre un outil)</span>'
           : '<button class="act-run">Lire</button>'}

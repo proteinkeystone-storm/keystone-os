@@ -4,6 +4,8 @@
    Le cœur de l'agent (KORA_BRIEF §2) : un catalogue d'actions bien
    nommées, scopées par pad. V1 = la chaîne de contenu (Brainstorming,
    Ghost Writer, Social Manager) + l'état de la chaîne elle-même.
+   V1.2 (18/07) = + Smart Dynamic QR (le 1er pad hors chaîne — même
+   moule : lectures API/localStorage, écritures = préparer/ouvrir).
 
    RÈGLES (KORA_BRIEF Annexe B) :
    · Module INERTE AU CHARGEMENT : zéro import statique de pads.
@@ -40,12 +42,25 @@ function _excerpt(text, max = 140) {
    (test réel 18/07 : les ISO lui faisaient sortir « 17 avril 223 à 17h4 »). */
 function _frDate(v) {
   if (!v) return null;
+  /* date pure « YYYY-MM-DD » (ex. printed_at) : jamais d'heure fantôme
+     (new Date('2026-07-15') = minuit UTC → « à 2h00 » à Paris, revue 19/07) */
+  if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    const d0 = new Date(v + 'T00:00:00');
+    return isNaN(d0) ? v : d0.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
   const d = v instanceof Date ? v : new Date(v);
   if (isNaN(d)) return String(v);
   const txt = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
   const hm = d.getHours() || d.getMinutes()
     ? ' à ' + String(d.getHours()) + 'h' + String(d.getMinutes()).padStart(2, '0') : '';
   return txt + hm;
+}
+/* SQLite datetime('now') stocke « YYYY-MM-DD HH:MM:SS » UTC SANS T ni Z
+   (qr_redirects.created_at) : parsé tel quel, new Date le croit LOCAL →
+   heure fausse, jour faux près de minuit. Même normalisation que le
+   worker (qr.js:647). Les ISO avec T/Z passent inchangés. */
+function _sqlUtc(v) {
+  return (v && typeof v === 'string' && !/[TZ]/.test(v)) ? v.replace(' ', 'T') + 'Z' : v;
 }
 async function _api(path, { auth = true } = {}) {
   const headers = {};
@@ -331,6 +346,139 @@ export const KORA_ACTIONS = [
     },
   },
 
+  /* ═══ SMART DYNAMIC QR (V1.2 — 1er pad hors chaîne) ═══
+     Particularité (inventaire 18/07) : la flotte ne vit PAS en
+     localStorage (_cachedQrs = état mémoire du module, sdqr.js:53) —
+     toutes les lectures passent par le worker. Tenant : _authTenant
+     (qr.js:148) gère lui-même admin→'default', rien à câbler ici.
+     /r/:shortId (hot-path prod, 530+ scans imprimés) : JAMAIS touché. */
+  {
+    id: 'qr.list', pad: 'sdqr', mode: 'read',
+    label: 'Lister mes QR codes',
+    desc: "La flotte Smart Dynamic QR : nom, type (url, vcard, wifi…), mode (statique, dynamique, smart), statut, dossier, scans totaux, destination. Répond à « mes QR codes », « combien de QR j'ai ».",
+    target: '.sdqr-qr-grid',
+    params: [],
+    run: async () => {
+      const data = await _api('/api/qr');
+      const qrs = data.qrs || [];
+      const out = {
+        total: qrs.length,
+        actifs: qrs.filter(q => (q.status || 'active') === 'active').length,
+        /* statique : scans null (pas 0 — rien n'est suivi) ; la destination
+           d'un statique URL vit dans payload.url, pas dans qr_redirects */
+        qrs: qrs.map(q => ({ id: q.id, nom: q.name || '(sans nom)', type: q.qr_type || 'url',
+          mode: q.mode || 'dynamic', statut: q.status || 'active', dossier: q.folder || null,
+          scans: q.mode === 'static' ? null : (q.scans_total || 0),
+          destination: q.target_url || q.payload?.url || null, cree: _frDate(q.created_at) })),
+      };
+      if (qrs.some(q => q.mode === 'static'))
+        out.note = 'Les QR statiques ne suivent pas les scans (aucun comptage, volontairement).';
+      return out;
+    },
+  },
+  {
+    id: 'qr.scans_overview', pad: 'sdqr', mode: 'read',
+    label: 'Vue d’ensemble des scans',
+    desc: "Les scans de tous mes QR : total, uniques, aujourd'hui, cette semaine, classement des meilleurs, à surveiller. Répond à « les scans de mes QR », « combien de scans », « quel QR marche le mieux », « ça a scanné aujourd'hui ? ».",
+    target: '.sdqr-tab[data-view="stats"]',
+    params: [{ name: 'period', type: 'string', required: false, desc: '7d, 30d, 90d ou all (défaut 7d)' }],
+    run: async (args = {}) => {
+      const period = ['7d', '30d', '90d', 'all'].includes(args.period) ? args.period : '7d';
+      const data = await _api(`/api/qr/overview?period=${period}`);
+      const t = data.totals || {};
+      /* le serveur agrège par date UTC (qr.js:602) — approximation locale OK */
+      const today = new Date().toISOString().slice(0, 10);
+      const TREND = { up: 'en hausse', down: 'en baisse', flat: 'stable' };
+      const out = {
+        periode: period === 'all' ? 'depuis le début' : `${parseInt(period, 10)} derniers jours`,
+        scans: t.scans_total || 0, visiteurs_uniques: t.unique || 0,
+        qr_total: t.qr_total || 0, qr_actifs: t.qr_active || 0,
+        aujourdhui: (data.byDay || []).find(d => d.day === today)?.cnt || 0,
+        cette_semaine: t.week || 0,
+        classement: (data.leaderboard || []).map(l => ({ nom: l.name, scans: l.scans,
+          tendance: TREND[l.trend] || 'stable' })),
+        a_surveiller: (data.watch || []).map(w => `${w.name} : ${w.note}`),
+      };
+      /* qr.js:593-598 : en 7d, le filtre de période exclut la semaine
+         précédente → week_delta vaut mécaniquement +100 %. On ne sert
+         l'évolution que quand le serveur a vu les DEUX semaines ; null
+         explicite sinon (un champ absent tente le modèle de le combler). */
+      out.evolution_semaine = period !== '7d'
+        ? (t.week_delta > 0 ? '+' : '') + (t.week_delta || 0) + ' %' : null;
+      return out;
+    },
+  },
+  {
+    id: 'qr.stats_one', pad: 'sdqr', mode: 'read',
+    label: 'Statistiques d’un QR précis',
+    desc: "Les stats détaillées d'UN QR retrouvé par son nom : scans aujourd'hui / cette semaine / total, visiteurs uniques, meilleur créneau (jour + heure), pays, appareils. Répond à « les stats du QR … », « il fait combien de scans, le QR … ? ».",
+    target: '#sdqr-stats-body',
+    params: [
+      { name: 'name', type: 'string', required: true, desc: 'nom (même partiel) du QR' },
+      { name: 'period', type: 'string', required: false, desc: '7d, 30d, 90d ou all (défaut 30d)' },
+    ],
+    run: async (args = {}) => {
+      const ref = String(args.name || '').trim();
+      if (!ref) throw new Error('Il me faut le nom du QR.');
+      const { qrs } = await _api('/api/qr');
+      const found = _qrByName(qrs || [], ref);
+      if (!found.match) {
+        if (found.candidates.length)
+          throw new Error(`Plusieurs QR correspondent à « ${ref} » : ${found.candidates.join(' · ')}. Précise le nom.`);
+        throw new Error(`Aucun QR nommé « ${ref} » dans la flotte.`);
+      }
+      const q = found.match;
+      if (q.mode === 'static')
+        return { qr: q.name, mode: 'statique',
+                 info: 'QR statique : aucun scan n’est tracké (par design, RGPD natif).' };
+      const period = ['7d', '30d', '90d', 'all'].includes(args.period) ? args.period : '30d';
+      const s = await _api(`/api/qr/${encodeURIComponent(q.id)}/stats?period=${period}`);
+      const t = s.totals || {};
+      return {
+        qr: q.name, periode: period === 'all' ? 'depuis le début' : `${parseInt(period, 10)} derniers jours`,
+        scans: t.total || 0, visiteurs_uniques: t.unique || 0,
+        aujourdhui: t.today || 0, cette_semaine: t.week || 0,
+        meilleur_creneau: _qrBestSlot(s.heatmap),
+        pays: (s.byCountry || []).slice(0, 3).map(c => ({ pays: c.country, scans: c.cnt })),
+        appareils: (s.byDevice || []).map(d => ({ appareil: d.device, scans: d.cnt })),
+        cree: _frDate(_sqlUtc(s.meta?.created_at)), imprime: _frDate(s.meta?.printed_at),
+      };
+    },
+  },
+  {
+    id: 'qr.followed', pad: 'sdqr', mode: 'read',
+    label: 'Le QR suivi sur le tableau de bord',
+    desc: "Le QR épinglé au tableau de bord (menu « Suivre sur le tableau de bord ») et ses scans. Répond à « le QR que je suis », « mon QR épinglé, il en est où ? ».",
+    target: '.sdqr-qr-grid',
+    params: [],
+    run: async () => {
+      /* écrit par le menu ⋯ de la bibliothèque : { id: short_id, name } (sdqr.js:565) */
+      const f = _ls('ks_sdqr_followed', null);
+      if (!f || !f.id) return { suivi: false, message: 'Aucun QR suivi sur le tableau de bord.' };
+      const { qrs } = await _api('/api/qr');
+      const q = (qrs || []).find(x => x.short_id === f.id);
+      if (!q) return { suivi: true, nom: f.name || null,
+                       message: 'Le QR suivi n’existe plus dans la flotte.' };
+      let scans_7_jours = null, tendance = null;
+      try {
+        const o = await _api('/api/qr/overview?period=7d');
+        const lb = (o.leaderboard || []).find(l => l.short_id === f.id);
+        if (lb) { scans_7_jours = lb.scans;
+                  tendance = ({ up: 'en hausse', down: 'en baisse', flat: 'stable' })[lb.trend] || 'stable'; }
+        else {
+          /* le leaderboard est tronqué au top 8 (qr.js:627) : un QR suivi
+             en 9e position scanne peut-être — on va chercher SES stats
+             plutôt que de laisser croire « pas de données » */
+          const s7 = await _api(`/api/qr/${encodeURIComponent(q.id)}/stats?period=7d`);
+          scans_7_jours = s7.totals?.week ?? null;
+        }
+      } catch (e) { /* tendance facultative : les totaux suffisent */ }
+      return { suivi: true, nom: q.name || '(sans nom)', statut: q.status || 'active',
+               scans_total: q.scans_total || 0, scans_7_jours, tendance,
+               destination: q.target_url || null, cree: _frDate(q.created_at) };
+    },
+  },
+
   /* ═══════════════════════════════════════════════════════════════
      V1.1 — LES ÉCRITURES SÛRES (sprint « Kora agit », 18/07/2026)
      Rien d'irréversible, rien ne part vers l'extérieur : préparer,
@@ -430,7 +578,7 @@ export const KORA_ACTIONS = [
   {
     id: 'chain.start', pad: 'chaine', mode: 'write',
     label: 'Démarrer la chaîne de contenu',
-    desc: "Lance la chaîne Brainstorming → Ghost Writer → Social : pose l'état de chaîne et ouvre l'étape idées (brief prérempli si fourni ; réseau optionnel — choisi dans l'outil sinon). C'est la voie pour RÉDIGER un contenu de qualité. Répond à « démarre la chaîne », « rédige-moi un article/post sur… ».",
+    desc: "Lance la chaîne Brainstorming → Ghost Writer → Social (brief prérempli si fourni, réseau optionnel). C'est LA voie pour RÉDIGER un contenu de qualité. Répond à « démarre la chaîne », « rédige-moi un article/post sur… ».",
     target: '#wr-chain-slot',
     params: [
       { name: 'network', type: 'string', required: false, desc: 'facebook, instagram, linkedin, threads ou telegram — si déjà connu' },
@@ -459,18 +607,20 @@ export const KORA_ACTIONS = [
   {
     id: 'os.open_pad', pad: 'os', mode: 'write',
     label: 'Ouvrir un outil',
-    desc: "Ouvre un outil de la chaîne de contenu : brainstorming, ghostwriter ou social. Répond à « ouvre-moi le Social Manager ».",
+    desc: "Ouvre un outil du catalogue : brainstorming, ghostwriter, social ou qr. Répond à « ouvre-moi le Social Manager ».",
     target: '.ws-app',
-    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming | ghostwriter | social' }],
+    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming | ghostwriter | social | qr' }],
     run: async (args = {}) => {
       const KORA_PADS = {
         brainstorming: ['A-COM-003', 'le Brainstorming'], ghostwriter: ['A-COM-005', 'le Ghost Writer'],
         social: ['O-SOC-001', 'le Social Manager'],
         'ghost writer': ['A-COM-005', 'le Ghost Writer'], 'social manager': ['O-SOC-001', 'le Social Manager'],
+        qr: ['A-COM-001', 'Smart Dynamic QR'], sdqr: ['A-COM-001', 'Smart Dynamic QR'],
+        'qr codes': ['A-COM-001', 'Smart Dynamic QR'], 'smart dynamic qr': ['A-COM-001', 'Smart Dynamic QR'],
       };
       const key = String(args.pad || '').trim().toLowerCase();
       const entry = KORA_PADS[key];
-      if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social.`);
+      if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social, qr.`);
       _guardGwModal();
       const [padId, nom] = entry;
       /* openTool = LA porte gated (licence + Living Layer, ui-renderer.js:2192) */
@@ -483,6 +633,57 @@ export const KORA_ACTIONS = [
       return { fait: true, outil_ouvert: nom };
     },
   },
+
+  /* ═══ SMART DYNAMIC QR — écritures sûres (V1.2) ═══ */
+  {
+    id: 'qr.open', pad: 'sdqr', mode: 'write',
+    label: 'Ouvrir Smart Dynamic QR',
+    desc: "Ouvre l'outil Smart Dynamic QR — directement sur la fiche d'un QR si un nom est donné. Répond à « ouvre mes QR codes », « montre-moi le QR … ».",
+    target: '.sdqr-topbar',
+    params: [{ name: 'name', type: 'string', required: false, desc: 'nom du QR à ouvrir (défaut : la bibliothèque)' }],
+    run: async (args = {}) => {
+      _guardGwModal();
+      _guardSdqrCreate();
+      const ref = String(args.name || '').trim();
+      let opts = {}, extra = {};
+      if (ref) {
+        const { qrs } = await _api('/api/qr');
+        const found = _qrByName(qrs || [], ref);
+        if (!found.match) {
+          if (found.candidates.length)
+            throw new Error(`Plusieurs QR correspondent à « ${ref} » : ${found.candidates.join(' · ')}. Précise le nom.`);
+          throw new Error(`Aucun QR nommé « ${ref} » — je peux ouvrir la bibliothèque si tu veux.`);
+        }
+        /* openSDQR relaie opts.editId = ouverture directe de la fiche (sdqr.js:238) */
+        opts = { editId: found.match.id };
+        extra = { qr: found.match.name };
+      }
+      return _openSdqrHonest(opts, extra);
+    },
+  },
+  {
+    id: 'qr.prepare_url', pad: 'sdqr', mode: 'write',
+    label: 'Préparer un QR code URL',
+    desc: "Ouvre la création d'un QR avec l'adresse (et le nom) préremplis — rien n'est créé, l'utilisateur enregistre. UNIQUEMENT si l'utilisateur a donné l'adresse ; sinon demande-la-lui, ne l'invente jamais. Répond à « prépare-moi un QR vers … ».",
+    target: '#sdqr-content',
+    params: [
+      { name: 'url', type: 'string', required: true, desc: 'l’adresse (https://…) que le QR ouvrira' },
+      { name: 'name', type: 'string', required: false, desc: 'nom du QR' },
+    ],
+    run: async (args = {}) => {
+      let u = null;
+      try { u = new URL(String(args.url || '').trim()); } catch (e) { /* invalide */ }
+      if (!u || !/^https?:$/.test(u.protocol))
+        throw new Error('Il me faut une adresse web valide (http ou https).');
+      _guardGwModal();
+      _guardSdqrCreate();
+      /* openSDQR relaie createUrl/presetName (sdqr.js:250, deep-link Smart Agent) */
+      const opts = { createUrl: u.href };
+      if (String(args.name || '').trim()) opts.presetName = String(args.name).trim();
+      return _openSdqrHonest(opts, { url: u.href,
+        rappel: 'Formulaire prérempli — rien n’est créé : le design et l’enregistrement restent à l’utilisateur.' });
+    },
+  },
 ];
 
 /* réseaux valides du moteur de diffusion (social-handoff.js:19) */
@@ -490,6 +691,63 @@ function _validNetworks(input) {
   const KNOWN = ['facebook', 'instagram', 'linkedin', 'threads', 'telegram'];
   const arr = Array.isArray(input) ? input : (input ? [input] : []);
   return [...new Set(arr.map(n => String(n || '').trim().toLowerCase()).filter(n => KNOWN.includes(n)))];
+}
+
+/* Retrouver UN QR par son nom (exact d'abord, partiel ensuite), accents
+   ignorés. Ambigu ou introuvable → { match:null, candidates } pour que
+   Kora demande une précision au lieu d'ouvrir le mauvais QR. */
+function _qrByName(qrs, ref) {
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const n = norm(ref);
+  if (!n) return { match: null, candidates: [] };
+  const exact = qrs.filter(q => norm(q.name) === n);
+  if (exact.length === 1) return { match: exact[0], candidates: [] };
+  const part = exact.length ? exact : qrs.filter(q => norm(q.name).includes(n));
+  if (part.length === 1) return { match: part[0], candidates: [] };
+  /* discriminant (dossier/type) : deux QR au même nom resteraient
+     indistinguables dans le message « précise le nom » */
+  const cand = part.map(q => (q.name || '(sans nom)') +
+    (q.folder ? ` (dossier ${q.folder})` : q.qr_type ? ` (${q.qr_type})` : ''));
+  return { match: null, candidates: cand.slice(0, 6) };
+}
+
+/* Meilleur créneau de la heatmap jour×heure. Le serveur stocke ts en UTC
+   (qr.js:1017) et la conversion locale se fait côté client, comme dans la
+   heatmap du pad (_renderHeatmap). */
+function _qrBestSlot(heatmap) {
+  if (!Array.isArray(heatmap) || !heatmap.length) return null;
+  const best = heatmap.reduce((a, b) => (b.cnt > a.cnt ? b : a));
+  if (!best || !best.cnt) return null;
+  /* MÊME formule d'arrondi que la heatmap du pad (sdqr.js:4530) — sinon
+     le créneau annoncé peut contredire d'1 h la grille affichée à l'écran */
+  const off = -Math.round(new Date().getTimezoneOffset() / 60);
+  let hour = best.hour + off, dow = best.dow;
+  if (hour >= 24) { hour -= 24; dow = (dow + 1) % 7; }
+  if (hour < 0)  { hour += 24; dow = (dow + 6) % 7; }
+  const JOURS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+  return `${JOURS[dow]} vers ${hour}h`;
+}
+
+/* Rouvrir SDQR réécrit tout son shell (openSDQR fait panel.innerHTML =,
+   sdqr.js:221) : une CRÉATION en cours serait perdue. Seule la vue
+   création est détectable (classe --create) — la navigation interne du
+   pad re-rend pareil, on n'est pas plus destructeur que lui. */
+function _guardSdqrCreate() {
+  if (document.querySelector('#sdqr-fullscreen.open .sdqr-content--create'))
+    throw new Error('Une création de QR est en cours — termine-la ou ferme-la, puis redemande-moi.');
+}
+
+/* Ouverture SDQR honnête : openTool tranche SEUL l'accès (licence + essai
+   gratuit + admin, ui-renderer.js:2216-2223) — on CONSTATE le résultat au
+   DOM au lieu de le prédire (revue 19/07 : _padAccessible ignorait l'essai
+   → faux « pas dans la licence » et opts jetés pour un compte en essai).
+   openSDQR pose la classe .open de façon synchrone (sdqr.js:222). */
+async function _openSdqrHonest(opts, extra = {}) {
+  const { openTool } = await import('./ui-renderer.js');
+  openTool('A-COM-001', opts);
+  if (document.querySelector('#sdqr-fullscreen.open'))
+    return { fait: true, outil_ouvert: 'Smart Dynamic QR', ...extra };
+  return { fait: false, raison: 'Smart Dynamic QR n’est pas dans la licence — sa fiche est ouverte à l’écran.' };
 }
 
 /* Le modal Ghost Writer vit à z-index 99999 : tout outil ouvert pendant

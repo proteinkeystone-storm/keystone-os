@@ -41,10 +41,12 @@
      cadre .ws-app n'est plus pincé : son fond couvre tout l'écran, le
      dashboard sous-jacent reste inatteignable (leçon de la faille
      précédente), et la fenêtre flotte dessus comme au dashboard. */
-  body.kora-open .ws-app > :not([class*="topbar"]){
+  body.kora-open .ws-app > :not([class*="topbar"]),
+  body.kora-open .sdqr-fullscreen > :not([class*="topbar"]){
     margin-right:calc(min(40vw, 560px) + 24px);
   }
-  .ws-app > :not([class*="topbar"]){ transition:margin-right .3s ease; }
+  .ws-app > :not([class*="topbar"]),
+  .sdqr-fullscreen > :not([class*="topbar"]){ transition:margin-right .3s ease; }
 }
 /* le canvas WebGL voyage par-dessus le dock (position pilotée en JS).
    Z-index OS : au-dessus des workspaces (9999) ET du modal GW (99999) —

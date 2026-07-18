@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const KORA_CSS_V = '9';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
+const KORA_CSS_V = '10';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
 
 /* ── Shader (verbatim harnais kora-galet-morph.html) ── */
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -175,7 +175,10 @@ export function koraClose() {
   setTimeout(() => _panel.classList.remove('kora-open'), 300);
   koraState('repos');
   koraClearRings();
-  if (_log) _log.innerHTML = '';
+  /* le log SURVIT à la fermeture (revue 19/07) : _history survit déjà côté
+     boucle (le modèle se souvient) et la migration du dock ferme la fenêtre
+     PENDANT que la réponse d'une écriture streame — la vider perdait
+     l'échange ; rouvrir le galet doit montrer la conversation complète. */
 }
 export function koraSay(html) {
   if (!_inited || !_log) return null;
