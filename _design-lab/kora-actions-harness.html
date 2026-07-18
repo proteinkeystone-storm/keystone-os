@@ -68,6 +68,7 @@ const PADS = [
   ['brainstorming', 'Brainstorming'],
   ['ghostwriter', 'Ghost Writer'],
   ['social', 'Social Manager'],
+  ['os', 'OS'],
 ];
 
 const jwtEl = document.getElementById('jwt');
@@ -88,16 +89,20 @@ for (const [pad, title] of PADS) {
     const params = (a.params || []).map(p =>
       `<label>${p.name}${p.required ? ' (requis)' : ''}<input data-param="${p.name}" data-type="${p.type}" placeholder="${p.desc || ''}"></label>`
     ).join('');
+    const isWrite = a.mode === 'write';
     el.innerHTML = `
       <div class="act-head">
         <span class="act-label">${a.label}</span>
         <span class="act-id">${a.id}</span>
         <span class="act-target">→ ${a.target}</span>
-        <button class="act-run">Lire</button>
+        ${isWrite
+          ? '<span class="act-target" style="margin-left:auto">écriture — se teste dans l\'app (elle ouvre un outil)</span>'
+          : '<button class="act-run">Lire</button>'}
       </div>
       <div class="act-desc">${a.desc}</div>
       ${params ? `<div class="act-params">${params}</div>` : ''}
       <div class="act-out"></div>`;
+    if (isWrite) { sec.appendChild(el); continue; }
     const out = el.querySelector('.act-out');
     el.querySelector('.act-run').addEventListener('click', async () => {
       out.className = 'act-out on';

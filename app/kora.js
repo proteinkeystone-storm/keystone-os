@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const KORA_CSS_V = '3';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
+const KORA_CSS_V = '4';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
 
 /* ── Shader (verbatim harnais kora-galet-morph.html) ── */
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -300,9 +300,13 @@ export function initKora() {
   _cur = Object.assign({}, STATES.repos,
     { A:[...STATES.repos.A], B:[...STATES.repos.B], C:[...STATES.repos.C], lay:[...STATES.repos.lay] });
 
-  /* tap = ouvrir / ranger */
-  _dock.addEventListener('click', () =>
-    _panel.classList.contains('kora-open') ? koraClose() : koraOpen());
+  /* tap = ouvrir / ranger — sur le dock ET sur le canvas flottant :
+     dans un pad plein écran la topbar est recouverte, le galet
+     flottant (z-index OS) devient le seul bouton accessible */
+  const _toggle = () =>
+    _panel.classList.contains('kora-open') ? koraClose() : koraOpen();
+  _dock.addEventListener('click', _toggle);
+  _cv.addEventListener('click', _toggle);
   addEventListener('keydown', e => {
     if (e.key === 'Escape' && _panel.classList.contains('kora-open')) koraClose();
   });
@@ -336,6 +340,18 @@ function _frame(now) {
   _acc += dt;
   if (resting && _acc < 1/30) return;          // veille : 30 fps suffisent à respirer
   const step = _acc; _acc = 0;
+
+  /* économiseur/verrouillage actif → Kora s'efface entièrement
+     (nos z-index OS passeraient au-dessus du lock, inacceptable) */
+  const locked = !!document.getElementById('ks-lockscreen');
+  _cv.style.visibility = locked ? 'hidden' : 'visible';
+  if (locked && _panel.classList.contains('kora-open')) koraClose();
+
+  /* le canvas n'est cliquable QUE lorsqu'un outil plein écran recouvre
+     la topbar (sinon son halo intercepterait les boutons voisins) */
+  const covered = !!document.querySelector('.ws-app, #gw-overlay');
+  _cv.style.pointerEvents = (covered && !locked) ? 'auto' : 'none';
+  _cv.style.cursor = covered ? 'pointer' : '';
 
   _dock.classList.toggle('kora-mini', resting);
 

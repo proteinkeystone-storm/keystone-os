@@ -1,17 +1,20 @@
 /* ═══════════════════════════════════════════════════════════════
-   KORA — Catalogue d'actions V1 (LECTURE SEULEMENT)
+   KORA — Catalogue d'actions V1 (lectures) + V1.1 (écritures sûres)
    ───────────────────────────────────────────────────────────────
    Le cœur de l'agent (KORA_BRIEF §2) : un catalogue d'actions bien
    nommées, scopées par pad. V1 = la chaîne de contenu (Brainstorming,
    Ghost Writer, Social Manager) + l'état de la chaîne elle-même.
 
    RÈGLES (KORA_BRIEF Annexe B) :
-   · Module INERTE : aucun import des pads, aucun effet de bord —
-     lecture de localStorage/sessionStorage + endpoints worker existants.
+   · Module INERTE AU CHARGEMENT : zéro import statique de pads.
+     Lectures = localStorage/sessionStorage + endpoints existants ;
+     écritures = imports DYNAMIQUES dans run() des passerelles que
+     les pads s'échangent déjà (openTool, openBrainstorming…).
    · Chaque action visible déclare `target` = le sélecteur de ce
      qu'elle touche (l'anneau kora-ring se posera dessus).
-   · mode:'read' partout en V1 — les écritures viendront après, et
-     détruire/trancher n'entreront JAMAIS ici (§7).
+   · mode:'read' | 'write'. Les écritures V1.1 PRÉPARENT et OUVRENT,
+     rien de plus : publier/programmer/supprimer n'existent pas ici,
+     et détruire/trancher n'y entreront JAMAIS (§7).
    · Isolation : préfixe kora_, ce module n'apprend rien aux pads.
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
@@ -327,7 +330,171 @@ export const KORA_ACTIONS = [
       };
     },
   },
+
+  /* ═══════════════════════════════════════════════════════════════
+     V1.1 — LES ÉCRITURES SÛRES (sprint « Kora agit », 18/07/2026)
+     Rien d'irréversible, rien ne part vers l'extérieur : préparer,
+     préremplir, ouvrir. Publier/programmer/supprimer restent derrière
+     la ligne rouge (§7) — ces verbes n'existent pas ici.
+     Imports DYNAMIQUES à l'exécution : le module reste inerte au
+     chargement, et on suit les passerelles que les pads s'échangent
+     déjà entre eux (cartographie 18/07, fichier:ligne dans chaque run).
+     ═══════════════════════════════════════════════════════════════ */
+  {
+    id: 'sm.compose_draft', pad: 'social', mode: 'write',
+    label: 'Préparer un post dans le composer',
+    desc: "Met un texte dans le composer Social Manager (réseaux cochés si fournis) et ouvre l'outil. NE PUBLIE PAS — le bouton Publier reste à l'utilisateur. Répond à « prépare-moi un post sur… », « mets ça dans le composer ».",
+    target: '#sm-text',
+    params: [
+      { name: 'text', type: 'string', required: true, desc: 'le texte du post' },
+      { name: 'networks', type: 'array', required: false, desc: 'réseaux visés parmi facebook, instagram, linkedin, threads, telegram' },
+      { name: 'append', type: 'boolean', required: false, desc: 'true = ajouter au brouillon existant au lieu de le remplacer' },
+    ],
+    run: async (args = {}) => {
+      const text = String(args.text || '').trim();
+      if (!text) throw new Error('Il me faut le texte du post.');
+      const targets = _validNetworks(args.networks);
+      const { openTool } = await import('./ui-renderer.js');
+      /* revue 18/07 — faux succès sous gating : si la licence n'a pas
+         l'outil, openTool ouvre le paywall et n'écrit RIEN. On le dit. */
+      if (!(await _padAccessible('O-SOC-001'))) {
+        openTool('O-SOC-001');
+        return { fait: false, raison: 'Le Social Manager n’est pas dans la licence — sa fiche est ouverte à l’écran.' };
+      }
+      /* filet : l'ancien brouillon est sauvegardé avant remplacement */
+      const prev = _ls('ks_social_manager_draft_v1', null);
+      if (prev && (prev.text || '').trim() && args.append !== true) {
+        try { localStorage.setItem('kora_sm_prev_draft', JSON.stringify(prev)); } catch (e) { /* plein */ }
+      }
+      /* openTool relaie opts.compose à O-SOC-001 (ui-renderer.js:2235) */
+      openTool('O-SOC-001', { compose: { text, targets, append: args.append === true } });
+      return { fait: true, outil_ouvert: 'Social Manager',
+               texte: _excerpt(text, 200), reseaux: targets.length ? targets : 'inchangés',
+               rappel: 'Rien n’est publié : le bouton Publier reste à l’utilisateur.' };
+    },
+  },
+  {
+    id: 'gw.rewrite_text', pad: 'ghostwriter', mode: 'write',
+    label: 'Envoyer un texte au Ghost Writer',
+    desc: "Ouvre le Ghost Writer avec un texte prêt à réécrire (3 variantes) — l'utilisateur choisit et lance lui-même. Répond à « fais réécrire ça », « améliore ce texte ».",
+    target: '#gw-source',
+    params: [{ name: 'text', type: 'string', required: true, desc: 'le texte à faire réécrire' }],
+    run: async (args = {}) => {
+      const text = String(args.text || '').trim();
+      if (!text) throw new Error('Il me faut le texte à réécrire.');
+      /* revue 18/07 — un modal GW déjà ouvert ignore l'appel (garde
+         _openModal) MAIS l'appel muterait sa source : on s'arrête AVANT */
+      if (document.getElementById('gw-overlay'))
+        throw new Error('Le Ghost Writer est déjà ouvert — ferme-le d’abord, puis redemande-moi.');
+      const gw = await import('./ghostwriter.js');
+      const { isChainActive } = await import('./lib/content-chain.js');
+      /* chaîne active → entrée chaîne (cohérente, sans flag) ; sinon
+         entrée standard, gardée par un flag (no-op silencieux qu'on
+         transforme en refus clair, sans jargon) */
+      if (isChainActive()) {
+        gw.openGhostwriterChained(text);
+      } else {
+        if (typeof gw.isGhostwriterEnabled === 'function' && !gw.isGhostwriterEnabled())
+          throw new Error('Le service de réécriture n’est pas activé sur ce poste.');
+        gw.openGhostwriter(text);
+      }
+      return { fait: true, outil_ouvert: 'Ghost Writer', texte: _excerpt(text, 200),
+               rappel: 'La réécriture se lance d’un clic — le choix de la variante reste à l’utilisateur.' };
+    },
+  },
+  {
+    id: 'bs.start_session', pad: 'brainstorming', mode: 'write',
+    label: 'Ouvrir un brainstorming avec un brief',
+    desc: "Ouvre le Brainstorming avec le brief prérempli — la séance ne démarre qu'au clic de l'utilisateur (elle consomme des crédits IA). Répond à « lance un brainstorming sur… ».",
+    target: '#wr-input',
+    params: [{ name: 'brief', type: 'string', required: true, desc: 'le sujet à faire débattre' }],
+    run: async (args = {}) => {
+      const brief = String(args.brief || '').trim();
+      if (!brief) throw new Error('Il me faut le sujet du brainstorming.');
+      /* revue 18/07 — rouvrir écraserait une séance en cours (le shell
+         est réécrit) : on protège le travail de l'utilisateur */
+      if (document.querySelector('#wr-fullscreen.open'))
+        throw new Error('Une séance de brainstorming est déjà ouverte — termine-la ou ferme-la, puis redemande-moi.');
+      /* import direct comme le fait Social Manager (social-manager.js:815) :
+         le routage standard openTool jette les opts (ui-renderer.js:2246).
+         PAS de mode passé → défaut 'exploration' (un mode inconnu
+         retomberait sur post-ideas et poserait une chaîne par erreur). */
+      const { openBrainstorming } = await import('./brainstorming.js');
+      openBrainstorming({ brief });
+      return { fait: true, outil_ouvert: 'Brainstorming', brief: _excerpt(brief, 200),
+               rappel: 'Brief prérempli — le lancement de la séance reste à l’utilisateur.' };
+    },
+  },
+  {
+    id: 'chain.start', pad: 'chaine', mode: 'write',
+    label: 'Démarrer la chaîne de contenu',
+    desc: "Lance la chaîne Brainstorming → Ghost Writer → Social pour un réseau donné : pose l'état de chaîne et ouvre l'étape idées (brief prérempli si fourni). Répond à « démarre la chaîne pour LinkedIn ».",
+    target: '#wr-chain-slot',
+    params: [
+      { name: 'network', type: 'string', required: true, desc: 'facebook, instagram, linkedin, threads ou telegram' },
+      { name: 'brief', type: 'string', required: false, desc: 'le sujet, si déjà connu' },
+    ],
+    run: async (args = {}) => {
+      const nets = _validNetworks([args.network]);
+      if (!nets.length) throw new Error(`Réseau inconnu : ${args.network}. Choix : facebook, instagram, linkedin, threads, telegram.`);
+      if (document.querySelector('#wr-fullscreen.open'))
+        throw new Error('Une séance de brainstorming est déjà ouverte — termine-la ou ferme-la, puis redemande-moi.');
+      const { setChain } = await import('./lib/content-chain.js');
+      const { openBrainstorming } = await import('./brainstorming.js');
+      setChain({ step: 'ideas', origin: 'kora', network: nets[0] });
+      const opts = { mode: 'post-ideas' };
+      if (String(args.brief || '').trim()) opts.brief = String(args.brief).trim();
+      openBrainstorming(opts);
+      return { fait: true, chaine: 'démarrée', reseau: nets[0], etape: 'idées (Brainstorming)',
+               brief: opts.brief ? _excerpt(opts.brief, 200) : null };
+    },
+  },
+  {
+    id: 'os.open_pad', pad: 'os', mode: 'write',
+    label: 'Ouvrir un outil',
+    desc: "Ouvre un outil de la chaîne de contenu : brainstorming, ghostwriter ou social. Répond à « ouvre-moi le Social Manager ».",
+    target: '.ws-app',
+    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming | ghostwriter | social' }],
+    run: async (args = {}) => {
+      const KORA_PADS = {
+        brainstorming: ['A-COM-003', 'le Brainstorming'], ghostwriter: ['A-COM-005', 'le Ghost Writer'],
+        social: ['O-SOC-001', 'le Social Manager'],
+        'ghost writer': ['A-COM-005', 'le Ghost Writer'], 'social manager': ['O-SOC-001', 'le Social Manager'],
+      };
+      const key = String(args.pad || '').trim().toLowerCase();
+      const entry = KORA_PADS[key];
+      if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social.`);
+      const [padId, nom] = entry;
+      /* openTool = LA porte gated (licence + Living Layer, ui-renderer.js:2192) */
+      const { openTool } = await import('./ui-renderer.js');
+      if (!(await _padAccessible(padId))) {
+        openTool(padId);
+        return { fait: false, raison: `${nom} n’est pas dans la licence — sa fiche est ouverte à l’écran.` };
+      }
+      openTool(padId);
+      return { fait: true, outil_ouvert: nom };
+    },
+  },
 ];
+
+/* réseaux valides du moteur de diffusion (social-handoff.js:19) */
+function _validNetworks(input) {
+  const KNOWN = ['facebook', 'instagram', 'linkedin', 'threads', 'telegram'];
+  const arr = Array.isArray(input) ? input : (input ? [input] : []);
+  return [...new Set(arr.map(n => String(n || '').trim().toLowerCase()).filter(n => KNOWN.includes(n)))];
+}
+
+/* même sémantique que la garde d'openTool (ui-renderer.js:2216) —
+   pour dire la VÉRITÉ quand la licence n'a pas l'outil (revue 18/07) */
+async function _padAccessible(padId) {
+  try {
+    const { getOwnedIds, getLifetimeIds, isAdminUser } = await import('./pads-loader.js');
+    if (isAdminUser()) return true;
+    const owned = getOwnedIds();
+    if (owned === null) return true;                       // sentinelle « tout possédé »
+    return owned.includes(padId) || getLifetimeIds().includes(padId);
+  } catch (e) { return true; }                             // au doute, openTool tranchera
+}
 
 /* ── Exécution ── */
 export function koraActionsForPad(pad) {

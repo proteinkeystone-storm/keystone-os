@@ -34,13 +34,14 @@ function _push(role, content) {
   _history.push({ role, content });
   if (_history.length > MAX_HISTORY) _history = _history.slice(-MAX_HISTORY);
 }
-/* défs compactes du catalogue scopé — V1 : tout le catalogue lecture */
+/* défs compactes du catalogue scopé — V1.1 : lectures + écritures sûres */
 function _actionDefs() {
   return KORA_ACTIONS.map(a => ({
-    id: a.id, label: a.label, desc: a.desc,
+    id: a.id, label: a.label, desc: a.desc, mode: a.mode || 'read',
     params: (a.params || []).map(p => ({ name: p.name, type: p.type, required: !!p.required })),
   }));
 }
+const _isMobile = () => matchMedia('(max-width:640px)').matches;
 function _setBusy(b) {
   _busy = b;
   if (_input)  _input.disabled = b;
@@ -93,13 +94,20 @@ async function _send(text) {
     }
     if (d.annonce) { koraSay(_esc(d.annonce)); _push('assistant', d.annonce); }
     koraState('travail');
-    const ringed = act.target ? koraRing(act.target) : null;
+    /* lecture : anneau AVANT (la cible existe déjà si le pad est ouvert) ;
+       écriture : anneau APRÈS (c'est l'action qui fait exister la cible —
+       elle ouvre l'outil) — et on le laisse en place pendant la réponse */
+    const isWrite = act.mode === 'write';
+    if (!isWrite && act.target) koraRing(act.target);
     const result = await runKoraAction(d.id, d.args || {});
-    if (ringed) koraClearRings();
+    if (isWrite && result.ok && act.target) {
+      await new Promise(r => setTimeout(r, 350));   // le temps que l'outil monte son DOM
+      koraRing(act.target);
+    }
 
     if (!result.ok) {
-      koraSay('Je n’ai pas réussi cette lecture : ' + _esc(result.error));
-      _push('assistant', `(lecture ${d.id} en échec : ${result.error})`);
+      koraSay(_esc(result.error));
+      _push('assistant', `(action ${d.id} en échec : ${result.error})`);
       return;
     }
 
@@ -138,6 +146,14 @@ async function _send(text) {
     }
     if (!fullText && line) line.textContent = 'Lecture faite — mais je n’ai rien su en dire. Réessaie ?';
     _push('assistant', fullText || '(réponse vide)');
+    /* écriture sur mobile : la feuille couvre l'outil qu'on vient
+       d'ouvrir — on se range pour le laisser voir (desktop : les deux
+       coexistent, panneau à droite) */
+    if (isWrite && result.ok && _isMobile()) {
+      await new Promise(r => setTimeout(r, 1600));
+      const { koraClose } = await import('./kora.js');
+      koraClose();
+    }
   } catch (e) {
     koraSay('Petit souci de mon côté (' + _esc(e?.message || 'réseau') + '). Réessaie dans un instant.');
   } finally {
@@ -154,7 +170,7 @@ export function initKoraLoop(panel) {
   bar.className = 'kora-inputbar';
   bar.innerHTML = `
     <input class="kora-input" type="text" maxlength="1000"
-           placeholder="Demande-moi une lecture — « où en sont mes posts ? »" aria-label="Parler à Kora">
+           placeholder="Demande-moi — « prépare-moi un post sur… »" aria-label="Parler à Kora">
     <button class="kora-send" title="Envoyer" aria-label="Envoyer">${icon('send', 16)}</button>`;
   panel.appendChild(bar);
   _input = bar.querySelector('.kora-input');
