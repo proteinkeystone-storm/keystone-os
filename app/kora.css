@@ -40,6 +40,15 @@
      rien dessous. (.ws-app est fixed inset:0 → on pince `right`.) */
   body.kora-open .ws-app{ right:calc(min(40vw, 560px) + 16px); }
   .ws-app{ transition:right .3s ease; }
+  /* ⚠ la zone libérée révélerait le DASHBOARD qui vit toujours sous
+     l'outil (topbar cliquable = catastrophe, capture Stéphane 18/07) :
+     dans un outil, la fenêtre occupe donc TOUTE la colonne libérée —
+     pleine hauteur, collée au bord, jointure exacte avec l'outil pincé */
+  body.kora-in-tool .kora-panel{
+    top:0; right:0; bottom:0;
+    width:calc(min(40vw, 560px) + 16px);
+    border-radius:14px 0 0 14px;
+  }
 }
 /* le canvas WebGL voyage par-dessus le dock (position pilotée en JS).
    Z-index OS : au-dessus des workspaces (9999) ET du modal GW (99999) —

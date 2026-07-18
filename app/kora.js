@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const KORA_CSS_V = '7';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
+const KORA_CSS_V = '8';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
 
 /* ── Shader (verbatim harnais kora-galet-morph.html) ── */
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -366,6 +366,9 @@ function _frame(now) {
        décor (faille trouvée par Stéphane 18/07) */
     if (_panel.classList.contains('kora-open')) koraClose();
   }
+  /* dans un outil, la fenêtre prend sa variante pleine colonne
+     (sinon la zone libérée révèle le dashboard sous-jacent) */
+  document.body.classList.toggle('kora-in-tool', host !== _ccBar);
 
   _dock.classList.toggle('kora-mini', resting);
 
