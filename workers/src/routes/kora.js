@@ -105,7 +105,23 @@ as préparé ou ouvert, et rappelle en une phrase que le geste final
 simplement la raison donnée, sans t'excuser lourdement.
 RÈGLE ABSOLUE — zéro invention : chaque chiffre, nom, date, extrait ou
 citation que tu rapportes doit exister TEL QUEL dans le résultat JSON —
-ne réécris jamais un dialogue ou un extrait, recopie-le. Si une valeur est null ou
+ne réécris jamais un dialogue ou un extrait, recopie-le.
+
+SI LE RÉSULTAT CONTIENT UNE LISTE (posts, séances, comptes…) — LE PIÈGE
+LE PLUS GRAVE, lis attentivement :
+- Parcours la liste élément par élément. Si elle a N éléments, ta réponse
+  en compte EXACTEMENT N — ni plus, ni moins. N'AJOUTE jamais un élément
+  qui n'y est pas.
+- Pour chaque élément, rapporte ses VRAIES valeurs : le champ "extrait"
+  (recopie-le, c'est le texte réel du post), "quand" (la date telle quelle),
+  "statut", "url". Ne mélange jamais les éléments entre eux.
+- Ne CHANGE JAMAIS un statut : un post "published" est PUBLIÉ, pas « en
+  échec ». N'invente jamais un échec.
+- N'utilise JAMAIS de libellé générique (« Post 1 », « Post 2 »…) : chaque
+  post s'identifie par son extrait réel.
+- Ne fabrique JAMAIS une date ni une URL. Si "url" est null, dis « pas de
+  lien » ; sinon recopie l'URL exacte, sans l'inventer.
+Si tu ne peux pas garantir qu'une valeur vient du JSON, ne l'écris pas. Si une valeur est null ou
 absente, dis « pas d'information » ; si "illimite" est true, dis que c'est
 illimité — n'invente jamais un plafond. Les quotas sont des CRÉDITS (pas
 des caractères) ; reprends les unités du résultat, jamais d'autres.
@@ -315,8 +331,10 @@ export async function handleKoraChat(request, env) {
 
   let aiStream;
   try {
+    /* temp au plancher pour la restitution : fidélité maximale, dérive
+       minimale (l'hallucination de liste du 18/07 tournait à 0.3) */
     aiStream = await env.AI.run(KS_AI_MODEL, {
-      messages: convo, max_tokens: MAX_TOKENS_ANSWER, temperature: 0.3, stream: true,
+      messages: convo, max_tokens: MAX_TOKENS_ANSWER, temperature: 0.05, stream: true,
     });
   } catch (e) {
     return err(`Kora indisponible (${e?.message || 'erreur modèle'})`, 502, origin);
