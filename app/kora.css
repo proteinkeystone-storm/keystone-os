@@ -7,33 +7,23 @@
 /* ── Étage 1 : LA PASTILLE (dock dans la .cc-bar) ──
    Au repos : un bouton comme les autres. Active : s'étend et pousse
    naturellement ses voisins vers la gauche (flexbox + transition). */
+/* Le dock est une PURE GÉOMÉTRIE (dimensions + place dans le flex) :
+   AUCUNE carrosserie CSS — le liseré dessiné par l'onde elle-même est
+   l'unique contour (retour Stéphane 18/07 : l'écrin CSS dédoublait le
+   trait du shader, en clair comme en sombre). */
 .kora-dock{
   position:relative; flex:0 0 auto; height:26px; width:160px;
   transition:width .38s cubic-bezier(.3,.9,.3,1);
   cursor:pointer; border-radius:8px;
-  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+  background:transparent; border:1px solid transparent;
 }
 .kora-dock.kora-mini{ width:36px; }
-/* mode clair : MÊME habit que les boutons voisins (retour Stéphane 18/07 —
-   l'écrin marine était « mal taillé » ; la version nue des applis, validée,
-   fait foi : l'onde du shader porte son propre liseré, le dock ne fournit
-   que la carrosserie des voisins) */
-html.light-mode .kora-dock{
-  background:#ffffff; border-color:rgba(17,24,39,.15);
-  box-shadow:0 1px 2px rgba(15,23,42,.04);
-}
-
 /* ── Dans les headers d'outils (.ws-topbar-actions) : vrai bouton,
    mêmes dimensions que les .ws-iconbtn voisins (38×38, rayon 10) ;
-   étendu, il pousse les voisins par le flex — même geste que la cc-bar */
-.ws-topbar-actions .kora-dock{
-  height:38px; width:190px; border-radius:10px;
-  background:rgba(255,255,255,.03); border-color:var(--ws-border, rgba(255,255,255,.08));
-}
+   étendu, il pousse les voisins par le flex — même geste que la cc-bar.
+   Toujours aucune carrosserie : l'onde dessine son propre contour. */
+.ws-topbar-actions .kora-dock{ height:38px; width:190px; border-radius:10px; }
 .ws-topbar-actions .kora-dock.kora-mini{ width:38px; }
-html.light-mode .ws-topbar-actions .kora-dock{
-  background:#ffffff; border-color:rgba(17,24,39,.15);
-}
 
 /* ── La fenêtre POUSSE le dashboard (retour Stéphane 18/07) ──
    Rien ne passe dessous : le contenu se réorganise à gauche. Desktop
@@ -45,6 +35,11 @@ html.light-mode .ws-topbar-actions .kora-dock{
     transition:padding-right .3s ease;
   }
   .main{ transition:padding-right .3s ease; }
+  /* même geste dans les OUTILS (retour Stéphane 18/07) : l'application
+     entière se compresse à gauche de la fenêtre — split-screen, plus
+     rien dessous. (.ws-app est fixed inset:0 → on pince `right`.) */
+  body.kora-open .ws-app{ right:calc(min(40vw, 560px) + 16px); }
+  .ws-app{ transition:right .3s ease; }
 }
 /* le canvas WebGL voyage par-dessus le dock (position pilotée en JS).
    Z-index OS : au-dessus des workspaces (9999) ET du modal GW (99999) —
