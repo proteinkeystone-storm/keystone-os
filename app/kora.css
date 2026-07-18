@@ -35,20 +35,16 @@
     transition:padding-right .3s ease;
   }
   .main{ transition:padding-right .3s ease; }
-  /* même geste dans les OUTILS (retour Stéphane 18/07) : l'application
-     entière se compresse à gauche de la fenêtre — split-screen, plus
-     rien dessous. (.ws-app est fixed inset:0 → on pince `right`.) */
-  body.kora-open .ws-app{ right:calc(min(40vw, 560px) + 16px); }
-  .ws-app{ transition:right .3s ease; }
-  /* ⚠ la zone libérée révélerait le DASHBOARD qui vit toujours sous
-     l'outil (topbar cliquable = catastrophe, capture Stéphane 18/07) :
-     dans un outil, la fenêtre occupe donc TOUTE la colonne libérée —
-     pleine hauteur, collée au bord, jointure exacte avec l'outil pincé */
-  body.kora-in-tool .kora-panel{
-    top:0; right:0; bottom:0;
-    width:calc(min(40vw, 560px) + 16px);
-    border-radius:14px 0 0 14px;
+  /* même geste dans les OUTILS (retours Stéphane 18/07) : comme au
+     dashboard, la TOPBAR de l'outil reste PLEINE LARGEUR (boutons et
+     galet à droite de l'écran) et seul le CONTENU se compresse. Le
+     cadre .ws-app n'est plus pincé : son fond couvre tout l'écran, le
+     dashboard sous-jacent reste inatteignable (leçon de la faille
+     précédente), et la fenêtre flotte dessus comme au dashboard. */
+  body.kora-open .ws-app > :not([class*="topbar"]){
+    margin-right:calc(min(40vw, 560px) + 24px);
   }
+  .ws-app > :not([class*="topbar"]){ transition:margin-right .3s ease; }
 }
 /* le canvas WebGL voyage par-dessus le dock (position pilotée en JS).
    Z-index OS : au-dessus des workspaces (9999) ET du modal GW (99999) —
