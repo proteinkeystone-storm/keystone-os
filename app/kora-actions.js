@@ -33,6 +33,17 @@ function _excerpt(text, max = 140) {
   const t = String(text || '').replace(/\s+/g, ' ').trim();
   return t.length > max ? t.slice(0, max - 1) + '…' : t;
 }
+/* Dates en français FINI : le modèle recopie, il ne « traduit » plus
+   (test réel 18/07 : les ISO lui faisaient sortir « 17 avril 223 à 17h4 »). */
+function _frDate(v) {
+  if (!v) return null;
+  const d = v instanceof Date ? v : new Date(v);
+  if (isNaN(d)) return String(v);
+  const txt = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const hm = d.getHours() || d.getMinutes()
+    ? ' à ' + String(d.getHours()) + 'h' + String(d.getMinutes()).padStart(2, '0') : '';
+  return txt + hm;
+}
 async function _api(path, { auth = true } = {}) {
   const headers = {};
   if (auth) {
@@ -61,7 +72,7 @@ export const KORA_ACTIONS = [
       if (!chain || !chain.ts || Date.now() - chain.ts > 6 * 3600 * 1000)
         return { active: false, message: 'Aucune chaîne de contenu active.' };
       return { active: true, step: chain.step, network: chain.network || null,
-               origin: chain.origin || null, depuis: new Date(chain.ts).toISOString() };
+               origin: chain.origin || null, depuis: _frDate(chain.ts) };
     },
   },
 
@@ -78,7 +89,7 @@ export const KORA_ACTIONS = [
         total: sessions.length,
         seances: sessions.map(s => ({
           id: s.id, brief: _excerpt(s.brief, 120), mode: s.mode || 'debat',
-          debut: s.started_at || null, maj: s.updated_at || null,
+          debut: _frDate(s.started_at), maj: _frDate(s.updated_at),
           tours: Array.isArray(s.history) ? s.history.length : 0,
           synthese: !!s.synthesis,
         })),
@@ -101,7 +112,7 @@ export const KORA_ACTIONS = [
       if (!s.synthesis) throw new Error(`La séance « ${_excerpt(s.brief, 60)} » n’a pas encore de synthèse.`);
       const sy = s.synthesis;
       return {
-        seance: { id: s.id, brief: _excerpt(s.brief, 120), date: s.synthesizedAt || s.updated_at || null },
+        seance: { id: s.id, brief: _excerpt(s.brief, 120), date: _frDate(s.synthesizedAt || s.updated_at) },
         positionnement: sy.positioning || null,
         opportunites: sy.opportunities || [],
         risques: sy.risks || [],
@@ -132,7 +143,7 @@ export const KORA_ACTIONS = [
         tours_total: history.length,
         tours: history.slice(-n).map(h => ({
           qui: h.agent_id === 'user' ? 'utilisateur' : h.agent_id,
-          texte: _excerpt(h.content, 300), quand: h.timestamp || null,
+          texte: _excerpt(h.content, 300), quand: _frDate(h.timestamp),
         })),
       };
     },
@@ -168,7 +179,7 @@ export const KORA_ACTIONS = [
       return {
         total: archive.length,
         posts: archive.map(p => ({ id: p.id, reseau: p.network || null,
-          date: p.ts ? new Date(p.ts).toISOString() : null, extrait: _excerpt(p.text, 200) })),
+          date: _frDate(p.ts), extrait: _excerpt(p.text, 200) })),
       };
     },
   },
@@ -183,7 +194,7 @@ export const KORA_ACTIONS = [
       return {
         total: lib.length,
         variantes: lib.map(v => ({ uid: v.uid, label: v.label || null, mode: v.modeLabel || null,
-          date: v.date || null, extrait: _excerpt(v.text, 200) })),
+          date: _frDate(v.date), extrait: _excerpt(v.text, 200) })),
       };
     },
   },
@@ -234,7 +245,7 @@ export const KORA_ACTIONS = [
         .sort((a, b) => String(a.scheduledAt).localeCompare(String(b.scheduledAt)));
       return {
         fenetre_jours: days, total: posts.length,
-        posts: posts.map(p => ({ id: p.id, quand: p.scheduledAt, reseaux: p.targets || [],
+        posts: posts.map(p => ({ id: p.id, quand: _frDate(p.scheduledAt), reseaux: p.targets || [],
           extrait: _excerpt(p.excerpt, 160), medias: p.mediaCount || 0 })),
       };
     },
@@ -242,7 +253,7 @@ export const KORA_ACTIONS = [
   {
     id: 'sm.recent_results', pad: 'social', mode: 'read',
     label: 'Résultats des dernières publications',
-    desc: 'Historique récent hors programmés : statut global (publié, partiel, échec…) et résultat par réseau, avec lien quand il existe.',
+    desc: 'Les posts déjà publiés (ou en échec) sur les réseaux sociaux : combien, quand, quel statut par réseau, avec lien quand il existe. Répond à « combien de posts ai-je faits / publiés ? », « mes dernières publications ».',
     target: '[data-slot="queue"]',
     params: [{ name: 'limit', type: 'number', required: false, desc: 'nombre de posts (défaut 10)' }],
     run: async (args = {}) => {
@@ -251,7 +262,7 @@ export const KORA_ACTIONS = [
       const posts = (data.posts || []).filter(p => p.status !== 'scheduled').slice(0, limit);
       return {
         total: posts.length,
-        posts: posts.map(p => ({ id: p.id, statut: p.status, quand: p.updatedAt || p.createdAt || null,
+        posts: posts.map(p => ({ id: p.id, statut: p.status, quand: _frDate(p.updatedAt || p.createdAt),
           extrait: _excerpt(p.excerpt, 160),
           par_reseau: (p.results || []).map(r => ({ reseau: r.platform, statut: r.status,
             url: r.url || null, erreur: r.error || null })) })),
@@ -270,7 +281,7 @@ export const KORA_ACTIONS = [
       return {
         total: (data.accounts || []).length,
         comptes: (data.accounts || []).map(a => ({ reseau: a.platform, nom: a.display_name || null,
-          statut: a.status, expire_le: a.expires_at || null,
+          statut: a.status, expire_le: _frDate(a.expires_at),
           expire_bientot: !!(a.expires_at && new Date(a.expires_at).getTime() <= soon) })),
       };
     },
