@@ -128,7 +128,8 @@ async function _send(text) {
         if (!payload) continue;
         try {
           const j = JSON.parse(payload);
-          if (j.type === 'chunk' && j.text) {
+          /* garde longueur, pas truthiness : le token "0" est falsy (bug des zéros) */
+          if (j.type === 'chunk' && typeof j.text === 'string' && j.text.length) {
             fullText += j.text;
             if (line) line.textContent = fullText;
           }

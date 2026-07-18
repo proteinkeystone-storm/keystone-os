@@ -324,7 +324,9 @@ export async function handleKoraChat(request, env) {
             try {
               const j = JSON.parse(payload);
               const chunk = j.response ?? j.choices?.[0]?.delta?.content ?? '';
-              if (chunk) { outText += chunk; send({ type: 'chunk', text: chunk }); }
+              /* PAS de `if (chunk)` : le token "0" est falsy en JS — c'est
+                 lui qui transformait « 2026 » en « 226 » (bug des zéros). */
+              if (typeof chunk === 'string' && chunk.length) { outText += chunk; send({ type: 'chunk', text: chunk }); }
             } catch (e) { /* fragment non-JSON, on attend la suite */ }
           }
         }
