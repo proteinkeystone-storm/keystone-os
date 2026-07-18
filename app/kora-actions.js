@@ -353,6 +353,7 @@ export const KORA_ACTIONS = [
     run: async (args = {}) => {
       const text = String(args.text || '').trim();
       if (!text) throw new Error('Il me faut le texte du post.');
+      _guardGwModal();
       const targets = _validNetworks(args.networks);
       const { openTool } = await import('./ui-renderer.js');
       /* revue 18/07 — faux succès sous gating : si la licence n'a pas
@@ -411,6 +412,7 @@ export const KORA_ACTIONS = [
     run: async (args = {}) => {
       const brief = String(args.brief || '').trim();
       if (!brief) throw new Error('Il me faut le sujet du brainstorming.');
+      _guardGwModal();
       /* revue 18/07 — rouvrir écraserait une séance en cours (le shell
          est réécrit) : on protège le travail de l'utilisateur */
       if (document.querySelector('#wr-fullscreen.open'))
@@ -437,6 +439,7 @@ export const KORA_ACTIONS = [
     run: async (args = {}) => {
       const nets = _validNetworks([args.network]);
       if (!nets.length) throw new Error(`Réseau inconnu : ${args.network}. Choix : facebook, instagram, linkedin, threads, telegram.`);
+      _guardGwModal();
       if (document.querySelector('#wr-fullscreen.open'))
         throw new Error('Une séance de brainstorming est déjà ouverte — termine-la ou ferme-la, puis redemande-moi.');
       const { setChain } = await import('./lib/content-chain.js');
@@ -464,6 +467,7 @@ export const KORA_ACTIONS = [
       const key = String(args.pad || '').trim().toLowerCase();
       const entry = KORA_PADS[key];
       if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social.`);
+      _guardGwModal();
       const [padId, nom] = entry;
       /* openTool = LA porte gated (licence + Living Layer, ui-renderer.js:2192) */
       const { openTool } = await import('./ui-renderer.js');
@@ -482,6 +486,15 @@ function _validNetworks(input) {
   const KNOWN = ['facebook', 'instagram', 'linkedin', 'threads', 'telegram'];
   const arr = Array.isArray(input) ? input : (input ? [input] : []);
   return [...new Set(arr.map(n => String(n || '').trim().toLowerCase()).filter(n => KNOWN.includes(n)))];
+}
+
+/* Le modal Ghost Writer vit à z-index 99999 : tout outil ouvert pendant
+   qu'il est affiché apparaîtrait DERRIÈRE lui (retour test réel 18/07 —
+   « elle n'a pas ouvert brainstorming ») — et le fermer perdrait les
+   variantes en cours. On refuse poliment. */
+function _guardGwModal() {
+  if (document.getElementById('gw-overlay'))
+    throw new Error('Le Ghost Writer est ouvert — ferme-le d’abord (ses variantes ne survivraient pas), puis redemande-moi.');
 }
 
 /* même sémantique que la garde d'openTool (ui-renderer.js:2216) —

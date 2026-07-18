@@ -349,9 +349,13 @@ function _frame(now) {
   _cv.style.visibility = locked ? 'hidden' : 'visible';
   if (locked && _panel.classList.contains('kora-open')) koraClose();
 
-  /* le canvas n'est cliquable QUE lorsqu'un outil plein écran recouvre
-     la topbar (sinon son halo intercepterait les boutons voisins) */
-  const covered = !!document.querySelector('.ws-app, #gw-overlay');
+  /* outil plein écran ouvert ? (⚠ les overlays Keystone peuvent RESTER
+     dans le DOM éteints — leçon lockfix : tester la VISIBILITÉ réelle,
+     jamais la simple présence) */
+  const covered = [...document.querySelectorAll('.ws-app:not(.wr-fullscreen), #wr-fullscreen.open, #gw-overlay')]
+    .some(el => el.getBoundingClientRect().width > 0);
+  /* le canvas n'est cliquable QUE dans ce cas (sinon son halo
+     intercepterait les boutons voisins de la cc-bar) */
   _cv.style.pointerEvents = (covered && !locked) ? 'auto' : 'none';
   _cv.style.cursor = covered ? 'pointer' : '';
 
@@ -380,8 +384,15 @@ function _frame(now) {
                                               : (0.35 + 0.65*Math.abs(Math.sin(_simT*2.1)*Math.sin(_simT*0.83))));
   const breathe = Math.sin(_simT*0.8) * _cur.breathe + knock * 0.35;
 
-  /* le canvas épouse le dock (largeur animée par le CSS) */
-  const r = _dock.getBoundingClientRect();
+  /* le canvas épouse le dock (largeur animée par le CSS) — SAUF quand
+     un outil couvre la topbar : le galet se reloge alors juste SOUS le
+     header de l'outil, à droite (retour test réel 18/07 : à sa place
+     topbar il entrait en collision visuelle avec les boutons de l'outil) */
+  let r = _dock.getBoundingClientRect();
+  if (covered) {
+    const w = r.width, h = r.height || 26;
+    r = { left: innerWidth - w - 14, top: 62, width: w, height: h };
+  }
   const pad = 14;
   _cv.style.left = (r.left - pad) + 'px'; _cv.style.top = (r.top - pad) + 'px';
   const W = Math.max(2, r.width + pad*2), H = Math.max(2, r.height + pad*2);
