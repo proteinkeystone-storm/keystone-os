@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>KORA — Banc d'essai du pilote de chaîne</title>
+<!-- ═══════════════════════════════════════════════════════════════
+     BANC D'ESSAI — app/kora-chain.js (pilote de chaîne V1.3)
+     Simule les jalons DOM + storage du trajet Brainstorming →
+     Ghost Writer → Social Manager et vérifie chaque transition de
+     phase du pilote, ses clics automatiques (#gw-go, .gw-action-send,
+     .wr-synthesize-btn) et ses arrêts rouges (anneaux). AUCUN pad
+     réel, aucun réseau : tout est factice. À ouvrir via le serveur
+     statique local ou la prod (import ES module).
+     ═══════════════════════════════════════════════════════════════ -->
+<style>
+  body{font-family:-apple-system,sans-serif;background:#0a0c1c;color:#e8e9f5;padding:30px;letter-spacing:-.02em}
+  h1{font-weight:900;font-size:18px;letter-spacing:.25em}
+  #out{margin-top:18px;font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.8;white-space:pre-wrap}
+  .ok{color:#7df0bb}.ko{color:#ff9d8a}
+</style>
+</head>
+<body>
+<h1>KORA — PILOTE DE CHAÎNE · BANC D'ESSAI</h1>
+<div id="out">…</div>
+
+<script type="module">
+import { koraChainPilot, koraChainPhase, koraChainStop } from '/app/kora-chain.js';
+import { koraClearRings } from '/app/kora.js';
+
+const out = document.getElementById('out');
+let ok = 0, ko = 0;
+const t = (label, cond) => {
+  out.innerHTML += `<span class="${cond ? 'ok' : 'ko'}">${cond ? 'OK ' : 'ÉCHEC '} — ${label}</span>\n`;
+  cond ? ok++ : ko++;
+};
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const BRIEF = 'brief du banc d’essai pilote';
+const setSessions = s => localStorage.setItem('ks_brainstorming_sessions', JSON.stringify(s));
+
+/* nettoyage préalable (le banc pollue volontairement le storage) */
+localStorage.removeItem('ks_brainstorming_sessions');
+sessionStorage.removeItem('ks_content_chain');
+
+/* ── jalon 1 : séance ouverte, débat en cours ── */
+document.body.insertAdjacentHTML('beforeend', '<div id="wr-fullscreen" class="open" style="display:none"></div>');
+setSessions([{ brief: BRIEF, history: [1, 2], synthesis: null }]);
+await koraChainPilot({ brief: BRIEF, pollMs: 120 });
+await sleep(400);
+t('débat en cours → phase reste « debat »', koraChainPhase() === 'debat');
+
+/* ── jalon 1b : débat FIGÉ ≥4 tours → clic auto sur Synthétiser ── */
+let synthClicked = false;
+document.getElementById('wr-fullscreen').insertAdjacentHTML('beforeend', '<button class="wr-synthesize-btn"></button>');
+document.querySelector('.wr-synthesize-btn').addEventListener('click', () => { synthClicked = true; });
+setSessions([{ brief: BRIEF, history: [1, 2, 3, 4], synthesis: null }]);
+/* on ne peut pas attendre 60 s : on vérifie seulement que SANS stall le bouton n'est PAS cliqué */
+await sleep(400);
+t('pas de stall → bouton Synthétiser PAS cliqué (garde 60 s)', synthClicked === false);
+
+/* ── jalon 2 : synthèse posée en storage → arrêt rouge « idée » ── */
+document.getElementById('wr-fullscreen').insertAdjacentHTML('beforeend',
+  '<div id="wr-synthesis-drawer" style="width:60px;height:60px"></div>');
+setSessions([{ brief: BRIEF, history: [1, 2, 3, 4], synthesis: { ideas: [{ angle: 'A', hook: 'H' }] } }]);
+await sleep(400);
+t('synthèse détectée (storage) → phase « idee »', koraChainPhase() === 'idee');
+t('anneau posé sur le tiroir d’idées', !!document.querySelector('.kora-ringbox'));
+
+/* ── jalon 2b : la boucle nettoie les anneaux (koraClearRings, comme le
+   finally de kora-loop) → le pilote le re-pose au tick suivant ── */
+koraClearRings();
+await sleep(400);
+t('anneau re-posé après koraClearRings (boucle de conversation)', !!document.querySelector('.kora-ringbox'));
+
+/* ── jalon 3 : GW chaîné ouvert (clic humain ou chain.pick_idea) ── */
+let goClicks = 0;
+document.body.insertAdjacentHTML('beforeend', `
+  <div id="gw-overlay" style="display:none"><div class="gw-modal" data-chain="1">
+    <textarea id="gw-source">A — H</textarea>
+    <button id="gw-go"></button>
+    <span id="gw-status"></span>
+    <div id="gw-variants"></div>
+  </div></div>`);
+document.getElementById('gw-go').addEventListener('click', () => { goClicks++; });
+await sleep(400);
+t('GW chaîné détecté → phase « compose »', koraChainPhase() === 'compose');
+t('composition lancée par le pilote (#gw-go cliqué 1 fois)', goClicks === 1);
+await sleep(300);
+t('pas de double clic sur #gw-go', goClicks === 1);
+
+/* ── jalon 3b : échec de composition (quota) → retrait propre ── */
+/* on le teste plus bas sur un second run ; ici : succès nominal */
+
+/* ── jalon 4 : post composé → envoi auto vers le composer ── */
+let sendClicks = 0;
+document.getElementById('gw-variants').innerHTML =
+  '<article class="gw-compose-post">post</article><button class="gw-action-send"></button>';
+document.getElementById('gw-status').textContent = '✓ Post composé (modèle : mistral)';
+document.querySelector('.gw-action-send').addEventListener('click', () => {
+  sendClicks++;
+  /* simule le natif : GW se ferme, chaîne → publish, composer rempli */
+  document.getElementById('gw-overlay').remove();
+  sessionStorage.setItem('ks_content_chain', JSON.stringify({ step: 'publish', ts: Date.now() }));
+  document.body.insertAdjacentHTML('beforeend',
+    '<textarea id="sm-text">post</textarea><button class="sm-btn-primary" data-act="publish" style="width:40px;height:20px"></button>');
+});
+await sleep(500);
+t('post détecté → envoi auto au composer (.gw-action-send cliqué 1 fois)', sendClicks === 1);
+t('phase « publish » atteinte', koraChainPhase() === 'publish');
+await sleep(400);
+t('anneau posé sur le bouton Publier (arrêt rouge final)',
+  [...document.querySelectorAll('.kora-ringbox')].length >= 1);
+
+/* ── jalon 5 : publication (clearChain) → le pilote se retire ── */
+sessionStorage.removeItem('ks_content_chain');
+await sleep(400);
+t('chaîne effacée (publication) → pilote arrêté', koraChainPhase() === null);
+
+/* ── run 2 : échec de composition (quota) → retrait avec message ── */
+document.querySelectorAll('#gw-overlay,#sm-text,.sm-btn-primary,.kora-ringbox').forEach(e => e.remove());
+document.body.insertAdjacentHTML('beforeend', `
+  <div id="gw-overlay"><div class="gw-modal" data-chain="1">
+    <textarea id="gw-source">A — H</textarea>
+    <button id="gw-go"></button>
+    <span id="gw-status"></span>
+    <div id="gw-variants"></div>
+  </div></div>`);
+await koraChainPilot({ brief: BRIEF, phase: 'compose', pollMs: 120 });
+await sleep(300);
+document.getElementById('gw-status').textContent = 'Quota atteint pour ce mois';
+await sleep(400);
+t('échec de composition (statut sans ✓, bouton actif) → pilote arrêté', koraChainPhase() === null);
+
+/* ── run 3 : séance fermée pendant le débat → retrait avec message ── */
+await koraChainPilot({ brief: BRIEF, pollMs: 120 });
+document.getElementById('wr-fullscreen').classList.remove('open');
+await sleep(400);
+t('workspace fermé pendant le débat → pilote arrêté', koraChainPhase() === null);
+
+koraChainStop();
+localStorage.removeItem('ks_brainstorming_sessions');
+sessionStorage.removeItem('ks_content_chain');
+out.innerHTML += `\n<b>${ok} OK · ${ko} ÉCHEC(S)</b>`;
+document.title = ko ? `ÉCHECS (${ko})` : 'TOUT VERT';
+</script>
+</body>
+</html>

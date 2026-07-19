@@ -553,8 +553,8 @@ export const KORA_ACTIONS = [
   },
   {
     id: 'bs.start_session', pad: 'brainstorming', mode: 'write',
-    label: 'Ouvrir un brainstorming avec un brief',
-    desc: "Ouvre le Brainstorming avec le brief prérempli — la séance ne démarre qu'au clic de l'utilisateur (elle consomme des crédits IA). Répond à « lance un brainstorming sur… ».",
+    label: 'Lancer un brainstorming avec un brief',
+    desc: "Lance une séance de brainstorming sur un sujet — le comité débat aussitôt (la séance consomme ses crédits IA). Répond à « lance un brainstorming sur… ».",
     target: '#wr-input',
     params: [{ name: 'brief', type: 'string', required: true, desc: 'le sujet à faire débattre' }],
     run: async (args = {}) => {
@@ -571,14 +571,22 @@ export const KORA_ACTIONS = [
          retomberait sur post-ideas et poserait une chaîne par erreur). */
       const { openBrainstorming } = await import('./brainstorming.js');
       openBrainstorming({ brief });
+      /* elle fonce (19/07) : le clic de lancement est le sien — coach de
+         brief géré comme dans chain.start (2e clic = lancement) */
+      const send = document.getElementById('wr-send');
+      send?.click();
+      if (document.querySelector('#wr-fullscreen .wr-brief-coach') && document.getElementById('wr-feed-empty'))
+        send?.click();
+      const lancee = !!document.querySelector('#wr-fullscreen.open') && !document.getElementById('wr-feed-empty');
       return { fait: true, outil_ouvert: 'Brainstorming', brief: _excerpt(brief, 200),
-               rappel: 'Brief prérempli — le lancement de la séance reste à l’utilisateur.' };
+               seance: lancee ? 'lancée — le comité débat' : 'brief posé — lancement à l’écran',
+               rappel: lancee ? 'La synthèse arrive en fin de tour de table.' : null };
     },
   },
   {
     id: 'chain.start', pad: 'chaine', mode: 'write',
     label: 'Démarrer la chaîne de contenu',
-    desc: "Lance la chaîne Brainstorming → Ghost Writer → Social (brief prérempli si fourni, réseau optionnel). C'est LA voie pour RÉDIGER un contenu de qualité. Répond à « démarre la chaîne », « rédige-moi un article/post sur… ».",
+    desc: "Lance et PILOTE la chaîne Brainstorming → Ghost Writer → Social : séance démarrée aussitôt, relais faits par Kora ; l'utilisateur choisit l'idée puis publie. LA voie pour RÉDIGER. Répond à « rédige-moi un article/post sur… », « démarre la chaîne ».",
     target: '#wr-chain-slot',
     params: [
       { name: 'network', type: 'string', required: false, desc: 'facebook, instagram, linkedin, threads ou telegram — si déjà connu' },
@@ -598,10 +606,68 @@ export const KORA_ACTIONS = [
       const opts = { mode: 'post-ideas' };
       if (String(args.brief || '').trim()) opts.brief = String(args.brief).trim();
       openBrainstorming(opts);
+      /* ELLE FONCE (décision Stéphane 19/07) : Kora LANCE la séance — les
+         seuls gestes humains de la chaîne sont choisir l'idée et publier.
+         Brief < 60 car. : le coach intercepte UNE fois par page
+         (brainstorming.js:608, flag consommé) → le 2e clic lance ; le
+         coach s'adresse aux humains, Kora est l'autrice du brief. */
+      let lancee = false;
+      if (opts.brief) {
+        const send = document.getElementById('wr-send');
+        send?.click();
+        if (document.querySelector('#wr-fullscreen .wr-brief-coach') && document.getElementById('wr-feed-empty'))
+          send?.click();
+        lancee = !!document.querySelector('#wr-fullscreen.open') && !document.getElementById('wr-feed-empty');
+        if (lancee) {
+          const { koraChainPilot } = await import('./kora-chain.js');
+          koraChainPilot({ brief: opts.brief });
+        }
+      }
       return { fait: true, chaine: 'démarrée', reseau: nets[0] || 'à choisir dans l’outil',
-               etape: 'idées (Brainstorming)',
+               seance: lancee ? 'lancée — le comité débat, Kora fera les relais' : 'ouverte — brief à poser puis lancer à l’écran',
                brief: opts.brief ? _excerpt(opts.brief, 200) : null,
-               rappel: 'Le lancement de la séance reste à l’utilisateur — puis Ghost Writer rédigera.' };
+               rappel: lancee
+                 ? 'Deux gestes restent à l’utilisateur : choisir l’idée à la synthèse, puis publier.'
+                 : 'La séance se lance à l’écran.' };
+    },
+  },
+  {
+    id: 'chain.pick_idea', pad: 'chaine', mode: 'write',
+    label: 'Choisir l’idée à rédiger',
+    desc: "Quand les idées du brainstorming sont affichées (synthèse), valide CELLE que l'utilisateur désigne — numéro 1-5 ou ses mots — et le Ghost Writer prend le relais. Répond à « la 2 », « prends celle sur… », « la première ».",
+    target: '#wr-synthesis-drawer',
+    params: [{ name: 'choice', type: 'string', required: true, desc: 'numéro (1-5) ou mots de l’idée choisie par l’utilisateur' }],
+    run: async (args = {}) => {
+      const btns = [...document.querySelectorAll('#wr-synthesis-drawer .wr-idea-relay')];
+      if (!btns.length)
+        throw new Error('Aucune idée affichée pour l’instant — elles apparaissent à la synthèse de la séance.');
+      if (document.getElementById('gw-overlay'))
+        throw new Error('Le Ghost Writer est déjà ouvert — ferme-le d’abord, puis redis-moi ton choix.');
+      const raw = String(args.choice || '').trim();
+      if (!raw) throw new Error(`Dis-moi laquelle : son numéro (1-${btns.length}) ou ses mots.`);
+      let btn = null;
+      const numMatch = /^\d+$/.test(raw) ? [raw, raw] : raw.match(/\b([1-9])\b/);
+      const num = numMatch ? parseInt(numMatch[1], 10) : null;
+      if (num && num >= 1 && num <= btns.length) btn = btns[num - 1];
+      if (!btn) {
+        const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const n = norm(raw);
+        const hits = btns.filter(b => norm(b.dataset.idea || '').includes(n));
+        if (hits.length === 1) btn = hits[0];
+        else if (hits.length > 1)
+          throw new Error(`Plusieurs idées correspondent — donne le numéro (1-${btns.length}).`);
+      }
+      if (!btn) throw new Error(`Je ne retrouve pas cette idée — donne son numéro (1-${btns.length}).`);
+      const idee = btn.dataset.idea || '';
+      /* = le clic « Rédiger » de la carte : setChain('write') +
+         openGhostwriterChained(idée) (brainstorming.js:1638/1172) */
+      btn.click();
+      /* le pilote prend (ou garde) la main : il composera puis enverra
+         au composer — prochains arrêts humains : aucun avant Publier */
+      const { koraChainPilot, koraChainPhase } = await import('./kora-chain.js');
+      if (!koraChainPhase()) koraChainPilot({ phase: 'idee' });
+      return { fait: true, idee: _excerpt(idee, 160),
+               suite: 'Ghost Writer ouvert — je compose le post puis je l’envoie au composer ; tu n’auras plus qu’à publier.' };
     },
   },
   {

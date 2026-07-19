@@ -132,18 +132,37 @@ async function _monthOverageEur(env) {
   return _neuronsToEur(overage);
 }
 
-// ── Auto-bridage (débounce mémoire : au plus 1×/min par isolat) ─────
+// ── Auto-bridage : ARME et LIBÈRE (débounce mémoire : au plus 1×/min
+//    par isolat). ─────────────────────────────────────────────────
+// BUG corrigé (19/07/2026, retour Stéphane « ça fait plusieurs jours
+// que ce quota ne se remet pas à jour ») : cette fonction n'ARMAIT
+// QUE le bridage, jamais ne le levait — un verrou à SENS UNIQUE. Pire,
+// elle n'était appelée qu'en fin de recordUsage() (= après un appel IA
+// RÉUSSI) : une fois le bridage actif, budgetGuard rejette tout AVANT
+// l'appel IA → recordUsage n'est plus jamais invoqué → la fonction qui
+// aurait pu lever le bridage ne tournait plus JAMAIS. Le bridage
+// restait donc figé pour toujours, y compris après le passage au mois
+// suivant (l'overage retombe à 0 mais le flag, lui, ne bougeait pas)
+// — seul un geste manuel dans l'admin (« Interrupteur IA ») le levait.
+// Fix : appelée aussi depuis budgetGuard (donc même IA coupée) ; ARME
+// si auto_on et dépassement ≥ seuil, LIBÈRE si le bridage est de raison
+// 'auto' (jamais une coupure MANUELLE — celle-là reste la décision de
+// Stéphane) ET que l'overage du mois est repassé sous le seuil.
 let _autoCheckAt = 0;
 async function _maybeAutoThrottle(env) {
   const now = Date.now();
   if (now - _autoCheckAt < 60000) return;
   _autoCheckAt = now;
   const ctl = await _readControl(env);
-  if (!ctl.auto_on || ctl.throttle_on) return;
-  const eur = await _monthOverageEur(env);
-  if (eur >= (ctl.threshold_eur || 0)) {
-    await setThrottle(env, true, 'auto');
+  if (!ctl.throttle_on) {
+    if (!ctl.auto_on) return;
+    const eur = await _monthOverageEur(env);
+    if (eur >= (ctl.threshold_eur || 0)) await setThrottle(env, true, 'auto');
+    return;
   }
+  if (ctl.throttle_reason !== 'auto') return;   // coupure manuelle : jamais auto-levée
+  const eur = await _monthOverageEur(env);
+  if (eur < (ctl.threshold_eur || 0)) await setThrottle(env, false, null);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -215,6 +234,11 @@ export async function budgetGuard(env, origin) {
   try {
     if (!env?.DB) return null;
     await ensureBudgetSchema(env);
+    /* appelé ICI (pas seulement depuis recordUsage) : sinon un bridage
+       actif s'auto-entretient — aucun appel IA ne réussit plus, donc
+       plus rien ne réévalue s'il faut le lever (cf. commentaire
+       _maybeAutoThrottle). Débounce 60s : coût négligeable. */
+    await _maybeAutoThrottle(env).catch(() => {});
     const ctl = await _readControl(env);
     if (!ctl.throttle_on) return null;
     const auto = ctl.throttle_reason === 'auto';
