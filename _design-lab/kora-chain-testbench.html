@@ -181,6 +181,41 @@ reset();
 const res2 = await runKoraAction('chain.cancel');
 T('S8b chain.cancel à vide → suivi:false, pas de crash', !!(res2.ok && res2.data.suivi === false));
 
+/* ══════════════════════════════════════════════════════════════════
+   S9 — COUPE-CIRCUIT INTER-ONGLETS (fix 19/07, 2e retour) : le jeton de
+   génération est un état de CE module — un pilote armé dans un AUTRE
+   onglet ne le voit pas. L'arrêt explicite écrit kora_chain_kill dans
+   localStorage ; tout pilote démarré AVANT cet horodatage se retire à
+   son prochain tick. On simule l'autre onglet en écrivant la clé à la
+   main (sans passer par koraChainStop de CETTE instance).
+   ══════════════════════════════════════════════════════════════════ */
+reset();
+sessionStorage.setItem('ks_content_chain', JSON.stringify({ step: 'publish', ts: Date.now() }));
+document.body.insertAdjacentHTML('beforeend',
+  '<textarea id="sm-text">post</textarea><button class="sm-btn-primary" data-act="publish" style="width:40px;height:20px"></button>');
+await koraChainPilot({ brief: BRIEF, phase: 'publish', pollMs: POLL });
+await waitFor(() => ring());
+T('S9 pilote actif (anneau sur Publier)', ring());
+await sleep(10);                                            // le kill doit être STRICTEMENT plus récent que le départ
+localStorage.setItem('kora_chain_kill', String(Date.now())); // = « annule » dans un autre onglet
+await waitFor(() => koraChainPhase() === null);
+T('S9 kill diffusé par un autre onglet → pilote arrêté', koraChainPhase() === null);
+koraClearRings();
+await sleep(400);
+T('S9 aucun anneau ne réapparaît après le kill', !ring());
+
+/* S9b — un kill ANCIEN ne tue pas un pilote démarré APRÈS (sinon plus
+   aucune chaîne ne pourrait jamais repartir après un premier « annule ») */
+reset();
+localStorage.setItem('kora_chain_kill', String(Date.now()));
+await sleep(10);
+sessionStorage.setItem('ks_content_chain', JSON.stringify({ step: 'publish', ts: Date.now() }));
+document.body.insertAdjacentHTML('beforeend',
+  '<textarea id="sm-text">post</textarea><button class="sm-btn-primary" data-act="publish" style="width:40px;height:20px"></button>');
+await koraChainPilot({ brief: BRIEF, phase: 'publish', pollMs: POLL });
+await sleep(500);
+T('S9b kill antérieur au départ → le pilote neuf survit', koraChainPhase() === 'publish');
+
 reset();
 out.innerHTML += `\n<b>${ok} OK · ${ko} ÉCHEC(S)</b>`;
 document.title = ko ? `ÉCHECS (${ko})` : 'TOUT VERT';

@@ -41,6 +41,14 @@ let _timer = null;
    devient inerte à son prochain réveil, même si _timer ne le tient plus.
    C'est la vraie ceinture : couper la génération tue le pilote à coup sûr. */
 let _gen = 0;
+/* COUPE-CIRCUIT INTER-ONGLETS (fix 19/07, 2e retour « l'anneau reste allumé
+   sur Publier après annule ») : la génération est un état de CE module, donc
+   de CET onglet — un pilote armé dans un autre onglet (ou une autre instance
+   du module après ré-init partielle) ne la voit pas. L'arrêt écrit donc un
+   horodatage dans localStorage ; chaque tick le compare à SON heure de
+   démarrage : plus récent → le pilote se retire, quel que soit l'onglet. */
+const KILL_KEY = 'kora_chain_kill';
+let _startedAt = 0;
 let _phase = null;            // 'debat' | 'idee' | 'compose' | 'forward' | 'publish'
 let _brief = '';
 let _deadline = 0;
@@ -88,6 +96,7 @@ export async function koraChainPilot(opts = {}) {
   const myGen = ++_gen;                 // toute frappe précédente devient périmée
   _brief = String(opts.brief || '').trim();
   _phase = opts.phase || 'debat';
+  _startedAt = Date.now();              // un kill PLUS RÉCENT que ce départ nous arrêtera
   _deadline = Date.now() + TTL_MS;
   _histLen = 0; _histTs = Date.now();
   _said = new Set();
@@ -97,7 +106,14 @@ export async function koraChainPilot(opts = {}) {
   clearInterval(_timer);
   _timer = setInterval(() => _tick(myGen), Math.max(120, opts.pollMs || POLL_MS));
 }
-export function koraChainStop() { _stop(null); }
+export function koraChainStop() {
+  /* arrêt EXPLICITE (« annule ») : diffuse aux autres onglets / instances.
+     Volontairement PAS dans _stop : un retrait silencieux (TTL, séance
+     fermée) d'un vieil onglet en arrière-plan ne doit pas tuer le pilote
+     légitime de l'onglet actif. */
+  try { localStorage.setItem(KILL_KEY, String(Date.now())); } catch (e) { /* stockage indisponible */ }
+  _stop(null);
+}
 export function koraChainPhase() { return _phase; }   // instrumentation / tests
 
 function _stop(msg) {
@@ -120,6 +136,11 @@ function _tick(gen) {
 function _step() {
   if (!_phase) return _stop(null);
   if (Date.now() > _deadline) return _stop(null);   // retrait silencieux
+  /* coupe-circuit inter-onglets : un arrêt a été diffusé APRÈS notre départ
+     (annule dans un autre onglet, ou instance du module qu'on ne tient plus) */
+  try {
+    if (Number(localStorage.getItem(KILL_KEY) || 0) > _startedAt) return _stop(null);
+  } catch (e) { /* stockage indisponible */ }
   const gw = document.getElementById('gw-overlay');
 
   /* ── DÉBAT : la séance tourne, on attend les idées ─────────────── */

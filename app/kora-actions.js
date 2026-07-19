@@ -610,21 +610,26 @@ export const KORA_ACTIONS = [
       setChain({ step: 'ideas', origin: 'kora', network: nets[0] || null });
       const opts = { mode: 'post-ideas' };
       if (String(args.brief || '').trim()) opts.brief = String(args.brief).trim();
-      /* auto-ancrage (fix immobilier 19/07, révisé sur remarque Stéphane
-         « et le Gest Conseiller Keystone ? ») : si le sujet EST Keystone,
-         on PRÉFÈRE convoquer le Gest « Conseiller Keystone » (savoir Kortex
-         réel, à jour) ; repli sur la description statique _KEYSTONE_FACTS
-         si l'agent n'est pas résoluble (plan non-MAX, agent absent, erreur).
-         Les deux ancrent le débat ET Ghost Writer contre l'invention immo. */
+      /* auto-ancrage (fix immobilier 19/07, révisé 2 fois) : si le sujet EST
+         Keystone, la description officielle _KEYSTONE_FACTS est TOUJOURS posée
+         en source — 3e retour Stéphane (« l'article invente encore de
+         l'immobilier, malgré le Gest actif ») : le Gest seul ne suffit pas.
+         Son Kortex ne contient que des fiches d'APPS individuelles
+         (ingest-apps-to-kortex.mjs) — rien qui dise ce que Keystone EST
+         globalement, ni le « n'est PAS de l'immobilier » ; sur un angle
+         « présentation », le retrieval peut même faire no-hits → plus AUCUN
+         ancrage nulle part (ni débat, ni Ghost Writer). La source statique
+         est le plancher factuel (worker : DOSSIER SOURCE) ; le Gest s'y
+         AJOUTE quand il est résoluble (fiches réelles, DOSSIER MAISON) au
+         lieu de la remplacer. */
       let ancree = null;
       if (opts.brief && _isKeystoneTopic(opts.brief)) {
+        opts.source = { text: _KEYSTONE_FACTS, title: 'À propos de Keystone', ref: 'Keystone OS — description officielle du produit' };
+        ancree = 'la séance est ancrée sur la description officielle de Keystone';
         const gestId = await _resolveKeystoneGest();
         if (gestId) {
           opts.inviteGest = true; opts.gestAgentId = gestId;
-          ancree = 'le Conseiller Keystone (savoir maison réel) débat à la table';
-        } else {
-          opts.source = { text: _KEYSTONE_FACTS, title: 'À propos de Keystone', ref: 'Keystone OS — description officielle du produit' };
-          ancree = 'la séance est ancrée sur la description officielle de Keystone';
+          ancree += ', et le Conseiller Keystone (savoir maison réel) débat à la table';
         }
       }
       openBrainstorming(opts);

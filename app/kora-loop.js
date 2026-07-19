@@ -65,6 +65,28 @@ async function _send(text) {
   koraState('reflexion');
 
   try {
+    /* ── arrêt DÉTERMINISTE de la chaîne (fix 19/07, 2e retour « l'anneau
+       reste allumé sur Publier après annule ») : le jeton de génération de
+       kora-chain.js est étanche, mais il ne sert que si chain.cancel
+       S'EXÉCUTE. En réel, la phase decide peut répondre en texte (« c'est
+       annulé » sans rien faire), tomber en 429 crédits, ou en panne modèle
+       (repli 200 type "reponse") — le pilote survivait et reposait l'anneau
+       au tick suivant (1,8 s). Un ordre d'arrêt COURT et net pendant qu'un
+       pilote tourne ne passe donc plus par le modèle : chain.cancel direct
+       (zéro crédit, zéro roulette). Les formulations longues ou négatives
+       (« n'annule pas », « annule et relance sur… ») gardent le chemin
+       modèle, qui sait nuancer et enchaîner. */
+    const { koraChainPhase } = await import('./kora-chain.js');
+    if (koraChainPhase() && text.length <= 48
+        && /\b(annule[rs]?|annulation|arr[eê]te[rs]?|stop(pe)?|laisse tomber|abandonne)\b/i.test(text)
+        && !/\b(pas|jamais)\b/i.test(text)) {
+      const r = await runKoraAction('chain.cancel', {});
+      const msg = r.ok ? (r.data?.message || 'J’arrête de suivre la chaîne.') : r.error;
+      koraSay(_esc(msg));
+      _push('assistant', msg);
+      return;
+    }
+
     /* ── phase 1 : décision ── */
     const res = await fetch(`${KORA_API}/api/kora/chat`, {
       method : 'POST',
