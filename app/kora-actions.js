@@ -1145,6 +1145,28 @@ async function _padAccessible(padId) {
   } catch (e) { return true; }                             // au doute, openTool tranchera
 }
 
+/* ── Méta des domaines (routage 2 étages, 19/07/2026) ──
+   Une ligne de ROUTAGE par pad pour l'étage 1 du worker (aiguillage) :
+   le modèle choisit un domaine sur ces résumés AVANT de voir le détail.
+   `global:true` = actions montrées EN ENTIER dès l'étage 1 (transverses).
+   Inerte tant que le catalogue ≤ 32 actions (le worker garde alors le
+   chemin historique à un appel) — mais envoyé dès maintenant pour que la
+   bascule soit automatique quand un pad s'ajoutera. Desc ≤ 160 car. */
+export const KORA_PAD_META = [
+  { pad: 'chaine', global: true },
+  { pad: 'os',     global: true },
+  { pad: 'brainstorming', label: 'Brainstorming',
+    desc: 'séances de réflexion multi-agents : lire séances, synthèses et débats, préférences du comité, lancer une séance sur un brief' },
+  { pad: 'ghostwriter', label: 'Ghost Writer',
+    desc: 'rédaction IA : posts composés, variantes, brouillons, quota d’écriture, faire réécrire un texte existant' },
+  { pad: 'social', label: 'Social Manager',
+    desc: 'réseaux sociaux : posts programmés et publiés, santé des comptes, stats d’un post, contraintes par réseau, préparer un post dans le composer' },
+  { pad: 'sdqr', label: 'Smart Dynamic QR',
+    desc: 'QR codes : flotte, scans et stats (globales, par QR, QR suivi), ouvrir un QR, préparer un QR vers une adresse' },
+  { pad: 'sentinel', label: 'Sentinel',
+    desc: 'sites web surveillés : en ligne/hors ligne, disponibilité, rapport d’audit (scores, points à corriger), relancer un audit' },
+];
+
 /* ── Exécution ── */
 export function koraActionsForPad(pad) {
   return KORA_ACTIONS.filter(a => a.pad === pad);

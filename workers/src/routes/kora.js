@@ -36,6 +36,27 @@ const MAX_RESULT_CHARS = 8000;  // résultat de lecture renvoyé au modèle
 const MAX_TOKENS_DECIDE = 600;
 const MAX_TOKENS_ANSWER = 1200;
 
+/* ── Routage 2 étages (19/07/2026 — le catalogue plafonne à 31/32) ──
+   Au-delà de MAX_ACTIONS, un seul appel avec tout le catalogue dégrade le
+   routage (confusion entre actions voisines) et crève le plafond en silence.
+   Bascule AUTOMATIQUE : ≤ 32 actions → chemin historique INTACT (un appel) ;
+   au-delà → étage 1 « aiguillage » (domaines résumés + actions GLOBALES en
+   entier : chaîne + os — le modèle choisit un DOMAINE, une globale, ou
+   répond) puis étage 2 « choix » (les actions détaillées du SEUL domaine
+   élu). Chiffrage : étage 1 ≈ 1,1 k tokens + étage 2 ≈ 1,5 k ≈ le prompt
+   unique actuel (2,5 k) mais chaque choix se fait parmi ≤ 24 options au
+   lieu de 30+ — la précision remonte, et ça scale à ~100 actions
+   (12 domaines × 24). Latence : +1 appel Mistral Small (~0,5-1 s) sur les
+   tours « domaine » seulement (globale/réponse = 1 appel). Crédits : 1 par
+   TOUR, inchangé (les 2 inférences sont métrées via recordUsage).
+   `body.routing === '2e'` force le chemin (harnais / test prod avant que
+   le catalogue grossisse) ; self-healing : un id d'action valide émis dès
+   l'étage 1 est accepté s'il n'exige aucun paramètre requis (sinon étage 2
+   sur son pad — le modèle n'a pas vu les params, les args seraient inventés). */
+const MAX_PADS        = 12;   // domaines montrés à l'étage 1
+const MAX_PAD_ACTIONS = 24;   // actions détaillées par domaine à l'étage 2
+const MAX_PAD_DESC    = 160;  // desc d'un domaine (étage 1)
+
 /* ── Persona gravée (décisions du 17/07/2026, KORA_BRIEF §14) ── */
 const PERSONA = `Tu es Kora, l'assistante intégrée de Keystone OS.
 Féminine, complice et chaleureuse : tu TUTOIES toujours. Phrases courtes,
@@ -238,6 +259,144 @@ function _parseDecision(raw) {
   return { reponse: txt.slice(0, 1200) };
 }
 
+/* ═══ Routage 2 étages — helpers (exportés pour les tests) ═══ */
+const _EMMELEE = () => ({ reponse: 'Je me suis emmêlée — reformule ta demande, je réessaie.' });
+
+export function _wantsTwoStage(body) {
+  const n = Array.isArray(body && body.actions) ? body.actions.length : 0;
+  return n > MAX_ACTIONS || !!(body && body.routing === '2e');
+}
+
+function _sysStage1(domainsBlock, globalBlock) {
+  return `${PERSONA}
+
+Tu disposes de DOMAINES d'outils (leurs actions détaillées te seront montrées
+à l'étape suivante) et d'ACTIONS GLOBALES utilisables tout de suite.
+
+DOMAINES DISPONIBLES :
+${domainsBlock}
+
+ACTIONS GLOBALES :
+${globalBlock}
+
+FORMAT DE SORTIE — un SEUL objet JSON, aucun texte autour, aucune balise \`\`\` :
+- La demande relève d'un domaine → {"domaine":"nom.exact.du.domaine"}
+- Une action GLOBALE s'impose → {"action":"id.exact","args":{...},"annonce":"une phrase à la première personne sur ce que tu vas faire"}
+- Réponse directe (salutation, remerciement, hors catalogue) → {"reponse":"ta réponse"}
+- Tu ne traites que la DERNIÈRE question (l'historique n'est que du contexte).
+
+RÈGLES :
+- RÉDIGER un article, une promo, un contenu travaillé → chain.start (c'est le
+  brief que tu rédiges, jamais l'article — la chaîne écrit bien mieux que toi).
+- Il te FOURNIT un texte prêt à poster → {"domaine":"social"} ; faire
+  retravailler un texte existant → {"domaine":"ghostwriter"}.
+- « annule », « arrête », « stop » PENDANT que tu pilotes une chaîne →
+  chain.cancel — TOUJOURS l'action, JAMAIS un {"reponse"} qui prétend avoir
+  annulé sans rien faire.
+- Publier/programmer/envoyer/supprimer → propose de PRÉPARER à la place :
+  {"reponse":"publier, c'est ton geste — mais je peux te le préparer, dis-moi."}
+- Données hors catalogue (e-mails, comptabilité…) → {"reponse":"je ne sais pas
+  encore lire ça — je peux te lire : tes séances, tes posts, tes réseaux, tes
+  QR codes et leurs scans, tes sites surveillés…"}
+- Message sans demande (« ok », « merci ») → {"reponse"} brève, ni action ni domaine.
+- Ambiguïté entre 2 domaines → choisis le plus probable, ne pose pas de question.
+- N'invente JAMAIS un nom de domaine ni un id hors des listes ci-dessus.
+
+EXEMPLES :
+« qu'est-ce qui part cette semaine ? » → {"domaine":"social"}
+« mon site est en ligne ? » → {"domaine":"sentinel"}
+« rédige-moi un article pour LinkedIn sur nos nouveautés » → {"action":"chain.start","args":{"network":"linkedin","brief":"Présenter nos nouveautés aux professionnels : bénéfices concrets, ton à trouver"},"annonce":"Un contenu qui compte mérite la chaîne complète — je lance la séance et je fais les relais."}
+« merci ! » → {"reponse":"Avec plaisir — je reste là si tu as besoin."}`;
+}
+
+function _sysStage2(padLabel, actionsBlock) {
+  return `${PERSONA}
+
+La demande de l'utilisateur concerne le domaine « ${padLabel} ».
+TES ACTIONS pour ce domaine (rien d'autre n'existe) :
+${actionsBlock}
+
+FORMAT DE SORTIE — un SEUL objet JSON, aucun texte autour, aucune balise \`\`\` :
+- Action : {"action":"id.exact","args":{...},"annonce":"une phrase à la première personne sur ce que tu vas faire"}
+- Aucune action listée ne couvre la demande → {"reponse":"explication honnête et courte"} — n'invente JAMAIS un id ni une capacité.
+- Tu ne traites que la DERNIÈRE question de l'utilisateur (l'historique n'est là que pour le contexte).
+- args = uniquement les paramètres déclarés, avec leurs valeurs admises ; un paramètre optionnel inconnu s'omet, ne l'invente pas.
+- Lire [lecture] ou préparer [prépare], tu SAIS le faire : ne dis jamais « je ne sais pas » pour une action listée.`;
+}
+
+export function _parseStage1(raw) {
+  if (!raw) return null;
+  const out = [];
+  for (const cand of _jsonCandidates(raw)) {
+    try {
+      const p = JSON.parse(cand);
+      if (typeof p.domaine === 'string' && p.domaine.trim()) {
+        out.push({ domaine: p.domaine.trim().toLowerCase() });
+      } else if (typeof p.action === 'string' && p.action.trim()) {
+        out.push({
+          action : p.action.trim(),
+          args   : (p.args && typeof p.args === 'object') ? p.args : {},
+          annonce: typeof p.annonce === 'string' ? p.annonce.slice(0, 300) : '',
+        });
+      } else if (typeof p.reponse === 'string' && p.reponse.trim()) {
+        out.push({ reponse: p.reponse });
+      }
+    } catch (e) { /* candidat invalide */ }
+  }
+  return out.length ? out[out.length - 1] : null;
+}
+
+/* Orchestrateur — runLLM injectable (les tests passent un faux moteur,
+   handleKoraChat passe env.AI ; même patron que buildChatMessages côté
+   Smart Agent : la logique se teste sans Workers). */
+export async function _twoStageDecide({ runLLM, actions, pads, messages }) {
+  const list = Array.isArray(actions) ? actions.filter(a => a && typeof a.id === 'string') : [];
+  const meta = Array.isArray(pads) ? pads.filter(p => p && typeof p.pad === 'string') : [];
+  const globalSet = new Set(meta.filter(p => p.global).map(p => p.pad));
+  if (!globalSet.size) { globalSet.add('chaine'); globalSet.add('os'); }   // repli client ancien
+
+  const groups = new Map();
+  for (const a of list) {
+    if (globalSet.has(a.pad)) continue;
+    if (!groups.has(a.pad)) groups.set(a.pad, []);
+    if (groups.get(a.pad).length < MAX_PAD_ACTIONS) groups.get(a.pad).push(a);
+  }
+  const globals = list.filter(a => globalSet.has(a.pad));
+  const domains = [...groups.keys()].slice(0, MAX_PADS);
+  if (domains.length < groups.size)
+    console.error(`[kora] routage : ${groups.size} domaines > MAX_PADS=${MAX_PADS} — les derniers sont invisibles du modèle`);
+  const metaByPad = new Map(meta.map(p => [p.pad, p]));
+  const domainsBlock = domains.map(p => {
+    const m = metaByPad.get(p);
+    const desc = (m && m.desc) ? String(m.desc).slice(0, MAX_PAD_DESC)
+      : groups.get(p).map(a => a.label || a.id).slice(0, 4).join(' · ');
+    return `- ${p} : ${desc}`;
+  }).join('\n');
+
+  /* ── étage 1 : aiguillage ── */
+  const raw1 = await runLLM(_sysStage1(domainsBlock, _actionsBlock(globals) || '(aucune)'), messages);
+  let d1 = _parseStage1(raw1);
+  if (!d1) return _EMMELEE();
+  if (d1.reponse) return d1;
+  if (d1.action) {
+    const known = list.find(a => a.id === d1.action);
+    if (!known) return _EMMELEE();
+    const needsParams = (known.params || []).some(p => p && p.required);
+    /* globale, ou id valide SANS paramètre requis : on accepte (self-healing).
+       Avec paramètre requis : le modèle n'a pas vu les params → args inventés
+       probables → on re-passe par l'étage 2 du pad concerné. */
+    if (globalSet.has(known.pad) || !needsParams) return d1;
+    d1 = { domaine: known.pad };
+  }
+
+  /* ── étage 2 : choix dans le domaine élu ── */
+  const pad = String(d1.domaine || '').toLowerCase();
+  if (!groups.has(pad)) return _EMMELEE();
+  const m = metaByPad.get(pad);
+  const raw2 = await runLLM(_sysStage2((m && m.label) || pad, _actionsBlock(groups.get(pad))), messages);
+  return _parseDecision(raw2) || _EMMELEE();
+}
+
 const _corsHeaders = (origin) => ({
   'Access-Control-Allow-Origin': origin,
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -290,30 +449,39 @@ export async function handleKoraChat(request, env) {
     }
 
     try {
-      const sys = _sysDecide(actionsBlock);
-      /* température basse = choix d'action déterministe (leçon audit
-         retrieval Smart Agent) ; 1 réessai — le 1er contact réel a
-         montré des erreurs transitoires du modèle (« décision 502 ») */
-      let res = null, lastErr = null;
-      for (let attempt = 0; attempt < 2 && !res; attempt++) {
-        try {
-          res = await env.AI.run(KS_AI_MODEL, {
-            messages   : [{ role: 'system', content: sys }, ...messages],
-            max_tokens : MAX_TOKENS_DECIDE,
-            temperature: 0.15,
-            stream     : false,
-          });
-        } catch (e) {
-          lastErr = e;
-          console.error('[kora] decide AI.run tentative', attempt + 1, ':', e?.message || e);
+      /* Runner partagé par les 2 chemins de routage : température basse =
+         choix d'action déterministe (leçon audit retrieval Smart Agent) ;
+         1 réessai — le 1er contact réel a montré des erreurs transitoires
+         du modèle (« décision 502 »). Chaque inférence est métrée. */
+      const runLLM = async (sys, msgs) => {
+        let res = null, lastErr = null;
+        for (let attempt = 0; attempt < 2 && !res; attempt++) {
+          try {
+            res = await env.AI.run(KS_AI_MODEL, {
+              messages   : [{ role: 'system', content: sys }, ...msgs],
+              max_tokens : MAX_TOKENS_DECIDE,
+              temperature: 0.15,
+              stream     : false,
+            });
+          } catch (e) {
+            lastErr = e;
+            console.error('[kora] decide AI.run tentative', attempt + 1, ':', e?.message || e);
+          }
         }
+        if (!res) throw (lastErr || new Error('modèle indisponible'));
+        const raw = _extractText(res);
+        await recordUsage(env, 'kora', {
+          usage: res?.usage, inText: sys + JSON.stringify(msgs), outText: raw,
+        }).catch(() => {});
+        return raw;
+      };
+
+      let decision;
+      if (_wantsTwoStage(body)) {
+        decision = await _twoStageDecide({ runLLM, actions: body.actions, pads: body.pads, messages });
+      } else {
+        decision = _parseDecision(await runLLM(_sysDecide(actionsBlock), messages));
       }
-      if (!res) throw (lastErr || new Error('modèle indisponible'));
-      const raw = _extractText(res);
-      await recordUsage(env, 'kora', {
-        usage: res?.usage, inText: sys + JSON.stringify(messages), outText: raw,
-      }).catch(() => {});
-      const decision = _parseDecision(raw);
       if (!decision) throw new Error('réponse modèle vide');
       committed = true;
       return json(

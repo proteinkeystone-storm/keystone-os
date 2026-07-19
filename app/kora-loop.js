@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-import { KORA_ACTIONS, koraAction, runKoraAction } from './kora-actions.js';
+import { KORA_ACTIONS, KORA_PAD_META, koraAction, runKoraAction } from './kora-actions.js';
 import { koraSay, koraState, koraRing, koraClearRings } from './kora.js';
 import { icon } from './lib/ui-icons.js';
 
@@ -37,7 +37,9 @@ function _push(role, content) {
 /* défs compactes du catalogue scopé — V1.1 : lectures + écritures sûres */
 function _actionDefs() {
   return KORA_ACTIONS.map(a => ({
-    id: a.id, label: a.label, desc: a.desc, mode: a.mode || 'read',
+    /* pad = clé du GROUPEMENT par domaine du routage 2 étages (le worker
+       groupe dessus) — sans lui, tous les domaines seraient « undefined » */
+    id: a.id, pad: a.pad, label: a.label, desc: a.desc, mode: a.mode || 'read',
     /* p.desc transmis : c'est lui qui porte les valeurs admises (7d|30d…,
        réseaux) — jeté, le modèle les inventait (revue 19/07) */
     params: (a.params || []).map(p => ({ name: p.name, type: p.type, required: !!p.required, desc: p.desc || '' })),
@@ -92,7 +94,10 @@ async function _send(text) {
       method : 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body   : JSON.stringify({ phase: 'decide', pad: 'dashboard',
-                                messages: _history, actions: _actionDefs() }),
+                                messages: _history, actions: _actionDefs(),
+                                /* routage 2 étages : résumés de domaines pour
+                                   l'étage 1 — inerte tant que ≤ 32 actions */
+                                pads: KORA_PAD_META }),
     });
     if (res.status === 429) {
       const j = await res.json().catch(() => ({}));
