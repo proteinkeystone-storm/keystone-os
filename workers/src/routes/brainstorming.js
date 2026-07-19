@@ -743,22 +743,48 @@ const POST_IDEAS_PROMPT =
 
 // Parse défensif d'une réponse LLM → liste d'idées { angle, hook }. Tolère le
 // texte autour du JSON ; fallback ligne-à-ligne si le JSON est cassé.
+// Fix « cartes JSON brutes » (capture Stéphane 19/07) : l'ancienne regex exigeait
+// la clé LITTÉRALE "ideas" dans le texte brut avant même de tenter le parse —
+// le modèle a répondu avec la clé "idees" (sans accent, dérive du français) au
+// lieu de "ideas" : la regex ne matchait JAMAIS, `m` restait null, le JSON
+// valide (juste mal nommé) n'était même pas essayé → chute directe dans le
+// fallback ligne-à-ligne, qui a alors découpé le JSON BRUT lui-même en
+// « idées » (```json, "idees": [, "angle": "…", …) — chaque ligne devenait une
+// carte. Fix : on n'exige plus AUCUN nom de clé — on extrait tous les objets
+// JSON équilibrés du texte (comptage d'accolades hors chaînes, insensible aux
+// fences ```json autour), on les parse, et on retient le premier tableau
+// top-level dont les éléments ressemblent à des idées ({angle,hook} ou l'un
+// des deux) — quel que soit son nom de clé (ideas, idees, posts…).
 export function parsePostIdeas(raw) {
   if (!raw || typeof raw !== 'string') return [];
   const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 200);
-  try {
-    const m = raw.match(/\{[\s\S]*"ideas"[\s\S]*\}/);
-    if (m) {
-      const parsed = JSON.parse(m[0]);
-      if (Array.isArray(parsed.ideas)) {
-        const out = parsed.ideas
-          .map(it => ({ angle: clean(it?.angle), hook: clean(it?.hook) }))
-          .filter(it => it.angle || it.hook)
-          .slice(0, 5);
-        if (out.length) return out;
-      }
+  const candidates = [];
+  let depth = 0, start = -1, inStr = false, escp = false;
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i];
+    if (inStr) {
+      if (escp) escp = false;
+      else if (c === '\\') escp = true;
+      else if (c === '"') inStr = false;
+      continue;
     }
-  } catch (_) { /* fallback ci-dessous */ }
+    if (c === '"') { inStr = true; continue; }
+    if (c === '{') { if (!depth) start = i; depth++; }
+    else if (c === '}' && depth > 0) { depth--; if (!depth && start >= 0) { candidates.push(raw.slice(start, i + 1)); start = -1; } }
+  }
+  for (const cand of candidates) {
+    let parsed;
+    try { parsed = JSON.parse(cand); } catch (_) { continue; }
+    if (!parsed || typeof parsed !== 'object') continue;
+    for (const v of Object.values(parsed)) {
+      if (!Array.isArray(v) || !v.length || !v.every(it => it && typeof it === 'object')) continue;
+      const out = v
+        .map(it => ({ angle: clean(it?.angle), hook: clean(it?.hook) }))
+        .filter(it => it.angle || it.hook)
+        .slice(0, 5);
+      if (out.length) return out;
+    }
+  }
   const lines = raw.split(/\n+/)
     .map(s => s.replace(/^[\s\d.\-•*"']+|["'\s]+$/g, '').trim())
     .filter(s => s.length > 6 && s.length < 200);
