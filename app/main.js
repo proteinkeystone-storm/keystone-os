@@ -188,8 +188,27 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // KORA (agent-OS) — surface dormante derrière flag (cf. KORA_BRIEF §3) :
     // rien n'est chargé ni affiché tant que ks_kora_enabled != '1'.
-    if (localStorage.getItem('ks_kora_enabled') === '1')
+    // Fix 19/07 (« le bouton Kora a disparu ») : le flag n'était posé QU'À LA
+    // console → une purge des données de site le perdait, irrécupérable sur
+    // mobile (pas de console). 3 défenses : ?kora=1|0 dans l'URL (activation
+    // par lien, tous appareils) ; clé désormais SYNCHRONISÉE par le Cloud
+    // Vault (PREFS_KEYS — survit aux purges après login, suit le compte sur
+    // tous les appareils) ; rattrapage post-hydratation (le flag qui revient
+    // du cloud charge Kora dans la MÊME session, sans attendre un reload).
+    /* pas de verrou local : initKora est idempotente (_inited, kora.js:248)
+       MAIS no-op tant que .cc-bar n'est pas rendue — un verrou ici aurait
+       figé ce no-op et bloqué le rattrapage post-hydratation */
+    const _bootKora = () =>
         import('./kora.js').then(m => m.initKora()).catch(e => console.warn('[kora]', e));
+    try {
+        const _kq = new URLSearchParams(window.location.search).get('kora');
+        if (_kq === '1') localStorage.setItem('ks_kora_enabled', '1');
+        if (_kq === '0') localStorage.setItem('ks_kora_enabled', '0');   // '0' explicite : l'OFF se synchronise aussi (un removeItem laisserait le '1' du cloud ressusciter)
+    } catch (e) { /* URL illisible — le flag stocké tranche */ }
+    if (localStorage.getItem('ks_kora_enabled') === '1') _bootKora();
+    window.addEventListener('ks-vault-hydrated', () => {
+        if (localStorage.getItem('ks_kora_enabled') === '1') _bootKora();
+    });
 
     // Sprint C — Activation URL post-paiement (?ks_activate=O-IMM-001)
     const _p = new URLSearchParams(window.location.search);

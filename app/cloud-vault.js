@@ -16,6 +16,13 @@ const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
 // désormais de la source unique app/lib/engines.js — sync clés inchangée.
 export const PREFS_KEYS = [
     'ks_active_engine','ks_user_name',
+    // Fix 19/07 — activation de Kora (dogfood) : posée à la console, la clé
+    // mourait à chaque purge de données de site (galet disparu, aucun moyen
+    // de la reposer sur mobile). Synchronisée, elle suit le COMPTE : activer
+    // sur un appareil (?kora=1) l'active partout au prochain boot hydraté,
+    // et elle survit aux purges après re-login. main.js écoute
+    // ks-vault-hydrated pour charger Kora dès le retour du flag.
+    'ks_kora_enabled',
     // ks_user_photo RÉ-INCLUS (2026-06-21) : l'avatar est désormais redimensionné
     // en vignette ~256 px à l'upload (et les anciennes photos >1 Mo sont migrées
     // au boot, cf. _migrateAvatarStorage dans ui-renderer.js) → ~10-25 Ko, bien
