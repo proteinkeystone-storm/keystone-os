@@ -1700,9 +1700,17 @@ POSTURE
                     parsed.delta?.text                      ??  // Anthropic stream
                     parsed.p                                ??  // Workers AI compact
                     '';
-                  if (chunk) {
-                    fullText += chunk;
-                    send({ type: 'chunk', agent_id: currentAgentId, text: chunk });
+                  /* bug des zéros (déjà chassé dans kora.js, jamais propagé
+                     ici) : Workers AI sur-parse les tokens purement numériques
+                     en NOMBRE JSON (« 1000 » peut streamer un token « 0 » →
+                     0, falsy) — un simple `if (chunk)` avale ces tokens :
+                     « 1000 fois » ressort « 1 fois » (repéré 19/07, Devil's
+                     Advocate). Ni truthiness ni typeof : on accepte chaînes
+                     ET nombres, jamais que la chaîne vide. */
+                  if (chunk !== null && chunk !== undefined && chunk !== '') {
+                    const s = String(chunk);
+                    fullText += s;
+                    send({ type: 'chunk', agent_id: currentAgentId, text: s });
                   }
                 } catch (e) { /* ignore malformed line */ }
               }
