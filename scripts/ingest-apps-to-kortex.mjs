@@ -207,8 +207,15 @@ for (const u of all) {
     `INSERT INTO kortex_units (id, tenant_id, agent_id, vault_id, type, title, body, body_text, status, source_kind, source_ref, lang) ` +
     `VALUES (${sqlStr(u.id)}, ${sqlStr(TENANT)}, ${sqlStr(AGENT_ID)}, ${sqlStr(VAULT_ID)}, ${sqlStr(u.type)}, ${sqlStr(u.title)}, ${sqlStr(u.body)}, ${sqlStr(u.body_text)}, 'validated', 'import', ${sqlStr(u.source_ref)}, 'fr');`
   );
+  /* FTS v2 (migration 2026-07-16, smart-agent.js:296) : l'ancienne
+     kortex_units_fts (unit_id, title, body_text) a été migrée puis
+     SUPPRIMÉE — le retrieval réel interroge kortex_units_fts_v2, cloisonnée
+     tenant_id/vault_id (UNINDEXED). Sans ce miroir, la fiche existe dans
+     kortex_units mais est INVISIBLE du FTS (silencieux : aucune erreur, le
+     hit ne remonte jamais). */
   stmts.push(
-    `INSERT INTO kortex_units_fts (unit_id, title, body_text) VALUES (${sqlStr(u.id)}, ${sqlStr(u.title)}, ${sqlStr(u.body_text)});`
+    `INSERT INTO kortex_units_fts_v2 (unit_id, tenant_id, vault_id, title, body_text) ` +
+    `VALUES (${sqlStr(u.id)}, ${sqlStr(TENANT)}, ${sqlStr(VAULT_ID)}, ${sqlStr(u.title)}, ${sqlStr(u.body_text)});`
   );
 }
 writeFileSync(OUT_SQL, stmts.join('\n') + '\n', 'utf8');
@@ -216,7 +223,7 @@ writeFileSync(OUT_SQL, stmts.join('\n') + '\n', 'utf8');
 // ── SQL séparé : fiches globales (idempotent — DELETE d'abord) ───
 const globals = parseGlobalContext(readFileSync(CTX_FILE, 'utf8'));
 const gStmts = [
-  `DELETE FROM kortex_units_fts WHERE unit_id IN (SELECT id FROM kortex_units WHERE tenant_id = ${sqlStr(TENANT)} AND agent_id = ${sqlStr(AGENT_ID)} AND source_ref = 'apps:keystone-os');`,
+  `DELETE FROM kortex_units_fts_v2 WHERE unit_id IN (SELECT id FROM kortex_units WHERE tenant_id = ${sqlStr(TENANT)} AND agent_id = ${sqlStr(AGENT_ID)} AND source_ref = 'apps:keystone-os');`,
   `DELETE FROM kortex_units WHERE tenant_id = ${sqlStr(TENANT)} AND agent_id = ${sqlStr(AGENT_ID)} AND source_ref = 'apps:keystone-os';`,
 ];
 for (const u of globals) {
@@ -225,7 +232,8 @@ for (const u of globals) {
     `VALUES (${sqlStr(u.id)}, ${sqlStr(TENANT)}, ${sqlStr(AGENT_ID)}, ${sqlStr(VAULT_ID)}, ${sqlStr(u.type)}, ${sqlStr(u.title)}, ${sqlStr(u.body)}, ${sqlStr(u.body_text)}, 'validated', 'import', ${sqlStr(u.source_ref)}, 'fr');`
   );
   gStmts.push(
-    `INSERT INTO kortex_units_fts (unit_id, title, body_text) VALUES (${sqlStr(u.id)}, ${sqlStr(u.title)}, ${sqlStr(u.body_text)});`
+    `INSERT INTO kortex_units_fts_v2 (unit_id, tenant_id, vault_id, title, body_text) ` +
+    `VALUES (${sqlStr(u.id)}, ${sqlStr(TENANT)}, ${sqlStr(VAULT_ID)}, ${sqlStr(u.title)}, ${sqlStr(u.body_text)});`
   );
 }
 writeFileSync(OUT_SQL_GLOBAL, gStmts.join('\n') + '\n', 'utf8');
