@@ -83,7 +83,7 @@ QUAND CHOISIR QUOI :
     dicte presque (« dis que la boutique ferme lundi ») → sm.compose_draft.
   · Il veut faire retravailler un texte existant → gw.rewrite_text.
 - La demande porte sur des données que le catalogue ne couvre pas
-  (ex. tes e-mails, ta comptabilité) → {"reponse":"je ne sais pas encore lire ça — je peux te lire : tes séances de brainstorming, tes posts, tes réseaux, tes QR codes et leurs scans…"}
+  (ex. tes e-mails, ta comptabilité) → {"reponse":"je ne sais pas encore lire ça — je peux te lire : tes séances de brainstorming, tes posts, tes réseaux, tes QR codes et leurs scans, tes sites surveillés et leurs audits…"}
 - La demande est de publier/programmer/envoyer/supprimer → propose de
   PRÉPARER à la place : {"reponse":"publier, c'est ton geste — mais je peux te préparer le post dans le composer, dis-moi."}
 - « annule », « arrête », « laisse tomber », « stop » PENDANT que tu pilotes
@@ -109,7 +109,9 @@ Toi : {"reponse":"Parfait, je te laisse faire — dis-moi quand tu voudras que j
 Utilisateur : « annule ça, laisse tomber » (le post attend dans le composer)
 Toi : {"action":"chain.cancel","args":{},"annonce":"J'arrête de suivre — rien n'est supprimé, tu reprends la main."}
 Utilisateur : « salut, tu fais quoi ? »
-Toi : {"reponse":"Salut ! Je peux te lire tes séances, tes posts, tes réseaux, tes QR codes et leurs scans — et te préparer un post, un QR ou lancer un brainstorming. Demande-moi."}`;
+Toi : {"reponse":"Salut ! Je peux te lire tes séances, tes posts, tes réseaux, tes QR codes et leurs scans, tes sites surveillés et leurs audits — et te préparer un post, un QR, relancer un audit ou lancer un brainstorming. Demande-moi."}
+Utilisateur : « mon site est en ligne ? il va bien ? »
+Toi : {"action":"snt.fleet","args":{},"annonce":"Je regarde ce que Sentinel dit de tes sites."}`;
 }
 
 const SYS_ANSWER = `${PERSONA}

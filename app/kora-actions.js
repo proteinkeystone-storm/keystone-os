@@ -479,6 +479,99 @@ export const KORA_ACTIONS = [
     },
   },
 
+  /* ═══ SENTINEL (pad O-GEO-001 — audit web avec suivi, 19/07/2026) ═══
+     Endpoints en or : GET /api/sentinel/sites (la flotte : état + score) et
+     GET /sites/:id/cockpit (tout : 7 axes, findings, GEO, mots-clés,
+     tendances). Résolution d'un site PAR NOM comme les QR (_sntByName) ;
+     particularité : la plupart des comptes n'ont QU'UN site (limite plan
+     Starter = 1) → le paramètre site est optionnel, un site unique se
+     résout tout seul. Dates SQLite UTC → _frDate(_sqlUtc()). */
+  {
+    id: 'snt.fleet', pad: 'sentinel', mode: 'read',
+    label: 'État de mes sites surveillés',
+    desc: "Mes sites sous surveillance Sentinel : en ligne / hors ligne, disponibilité 24 h, temps de réponse, score d'audit global, date du dernier audit. Répond à « mon site est en ligne ? », « mes sites vont bien ? », « Sentinel dit quoi ? ».",
+    target: '.snt-app .ws-topbar-title',
+    params: [],
+    run: async () => {
+      const d = await _sntApi('/sites');
+      const sites = d.sites || [];
+      if (!sites.length)
+        return { total: 0, message: 'Aucun site surveillé pour l’instant — ajoute ton site dans Sentinel pour lancer la surveillance.' };
+      return {
+        total: sites.length, limite_du_plan: d.limit ?? null,
+        sites: sites.map(s => ({
+          nom: s.label || _sntHost(s.url), url: s.url,
+          plateforme: ({ wix: 'Wix', wordpress: 'WordPress', custom: 'sur-mesure' })[s.platform] || null,
+          /* null = jamais vérifié (site tout neuf) — pas « hors ligne » */
+          en_ligne: s.last_checked_at ? (s.last_ok === 1 || s.last_ok === true) : null,
+          /* null tant qu'aucun check en 24 h (site tout neuf) — pas 0 */
+          disponibilite_24h: s.uptime24h != null ? s.uptime24h + ' %' : null,
+          temps_reponse_ms: s.last_ms ?? null,
+          verifie_le: _frDate(_sqlUtc(s.last_checked_at)),
+          pannes_consecutives: s.consecutive_fails || 0,
+          score_audit: s.last_score ?? null,
+          audit_du: _frDate(_sqlUtc(s.last_audit_at)),
+        })),
+        note: sites.some(s => s.last_score == null)
+          ? 'score_audit null = jamais audité — l’action snt.run_audit lance l’audit.' : undefined,
+      };
+    },
+  },
+  {
+    id: 'snt.site_report', pad: 'sentinel', mode: 'read',
+    label: 'Rapport complet d’un site',
+    desc: "Le rapport Sentinel d'UN site : score global et par axe (SEO, sécurité, performance, dispo…), points à corriger priorisés, visibilité IA, tendances. Répond à « qu'est-ce qui cloche sur mon site ? », « mon score SEO ? ».",
+    target: '.snt-app .ws-topbar-title',
+    params: [
+      { name: 'site', type: 'string', required: false, desc: 'nom ou adresse (même partiels) ; inutile si un seul site surveillé' },
+    ],
+    run: async (args = {}) => {
+      const site = await _sntResolve(args.site);
+      const { cockpit: c } = await _sntApi(`/sites/${encodeURIComponent(site.id)}/cockpit`);
+      const a = c.audit;
+      const out = {
+        site: site.label || _sntHost(site.url), url: site.url,
+        en_ligne: c.site.last_checked_at ? (c.site.last_ok === 1 || c.site.last_ok === true) : null,
+        verifie_le: _frDate(_sqlUtc(c.site.last_checked_at)),
+        disponibilite_30j: c.uptime30d != null ? c.uptime30d + ' %' : null,
+        tendance_disponibilite: ({ up: 'en hausse', down: 'en baisse', stable: 'stable' })[c.uptimeTrend] || 'stable',
+        https: !!(c.ssl && c.ssl.https),
+      };
+      if (!a) {
+        out.audit = null;
+        out.message = 'Ce site n’a pas encore été audité — l’action snt.run_audit lance l’audit complet (environ une minute).';
+        return out;
+      }
+      out.score_global = a.score ?? null;
+      /* delta en POINTS vs l'audit d'il y a ~7 j (déjà calculé serveur) */
+      out.evolution_7j = c.scoreTrend != null ? (c.scoreTrend > 0 ? '+' : '') + c.scoreTrend + ' pts' : null;
+      out.audit_du = _frDate(_sqlUtc(a.created_at));
+      const AXES_FR = { disponibilite: 'Disponibilité', performance: 'Performance', seo: 'SEO technique',
+                        securite: 'Sécurité', accessibilite: 'Accessibilité', presence: 'Présence locale', keywords: 'Mots-clés' };
+      out.axes = {};
+      for (const [k, label] of Object.entries(AXES_FR))
+        if (a.scores && a.scores[k] != null) out.axes[label] = a.scores[k];
+      const SEV_ORD = { high: 0, medium: 1, low: 2 };
+      const SEV_FR = { high: 'élevé', medium: 'moyen', low: 'faible' };
+      out.points_a_corriger = (a.findings || [])
+        .slice().sort((x, y) => (SEV_ORD[x.sev] ?? 3) - (SEV_ORD[y.sev] ?? 3))
+        .slice(0, 6)
+        .map(f => ({ gravite: SEV_FR[f.sev] || f.sev, axe: AXES_FR[f.axis] || f.axis,
+                     probleme: f.title, conseil: _excerpt(f.detail, 160) }));
+      const restants = (a.findings || []).length - out.points_a_corriger.length;
+      if (restants > 0) out.points_a_corriger_en_plus = restants;
+      /* GEO : servi SEULEMENT si un relevé existe — un score null sur une
+         surface non configurée tenterait le modèle de l'expliquer en inventant */
+      if (c.geo && c.geo.configured && c.geo.score != null)
+        out.visibilite_ia = { score: c.geo.score, releve_du: _frDate(_sqlUtc(c.geo.run_at)) };
+      else if (c.geo && c.geo.enabled)
+        out.visibilite_ia = { configuree: false, info: 'La visibilité IA se configure dans le panneau du site (Sentinel).' };
+      if (c.gsc && c.gsc.connected && c.gsc.score != null)
+        out.mots_cles_google = { score: c.gsc.score, releve_du: _frDate(_sqlUtc(c.gsc.run_at)) };
+      return out;
+    },
+  },
+
   /* ═══════════════════════════════════════════════════════════════
      V1.1 — LES ÉCRITURES SÛRES (sprint « Kora agit », 18/07/2026)
      Rien d'irréversible, rien ne part vers l'extérieur : préparer,
@@ -739,9 +832,9 @@ export const KORA_ACTIONS = [
   {
     id: 'os.open_pad', pad: 'os', mode: 'write',
     label: 'Ouvrir un outil',
-    desc: "Ouvre un outil du catalogue : brainstorming, ghostwriter, social ou qr. Répond à « ouvre-moi le Social Manager ».",
+    desc: "Ouvre un outil du catalogue : brainstorming, ghostwriter, social, qr ou sentinel. Répond à « ouvre-moi le Social Manager ».",
     target: '.ws-app',
-    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming | ghostwriter | social | qr' }],
+    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming | ghostwriter | social | qr | sentinel' }],
     run: async (args = {}) => {
       const KORA_PADS = {
         brainstorming: ['A-COM-003', 'le Brainstorming'], ghostwriter: ['A-COM-005', 'le Ghost Writer'],
@@ -749,10 +842,11 @@ export const KORA_ACTIONS = [
         'ghost writer': ['A-COM-005', 'le Ghost Writer'], 'social manager': ['O-SOC-001', 'le Social Manager'],
         qr: ['A-COM-001', 'Smart Dynamic QR'], sdqr: ['A-COM-001', 'Smart Dynamic QR'],
         'qr codes': ['A-COM-001', 'Smart Dynamic QR'], 'smart dynamic qr': ['A-COM-001', 'Smart Dynamic QR'],
+        sentinel: ['O-GEO-001', 'Sentinel'], audit: ['O-GEO-001', 'Sentinel'],
       };
       const key = String(args.pad || '').trim().toLowerCase();
       const entry = KORA_PADS[key];
-      if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social, qr.`);
+      if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social, qr, sentinel.`);
       _guardGwModal();
       const [padId, nom] = entry;
       /* openTool = LA porte gated (licence + Living Layer, ui-renderer.js:2192) */
@@ -814,6 +908,45 @@ export const KORA_ACTIONS = [
       if (String(args.name || '').trim()) opts.presetName = String(args.name).trim();
       return _openSdqrHonest(opts, { url: u.href,
         rappel: 'Formulaire prérempli — rien n’est créé : le design et l’enregistrement restent à l’utilisateur.' });
+    },
+  },
+  {
+    id: 'snt.run_audit', pad: 'sentinel', mode: 'write',
+    label: 'Relancer l’audit d’un site',
+    desc: "Relance MAINTENANT l'audit complet Sentinel d'un site (~1 minute) et donne le nouveau score — le bouton « Auditer » du pad, rien d'irréversible. Répond à « re-vérifie mon site », « relance l'audit », « j'ai corrigé, re-teste ».",
+    target: '.snt-app .ws-topbar-title',
+    params: [
+      { name: 'site', type: 'string', required: false, desc: 'nom ou adresse (même partiels) ; inutile si un seul site surveillé' },
+    ],
+    run: async (args = {}) => {
+      const site = await _sntResolve(args.site);
+      const ancien = site.last_score ?? null;
+      /* 1. check rapide (dispo + alertes de transition, sentinel.js:816) —
+         best-effort : un check qui échoue n'empêche pas l'audit */
+      let check = null;
+      try { const r = await _sntApi(`/sites/${encodeURIComponent(site.id)}/check`, { method: 'POST' }); check = r.check || null; }
+      catch (e) { /* l'audit tranchera */ }
+      /* 2. audit complet — long (crawl multi-pages + CWV) : même timeout
+         que le bouton du pad (sentinel.js:686) */
+      await _sntApi(`/sites/${encodeURIComponent(site.id)}/audit`, { method: 'POST', timeout: 70000 });
+      /* 3. relecture du cockpit → score frais + points saillants */
+      const { cockpit: c } = await _sntApi(`/sites/${encodeURIComponent(site.id)}/cockpit`);
+      const a = c.audit || {};
+      const SEV_ORD = { high: 0, medium: 1, low: 2 };
+      const SEV_FR = { high: 'élevé', medium: 'moyen', low: 'faible' };
+      return {
+        fait: true, site: site.label || _sntHost(site.url),
+        en_ligne: check ? !!check.ok : (c.site.last_ok === 1 || c.site.last_ok === true),
+        score_global: a.score ?? null,
+        /* évolution vs le score d'AVANT cette relance (lu à la résolution) */
+        evolution: (ancien != null && a.score != null)
+          ? ((a.score - ancien > 0 ? '+' : '') + (a.score - ancien) + ' pts') : null,
+        points_a_corriger: (a.findings || [])
+          .slice().sort((x, y) => (SEV_ORD[x.sev] ?? 3) - (SEV_ORD[y.sev] ?? 3))
+          .slice(0, 3)
+          .map(f => ({ gravite: SEV_FR[f.sev] || f.sev, probleme: f.title })),
+        rappel: 'Le rapport détaillé (axes, correctifs clé en main) est dans Sentinel, panneau du site.',
+      };
     },
   },
 ];
@@ -932,6 +1065,63 @@ async function _openSdqrHonest(opts, extra = {}) {
   if (document.querySelector('#sdqr-fullscreen.open'))
     return { fait: true, outil_ouvert: 'Smart Dynamic QR', ...extra };
   return { fait: false, raison: 'Smart Dynamic QR n’est pas dans la licence — sa fiche est ouverte à l’écran.' };
+}
+
+/* ── Sentinel — accès API + résolution d'un site ──
+   _api (GET-only) ne suffit pas ici : l'audit est un POST long (70 s comme
+   le bouton du pad) et le serveur renvoie des messages d'erreur utiles
+   (limite de plan, site introuvable) qu'on veut restituer tels quels. */
+async function _sntApi(path, opts = {}) {
+  const token = _jwt();
+  if (!token) throw new Error('Non connecté : ouvre Keystone et connecte-toi (ks_jwt absent).');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeout || 30000);
+  let res;
+  try {
+    res = await fetch(`${KORA_API}/api/sentinel${path}`, {
+      method: opts.method || 'GET',
+      headers: { 'Authorization': `Bearer ${token}`, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    throw (e && e.name === 'AbortError')
+      ? new Error('Sentinel met trop de temps à répondre — réessaie dans un instant.') : e;
+  }
+  clearTimeout(timer);
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* corps vide */ }
+  if (!res.ok) throw new Error(data.error || `Sentinel ${path} → ${res.status}`);
+  return data;
+}
+function _sntHost(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return String(url || ''); }
+}
+/* Un site par nom (label) OU par adresse — exact d'abord, partiel ensuite,
+   accents ignorés. Particularité vs _qrByName : la plupart des comptes n'ont
+   QU'UN site (limite Starter = 1) → sans référence, un site unique se résout
+   seul ; plusieurs sites sans référence → on liste, on ne devine pas. */
+async function _sntResolve(ref) {
+  const d = await _sntApi('/sites');
+  const sites = d.sites || [];
+  if (!sites.length)
+    throw new Error('Aucun site surveillé — ajoute d’abord ton site dans Sentinel.');
+  const r = String(ref || '').trim();
+  if (!r) {
+    if (sites.length === 1) return sites[0];
+    throw new Error(`Plusieurs sites surveillés : ${sites.map(s => s.label || _sntHost(s.url)).join(' · ')}. Dis-moi lequel.`);
+  }
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const n = norm(r);
+  const names = s => [norm(s.label), norm(_sntHost(s.url)), norm(s.url)];
+  const exact = sites.filter(s => names(s).includes(n));
+  if (exact.length === 1) return exact[0];
+  const part = exact.length ? exact : sites.filter(s => names(s).some(x => x && x.includes(n)));
+  if (part.length === 1) return part[0];
+  if (part.length > 1)
+    throw new Error(`Plusieurs sites correspondent à « ${r} » : ${part.map(s => s.label || _sntHost(s.url)).join(' · ')}. Précise.`);
+  throw new Error(`Aucun site « ${r} » dans la surveillance. Sites suivis : ${sites.map(s => s.label || _sntHost(s.url)).join(' · ')}.`);
 }
 
 /* Le modal Ghost Writer vit à z-index 99999 : tout outil ouvert pendant
