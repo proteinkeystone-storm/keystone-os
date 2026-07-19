@@ -572,7 +572,12 @@ export const KORA_ACTIONS = [
       const { openBrainstorming } = await import('./brainstorming.js');
       openBrainstorming({ brief });
       /* elle fonce (19/07) : le clic de lancement est le sien — coach de
-         brief géré comme dans chain.start (2e clic = lancement) */
+         brief géré comme dans chain.start (2e clic = lancement).
+         Pause visible AVANT d'envoyer (retour 19/07 : « le champ ne se
+         remplit pas » — en fait il se vide à l'instant même où il se
+         remplit, le clic suivait sans délai) : on VOIT le brief posé
+         (§6 « on voit Kora travailler »), puis il part. */
+      await new Promise(r => setTimeout(r, 500));
       const send = document.getElementById('wr-send');
       send?.click();
       if (document.querySelector('#wr-fullscreen .wr-brief-coach') && document.getElementById('wr-feed-empty'))
@@ -586,7 +591,7 @@ export const KORA_ACTIONS = [
   {
     id: 'chain.start', pad: 'chaine', mode: 'write',
     label: 'Démarrer la chaîne de contenu',
-    desc: "Lance et PILOTE la chaîne Brainstorming → Ghost Writer → Social : séance démarrée aussitôt, relais faits par Kora ; l'utilisateur choisit l'idée puis publie. LA voie pour RÉDIGER. Répond à « rédige-moi un article/post sur… », « démarre la chaîne ».",
+    desc: "Lance et PILOTE la chaîne Brainstorming→Ghost Writer→Social : Kora démarre, fait les relais ; l'utilisateur choisit l'idée puis publie. LA voie pour RÉDIGER. Répond à « rédige-moi un article/post sur… », « démarre la chaîne ».",
     target: '#wr-chain-slot',
     params: [
       { name: 'network', type: 'string', required: false, desc: 'facebook, instagram, linkedin, threads ou telegram — si déjà connu' },
@@ -613,6 +618,9 @@ export const KORA_ACTIONS = [
          coach s'adresse aux humains, Kora est l'autrice du brief. */
       let lancee = false;
       if (opts.brief) {
+        /* pause visible AVANT d'envoyer (même leçon que bs.start_session,
+           revue 19/07) : le brief se voit posé avant de partir */
+        await new Promise(r => setTimeout(r, 500));
         const send = document.getElementById('wr-send');
         send?.click();
         if (document.querySelector('#wr-fullscreen .wr-brief-coach') && document.getElementById('wr-feed-empty'))
@@ -668,6 +676,30 @@ export const KORA_ACTIONS = [
       if (!koraChainPhase()) koraChainPilot({ phase: 'idee' });
       return { fait: true, idee: _excerpt(idee, 160),
                suite: 'Ghost Writer ouvert — je compose le post puis je l’envoie au composer ; tu n’auras plus qu’à publier.' };
+    },
+  },
+  {
+    id: 'chain.cancel', pad: 'chaine', mode: 'write',
+    label: 'Arrêter de suivre la chaîne',
+    desc: "Arrête le pilotage auto de la chaîne (Kora ne clique/n'entoure plus rien) — ne supprime ni ne publie rien, l'utilisateur reprend la main où ça en est. Répond à « annule », « arrête », « laisse tomber », « stop la chaîne ».",
+    target: '.ks-chain',
+    params: [],
+    run: async () => {
+      /* revue 19/07 (retour Stéphane) : sans cette action, le modèle
+         répondait « c'est annulé » sans RIEN faire (aucune action du
+         catalogue pour ça) — l'anneau restait allumé, le pilote tournait
+         toujours. Zéro invention : maintenant il y a un vrai geste. */
+      const { koraChainPhase, koraChainStop } = await import('./kora-chain.js');
+      const phase = koraChainPhase();
+      if (!phase) return { fait: true, suivi: false, message: 'Je ne suivais aucune chaîne pour l’instant.' };
+      koraChainStop();
+      /* la séance de brainstorming, elle, reste ouverte (chain.cancel
+         n'y touche pas — on ne ferme rien) : chain.start/bs.start_session
+         refuseront de relancer tant qu'elle est ouverte (garde existante) */
+      const encoreOuvert = !!document.querySelector('#wr-fullscreen.open');
+      return { fait: true, suivi: true,
+               message: 'J’arrête de suivre — rien n’est supprimé ni publié, tu reprends la main où ça en est.'
+                 + (encoreOuvert ? ' Ferme la fenêtre du brainstorming si tu veux repartir sur un autre sujet.' : '') };
     },
   },
   {

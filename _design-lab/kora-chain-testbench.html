@@ -115,6 +115,19 @@ sessionStorage.removeItem('ks_content_chain');
 await sleep(400);
 t('chaîne effacée (publication) → pilote arrêté', koraChainPhase() === null);
 
+/* ── jalon 5b : REPRODUCTION DU BUG SIGNALÉ (19/07) — l'utilisateur dit
+   « annule » pendant l'arrêt rouge Publier ; chain.cancel appelle
+   koraChainStop() ; l'anneau doit disparaître IMMÉDIATEMENT (avant même
+   le prochain tick de polling), pas juste rester allumé « en attendant ». */
+sessionStorage.setItem('ks_content_chain', JSON.stringify({ step: 'publish', ts: Date.now() }));
+await koraChainPilot({ brief: BRIEF, phase: 'publish', pollMs: 120 });
+await sleep(400);
+t('re-simulation : anneau Publier de nouveau présent', !!document.querySelector('.kora-ringbox'));
+koraChainStop();   // = ce que fait chain.cancel
+t('chain.cancel (koraChainStop) : anneau disparu SANS attendre un tick', !document.querySelector('.kora-ringbox'));
+t('chain.cancel : phase retombée à null', koraChainPhase() === null);
+sessionStorage.removeItem('ks_content_chain');
+
 /* ── run 2 : échec de composition (quota) → retrait avec message ── */
 document.querySelectorAll('#gw-overlay,#sm-text,.sm-btn-primary,.kora-ringbox').forEach(e => e.remove());
 document.body.insertAdjacentHTML('beforeend', `

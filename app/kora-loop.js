@@ -106,6 +106,12 @@ async function _send(text) {
       await new Promise(r => setTimeout(r, 350));   // le temps que l'outil monte son DOM
       koraRing(act.target);
     }
+    /* revue 19/07 — chain.cancel (et toute action future qui touche le
+       galet) peut avoir forcé l'état à 'repos' en cours de route (elle
+       s'arrête, koraChainStop → _stop force repos) : on reprend la main
+       AVANT la restitution, sinon la pastille dit « je suis prête »
+       pendant que la réponse streame encore (contradiction avec §6). */
+    koraState('travail');
 
     if (!result.ok) {
       koraSay(_esc(result.error));

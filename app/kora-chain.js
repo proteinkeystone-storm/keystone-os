@@ -94,6 +94,11 @@ function _stop(msg) {
   clearInterval(_timer); _timer = null; _phase = null;
   if (msg) { try { _kora?.koraSay?.(msg); } catch (e) { /* rien */ } }
   _state('repos', true);
+  /* piège trouvé le 19/07 : sans ça, l'anneau (ex. sur Publier) restait
+     allumé après un arrêt — le pilote arrêté ne le réaffirmait plus,
+     mais rien ne l'effaçait non plus (koraClearRings de la BOUCLE ne
+     couvre que la fin d'un tour de conversation, pas l'arrêt du pilote). */
+  try { _kora?.koraClearRings?.(); } catch (e) { /* galet pas monté */ }
 }
 
 function _tick() {
