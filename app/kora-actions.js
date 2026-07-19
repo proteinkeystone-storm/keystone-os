@@ -610,6 +610,15 @@ export const KORA_ACTIONS = [
       setChain({ step: 'ideas', origin: 'kora', network: nets[0] || null });
       const opts = { mode: 'post-ideas' };
       if (String(args.brief || '').trim()) opts.brief = String(args.brief).trim();
+      /* auto-ancrage (fix immobilier 19/07) : si le sujet EST Keystone, on
+         injecte la description officielle comme source → le débat et Ghost
+         Writer s'appuient sur des faits au lieu d'inventer (l'immo venait
+         d'une génération sans source). L'utilisateur peut la retirer/changer. */
+      let ancree = false;
+      if (opts.brief && _isKeystoneTopic(opts.brief)) {
+        opts.source = { text: _KEYSTONE_FACTS, title: 'À propos de Keystone', ref: 'Keystone OS — description officielle du produit' };
+        ancree = true;
+      }
       openBrainstorming(opts);
       /* ELLE FONCE (décision Stéphane 19/07) : Kora LANCE la séance — les
          seuls gestes humains de la chaîne sont choisir l'idée et publier.
@@ -634,6 +643,7 @@ export const KORA_ACTIONS = [
       return { fait: true, chaine: 'démarrée', reseau: nets[0] || 'à choisir dans l’outil',
                seance: lancee ? 'lancée — le comité débat, Kora fera les relais' : 'ouverte — brief à poser puis lancer à l’écran',
                brief: opts.brief ? _excerpt(opts.brief, 200) : null,
+               ancrage: ancree ? 'le sujet étant Keystone, j’ai ancré la séance sur sa description officielle (fini les inventions)' : null,
                rappel: lancee
                  ? 'Deux gestes restent à l’utilisateur : choisir l’idée à la synthèse, puis publier.'
                  : 'La séance se lance à l’écran.' };
@@ -794,6 +804,39 @@ export const KORA_ACTIONS = [
     },
   },
 ];
+
+/* ── Ancrage « c'est quoi Keystone » (fix immobilier, 19/07) ──
+   Sans source, Mistral Small INVENTE ce qu'est Keystone quand on lui
+   demande d'en faire la promo (hallucination immobilière constatée :
+   « annonces, contrats de réservation »). On injecte donc la
+   description OFFICIELLE comme source du débat + de Ghost Writer.
+   FAITS condensés depuis app/lib/keystone-doc.js (DOC_SECTIONS) — la
+   source de vérité ; garder ce texte cohérent avec elle. */
+const _KEYSTONE_FACTS =
+  "Keystone (Keystone OS) est un espace de travail modulaire édité par Protein Studio. " +
+  "Il réunit des outils métier dans une seule application web : au lieu de jongler entre plusieurs applis et abonnements, " +
+  "l'utilisateur active uniquement ce dont il a besoin, comme des applications sur un téléphone (le K-Store ajoute ou retire les outils selon la formule). " +
+  "L'intelligence artificielle est INCLUSE dans l'abonnement (compteur mensuel équitable, pas de facturation à la consommation, pas de jeton à racheter). " +
+  "Conçu « local d'abord » et souverain : les clés et les données métier restent dans le navigateur de l'utilisateur, sur son appareil ; " +
+  "seul le profil (prénom, photo, préférences) est synchronisé, chiffré ; conforme RGPD avec droit à l'oubli. " +
+  "C'est une application web installable (PWA), consultable hors connexion pour l'essentiel — rien à télécharger sur un store. " +
+  "Formules : Démo, Starter, Pro et Max (accès complet). Produit actuellement en beta accompagnée. " +
+  "Les outils incluent notamment : une chaîne de contenu (Brainstorming multi-agents → Ghost Writer → Social Manager), " +
+  "des QR codes dynamiques traçables (Smart Dynamic QR), des notes en constellation (Keynapse), un audit de visibilité web souverain (Sentinel), " +
+  "une charte graphique vivante partageable (Key Brand), un chemin de fer de rédaction pour la presse (desK), des flipbooks autoportés (booK), " +
+  "un réseau relationnel anti-CRM (networK), un partage de secret chiffré usage-unique (Missive/Sceau), des gabarits d'impression aux normes (Brief Prod). " +
+  "IMPORTANT : Keystone n'est PAS un logiciel spécialisé dans l'immobilier ni dans un métier unique — c'est un OS d'outils métier, généraliste et modulaire.";
+
+/* Le brief porte-t-il sur Keystone lui-même (auto-promo) ? Alors on ancre.
+   Ancré sur « keystone » (signal net) + quelques tournures autoréférentielles
+   explicites — on préfère rater un cas ambigu (« notre app » seul) que d'ancrer
+   à tort un sujet client qui n'a rien à voir. */
+function _isKeystoneTopic(brief) {
+  const n = String(brief || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/\bkeystone\b/.test(n) || /protein studio/.test(n)) return true;
+  return /\b(notre|mon|ma|nos|mes)\s+(app|application|appli|produit|outil|logiciel|plateforme|os|solution|saas)\b/.test(n)
+      && /\b(promo|promouv|promeus|vend|présent|present|lance|met[s]? en avant|vitrine|pitch)/.test(n);
+}
 
 /* réseaux valides du moteur de diffusion (social-handoff.js:19) */
 function _validNetworks(input) {

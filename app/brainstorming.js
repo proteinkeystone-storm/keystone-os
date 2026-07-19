@@ -313,6 +313,14 @@ export function openBrainstorming(opts = {}) {
     const input = panel.querySelector('#wr-input');
     if (input) { input.value = opts.brief.trim(); input.focus(); }
   }
+
+  // Source d'ancrage entrante (ex. Kora auto-ancre « promo de Keystone » avec
+  // la description officielle du produit, cf. content-source-grounding) :
+  // ancre le débat ET Ghost Writer sur des FAITS au lieu d'inventer. Même
+  // canal que « Ajouter une source », posé d'emblée pour la séance.
+  if (opts && opts.source && typeof opts.source.text === 'string' && opts.source.text.trim()) {
+    _setSource(panel, opts.source);
+  }
 }
 
 export function closeBrainstorming() {
