@@ -288,9 +288,13 @@ export function openBrainstorming(opts = {}) {
     manualRoster: [...MANDATORY_DEBATE_AGENTS],
     roster:       [],   // résolu juste après (dépend de mode + rosterMode)
     // Socle Gest — invité « expert maison » opt-in (préf persistée).
-    inviteGest:   _rosterPref?.inviteGest === true,
+    // opts peut l'IMPOSER (ex. Kora auto-ancre « promo de Keystone » sur le
+    // Gest « Conseiller Keystone » = savoir Kortex réel plutôt qu'un texte figé).
+    inviteGest:   opts.inviteGest === true || _rosterPref?.inviteGest === true,
     // P2 Gest — Smart Agent dont on convoque le savoir (résolu via le picker).
-    gestAgentId:  (typeof _rosterPref?.gestAgentId === 'string') ? _rosterPref.gestAgentId : null,
+    // opts.gestAgentId prime sur la préf sauvegardée quand fourni.
+    gestAgentId:  (typeof opts.gestAgentId === 'string' && opts.gestAgentId) ? opts.gestAgentId
+                  : ((typeof _rosterPref?.gestAgentId === 'string') ? _rosterPref.gestAgentId : null),
   };
   _gestAgentsCache = null;   // picker rechargé pour cette séance
   _currentSession.roster = _resolveRoster();

@@ -610,14 +610,22 @@ export const KORA_ACTIONS = [
       setChain({ step: 'ideas', origin: 'kora', network: nets[0] || null });
       const opts = { mode: 'post-ideas' };
       if (String(args.brief || '').trim()) opts.brief = String(args.brief).trim();
-      /* auto-ancrage (fix immobilier 19/07) : si le sujet EST Keystone, on
-         injecte la description officielle comme source → le débat et Ghost
-         Writer s'appuient sur des faits au lieu d'inventer (l'immo venait
-         d'une génération sans source). L'utilisateur peut la retirer/changer. */
-      let ancree = false;
+      /* auto-ancrage (fix immobilier 19/07, révisé sur remarque Stéphane
+         « et le Gest Conseiller Keystone ? ») : si le sujet EST Keystone,
+         on PRÉFÈRE convoquer le Gest « Conseiller Keystone » (savoir Kortex
+         réel, à jour) ; repli sur la description statique _KEYSTONE_FACTS
+         si l'agent n'est pas résoluble (plan non-MAX, agent absent, erreur).
+         Les deux ancrent le débat ET Ghost Writer contre l'invention immo. */
+      let ancree = null;
       if (opts.brief && _isKeystoneTopic(opts.brief)) {
-        opts.source = { text: _KEYSTONE_FACTS, title: 'À propos de Keystone', ref: 'Keystone OS — description officielle du produit' };
-        ancree = true;
+        const gestId = await _resolveKeystoneGest();
+        if (gestId) {
+          opts.inviteGest = true; opts.gestAgentId = gestId;
+          ancree = 'le Conseiller Keystone (savoir maison réel) débat à la table';
+        } else {
+          opts.source = { text: _KEYSTONE_FACTS, title: 'À propos de Keystone', ref: 'Keystone OS — description officielle du produit' };
+          ancree = 'la séance est ancrée sur la description officielle de Keystone';
+        }
       }
       openBrainstorming(opts);
       /* ELLE FONCE (décision Stéphane 19/07) : Kora LANCE la séance — les
@@ -643,7 +651,7 @@ export const KORA_ACTIONS = [
       return { fait: true, chaine: 'démarrée', reseau: nets[0] || 'à choisir dans l’outil',
                seance: lancee ? 'lancée — le comité débat, Kora fera les relais' : 'ouverte — brief à poser puis lancer à l’écran',
                brief: opts.brief ? _excerpt(opts.brief, 200) : null,
-               ancrage: ancree ? 'le sujet étant Keystone, j’ai ancré la séance sur sa description officielle (fini les inventions)' : null,
+               ancrage: ancree,   // null, ou « …le Conseiller Keystone… » / « …description officielle… »
                rappel: lancee
                  ? 'Deux gestes restent à l’utilisateur : choisir l’idée à la synthèse, puis publier.'
                  : 'La séance se lance à l’écran.' };
@@ -826,6 +834,25 @@ const _KEYSTONE_FACTS =
   "une charte graphique vivante partageable (Key Brand), un chemin de fer de rédaction pour la presse (desK), des flipbooks autoportés (booK), " +
   "un réseau relationnel anti-CRM (networK), un partage de secret chiffré usage-unique (Missive/Sceau), des gabarits d'impression aux normes (Brief Prod). " +
   "IMPORTANT : Keystone n'est PAS un logiciel spécialisé dans l'immobilier ni dans un métier unique — c'est un OS d'outils métier, généraliste et modulaire.";
+
+/* Résout le Gest « Conseiller Keystone » = le Smart Agent dont le Kortex
+   contient les fiches réelles des apps (ingest-apps-to-kortex.mjs). Le
+   convoquer donne à la chaîne le VRAI savoir maison (retrieval, toujours
+   à jour) plutôt qu'un résumé figé. Renvoie l'id de l'agent, ou null si :
+   plan non-MAX (403), agent absent, ou erreur → l'appelant retombe alors
+   sur _KEYSTONE_FACTS (texte statique). Nom résolu (pas d'id en dur : un
+   agent recréé changerait d'id). */
+async function _resolveKeystoneGest() {
+  try {
+    const data = await _api('/api/smart-agent/agents');   // 403 non-MAX → throw → null
+    const agents = Array.isArray(data.agents) ? data.agents : [];
+    const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    /* « Conseiller Keystone » d'abord ; à défaut tout agent « keystone » */
+    const hit = agents.find(a => norm(a.name).includes('conseiller keystone'))
+             || agents.find(a => norm(a.name).includes('keystone'));
+    return hit?.id || null;
+  } catch (e) { return null; }
+}
 
 /* Le brief porte-t-il sur Keystone lui-même (auto-promo) ? Alors on ancre.
    Ancré sur « keystone » (signal net) + quelques tournures autoréférentielles
