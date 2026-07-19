@@ -55,10 +55,19 @@ function fakeRunner(outputs) {
 // ════════════════════════════════════════════════════════════════
 console.log('\n\x1b[1m▶ Suite 1 — seuil de bascule (_wantsTwoStage)\x1b[0m');
 {
-  check('31 actions (catalogue actuel) → chemin historique', _wantsTwoStage({ actions: ACTIONS }) === false);
-  check('33 actions → 2 étages automatique', _wantsTwoStage({ actions: [...ACTIONS, ACTIONS[0], ACTIONS[1]] }) === true);
-  check('routing:"2e" force le chemin même à 31', _wantsTwoStage({ actions: ACTIONS, routing: '2e' }) === true);
+  /* le seuil se teste sur une taille FIXE (32/33), pas sur ACTIONS.length —
+     le vrai catalogue grossit à chaque pad (31 hier, 36 avec Keynapse) et
+     un total figé dans ce test casserait à chaque ajout, sans rapport avec
+     ce qui est réellement testé ici (le seuil lui-même). */
+  const at32 = Array.from({ length: 32 }, (_, i) => ({ id: `x.${i}`, pad: 'x' }));
+  const at33 = Array.from({ length: 33 }, (_, i) => ({ id: `x.${i}`, pad: 'x' }));
+  check('32 actions (= MAX_ACTIONS) → chemin historique', _wantsTwoStage({ actions: at32 }) === false);
+  check('33 actions (> MAX_ACTIONS) → 2 étages automatique', _wantsTwoStage({ actions: at33 }) === true);
+  check('routing:"2e" force le chemin même sous le seuil (32)', _wantsTwoStage({ actions: at32, routing: '2e' }) === true);
   check('body vide → false (pas de crash)', _wantsTwoStage({}) === false && _wantsTwoStage(null) === false);
+  /* le catalogue RÉEL (36 aujourd'hui) doit lui aussi basculer — sinon la
+     désynchro entre ce seuil et MAX_ACTIONS du worker resterait invisible */
+  check(`catalogue réel (${ACTIONS.length} actions) déclenche bien les 2 étages`, _wantsTwoStage({ actions: ACTIONS }) === true);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -73,10 +82,10 @@ console.log('\n\x1b[1m▶ Suite 2 — aiguillage domaine → choix (le chemin no
   check('décision finale = snt.fleet', d.action === 'snt.fleet' && !!d.annonce);
   const sys1 = calls[0].sys, sys2 = calls[1].sys;
   check('étage 1 : la ligne de domaine sentinel est là', /- sentinel : /.test(sys1));
-  check('étage 1 : les 5 domaines non-globaux sont listés',
-    ['brainstorming', 'ghostwriter', 'social', 'sdqr', 'sentinel'].every(p => sys1.includes(`- ${p} : `)));
+  check('étage 1 : tous les domaines non-globaux du catalogue sont listés',
+    ['brainstorming', 'ghostwriter', 'social', 'sdqr', 'sentinel', 'keynapse'].every(p => sys1.includes(`- ${p} : `)));
   check('étage 1 : les globales chain.* et os.* sont détaillées', sys1.includes('chain.start') && sys1.includes('chain.cancel') && sys1.includes('os.open_pad'));
-  check('étage 1 : AUCUN id de pad (ni snt.* ni qr.* ni sm.*)', !/snt\.|qr\.|sm\.|bs\.|gw\./.test(sys1));
+  check('étage 1 : AUCUN id de pad (ni snt.* ni qr.* ni sm.* ni kn.*)', !/snt\.|qr\.|sm\.|bs\.|gw\.|kn\./.test(sys1));
   check('étage 2 : les 3 actions sentinel détaillées', sys2.includes('snt.fleet') && sys2.includes('snt.site_report') && sys2.includes('snt.run_audit'));
   check('étage 2 : les desc de params y sont (valeurs admises)', /nom ou adresse/.test(sys2));
   check('étage 2 : rien des autres pads', !/qr\.list|sm\.compose|bs\.start/.test(sys2));
@@ -114,7 +123,9 @@ console.log('\n\x1b[1m▶ Suite 3 — étage 1 : globale, réponse, self-healing
 // ════════════════════════════════════════════════════════════════
 console.log('\n\x1b[1m▶ Suite 4 — replis (domaine inconnu, illisible, étage 2 honnête)\x1b[0m');
 {
-  const k = fakeRunner(['{"domaine":"keynapse"}']);
+  /* domaine qui n'existe PAS (encore) dans le catalogue — garder ce nom hors
+     de toute vraie liste de pads, sinon un futur ajout ferait taire ce test */
+  const k = fakeRunner(['{"domaine":"zzz-domaine-inexistant"}']);
   const dk = await _twoStageDecide({ runLLM: k.runLLM, actions: ACTIONS, pads: KORA_PAD_META, messages: MSGS });
   check('domaine hors catalogue → repli sobre', k.calls.length === 1 && /emmêlée/.test(dk.reponse || ''));
 

@@ -572,6 +572,89 @@ export const KORA_ACTIONS = [
     },
   },
 
+  /* ═══ KEYNAPSE (pad O-Keyn-001 — notes en bulles, 19/07/2026) ═══
+     Pas d'endpoint « recherche » côté serveur : GET /state renvoie TOUTE
+     la constellation (zones+bulles+liens, plafond 2000 bulles) — le tri se
+     fait ici, côté client, comme pour SDQR/Sentinel. Résolution d'une bulle
+     PAR TITRE (_knResolve, même patron que _sntResolve/_qrByName) : exact
+     d'abord, partiel ensuite, accents ignorés. Dates : created_at/updated_at
+     des bulles = SQLite _sqlUtc ; `at` des rappels est DÉJÀ un ISO complet
+     (keynapse.js:702, _sqlUtc no-op dessus — sûr par construction). */
+  {
+    id: 'kn.search', pad: 'keynapse', mode: 'read',
+    label: 'Chercher dans mes notes',
+    desc: "Cherche un mot-clé dans le titre ou le texte de mes bulles Keynapse : zone, avancement des tâches, nombre de rappels. Répond à « qu'est-ce que j'ai noté sur… », « cherche … dans mes notes ».",
+    target: '.kyn-app .ws-topbar-title',
+    params: [{ name: 'query', type: 'string', required: true, desc: 'mot ou expression à chercher' }],
+    run: async (args = {}) => {
+      const q = String(args.query || '').trim();
+      if (!q) throw new Error('Il me faut un mot-clé à chercher.');
+      const { zones, bubbles } = await _knApi('/state');
+      const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const n = norm(q);
+      const zoneName = id => (zones || []).find(z => z.id === id)?.name || null;
+      const hits = (bubbles || []).filter(b => norm(b.title).includes(n) || norm(b.description).includes(n));
+      if (!hits.length) return { trouve: 0, message: `Rien trouvé pour « ${q} » dans tes notes.` };
+      return {
+        trouve: hits.length,
+        notes: hits.slice(0, 8).map(b => ({
+          titre: b.title, zone: zoneName(b.zone_id),
+          extrait: b.description ? _excerpt(b.description, 160) : null,
+          modifie_le: _frDate(_sqlUtc(b.updated_at)),
+        })),
+        en_plus: hits.length > 8 ? hits.length - 8 : undefined,
+      };
+    },
+  },
+  {
+    id: 'kn.list_reminders', pad: 'keynapse', mode: 'read',
+    label: 'Mes rappels Keynapse',
+    desc: "Mes rappels posés sur des notes Keynapse : à venir et en retard, avec la note concernée, l'échéance et la répétition. Répond à « quels sont mes rappels ? », « j'ai des rappels en retard ? ».",
+    target: '.kyn-app .ws-topbar-title',
+    params: [],
+    run: async () => {
+      const { reminders } = await _knApi('/reminders');
+      const list = reminders || [];
+      if (!list.length) return { total: 0, message: 'Aucun rappel posé dans Keynapse.' };
+      const now = Date.now();
+      const REPEAT_FR = { daily: 'chaque jour', weekly: 'chaque semaine', monthly: 'chaque mois' };
+      const shaped = list.map(r => ({
+        note: r.bubble_title, libelle: r.label || null,
+        echeance: _frDate(r.at), en_retard: !r.notified_at && Date.parse(r.at) < now,
+        repetition: REPEAT_FR[r.repeat] || null,
+      }));
+      return {
+        total: shaped.length,
+        en_retard: shaped.filter(r => r.en_retard).length,
+        rappels: shaped.slice(0, 10),
+        en_plus: shaped.length > 10 ? shaped.length - 10 : undefined,
+      };
+    },
+  },
+  {
+    id: 'kn.read_bubble', pad: 'keynapse', mode: 'read',
+    label: 'Lire une note précise',
+    desc: "Le détail d'UNE bulle Keynapse retrouvée par son titre : zone, texte, tâches (faites/restantes), notes libres, nombre de photos/dessins/mémos vocaux, rappels. Répond à « qu'est-ce qu'il y a dans ma note … ? ».",
+    target: '.kyn-app .ws-topbar-title',
+    params: [{ name: 'title', type: 'string', required: true, desc: 'titre (même partiel) de la bulle' }],
+    run: async (args = {}) => {
+      const b = await _knResolve(args.title);
+      const d = await _knApi(`/bubbles/${encodeURIComponent(b.id)}`);
+      const todos = d.todos || [];
+      return {
+        titre: d.bubble.title, zone: b.zoneName,
+        texte: d.bubble.description ? _excerpt(d.bubble.description, 300) : null,
+        taches: todos.length ? { faites: todos.filter(t => t.done).length, total: todos.length,
+                                  restantes: todos.filter(t => !t.done).map(t => t.label).slice(0, 5) } : null,
+        notes_libres: (d.notes || []).slice(0, 3).map(n => _excerpt(n.body, 200)),
+        photos_dessins: (d.media || []).length,
+        memos_vocaux: (d.audios || []).length,
+        rappels: (d.reminders || []).map(r => ({ echeance: _frDate(r.at), libelle: r.label || null })),
+        modifie_le: _frDate(_sqlUtc(d.bubble.updated_at)),
+      };
+    },
+  },
+
   /* ═══════════════════════════════════════════════════════════════
      V1.1 — LES ÉCRITURES SÛRES (sprint « Kora agit », 18/07/2026)
      Rien d'irréversible, rien ne part vers l'extérieur : préparer,
@@ -832,9 +915,9 @@ export const KORA_ACTIONS = [
   {
     id: 'os.open_pad', pad: 'os', mode: 'write',
     label: 'Ouvrir un outil',
-    desc: "Ouvre un outil du catalogue : brainstorming, ghostwriter, social, qr ou sentinel. Répond à « ouvre-moi le Social Manager ».",
+    desc: "Ouvre un outil du catalogue : brainstorming, ghostwriter, social, qr, sentinel ou keynapse. Répond à « ouvre-moi le Social Manager ».",
     target: '.ws-app',
-    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming | ghostwriter | social | qr | sentinel' }],
+    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming | ghostwriter | social | qr | sentinel | keynapse' }],
     run: async (args = {}) => {
       const KORA_PADS = {
         brainstorming: ['A-COM-003', 'le Brainstorming'], ghostwriter: ['A-COM-005', 'le Ghost Writer'],
@@ -843,10 +926,11 @@ export const KORA_ACTIONS = [
         qr: ['A-COM-001', 'Smart Dynamic QR'], sdqr: ['A-COM-001', 'Smart Dynamic QR'],
         'qr codes': ['A-COM-001', 'Smart Dynamic QR'], 'smart dynamic qr': ['A-COM-001', 'Smart Dynamic QR'],
         sentinel: ['O-GEO-001', 'Sentinel'], audit: ['O-GEO-001', 'Sentinel'],
+        keynapse: ['O-Keyn-001', 'Keynapse'], notes: ['O-Keyn-001', 'Keynapse'],
       };
       const key = String(args.pad || '').trim().toLowerCase();
       const entry = KORA_PADS[key];
-      if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social, qr, sentinel.`);
+      if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social, qr, sentinel, keynapse.`);
       _guardGwModal();
       const [padId, nom] = entry;
       /* openTool = LA porte gated (licence + Living Layer, ui-renderer.js:2192) */
@@ -947,6 +1031,47 @@ export const KORA_ACTIONS = [
           .map(f => ({ gravite: SEV_FR[f.sev] || f.sev, probleme: f.title })),
         rappel: 'Le rapport détaillé (axes, correctifs clé en main) est dans Sentinel, panneau du site.',
       };
+    },
+  },
+  {
+    id: 'kn.open_bubble', pad: 'keynapse', mode: 'write',
+    label: 'Ouvrir une note dans Keynapse',
+    desc: "Ouvre Keynapse — directement sur la fiche d'une bulle si un titre est donné. Rien n'est créé ni modifié. Répond à « ouvre ma note … dans Keynapse », « montre-moi la bulle … ».",
+    target: '.kyn-app .ws-topbar-title',
+    params: [{ name: 'title', type: 'string', required: false, desc: 'titre (même partiel) de la bulle à ouvrir' }],
+    run: async (args = {}) => {
+      _guardGwModal();
+      const opts = {};
+      let ref = null;
+      if (String(args.title || '').trim()) {
+        /* résolution AVANT ouverture : un titre inconnu doit le dire plutôt
+           qu'ouvrir Keynapse vide sur une fiche qui n'apparaîtra jamais */
+        const b = await _knResolve(args.title);
+        opts.bubbleId = b.id; ref = b.title;
+      }
+      const { openTool } = await import('./ui-renderer.js');
+      openTool('O-Keyn-001', opts);
+      if (!document.querySelector('.kyn-app'))
+        return { fait: false, raison: 'Keynapse n’est pas dans la licence — sa fiche est ouverte à l’écran.' };
+      return { fait: true, outil_ouvert: 'Keynapse', note: ref };
+    },
+  },
+  {
+    id: 'kn.create_note', pad: 'keynapse', mode: 'write',
+    label: 'Ajouter une note dans une bulle',
+    desc: "Ajoute un texte dans les notes libres d'UNE bulle Keynapse existante, retrouvée par son titre — n'invente ni le titre de la bulle ni le texte, demande-les si absents. Répond à « note ça dans ma bulle … », « ajoute cette remarque à … ».",
+    target: '.kyn-app .ws-topbar-title',
+    params: [
+      { name: 'title', type: 'string', required: true, desc: 'titre (même partiel) de la bulle où noter' },
+      { name: 'text', type: 'string', required: true, desc: 'le texte à ajouter' },
+    ],
+    run: async (args = {}) => {
+      const text = String(args.text || '').trim();
+      if (!text) throw new Error('Il me faut le texte à noter.');
+      const b = await _knResolve(args.title);
+      const r = await _knApi(`/bubbles/${encodeURIComponent(b.id)}/notes`, { method: 'POST', body: { body: text } });
+      return { fait: true, note: b.title, ajoute: _excerpt(r.note?.body || text, 160),
+               rappel: 'Ajouté aux notes libres de la bulle — visible en l’ouvrant dans Keynapse.' };
     },
   },
 ];
@@ -1124,6 +1249,55 @@ async function _sntResolve(ref) {
   throw new Error(`Aucun site « ${r} » dans la surveillance. Sites suivis : ${sites.map(s => s.label || _sntHost(s.url)).join(' · ')}.`);
 }
 
+/* ── Keynapse — accès API + résolution d'une bulle ──
+   Même patron que _sntApi : GET-only insuffisant (create_note est un POST). */
+async function _knApi(path, opts = {}) {
+  const token = _jwt();
+  if (!token) throw new Error('Non connecté : ouvre Keystone et connecte-toi (ks_jwt absent).');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeout || 30000);
+  let res;
+  try {
+    res = await fetch(`${KORA_API}/api/keynapse${path}`, {
+      method: opts.method || 'GET',
+      headers: { 'Authorization': `Bearer ${token}`, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    throw (e && e.name === 'AbortError')
+      ? new Error('Keynapse met trop de temps à répondre — réessaie dans un instant.') : e;
+  }
+  clearTimeout(timer);
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* corps vide */ }
+  if (!res.ok) throw new Error(data.error || `Keynapse ${path} → ${res.status}`);
+  return data;
+}
+/* Une bulle par TITRE — exact d'abord, partiel ensuite, accents ignorés.
+   Contrairement à Sentinel (souvent 1 seul site), une constellation a
+   TOUJOURS plusieurs bulles : référence vide → erreur (jamais de choix
+   automatique). Renvoie aussi le nom de zone (affichage) et zone_id. */
+async function _knResolve(ref) {
+  const r = String(ref || '').trim();
+  if (!r) throw new Error('Il me faut le titre de la bulle.');
+  const { zones, bubbles } = await _knApi('/state');
+  const list = bubbles || [];
+  if (!list.length) throw new Error('Aucune note dans Keynapse pour l’instant.');
+  const zoneName = id => (zones || []).find(z => z.id === id)?.name || null;
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const n = norm(r);
+  const exact = list.filter(b => norm(b.title) === n);
+  const withZone = b => ({ ...b, zoneName: zoneName(b.zone_id) });
+  if (exact.length === 1) return withZone(exact[0]);
+  const part = exact.length ? exact : list.filter(b => norm(b.title).includes(n));
+  if (part.length === 1) return withZone(part[0]);
+  if (part.length > 1)
+    throw new Error(`Plusieurs notes correspondent à « ${r} » : ${part.slice(0, 6).map(b => b.title).join(' · ')}. Précise le titre.`);
+  throw new Error(`Aucune note « ${r} » dans Keynapse.`);
+}
+
 /* Le modal Ghost Writer vit à z-index 99999 : tout outil ouvert pendant
    qu'il est affiché apparaîtrait DERRIÈRE lui (retour test réel 18/07 —
    « elle n'a pas ouvert brainstorming ») — et le fermer perdrait les
@@ -1165,6 +1339,8 @@ export const KORA_PAD_META = [
     desc: 'QR codes : flotte, scans et stats (globales, par QR, QR suivi), ouvrir un QR, préparer un QR vers une adresse' },
   { pad: 'sentinel', label: 'Sentinel',
     desc: 'sites web surveillés : en ligne/hors ligne, disponibilité, rapport d’audit (scores, points à corriger), relancer un audit' },
+  { pad: 'keynapse', label: 'Keynapse',
+    desc: 'notes en bulles : chercher un mot-clé, rappels à venir/en retard, détail d’une note, ouvrir une note, y ajouter du texte' },
 ];
 
 /* ── Exécution ── */

@@ -82,6 +82,21 @@ export function openKeynapse(opts = {}) {
   _bindSWMessages();           // clic notif → ouvrir la bulle
   _startReminderPoll();        // notifications locales (S7)
   _load();
+  // Handoff (Kora kn.open_bubble) : ouvre directement la fiche d'une bulle
+  // une fois la constellation chargée — même patron que _prefillAddUrl de
+  // Sentinel (attend l'async de _load, poll court, aucune modification si
+  // la bulle n'existe plus/pas encore rendue).
+  if (opts && opts.bubbleId) _openBubbleWhenReady(String(opts.bubbleId));
+}
+function _openBubbleWhenReady(id) {
+  let tries = 0;
+  const tick = () => {
+    if (!_root) return;                                  // fermé entre-temps
+    if (_state.bubbles.some((b) => b.id === id)) { _openPanel(id); return; }
+    if (!_loading && ++tries >= 20) return;               // chargé, bulle introuvable : abandon silencieux
+    setTimeout(tick, 150);
+  };
+  tick();
 }
 export function closeKeynapse() {
   if (!_root) return;

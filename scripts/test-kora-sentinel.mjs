@@ -171,8 +171,11 @@ console.log('\n\x1b[1m▶ Suite 4 — snt.run_audit (séquence + évolution)\x1b
 // ════════════════════════════════════════════════════════════════
 console.log('\n\x1b[1m▶ Suite 5 — catalogue (caps worker)\x1b[0m');
 {
-  check('31 actions au total (≤ MAX_ACTIONS=32, marge 1)', KORA_ACTIONS.length === 31);
-  check('3 actions sentinel', KORA_ACTIONS.filter(a => a.pad === 'sentinel').length === 3);
+  /* le compte exact évolue avec chaque pad (Keynapse l'a fait passer à 36,
+     > MAX_ACTIONS=32 : le routage 2 étages prend le relais automatiquement,
+     cf. test-kora-routing.mjs) — on vérifie juste que Sentinel y est TOUJOURS,
+     pas un total figé qui casserait à chaque nouveau pad */
+  check('3 actions sentinel toujours présentes dans le catalogue', KORA_ACTIONS.filter(a => a.pad === 'sentinel').length === 3);
   check('toutes les desc ≤ 240 car.', KORA_ACTIONS.every(a => (a.desc || '').length <= 240));
   check('tous les desc de params ≤ 90 car.', KORA_ACTIONS.every(a => (a.params || []).every(p => (p.desc || '').length <= 90)));
   const open = KORA_ACTIONS.find(a => a.id === 'os.open_pad');
