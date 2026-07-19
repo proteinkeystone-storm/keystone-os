@@ -33,6 +33,14 @@ const TTL_MS   = 15 * 60e3;   // sans progrès depuis 15 min → le pilote se re
 const STALL_MS = 60e3;        // débat figé (auto_pause sans round_complete) → bouton Synthétiser
 
 let _timer = null;
+/* GÉNÉRATION du pilote (fix 19/07, retour Stéphane « le trait tourne
+   toujours sur Publier après annulation ») : garde-fou contre un timer
+   dont on aurait perdu l'id (donc impossible à clearInterval). Chaque
+   démarrage bumpe la génération ; chaque tick vérifie qu'il appartient
+   à la génération courante ; _stop la bumpe → TOUT timer orphelin
+   devient inerte à son prochain réveil, même si _timer ne le tient plus.
+   C'est la vraie ceinture : couper la génération tue le pilote à coup sûr. */
+let _gen = 0;
 let _phase = null;            // 'debat' | 'idee' | 'compose' | 'forward' | 'publish'
 let _brief = '';
 let _deadline = 0;
@@ -77,6 +85,7 @@ function _state(s, force) {
 
 /* ── API ── */
 export async function koraChainPilot(opts = {}) {
+  const myGen = ++_gen;                 // toute frappe précédente devient périmée
   _brief = String(opts.brief || '').trim();
   _phase = opts.phase || 'debat';
   _deadline = Date.now() + TTL_MS;
@@ -84,13 +93,15 @@ export async function koraChainPilot(opts = {}) {
   _said = new Set();
   _goClicked = _sendClicked = _synthClicked = false;
   _kora = await import('./kora.js');
+  if (myGen !== _gen) return;           // un autre pilote (ou un stop) est passé pendant l'await : on s'efface
   clearInterval(_timer);
-  _timer = setInterval(_tick, Math.max(120, opts.pollMs || POLL_MS));
+  _timer = setInterval(() => _tick(myGen), Math.max(120, opts.pollMs || POLL_MS));
 }
 export function koraChainStop() { _stop(null); }
 export function koraChainPhase() { return _phase; }   // instrumentation / tests
 
 function _stop(msg) {
+  _gen++;                               // périme TOUT timer, même un dont _timer ne tiendrait plus l'id
   clearInterval(_timer); _timer = null; _phase = null;
   if (msg) { try { _kora?.koraSay?.(msg); } catch (e) { /* rien */ } }
   _state('repos', true);
@@ -101,7 +112,8 @@ function _stop(msg) {
   try { _kora?.koraClearRings?.(); } catch (e) { /* galet pas monté */ }
 }
 
-function _tick() {
+function _tick(gen) {
+  if (gen !== _gen) return;   // timer d'une génération périmée (stop qu'on n'a pas pu clearInterval) : inerte
   try { _step(); } catch (e) { /* un poll ne casse jamais l'app */ }
 }
 

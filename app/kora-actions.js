@@ -688,15 +688,26 @@ export const KORA_ACTIONS = [
       /* revue 19/07 (retour Stéphane) : sans cette action, le modèle
          répondait « c'est annulé » sans RIEN faire (aucune action du
          catalogue pour ça) — l'anneau restait allumé, le pilote tournait
-         toujours. Zéro invention : maintenant il y a un vrai geste. */
+         toujours. 2e retour (« le trait tourne toujours sur Publier ») :
+         on ne gate PLUS l'arrêt sur koraChainPhase() (une lecture de phase
+         périmée sautait koraChainStop) — on arrête TOUJOURS. koraChainStop
+         bumpe la génération (tue tout timer, cf. kora-chain.js) et efface
+         les anneaux. */
       const { koraChainPhase, koraChainStop } = await import('./kora-chain.js');
-      const phase = koraChainPhase();
-      if (!phase) return { fait: true, suivi: false, message: 'Je ne suivais aucune chaîne pour l’instant.' };
+      const wasRunning = !!koraChainPhase();
       koraChainStop();
-      /* la séance de brainstorming, elle, reste ouverte (chain.cancel
-         n'y touche pas — on ne ferme rien) : chain.start/bs.start_session
-         refuseront de relancer tant qu'elle est ouverte (garde existante) */
+      /* filet : efface aussi les anneaux + repose l'état depuis LA MÊME
+         instance kora.js que la boucle — couvre le cas où le pilote n'a
+         jamais tourné dans cette session (_kora null dans _stop) mais où
+         un anneau traînerait malgré tout. */
+      try { const k = await import('./kora.js'); k.koraClearRings(); k.koraState('repos'); } catch (e) { /* galet absent */ }
+      /* la séance de brainstorming, elle, reste ouverte (on ne ferme rien) :
+         chain.start/bs.start_session refuseront de relancer tant qu'elle
+         l'est (garde existante) — d'où l'indice. */
       const encoreOuvert = !!document.querySelector('#wr-fullscreen.open');
+      if (!wasRunning)
+        return { fait: true, suivi: false,
+                 message: 'Je ne suivais aucune chaîne — j’ai quand même tout remis au repos.' };
       return { fait: true, suivi: true,
                message: 'J’arrête de suivre — rien n’est supprimé ni publié, tu reprends la main où ça en est.'
                  + (encoreOuvert ? ' Ferme la fenêtre du brainstorming si tu veux repartir sur un autre sujet.' : '') };
