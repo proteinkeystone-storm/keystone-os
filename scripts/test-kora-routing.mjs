@@ -83,7 +83,7 @@ console.log('\n\x1b[1m▶ Suite 2 — aiguillage domaine → choix (le chemin no
   const sys1 = calls[0].sys, sys2 = calls[1].sys;
   check('étage 1 : la ligne de domaine sentinel est là', /- sentinel : /.test(sys1));
   check('étage 1 : tous les domaines non-globaux du catalogue sont listés',
-    ['brainstorming', 'ghostwriter', 'social', 'sdqr', 'sentinel', 'keynapse', 'smartagent', 'desk', 'book', 'keybrand', 'keyform'].every(p => sys1.includes(`- ${p} : `)));
+    ['brainstorming', 'ghostwriter', 'social', 'sdqr', 'sentinel', 'keynapse', 'smartagent', 'desk', 'book', 'keybrand', 'keyform', 'network'].every(p => sys1.includes(`- ${p} : `)));
   check('étage 1 : les globales chain.* et os.* sont détaillées', sys1.includes('chain.start') && sys1.includes('chain.cancel') && sys1.includes('os.open_pad'));
   check('étage 1 : la globale ll.whats_new (Living Layer) est détaillée', sys1.includes('ll.whats_new'));
   check('étage 1 : livinglayer n’est PAS une ligne de DOMAINE (c’est une globale)', !/- livinglayer : /.test(sys1));

@@ -108,8 +108,8 @@ const CORPUS = [
   // ── desK (K-9) ──
   { pad:'desk', phrase:"où en est L'Épaulette ?",              attendu:'dk.railroad' },
   { pad:'desk', phrase:"c'est quand le bouclage de ma revue ?", attendu:'dk.railroad' },
-  { pad:'desk', phrase:"qui je dois relancer ?",               attendu:'dk.relances_dues',
-    note:'copies en attente à relancer — lecture, PAS l’envoi' },
+  { pad:'desk', phrase:"qui je dois relancer ?",               attendu:['dk.relances_dues','nk.relances_dues'],
+    note:'AMBIGU desK (copies contributeurs) vs networK (contacts) — les deux « relances » sont correctes ; en réel, le pad courant = ancre (§4) tranche. Phrase nue sans contexte = les deux OK' },
   { pad:'desk', phrase:"qui n'a pas encore rendu sa copie ?",  attendu:'dk.issue_state',
     note:'le sommaire du numéro montre les copies attendues' },
   { pad:'desk', phrase:"qu'est-ce qui est arrivé dans le bac à trier ?", attendu:'dk.inbox' },
@@ -134,6 +134,13 @@ const CORPUS = [
   { pad:'livinglayer', phrase:"quoi de neuf ?",                    attendu:'ll.whats_new' },
   { pad:'livinglayer', phrase:"qu'est-ce qui a bougé aujourd'hui ?", attendu:'ll.whats_new',
     note:'synthèse ambiante transverse — action globale, jamais le champ text (PII networK)' },
+
+  // ── networK (K-14) — réseau relationnel (le killer = « qui recontacter ») ──
+  { pad:'network', phrase:"qui je dois recontacter ?",            attendu:'nk.relances_dues',
+    note:'killer §15.2 : relances dues via relance_at stocké' },
+  { pad:'network', phrase:"combien de contacts j'ai dans mon réseau ?", attendu:'nk.network_overview' },
+  { pad:'network', phrase:"où j'en suis avec Camille Leroy ?",    attendu:'nk.contact',
+    note:'fiche + journal d’UN contact résolu par son nom' },
 
   // ── chaîne de contenu ──
   { pad:'chaine', phrase:"écris-moi un article promo de Keystone pour LinkedIn", attendu:'chain.start',

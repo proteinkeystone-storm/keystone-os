@@ -1167,9 +1167,9 @@ export const KORA_ACTIONS = [
   {
     id: 'os.open_pad', pad: 'os', mode: 'write',
     label: 'Ouvrir un outil',
-    desc: "Ouvre un outil du catalogue : brainstorming, ghostwriter, social, qr, sentinel, keynapse, smartagent, desk, book ou keybrand. Répond à « ouvre-moi le Social Manager ».",
+    desc: "Ouvre un outil du catalogue : brainstorming, ghostwriter, social, qr, sentinel, keynapse, smartagent, desk, book, keybrand ou network. Répond à « ouvre-moi le Social Manager ».",
     target: '.ws-app',
-    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming|ghostwriter|social|qr|sentinel|keynapse|smartagent|desk|book|keybrand' }],
+    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming|social|qr|sentinel|keynapse|smartagent|desk|keybrand|network|book' }],
     run: async (args = {}) => {
       const KORA_PADS = {
         brainstorming: ['A-COM-003', 'le Brainstorming'], ghostwriter: ['A-COM-005', 'le Ghost Writer'],
@@ -1189,6 +1189,11 @@ export const KORA_ACTIONS = [
         bibliotheque: ['O-BOK-001', 'booK'], 'bibliothèque': ['O-BOK-001', 'booK'],
         keybrand: ['O-BRD-001', 'Key Brand'], 'key brand': ['O-BRD-001', 'Key Brand'],
         charte: ['O-BRD-001', 'Key Brand'], marque: ['O-BRD-001', 'Key Brand'],
+        // networK (K-14) — le réseau relationnel (clés en minuscules : le
+        // lookup fait args.pad.toLowerCase()).
+        network: ['O-NET-001', 'networK'], reseau: ['O-NET-001', 'networK'],
+        'réseau': ['O-NET-001', 'networK'], contacts: ['O-NET-001', 'networK'],
+        relations: ['O-NET-001', 'networK'],
         // Alias d'ouverture SEULE des pads hors-catalogue (KORA_BRIEF §15.3,
         // « coût zéro, à poser au premier train qui touche le catalogue ») :
         // aucune action métier — juste « ouvre-moi Missive / Brief Prod ».
@@ -1638,6 +1643,91 @@ export const KORA_ACTIONS = [
       const rien = a_agir.length === 0 && !alerte;
       const out = { a_agir, alerte, pouls, rien_a_signaler: rien };
       if (rien) out.message = 'Rien qui réclame ton attention côté tes outils — tout est calme. Voici le pouls du jour.';
+      return out;
+    },
+  },
+
+  /* ═══ networK (pad O-NET-001, K-14 21/07/2026 — réseau relationnel) ═══
+     LECTURE SEULE (3 actions). Le killer §15.2 = « qui recontacter » via la
+     relance stockée (relance_at). Toutes lisent un seul GET /bootstrap. */
+  {
+    id: 'nk.network_overview', pad: 'network', mode: 'read',
+    label: 'Mon réseau networK',
+    desc: "La forme de ton réseau relationnel networK : nombre de contacts, répartition par catégorie, et combien de relances sont dues. Répond à « mon réseau », « combien de contacts j'ai », « mes contacts par catégorie ».",
+    target: '.nk-app .ws-topbar-title',
+    params: [],
+    run: async () => {
+      const { categories, contacts } = await _nkBootstrap();
+      if (!contacts.length) return { total: 0, message: 'Ton réseau networK est vide pour l’instant.' };
+      const catById = new Map(categories.map(c => [c.id, c.label]));
+      const byCat = {};
+      for (const c of contacts) {
+        const label = catById.get(c.category_id) || 'Sans catégorie';
+        byCat[label] = (byCat[label] || 0) + 1;
+      }
+      const today = _nkTodayIso();
+      const relancesDues = contacts.filter(c => c.relance_at && c.relance_at <= today).length;
+      return {
+        total: contacts.length,
+        par_categorie: Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([categorie, contacts]) => ({ categorie, contacts })),
+        relances_dues: relancesDues,
+      };
+    },
+  },
+  {
+    id: 'nk.relances_dues', pad: 'network', mode: 'read',
+    label: 'Qui recontacter (relances)',
+    desc: "Les contacts networK à recontacter : relances dues ou en retard (date + motif), et combien arrivent dans les 7 jours. Répond à « qui je dois recontacter ? », « mes relances », « qui relancer cette semaine ? ».",
+    target: '.nk-app .ws-topbar-title',
+    params: [],
+    run: async () => {
+      const { contacts } = await _nkBootstrap();
+      const today = _nkTodayIso();
+      const dueList = contacts.filter(c => c.relance_at && c.relance_at <= today)
+        .sort((a, b) => String(a.relance_at).localeCompare(String(b.relance_at)));
+      const soon = contacts.filter(c => c.relance_at && c.relance_at > today && c.relance_at <= _nkIsoPlusDays(7)).length;
+      if (!dueList.length)
+        return { total_dues: 0, a_venir_7j: soon,
+          message: soon ? `Aucune relance due aujourd’hui — ${soon} prévue(s) dans les 7 jours.` : 'Aucune relance à faire pour l’instant.' };
+      return {
+        total_dues: dueList.length,
+        a_venir_7j: soon,
+        a_relancer: dueList.slice(0, 25).map(c => ({
+          nom: c.name,
+          prevue_le: _frDate(c.relance_at),
+          en_retard: c.relance_at < today,
+          motif: c.relance_note || null,
+        })),
+      };
+    },
+  },
+  {
+    id: 'nk.contact', pad: 'network', mode: 'read',
+    label: 'Fiche d’un contact networK',
+    desc: "La fiche d'UN contact retrouvé par son nom : rôle, société, catégorie, tags, coordonnées, relance prévue, dernière interaction et journal récent. Répond à « la fiche de … », « où j'en suis avec … ».",
+    target: '.nk-app .ws-topbar-title',
+    params: [{ name: 'name', type: 'string', required: true, desc: 'nom (même partiel) du contact' }],
+    run: async (args = {}) => {
+      const boot = await _nkBootstrap();
+      const c = _nkResolveContact(boot, args.name);
+      const acts = boot.activity.filter(a => a.contact_id === c.id)
+        .sort((a, b) => String(b.happened_at).localeCompare(String(a.happened_at)));
+      const catLabel = (boot.categories.find(x => x.id === c.category_id) || {}).label || null;
+      const out = {
+        contact: c.name,
+        type: c.kind || 'person',
+        societe: c.company || null,
+        fonction: c.title || null,
+        categorie: catLabel,
+        roles: _nkJsonArr(c.roles),
+        tags: _nkJsonArr(c.tags),
+        coordonnees: { email: c.email || null, telephone: c.phone || null, site: c.website || null },
+        relance: c.relance_at ? { prevue_le: _frDate(c.relance_at), motif: c.relance_note || null } : null,
+        derniere_interaction: acts.length ? _frDate(_sqlUtc(acts[0].happened_at)) : null,
+        journal_recent: acts.slice(0, 5).map(a => ({ type: a.type, quoi: _excerpt(a.label, 120), quand: _frDate(_sqlUtc(a.happened_at)) })),
+      };
+      /* notes = champ libre potentiellement sensible : extrait borné, jamais tout */
+      if (c.notes) out.notes = _excerpt(c.notes, 200);
       return out;
     },
   },
@@ -2187,6 +2277,50 @@ async function _llBoard(clientSensors = {}) {
   return data;
 }
 
+/* ── networK (pad O-NET-001, K-14) — réseau relationnel, LECTURE SEULE ──
+   Tenant = _tenantOf côté worker (network.js:106) : piège admin→'default'
+   comme QR/Sentinel/Keynapse, MAIS résolu par le worker à partir du JWT →
+   Kora envoie le ks_jwt de l'utilisateur, rien à résoudre ici (cohérent
+   avec ce que le pad affiche). GET /bootstrap ramène TOUT le graphe
+   (catégories + contacts + activité) en un appel — les 3 lectures s'en
+   servent, jamais un 2e appel. PII = le PROPRE réseau de l'utilisateur
+   (légitime), mais on reste sobre : coordonnées/notes/journal seulement sur
+   une fiche ciblée, jamais dans un survol. */
+async function _nkBootstrap() {
+  const data = await _api('/api/network/bootstrap');
+  return {
+    categories: Array.isArray(data.categories) ? data.categories : [],
+    contacts:   Array.isArray(data.contacts)   ? data.contacts   : [],
+    activity:   Array.isArray(data.activity)   ? data.activity   : [],
+  };
+}
+/* date locale du jour en « YYYY-MM-DD » (relance_at est stocké dans ce format,
+   comparaison lexicographique sûre) */
+function _nkTodayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function _nkIsoPlusDays(days) {
+  const d = new Date(); d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const _nkJsonArr = (s) => { try { const v = JSON.parse(s || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
+/* Un contact par NOM — même patron que _kfResolveForm/_kbResolve. */
+function _nkResolveContact(boot, ref) {
+  const contacts = boot.contacts || [];
+  if (!contacts.length) throw new Error('Ton réseau networK est vide — ajoute des contacts d’abord.');
+  const r = String(ref || '').trim();
+  if (!r) throw new Error('Quel contact ? Donne-moi un nom.');
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const n = norm(r);
+  const exact = contacts.filter(c => norm(c.name) === n);
+  const hit = exact.length ? exact : contacts.filter(c => norm(c.name).includes(n));
+  if (hit.length === 1) return hit[0];
+  if (hit.length > 1)
+    throw new Error(`Plusieurs contacts « ${r} » : ${hit.slice(0, 8).map(c => c.name).join(' · ')}. Précise.`);
+  throw new Error(`Aucun contact « ${r} » dans ton réseau networK.`);
+}
+
 /* Le modal Ghost Writer vit à z-index 99999 : tout outil ouvert pendant
    qu'il est affiché apparaîtrait DERRIÈRE lui (retour test réel 18/07 —
    « elle n'a pas ouvert brainstorming ») — et le fermer perdrait les
@@ -2243,6 +2377,8 @@ export const KORA_PAD_META = [
     desc: 'chartes graphiques : liste, statut, couleur principale, résumé d’une charte (couleurs/typos/logo), lien public si publiée' },
   { pad: 'keyform', label: 'Key Form',
     desc: 'formulaires (ex-Pulsa) : liste et statut, lien public, suivi des réponses d’un formulaire (total, aujourd’hui, hier, 7 jours) — lecture seule' },
+  { pad: 'network', label: 'networK',
+    desc: 'réseau relationnel : contacts par catégorie, relances dues (« qui recontacter »), fiche et journal d’un contact' },
 ];
 
 /* ── Exécution ── */
