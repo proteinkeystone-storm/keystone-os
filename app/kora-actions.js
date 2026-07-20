@@ -1489,6 +1489,94 @@ export const KORA_ACTIONS = [
       return out;
     },
   },
+
+  /* ═══ Key Form (pad A-COM-004 — ex-Pulsa, K-11 21/07/2026) ═══
+     FORMULAIRE ARTISTES EN PROD CRITIQUE. LECTURE STRICTE, ZÉRO ÉCRITURE,
+     JAMAIS (KORA_BRIEF §15.2) : ni une écriture « sûre » façon
+     dk.prepare_relance, ni même l'alias os.open_pad (mode:write). Kora peut
+     dire « 3 réponses hier » — elle ne touche JAMAIS au flux. Les deux
+     actions n'appellent que des GET (_kfApi force method:'GET'). PII des
+     répondants et e-mails direction ne sortent jamais (cf. _kfApi). */
+  {
+    id: 'kf.list_forms', pad: 'keyform', mode: 'read',
+    label: 'Mes formulaires Key Form',
+    desc: "Tes formulaires Key Form : titre, statut (publié/brouillon/archivé), lien public si publié, création et dernière modif. Répond à « mes formulaires », « combien de formulaires j'ai », « mes Key Form ».",
+    target: '.pulsa-app .ws-topbar-title',
+    params: [],
+    run: async () => {
+      const forms = await _kfListForms();
+      if (!forms.length)
+        return { total: 0, message: 'Aucun formulaire Key Form pour l’instant.' };
+      const origin = (typeof location !== 'undefined' && location.origin) ? location.origin : '';
+      const sorted = forms.slice().sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+      return {
+        total: sorted.length,
+        formulaires: sorted.slice(0, 30).map(f => {
+          const meta = f.meta || {};
+          const statut = _kfStatutFr(f.output && f.output.status);
+          const row = {
+            titre: meta.title || '(sans titre)',
+            statut,
+            cree: _frDate(f.created_at),
+            modifie: _frDate(f.updated_at),
+          };
+          /* lien public = origine du FRONT + /f/slug (rewrite Vercel),
+             seulement pour un formulaire publié qui a un slug */
+          if (statut === 'publié' && meta.slug)
+            row.lien_public = origin ? `${origin}/f/${meta.slug}` : `/f/${meta.slug}`;
+          return row;
+        }),
+        en_plus: sorted.length > 30 ? sorted.length - 30 : undefined,
+      };
+    },
+  },
+  {
+    id: 'kf.responses', pad: 'keyform', mode: 'read',
+    label: 'Réponses d’un formulaire Key Form',
+    desc: "Le SUIVI des réponses d'UN formulaire : total, aujourd'hui, hier, 7 derniers jours, dates des dernières — jamais le contenu. Répond à « combien de réponses », « 3 réponses hier ? », « les dernières réponses de … ».",
+    target: '.pulsa-app .ws-topbar-title',
+    params: [{ name: 'form', type: 'string', required: false, desc: 'nom (même partiel) du formulaire ; inutile si un seul' }],
+    run: async (args = {}) => {
+      const form = await _kfResolveForm(args.form);
+      const meta = form.meta || {};
+      const data = await _kfApi(`/responses?form_id=${encodeURIComponent(form.id)}`);
+      const rows = Array.isArray(data.responses) ? data.responses : [];
+      const total = typeof data.count === 'number' ? data.count : rows.length;
+
+      /* buckets en heure LOCALE (le « hier » de l'utilisateur, pas UTC).
+         created_at = « YYYY-MM-DD HH:MM:SS » UTC → _sqlUtc pour parser juste. */
+      const now = new Date();
+      const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const startYest = new Date(startToday.getTime() - 86400e3);
+      const weekAgo = new Date(startToday.getTime() - 6 * 86400e3);
+      let auj = 0, hier = 0, sem = 0;
+      const datesRecentes = [];
+      for (const r of rows) {
+        const d = new Date(_sqlUtc(r.created_at));
+        if (isNaN(d)) continue;
+        if (d >= startToday) auj++;
+        else if (d >= startYest) hier++;
+        if (d >= weekAgo) sem++;
+      }
+      /* rows déjà triées created_at DESC par le worker : les 5 premières = les
+         plus récentes. On ne ressort QUE la date, jamais le contenu (PII). */
+      for (const r of rows.slice(0, 5)) datesRecentes.push(_frDate(_sqlUtc(r.created_at)));
+
+      const out = {
+        formulaire: meta.title || '(sans titre)',
+        statut: _kfStatutFr(form.output && form.output.status),
+        total,
+        aujourd_hui: auj,
+        hier,
+        sept_derniers_jours: sem,
+        dernieres_dates: datesRecentes,
+      };
+      if (!total) out.message = 'Ce formulaire n’a encore reçu aucune réponse.';
+      /* le worker plafonne la liste à 500 : au-delà, total est sous-estimé */
+      if (total === 500) out.note = 'Affichage plafonné à 500 — il peut y en avoir davantage.';
+      return out;
+    },
+  },
 ];
 
 /* ── Ancrage « c'est quoi Keystone » (fix immobilier, 19/07) ──
@@ -1932,6 +2020,71 @@ async function _kbResolve(ref) {
   throw new Error(`Aucune charte « ${r} ». Chartes existantes : ${items.map(c => c.name).join(' · ')}.`);
 }
 
+/* ── Key Form (pad A-COM-004 — ex-Pulsa, formulaire artistes EN PROD) ──
+   LECTURE STRICTE, ZÉRO ÉCRITURE, JAMAIS (KORA_BRIEF §15.2). On ne touche
+   QUE des routes GET du worker pulsa, jamais un POST/PATCH/DELETE. Tenant =
+   owner_sub côté worker, MAIS pour un JWT user owner_sub == claims.sub
+   (pulsa-forms.js:_resolveOwner) : en envoyant le ks_jwt de l'utilisateur,
+   le worker scope tout seul à SES formulaires — rien à résoudre ici, comme
+   Key Brand. Deux garde-fous PII portés côté client (le worker, lui, sert
+   la config brute + le contenu des réponses aux propriétaires) :
+     · list_forms ne ressort JAMAIS delivery.recipients (e-mails direction) ;
+     · responses ne ressort JAMAIS le CONTENU des réponses (bios, œuvres,
+       coordonnées des répondants) ni ip/user_agent/hash — comptes et DATES
+       seulement (« 3 réponses hier », brief §15.2). */
+async function _kfApi(path, opts = {}) {
+  const token = _jwt();
+  if (!token) throw new Error('Non connecté : ouvre Keystone et connecte-toi (ks_jwt absent).');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeout || 30000);
+  let res;
+  try {
+    /* GET uniquement — aucune méthode d'écriture n'est ni passée ni permise. */
+    res = await fetch(`${KORA_API}/api/pulsa${path}`, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` },
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    throw (e && e.name === 'AbortError')
+      ? new Error('Key Form met trop de temps à répondre — réessaie dans un instant.') : e;
+  }
+  clearTimeout(timer);
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* corps vide */ }
+  if (!res.ok) throw new Error(data.error || `Key Form ${path} → ${res.status}`);
+  return data;
+}
+/* Liste des formulaires de l'utilisateur (GET /api/pulsa/forms). Chaque
+   form = config décompressée par le worker (_rowToForm) : meta{title,slug},
+   output.status, created_at/updated_at (timestamps ms). */
+async function _kfListForms() {
+  const data = await _kfApi('/forms');
+  return Array.isArray(data.forms) ? data.forms : [];
+}
+const _kfStatutFr = (s) => s === 'published' ? 'publié' : s === 'archived' ? 'archivé' : 'brouillon';
+/* Un formulaire par NOM — même patron que _kbResolve/_saResolve. */
+async function _kfResolveForm(ref) {
+  const forms = await _kfListForms();
+  if (!forms.length)
+    throw new Error('Aucun formulaire Key Form pour l’instant — Key Form en crée un en quelques minutes.');
+  const titreDe = (f) => (f.meta && f.meta.title) || '(sans titre)';
+  const r = String(ref || '').trim();
+  if (!r) {
+    if (forms.length === 1) return forms[0];
+    throw new Error(`Plusieurs formulaires : ${forms.map(titreDe).join(' · ')}. Lequel ?`);
+  }
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const n = norm(r);
+  const exact = forms.filter(f => norm(titreDe(f)) === n);
+  const hit = exact.length ? exact : forms.filter(f => norm(titreDe(f)).includes(n));
+  if (hit.length === 1) return hit[0];
+  if (hit.length > 1)
+    throw new Error(`Plusieurs formulaires correspondent à « ${r} » : ${hit.map(titreDe).join(' · ')}. Précise.`);
+  throw new Error(`Aucun formulaire « ${r} ». Formulaires existants : ${forms.map(titreDe).join(' · ')}.`);
+}
+
 /* Le modal Ghost Writer vit à z-index 99999 : tout outil ouvert pendant
    qu'il est affiché apparaîtrait DERRIÈRE lui (retour test réel 18/07 —
    « elle n'a pas ouvert brainstorming ») — et le fermer perdrait les
@@ -1983,6 +2136,8 @@ export const KORA_PAD_META = [
     desc: 'bibliothèque de flipbooks sur cet appareil : titres, pages, poids, dernière modif' },
   { pad: 'keybrand', label: 'Key Brand',
     desc: 'chartes graphiques : liste, statut, couleur principale, résumé d’une charte (couleurs/typos/logo), lien public si publiée' },
+  { pad: 'keyform', label: 'Key Form',
+    desc: 'formulaires (ex-Pulsa) : liste et statut, lien public, suivi des réponses d’un formulaire (total, aujourd’hui, hier, 7 jours) — lecture seule' },
 ];
 
 /* ── Exécution ── */

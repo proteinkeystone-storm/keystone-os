@@ -120,6 +120,11 @@ const CORPUS = [
   { pad:'keybrand', phrase:"le lien public de ma charte graphique ?", attendu:'kb.chart_summary',
     note:'formulation ciblée UNE charte → résumé + lien /b/' },
 
+  // ── Key Form (K-11) — 2 lectures, ZÉRO écriture, jamais ──
+  { pad:'keyform', phrase:"combien de formulaires Key Form j'ai ?", attendu:'kf.list_forms' },
+  { pad:'keyform', phrase:"combien de réponses hier sur mon formulaire ?", attendu:'kf.responses',
+    note:'suivi des réponses d’UN formulaire — comptes + dates, jamais le contenu (PII)' },
+
   // ── chaîne de contenu ──
   { pad:'chaine', phrase:"écris-moi un article promo de Keystone pour LinkedIn", attendu:'chain.start',
     note:'doctrine concierge : elle orchestre, elle ne rédige pas' },
