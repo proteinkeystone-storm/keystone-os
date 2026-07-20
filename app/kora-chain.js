@@ -86,7 +86,16 @@ function _state(s, force) {
   try {
     const cur = document.body.dataset.koraState;
     if (cur === s) return;
-    if (!force && cur && cur !== 'repos') return;
+    /* « besoin de toi » = LA LIGNE ROUGE (KORA_BRIEF §8 et B.4) : ce signal
+       passe TOUJOURS, forcé ou non. Sans cette exception, un arrêt rouge
+       atteint depuis l'état « travail » était ignoré en silence — le galet
+       affichait « je bosse » alors que Kora ATTENDAIT une décision, et le
+       langage de présence mentait au pire moment.
+       Trouvé au test réel de la chaîne (20/07, retour Stéphane) : l'arrêt
+       final sur « Publier » restait en couleurs de travail. La règle est
+       posée ICI plutôt qu'en `true` à chaque appel — deux sites l'avaient
+       déjà oublié (l'attente d'idée et la publication). */
+    if (!force && s !== 'besoin' && cur && cur !== 'repos') return;
     _kora?.koraState?.(s);
   } catch (e) { /* galet pas monté */ }
 }
