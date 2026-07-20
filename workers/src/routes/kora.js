@@ -272,7 +272,47 @@ function _parseDecision(raw) {
 }
 
 /* ═══ Routage 2 étages — helpers (exportés pour les tests) ═══ */
-const _EMMELEE = () => ({ reponse: 'Je me suis emmêlée — reformule ta demande, je réessaie.' });
+/* « Je me suis emmêlée » était une BOÎTE NOIRE : rendu sans trace, on ne
+   savait jamais POURQUOI (dogfood K-7, 19/07 — une même question marchait
+   puis échouait selon l'historique, impossible à diagnostiquer). Chaque
+   repli journalise désormais sa cause + la sortie brute du modèle, visibles
+   au `wrangler tail`. `ou` = où ça a lâché, `raw` = ce que le modèle a dit. */
+const _EMMELEE = (ou, raw) => {
+  console.error(`[kora] emmêlée @${ou || '?'} — brut: ${String(raw ?? '').slice(0, 400)}`);
+  return { reponse: 'Je me suis emmêlée — reformule ta demande, je réessaie.' };
+};
+
+/* Le modèle désigne le domaine en TEXTE LIBRE : il rend tantôt la clé
+   (« social »), tantôt le libellé (« Social Manager »), tantôt une variante
+   accentuée. Une comparaison stricte le renvoyait en repli sobre alors que
+   son choix était bon — d'où « combien de posts ai-je faits ? » qui marche
+   au 1er tour puis échoue après un autre échange (dogfood K-7).
+   Résolution tolérante : clé exacte → clé pliée → libellé plié → inclusion.
+   (regex de pliage COPIÉE de app/kora-actions.js:593 — ne jamais la retaper,
+   le caractère combinant se recasse à la saisie : piège déjà payé 2×) */
+const _norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+export function _resolveDomain(raw, padKeys, metaByPad) {
+  const keys = [...padKeys];
+  const want = _norm(raw);
+  if (!want) return null;
+  const exact = keys.find(k => k === String(raw || '').toLowerCase().trim());
+  if (exact) return exact;
+  const folded = keys.find(k => _norm(k) === want);
+  if (folded) return folded;
+  const byLabel = keys.find(k => { const m = metaByPad && metaByPad.get(k); return m && m.label && _norm(m.label) === want; });
+  if (byLabel) return byLabel;
+  /* inclusion : « le social manager », « domaine sentinel » → la bonne clé.
+     On classe par longueur du terme qui a matché (le plus long gagne), pour
+     qu'une clé courte ne rafle pas un domaine plus précis. */
+  let best = null, bestLen = 0;
+  for (const k of keys) {
+    const label = _norm((metaByPad && metaByPad.get(k) || {}).label || '');
+    for (const term of [_norm(k), label]) {
+      if (term && want.includes(term) && term.length > bestLen) { best = k; bestLen = term.length; }
+    }
+  }
+  return best;
+}
 
 export function _wantsTwoStage(body) {
   const n = Array.isArray(body && body.actions) ? body.actions.length : 0;
@@ -405,11 +445,11 @@ export async function _twoStageDecide({ runLLM, actions, pads, messages }) {
   /* ── étage 1 : aiguillage ── */
   const raw1 = await runLLM(_sysStage1(domainsBlock, _actionsBlock(globals) || '(aucune)'), messages);
   let d1 = _parseStage1(raw1);
-  if (!d1) return _EMMELEE();
+  if (!d1) return _EMMELEE('etage1-illisible', raw1);
   if (d1.reponse) return d1;
   if (d1.action) {
     const known = list.find(a => a.id === d1.action);
-    if (!known) return _EMMELEE();
+    if (!known) return _EMMELEE('etage1-action-inconnue', raw1);
     const needsParams = (known.params || []).some(p => p && p.required);
     /* globale, ou id valide SANS paramètre requis : on accepte (self-healing).
        Avec paramètre requis : le modèle n'a pas vu les params → args inventés
@@ -419,11 +459,11 @@ export async function _twoStageDecide({ runLLM, actions, pads, messages }) {
   }
 
   /* ── étage 2 : choix dans le domaine élu ── */
-  const pad = String(d1.domaine || '').toLowerCase();
-  if (!groups.has(pad)) return _EMMELEE();
+  const pad = _resolveDomain(d1.domaine, groups.keys(), metaByPad);
+  if (!pad) return _EMMELEE('domaine-hors-catalogue:' + String(d1.domaine || '').slice(0, 40), raw1);
   const m = metaByPad.get(pad);
   const raw2 = await runLLM(_sysStage2((m && m.label) || pad, _actionsBlock(groups.get(pad))), messages);
-  return _parseDecision(raw2) || _EMMELEE();
+  return _parseDecision(raw2) || _EMMELEE('etage2-illisible', raw2);
 }
 
 const _corsHeaders = (origin) => ({

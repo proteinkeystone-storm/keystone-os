@@ -23,7 +23,7 @@
 import { execSync }      from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { _wantsTwoStage, _twoStageDecide, _parseStage1 } from '../workers/src/routes/kora.js';
+import { _wantsTwoStage, _twoStageDecide, _parseStage1, _resolveDomain } from '../workers/src/routes/kora.js';
 import { KORA_ACTIONS, KORA_PAD_META } from '../app/kora-actions.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -194,6 +194,36 @@ console.log('\n\x1b[1m▶ Suite 5b — régression « Je me suis emmêlée » (d
   const r3 = fakeRunner(['{"domaine":"sentinel"}', '{"action":"snt.fleet","args":{},"annonce":"Je regarde."}']);
   const d3 = await _twoStageDecide({ runLLM: r3.runLLM, actions: ACTIONS, pads: KORA_PAD_META, messages: MSGS });
   check('non-régression : aiguillage JSON toujours routé en 2 étages', d3.action === 'snt.fleet' && r3.calls.length === 2);
+}
+
+// ════════════════════════════════════════════════════════════════
+/* Le modèle nomme le domaine en TEXTE LIBRE : clé, libellé, ou tournure.
+   Une égalité stricte le renvoyait en « emmêlée » alors que son choix était
+   bon — symptôme réel (dogfood 19/07) : « combien de posts ai-je faits ? »
+   marche au 1er tour puis échoue une fois l'historique chargé. */
+console.log('\n\x1b[1m▶ Suite 5c — _resolveDomain (le modèle nomme le domaine à sa façon)\x1b[0m');
+{
+  const keys = ['brainstorming', 'ghostwriter', 'social', 'sdqr', 'sentinel', 'keynapse'];
+  const meta = new Map(KORA_PAD_META.filter(p => !p.global).map(p => [p.pad, p]));
+  const R = (s) => _resolveDomain(s, keys, meta);
+
+  check('clé exacte',                    R('social') === 'social');
+  check('casse ignorée',                 R('Sentinel') === 'sentinel');
+  check('espaces ignorés',               R('  keynapse  ') === 'keynapse');
+  check('libellé « Social Manager »',    R('Social Manager') === 'social');
+  check('libellé « Ghost Writer »',      R('Ghost Writer') === 'ghostwriter');
+  check('libellé « Smart Dynamic QR »',  R('Smart Dynamic QR') === 'sdqr');
+  check('tournure « le social manager »',R('le social manager') === 'social');
+  check('accents pliés',                 R('sentinél') === 'sentinel');
+  check('inconnu → null (repli sobre préservé)', R('zzz-domaine-inexistant') === null);
+  check('vide → null',                   R('') === null && R(null) === null);
+  check('le terme le plus long gagne',   R('smart dynamic qr') === 'sdqr');
+
+  /* bout en bout : le modèle rend le LIBELLÉ au lieu de la clé */
+  const r = fakeRunner(['{"domaine":"Social Manager"}', '{"action":"sm.recent_results","args":{},"annonce":"Je regarde."}']);
+  const d = await _twoStageDecide({ runLLM: r.runLLM, actions: ACTIONS, pads: KORA_PAD_META,
+                                    messages: [{ role: 'user', content: 'combien de posts ai-je faits ?' }] });
+  check('bout en bout : libellé au lieu de la clé → routé quand même', d.action === 'sm.recent_results' && r.calls.length === 2);
 }
 
 // ════════════════════════════════════════════════════════════════
