@@ -24,6 +24,17 @@
 <div id="out">…</div>
 
 <script type="module">
+/* ⚠ LIRE AVANT DE CONCLURE À UN BUG (vérifié le 20/07/2026)
+   Ce banc enchaîne ses scénarios avec de VRAIS timers, dans un navigateur
+   qui peut être chargé : une assertion peut échouer ici alors que le code
+   est CORRECT. Discipline obligatoire — reproduire le scénario SEUL avant
+   d'accuser le produit. Historique : S3/S4/S6 puis S9 ont échoué en
+   séquence et sont TOUS passés en isolement ; la seule vraie cause trouvée
+   était une fuite du banc (kora_chain_kill non nettoyé entre scénarios,
+   corrigée dans reset() — 17 OK/4 ÉCHECS → 20 OK/1 ÉCHEC).
+   Ce banc simule les pads par des fixtures : il prouve la LOGIQUE du
+   pilote et les sélecteurs attendus, pas le DOM réel des vrais pads. */
+
 import { koraChainPilot, koraChainPhase, koraChainStop } from '/app/kora-chain.js';
 import { koraClearRings } from '/app/kora.js';
 
@@ -53,6 +64,11 @@ function reset() {
   document.querySelectorAll('#wr-fullscreen,#gw-overlay,#wr-synthesis-drawer,#sm-text,.sm-btn-primary,.kora-ringbox').forEach(e => e.remove());
   localStorage.removeItem('ks_brainstorming_sessions');
   sessionStorage.removeItem('ks_content_chain');
+  /* koraChainStop() (appelé juste au-dessus) DIFFUSE un kill horodaté dans
+     localStorage : sans ce nettoyage il survit d'un scénario à l'autre et
+     peut retirer le pilote du scénario suivant. Fuite trouvée le 20/07 en
+     cherchant pourquoi S4 échouait en séquence alors qu'il passe isolé. */
+  localStorage.removeItem('kora_chain_kill');
 }
 const BRIEF = 'brief du banc d’essai';
 const setSessions = s => localStorage.setItem('ks_brainstorming_sessions', JSON.stringify(s));
