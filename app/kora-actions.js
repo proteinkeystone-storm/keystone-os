@@ -1533,9 +1533,9 @@ export const KORA_ACTIONS = [
   {
     id: 'kf.responses', pad: 'keyform', mode: 'read',
     label: 'Réponses d’un formulaire Key Form',
-    desc: "Le SUIVI des réponses d'UN formulaire : total, aujourd'hui, hier, 7 derniers jours, dates des dernières — jamais le contenu. Répond à « combien de réponses », « 3 réponses hier ? », « les dernières réponses de … ».",
+    desc: "Suivi des réponses d'UN formulaire : total, aujourd'hui, hier, 7 jours, dernières dates. Appelle-la MÊME sans nom (le seul, ou je liste) — ne demande jamais le nom avant. Répond à « combien de réponses », « 3 réponses hier ? ».",
     target: '.pulsa-app .ws-topbar-title',
-    params: [{ name: 'form', type: 'string', required: false, desc: 'nom (même partiel) du formulaire ; inutile si un seul' }],
+    params: [{ name: 'form', type: 'string', required: false, desc: 'nom (même partiel) du formulaire ; omets-le si tu ne l’as pas, je résous seule' }],
     run: async (args = {}) => {
       const form = await _kfResolveForm(args.form);
       const meta = form.meta || {};
