@@ -100,6 +100,17 @@ const CORPUS = [
   { pad:'smartagent', phrase:"qu'est-ce que mon agent ne sait pas répondre ?", attendu:'sa.gaps',
     note:'formulation ciblée UN jumeau → sa.gaps' },
 
+  // ── desK (K-9) ──
+  { pad:'desk', phrase:"où en est L'Épaulette ?",              attendu:'dk.railroad' },
+  { pad:'desk', phrase:"c'est quand le bouclage de ma revue ?", attendu:'dk.railroad' },
+  { pad:'desk', phrase:"qui je dois relancer ?",               attendu:'dk.relances_dues',
+    note:'copies en attente à relancer — lecture, PAS l’envoi' },
+  { pad:'desk', phrase:"qui n'a pas encore rendu sa copie ?",  attendu:'dk.issue_state',
+    note:'le sommaire du numéro montre les copies attendues' },
+  { pad:'desk', phrase:"qu'est-ce qui est arrivé dans le bac à trier ?", attendu:'dk.inbox' },
+  { pad:'desk', phrase:"prépare une relance pour Martin",      attendu:'dk.prepare_relance',
+    note:'PRÉPARE le brouillon — l’envoi reste le geste de la rédactrice (§7)' },
+
   // ── chaîne de contenu ──
   { pad:'chaine', phrase:"écris-moi un article promo de Keystone pour LinkedIn", attendu:'chain.start',
     note:'doctrine concierge : elle orchestre, elle ne rédige pas' },

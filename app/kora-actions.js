@@ -24,6 +24,12 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
+/* desK — règles métier PURES (relances, folio, statuts). Import STATIQUE
+   toléré : ce module n'a aucun effet de bord (zéro DOM/fetch/import), il
+   ne réveille donc pas le pad — la règle « inerte au chargement » vise les
+   PADS (app/desk.js pose des listeners), pas une lib de calcul (K-9). */
+import { dkRelancesDues, dkRelanceInfo, dkLateDays, dkPn, dkNeedsCopy } from './lib/desk-rules.js';
+
 const KORA_API = (typeof window !== 'undefined' && window.__KS_API_BASE__) ||
   'https://keystone-os-api.keystone-os.workers.dev';
 
@@ -767,6 +773,140 @@ export const KORA_ACTIONS = [
     },
   },
 
+  /* ═══ desK (pad O-DSK-001 — chemin de fer vivant, K-9 20/07/2026) ═══
+     Tenant = LA PUBLICATION (dk_members), jamais l'utilisateur — le worker
+     l'impose seul, on lit avec le JWT. Le worker ne renvoie que le numéro
+     PHYSIQUE des pages → le folio affiché (couverture hors-num, départ à 0
+     chez L'Épaulette) se recalcule via dkPn(n, pub), sinon Kora dirait
+     « page 3 » là où la rédactrice lit « page 1 ». La copie des articles
+     (a.notes, jusqu'à 60k) n'est JAMAIS renvoyée au modèle. */
+  {
+    id: 'dk.railroad', pad: 'desk', mode: 'read',
+    label: 'État du chemin de fer desK',
+    desc: "Où en est une revue : numéro en fabrication, jours avant le bouclage, copies en retard, contributions à trier dans le bac. Répond à « où en est L'Épaulette ? », « c'est quand le bouclage ? », « qu'est-ce qui traîne ? ».",
+    target: '.dk-app .ws-topbar-title',
+    params: [{ name: 'revue', type: 'string', required: false, desc: 'nom (même partiel) de la revue ; inutile si une seule' }],
+    run: async (args = {}) => {
+      const { pub, pubs } = await _dkResolvePub(args.revue);
+      const cur = _dkCurrentIssue(pub);
+      if (!cur)
+        return { revue: pub.name, autres_revues: pubs.length > 1 ? pubs.length - 1 : undefined, message: 'Aucun numéro pour l’instant — desK en crée un en un geste.' };
+      const D = await _dkIssue(cur.id);
+      const dues = dkRelancesDues(D.articles || [], { contribs: D.contribs, relances: D.relances });
+      const enRetard = dues.filter(a => dkLateDays(a) > 0).length;
+      // Bouclage : jours avant le jalon. ⚠ le worker renvoie `jalons` en TEXT
+      // JSON brut (dk_issues.jalons TEXT), jamais parsé — desk.js fait pareil
+      // (JSON.parse). Sur une string, `.bouclage` serait undefined en silence.
+      const jal = _dkJalons(cur.jalons);
+      const jb = jal.bouclage ? new Date(jal.bouclage + 'T12:00:00') : null;
+      let bouclageJ = null;
+      if (jb && !isNaN(jb)) bouclageJ = Math.round((jb.getTime() - Date.now()) / 86400000);
+      return {
+        revue: pub.name,
+        numero: cur.num, theme: cur.theme || null, statut: cur.status,
+        bouclage_dans_jours: bouclageJ,
+        copies_a_relancer: dues.length, dont_en_retard: enRetard,
+        a_trier: (D.inbox || []).length,
+        autres_revues: pubs.length > 1 ? pubs.filter(p => p.id !== pub.id).map(p => p.name) : undefined,
+      };
+    },
+  },
+  {
+    id: 'dk.issue_state', pad: 'desk', mode: 'read',
+    label: 'Détail d’un numéro desK',
+    desc: "Le sommaire d'un numéro : articles attendus/remis/relus, leur page (folio réel), leur contributeur, leur marge. Répond à « qu'est-ce qui manque dans le numéro ? », « qui n'a pas rendu ? », « le sommaire du n° en cours ».",
+    target: '.dk-app [data-slot=\"main\"]',
+    params: [
+      { name: 'revue', type: 'string', required: false, desc: 'nom de la revue ; inutile si une seule' },
+      { name: 'numero', type: 'string', required: false, desc: 'n° visé ; par défaut le numéro en fabrication' },
+    ],
+    run: async (args = {}) => {
+      const { pub } = await _dkResolvePub(args.revue);
+      let issue = null;
+      if (args.numero != null && String(args.numero).trim())
+        issue = (pub.issues || []).find(i => String(i.num) === String(args.numero).trim());
+      issue = issue || _dkCurrentIssue(pub);
+      if (!issue) return { revue: pub.name, message: 'Aucun numéro à afficher.' };
+      const D = await _dkIssue(issue.id);
+      // Placés dans CE numéro (un article du marbre n'y est pas forcément).
+      const placedIds = new Set((D.slots || []).map(s => s.art_id).filter(Boolean));
+      const arts = (D.articles || []).filter(a => placedIds.has(a.id) && a.status !== 'abandonne');
+      const STAT = { propose: 'proposé', attendu: 'attendu', remis: 'remis', relu: 'relu', maquette: 'maquetté', publie: 'publié' };
+      const items = arts.map(a => ({
+        titre: a.title, contributeur: a.contrib || null,
+        statut: STAT[a.status] || a.status,
+        pages: _dkPagesOf(a.id, D, pub),
+        attend_la_copie: dkNeedsCopy(a.status),
+      }));
+      const attendus = items.filter(i => i.attend_la_copie).length;
+      return {
+        revue: pub.name, numero: issue.num, theme: issue.theme || null, statut: issue.status,
+        articles_places: items.length, copies_attendues: attendus,
+        sommaire: items,
+      };
+    },
+  },
+  {
+    id: 'dk.relances_dues', pad: 'desk', mode: 'read',
+    label: 'Copies à relancer',
+    desc: "Les contributeurs dont la copie est en attente et qu'il est temps de relancer (échéance + retard habituel — jamais une relance déjà envoyée récemment). Répond à « qui je dois relancer ? », « qui est en retard ? ».",
+    target: '.dk-app .ws-topbar-title',
+    params: [{ name: 'revue', type: 'string', required: false, desc: 'nom de la revue ; inutile si une seule' }],
+    run: async (args = {}) => {
+      const { pub } = await _dkResolvePub(args.revue);
+      const cur = _dkCurrentIssue(pub);
+      if (!cur) return { revue: pub.name, total: 0, message: 'Aucun numéro en cours.' };
+      const D = await _dkIssue(cur.id);
+      const dues = dkRelancesDues(D.articles || [], { contribs: D.contribs, relances: D.relances });
+      if (!dues.length)
+        return { revue: pub.name, numero: cur.num, total: 0, message: 'Rien à relancer — toutes les copies attendues sont dans les temps.' };
+      return {
+        revue: pub.name, numero: cur.num, total: dues.length,
+        a_relancer: dues.map(a => {
+          const ri = dkRelanceInfo(a, { contribs: D.contribs, relances: D.relances });
+          const late = dkLateDays(a);
+          return {
+            article: a.title, contributeur: a.contrib || null,
+            pages: _dkPagesOf(a.id, D, pub),
+            retard_jours: late > 0 ? late : 0,
+            type: ri && ri.mode === 'avant' ? 'rappel avant échéance' : 'copie en retard',
+            email_connu: !!(ri && ri.email),
+          };
+        }),
+        note: 'Je peux préparer le brouillon de relance ; l’envoi restera ton geste.',
+      };
+    },
+  },
+  {
+    id: 'dk.inbox', pad: 'desk', mode: 'read',
+    label: 'Bac à trier desK',
+    desc: "Les contributions arrivées par e-mail qui attendent d'être rattachées à un article (bac à trier). Répond à « qu'est-ce qui est arrivé dans le bac ? », « des contributions à ranger ? ».",
+    target: '.dk-app [data-slot=\"main\"]',
+    params: [{ name: 'revue', type: 'string', required: false, desc: 'nom de la revue ; inutile si une seule' }],
+    run: async (args = {}) => {
+      const { pub } = await _dkResolvePub(args.revue);
+      const cur = _dkCurrentIssue(pub);
+      if (!cur) return { revue: pub.name, total: 0, message: 'Aucun numéro en cours.' };
+      const D = await _dkIssue(cur.id);
+      const inbox = D.inbox || [];
+      if (!inbox.length)
+        return { revue: pub.name, total: 0, message: 'Le bac est vide — rien à trier.' };
+      return {
+        revue: pub.name, total: inbox.length,
+        a_trier: inbox.slice(0, 20).map(m => {
+          let nPj = 0;
+          try { nPj = (JSON.parse(m.attachments || '[]') || []).length; } catch (e) {}
+          return {
+            de: m.from_name || m.from_email, objet: m.subject || '(sans objet)',
+            recu_le: _frDate(_sqlUtc(m.received_at)),
+            pieces_jointes: nPj,
+          };
+        }),
+        en_plus: inbox.length > 20 ? inbox.length - 20 : undefined,
+      };
+    },
+  },
+
   /* ═══════════════════════════════════════════════════════════════
      V1.1 — LES ÉCRITURES SÛRES (sprint « Kora agit », 18/07/2026)
      Rien d'irréversible, rien ne part vers l'extérieur : préparer,
@@ -1027,9 +1167,9 @@ export const KORA_ACTIONS = [
   {
     id: 'os.open_pad', pad: 'os', mode: 'write',
     label: 'Ouvrir un outil',
-    desc: "Ouvre un outil du catalogue : brainstorming, ghostwriter, social, qr, sentinel, keynapse ou smartagent. Répond à « ouvre-moi le Social Manager ».",
+    desc: "Ouvre un outil du catalogue : brainstorming, ghostwriter, social, qr, sentinel, keynapse, smartagent ou desk. Répond à « ouvre-moi le Social Manager ».",
     target: '.ws-app',
-    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming | ghostwriter | social | qr | sentinel | keynapse | smartagent' }],
+    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming | ghostwriter | social | qr | sentinel | keynapse | smartagent | desk' }],
     run: async (args = {}) => {
       const KORA_PADS = {
         brainstorming: ['A-COM-003', 'le Brainstorming'], ghostwriter: ['A-COM-005', 'le Ghost Writer'],
@@ -1041,10 +1181,18 @@ export const KORA_ACTIONS = [
         keynapse: ['O-Keyn-001', 'Keynapse'], notes: ['O-Keyn-001', 'Keynapse'],
         smartagent: ['O-AGT-001', 'le Smart Agent'], 'smart agent': ['O-AGT-001', 'le Smart Agent'],
         jumeaux: ['O-AGT-001', 'le Smart Agent'], kortex: ['O-AGT-001', 'le Smart Agent'],
+        // desK (K-9) — la revue, le chemin de fer.
+        desk: ['O-DSK-001', 'desK'], revue: ['O-DSK-001', 'desK'],
+        'chemin de fer': ['O-DSK-001', 'desK'], 'epaulette': ['O-DSK-001', 'desK'],
+        // Alias d'ouverture SEULE des pads hors-catalogue (KORA_BRIEF §15.3,
+        // « coût zéro, à poser au premier train qui touche le catalogue ») :
+        // aucune action métier — juste « ouvre-moi Missive / Brief Prod ».
+        missive: ['O-SEC-001', 'Missive'], sceau: ['O-SEC-001', 'Missive'],
+        'brief prod': ['A-COM-002', 'Brief Prod'], kodex: ['A-COM-002', 'Brief Prod'], 'brief': ['A-COM-002', 'Brief Prod'],
       };
       const key = String(args.pad || '').trim().toLowerCase();
       const entry = KORA_PADS[key];
-      if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social, qr, sentinel, keynapse, smartagent.`);
+      if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social, qr, sentinel, keynapse, smartagent, desk.`);
       _guardGwModal();
       const [padId, nom] = entry;
       /* openTool = LA porte gated (licence + Living Layer, ui-renderer.js:2192) */
@@ -1192,6 +1340,66 @@ export const KORA_ACTIONS = [
       const r = await _knApi(`/bubbles/${encodeURIComponent(b.id)}/notes`, { method: 'POST', body: { body: text } });
       return { fait: true, note: b.title, ajoute: _excerpt(r.note?.body || text, 160),
                rappel: 'Ajouté aux notes libres de la bulle — visible en l’ouvrant dans Keynapse.' };
+    },
+  },
+  {
+    /* desK — PRÉPARER une relance, jamais l'envoyer. Envoyer un e-mail est
+       une ligne rouge du brief (§7, colonne rouge « Publier / envoyer ») :
+       Kora amène la rédactrice devant le brouillon déjà rédigé, le doigt
+       sur « Envoyer » reste le sien. Même patron que sm.compose_draft.
+       On PASSE par openTool (la porte gatée) avec {relance:artId} ou
+       {relances:true} — desk.js ouvre alors la liste ou le formulaire. */
+    id: 'dk.prepare_relance', pad: 'desk', mode: 'write',
+    label: 'Préparer une relance dans desK',
+    desc: "Ouvre desK sur le brouillon de relance déjà rédigé (l'article s'il est nommé, sinon la liste des copies à relancer). N'ENVOIE RIEN — le bouton Envoyer reste à toi. Répond à « prépare une relance pour … », « relance … ».",
+    target: '.dk-app [data-slot=\"insp\"]',
+    params: [
+      { name: 'revue', type: 'string', required: false, desc: 'nom de la revue ; inutile si une seule' },
+      { name: 'article', type: 'string', required: false, desc: 'titre OU contributeur (même partiel) ; sinon la liste s’ouvre' },
+    ],
+    run: async (args = {}) => {
+      _guardGwModal();
+      if (!(await _padAccessible('O-DSK-001'))) {
+        const { openTool } = await import('./ui-renderer.js');
+        openTool('O-DSK-001');
+        return { fait: false, raison: 'desK n’est pas dans la licence — sa fiche est ouverte à l’écran.' };
+      }
+      const { pub } = await _dkResolvePub(args.revue);
+      const cur = _dkCurrentIssue(pub);
+      if (!cur) return { fait: false, raison: `Aucun numéro en cours pour ${pub.name} — rien à relancer.` };
+      const D = await _dkIssue(cur.id);
+      const dues = dkRelancesDues(D.articles || [], { contribs: D.contribs, relances: D.relances });
+      const opts = {};
+      let cible = null;
+      const ref = String(args.article || '').trim().toLowerCase();
+      if (ref) {
+        const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        const n = norm(ref);
+        const match = dues.filter(a => norm(a.title).includes(n) || norm(a.contrib).includes(n));
+        if (!match.length)
+          return { fait: false, raison: dues.length
+            ? `Aucune copie à relancer pour « ${args.article} ». En attente : ${dues.map(a => a.contrib || a.title).join(' · ')}.`
+            : 'Rien à relancer en ce moment — toutes les copies attendues sont dans les temps.' };
+        if (match.length > 1)
+          return { fait: false, raison: `Plusieurs correspondent à « ${args.article} » : ${match.map(a => a.title).join(' · ')}. Lequel ?` };
+        opts.relance = match[0].id; cible = match[0].contrib || match[0].title;
+      } else {
+        if (!dues.length)
+          return { fait: false, raison: 'Rien à relancer en ce moment — toutes les copies attendues sont dans les temps.' };
+        opts.relances = true;
+      }
+      /* desK boote sur dk_last_pub/dk_last_issue : on les pose sur la revue+numéro
+         résolus AVANT d'ouvrir, sinon desK pourrait rouvrir une AUTRE revue et
+         l'article ne serait pas dans son marbre chargé → l'annonce mentirait
+         (revue adverse B5). Sans effet si desK est déjà ouvert (voir _applyOpts). */
+      try { localStorage.setItem('dk_last_pub', pub.id); localStorage.setItem('dk_last_issue', cur.id); } catch (e) {}
+      const { openTool } = await import('./ui-renderer.js');
+      openTool('O-DSK-001', opts);
+      return cible
+        ? { fait: true, outil_ouvert: 'desK', brouillon_pret_pour: cible,
+            rappel: 'Le brouillon est ouvert — relis-le et clique Envoyer quand tu veux. Je n’envoie rien à ta place.' }
+        : { fait: true, outil_ouvert: 'desK', a_relancer: dues.length,
+            rappel: 'La liste des copies à relancer est ouverte — choisis qui relancer, l’envoi reste ton geste.' };
     },
   },
 ];
@@ -1469,6 +1677,91 @@ async function _saResolve(ref) {
   throw new Error(`Aucun jumeau « ${r} ». Jumeaux existants : ${agents.map(a => a.name).join(' · ')}.`);
 }
 
+/* ── desK (pad O-DSK-001) — client de lecture (K-9) ──
+   Tenant = LA PUBLICATION, jamais claims.sub : le worker le fait respecter
+   tout seul (memberGate via dk_members) — on ne réimplémente aucune garde,
+   on lit avec le JWT et on obéit à ce qu'il renvoie. Base = /api/desk, en
+   honorant l'override dev localStorage.dk_api comme desk.js. */
+function _dkBase() {
+  try { const o = localStorage.getItem('dk_api'); if (o) return o; } catch (e) {}
+  return `${KORA_API}/api/desk`;
+}
+async function _dkApi(path, opts = {}) {
+  const token = _jwt();
+  if (!token) throw new Error('Non connecté : ouvre Keystone et connecte-toi (ks_jwt absent).');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeout || 30000);
+  let res;
+  try {
+    res = await fetch(`${_dkBase()}${path}`, {
+      method: opts.method || 'GET',
+      headers: { 'Authorization': `Bearer ${token}`, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    throw (e && e.name === 'AbortError')
+      ? new Error('desK met trop de temps à répondre — réessaie dans un instant.') : e;
+  }
+  clearTimeout(timer);
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* corps vide */ }
+  if (!res.ok) throw new Error(data.error || `desK ${path} → ${res.status}`);
+  return data;
+}
+/* La publication (revue) par NOM — même patron que _saResolve. Le bootstrap
+   est la SEULE porte : jamais un id deviné. Une seule revue se résout seule. */
+async function _dkResolvePub(ref) {
+  const boot = await _dkApi('/bootstrap');
+  const pubs = boot.publications || [];
+  if (!pubs.length)
+    throw new Error('Tu n’as pas encore de revue dans desK — desK s’ouvre pour en créer une.');
+  const r = String(ref || '').trim();
+  if (!r) {
+    if (pubs.length === 1) return { pub: pubs[0], pubs };
+    throw new Error(`Plusieurs revues : ${pubs.map(p => p.name).join(' · ')}. De laquelle tu parles ?`);
+  }
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const n = norm(r);
+  const exact = pubs.filter(p => norm(p.name) === n);
+  const hit = exact.length === 1 ? exact
+    : (exact.length ? exact : pubs.filter(p => norm(p.name).includes(n)));
+  if (hit.length === 1) return { pub: hit[0], pubs };
+  if (hit.length > 1)
+    throw new Error(`Plusieurs revues correspondent à « ${r} » : ${hit.map(p => p.name).join(' · ')}. Précise.`);
+  throw new Error(`Aucune revue « ${r} ». Revues existantes : ${pubs.map(p => p.name).join(' · ')}.`);
+}
+/* jalons = TEXT JSON brut côté worker (jamais parsé au bootstrap) ; tolère
+   aussi un objet déjà parsé, par prudence. */
+function _dkJalons(v) {
+  if (v && typeof v === 'object') return v;
+  try { return JSON.parse(v || '{}') || {}; } catch (e) { return {}; }
+}
+/* Le numéro « courant » d'une revue = celui en fabrication (préparation ou
+   production), sinon le plus récent (bootstrap trie created_at DESC). */
+function _dkCurrentIssue(pub) {
+  const issues = pub.issues || [];
+  return issues.find(i => i.status === 'preparation' || i.status === 'production') || issues[0] || null;
+}
+/* Charge l'état complet d'un numéro (payload issue enrichi : articles,
+   slots, contribs, relances, inbox…). ⚠ le worker ne renvoie que le numéro
+   PHYSIQUE des pages — le folio affiché se recalcule via dkPn(n, pub). */
+async function _dkIssue(issueId) {
+  const d = await _dkApi(`/issue/${encodeURIComponent(issueId)}`);
+  return d;
+}
+/* Placement d'un article dans un numéro : ses pages titulaires (folio). */
+function _dkPagesOf(artId, D, pub) {
+  const pageById = {};
+  for (const p of (D.pages || [])) pageById[p.id] = p;
+  const ns = [];
+  for (const s of (D.slots || [])) {
+    if (s.art_id === artId && pageById[s.page_id]) ns.push(pageById[s.page_id].n);
+  }
+  return [...new Set(ns)].sort((a, b) => a - b).map(n => dkPn(n, pub));
+}
+
 /* Le modal Ghost Writer vit à z-index 99999 : tout outil ouvert pendant
    qu'il est affiché apparaîtrait DERRIÈRE lui (retour test réel 18/07 —
    « elle n'a pas ouvert brainstorming ») — et le fermer perdrait les
@@ -1514,6 +1807,8 @@ export const KORA_PAD_META = [
     desc: 'notes en bulles : chercher un mot-clé, rappels à venir/en retard, détail d’une note, ouvrir une note, y ajouter du texte' },
   { pad: 'smartagent', label: 'Smart Agent',
     desc: 'jumeaux de savoir-faire (plan Max) : liste des agents, trous de savoir, état du coffre Kortex, usage du lien public' },
+  { pad: 'desk', label: 'desK',
+    desc: 'chemin de fer d’une revue : état d’un numéro, bouclage, sommaire, copies en retard, bac à trier, préparer une relance de contributeur' },
 ];
 
 /* ── Exécution ── */

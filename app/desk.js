@@ -44,6 +44,12 @@ import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 import { openGhostwriterChained }             from './ghostwriter.js';   // DK-5 : passerelle relecture (round-trip → relu)
+// K-9 : règles métier PURES partagées avec Kora (relances, folio, statuts).
+// Une seule implémentation — Kora lit « qui relancer » comme desK l'affiche.
+import {
+  DK_STATUS_LABEL, dkNeedsCopy, dkNumOpt, dkFolio, dkPn,
+  dkContribByName, dkRelancesOf, dkRelanceInfo, dkRelancesDues,
+} from './lib/desk-rules.js';
 
 const WORKSPACE_META = { id: 'O-DSK-001', name: 'desK' };
 // dk_api (localStorage) = override de dev/test — jamais posé en usage normal.
@@ -53,15 +59,19 @@ const POLL_MS = 45000;          // rafraîchissement d'équipe (2-5 personnes, p
 
 // Statuts d'article : libellé + point + pipeline restant (jours) une fois
 // la copie disponible. needsCopy = la remise est encore attendue.
+// ⚠ label et needsCopy viennent des règles PARTAGÉES (lib/desk-rules.js) —
+// Kora s'y branche aussi ; ne jamais les redéfinir ici. Seuls dot/reluDays/
+// maqDays restent locaux : rendu et délais de pipeline n'intéressent que desK.
 const STATUS = {
-  propose:  { label: 'proposé',  dot: '#8d93a8', reluDays: 2, maqDays: 2, needsCopy: true },
-  attendu:  { label: 'attendu',  dot: '#6d8dd6', reluDays: 2, maqDays: 2, needsCopy: true },
-  remis:    { label: 'remis',    dot: '#c9a227', reluDays: 2, maqDays: 2, needsCopy: false },
-  relu:     { label: 'relu',     dot: '#4cc38a', reluDays: 0, maqDays: 2, needsCopy: false },
-  maquette: { label: 'maquetté', dot: '#4cc38a', reluDays: 0, maqDays: 0, needsCopy: false },
-  publie:   { label: 'publié',   dot: '#4cc38a', reluDays: 0, maqDays: 0, needsCopy: false },
-  abandonne:{ label: 'abandonné',dot: '#8d93a8', reluDays: 0, maqDays: 0, needsCopy: false },
+  propose:  { dot: '#8d93a8', reluDays: 2, maqDays: 2 },
+  attendu:  { dot: '#6d8dd6', reluDays: 2, maqDays: 2 },
+  remis:    { dot: '#c9a227', reluDays: 2, maqDays: 2 },
+  relu:     { dot: '#4cc38a', reluDays: 0, maqDays: 2 },
+  maquette: { dot: '#4cc38a', reluDays: 0, maqDays: 0 },
+  publie:   { dot: '#4cc38a', reluDays: 0, maqDays: 0 },
+  abandonne:{ dot: '#8d93a8', reluDays: 0, maqDays: 0 },
 };
+for (const k of Object.keys(STATUS)) { STATUS[k].label = DK_STATUS_LABEL[k]; STATUS[k].needsCopy = dkNeedsCopy(k); }
 const JALON_DEFS = [
   { key: 'bouclage',  name: 'Bouclage rédactionnel' },
   { key: 'maquette',  name: 'Fin de maquette' },
@@ -140,8 +150,25 @@ async function _api(path, opts = {}) {
 }
 
 // ── Ouverture / fermeture ───────────────────────────────────────
-export function openDesk() {
-  if (_root) return;
+/* K-9 · Réception des passerelles (Kora, et tout appelant d'openTool) :
+   `{ relances:true }`  → la liste des copies à relancer ;
+   `{ relance:'<artId>' }` → le brouillon déjà rédigé pour CET article.
+   Kora PRÉPARE, elle n'envoie jamais : envoyer un e-mail est une ligne
+   rouge du brief (§7) — elle amène la rédactrice devant « Envoyer », le
+   doigt reste le sien. */
+let _pendingOpts = {};
+function _applyOpts(opts) {
+  if (!opts || (!opts.relance && !opts.relances)) return;
+  if (opts.relance) {
+    const a = _artById(opts.relance);
+    if (a) { _openRelanceForm(a, _openRelanceList); return; }
+  }
+  _openRelanceList();          // article introuvable dans ce numéro → la liste
+}
+
+export function openDesk(opts = {}) {
+  if (_root) { _applyOpts(opts); return; }   // déjà ouvert : on obéit quand même
+  _pendingOpts = opts || {};
   _root = document.createElement('div');
   _root.className = 'ws-app dk-app';
   _root.innerHTML = `
@@ -231,6 +258,9 @@ async function _boot() {
     await _loadIssue();
     clearInterval(_pollTimer);
     _pollTimer = setInterval(() => { if (!document.hidden && _issueId && !_writer) _loadIssue(true); }, POLL_MS);
+    // Passerelle (Kora…) : une fois seulement, le numéro chargé — le
+    // brouillon de relance a besoin de _D (articles, contribs, relances).
+    const o = _pendingOpts; _pendingOpts = {}; _applyOpts(o);
   } catch (e) {
     if (String(e.message) === 'offline' && cached) { _offline = true; _renderFer(); }
     else if (String(e.message) === 'offline') main.innerHTML = `<div class="dk-center dk-empty"><p>Impossible de joindre le serveur.<br>Vérifiez la connexion puis rouvrez desK.</p></div>`;
@@ -417,16 +447,12 @@ function _margeTxt(m) { return m === null ? '' : (m < 0 ? 'marge brûlée (' + m
    move, la confrontation au PDF. Ces helpers ne changent QUE le folio AFFICHÉ.
    Demande L'Épaulette : la couverture est hors numérotation (« Couverture »),
    la page qui suit démarre à 0, donc le sommaire (3ᵉ page physique) porte le 1. */
-function _numOpt() {
-  const pub = _pubs.find(p => p.id === _pubId) || {};
-  return { cover: !!pub.cover_unnumbered, first: Number.isFinite(pub.first_folio) ? pub.first_folio : 1 };
-}
-function _dispN(n) {                     // folio affiché ; null = couverture non numérotée
-  const o = _numOpt();
-  if (o.cover && n === 1) return null;
-  return o.first + (n - (o.cover ? 2 : 1));
-}
-function _pn(n) { const d = _dispN(n); return d === null ? 'couv.' : String(d); }   // pour « p. X », toasts…
+// Calcul partagé avec Kora (lib/desk-rules.js) : ces wrappers ne font que
+// lui fournir la publication courante.
+function _curPub() { return _pubs.find(p => p.id === _pubId) || {}; }
+function _numOpt() { return dkNumOpt(_curPub()); }
+function _dispN(n) { return dkFolio(n, _curPub()); }   // folio affiché ; null = couverture non numérotée
+function _pn(n) { return dkPn(n, _curPub()); }         // pour « p. X », toasts…
 function _pageLabel(p) {                 // en-tête de fiche : « page 3 » ou « Couverture »
   const d = _dispN(p.n);
   return d === null ? (p.fixe_tag || p.fixe_title || 'Couverture') : 'page ' + d;
@@ -524,33 +550,15 @@ function _fmtSize(b) {
   if (b >= 1048576) return (b / 1048576).toFixed(1).replace('.', ',') + ' Mo';
   return Math.max(1, Math.round(b / 1024)) + ' Ko';
 }
-function _contribByName(name) {
-  if (!name) return null;
-  const n = String(name).trim().toLowerCase();
-  return (_D.contribs || []).find(c => (c.name || '').trim().toLowerCase() === n) || null;
-}
-function _relancesOf(artId) { return (_D.relances || []).filter(r => r.art_id === artId); }
-
-/* La relance À FAIRE se calcule, elle n'est jamais stockée (§5.4) :
-   - contributeur fiable ou inconnu → relance DOUCE 2 j après l'échéance ;
-   - retard moyen constaté > 5 j → RAPPEL 3 j avant l'échéance ;
-   - une relance envoyée < 7 j suspend la suggestion ;
-   - le pointage (statut ≠ attendu) la fait disparaître d'elle-même.    */
-function _relanceInfo(a) {
-  const st = STATUS[a.status] || STATUS.propose;
-  if (!st.needsCopy || !a.due || !a.contrib) return null;
-  const c = _contribByName(a.contrib);
-  const avg = c && c.n_remises ? c.total_delay / c.n_remises : null;
-  const offset = (avg !== null && avg > 5) ? -3 : 2;
-  const at = new Date(new Date(a.due + 'T12:00:00').getTime() + offset * DAY);
-  if (Date.now() < at.getTime()) return null;
-  const last = _relancesOf(a.id)[0];
-  if (last && (Date.now() - new Date(last.sent_at + (last.sent_at.endsWith('Z') ? '' : 'Z')).getTime()) < 7 * DAY) return null;
-  return { at, mode: offset < 0 ? 'avant' : 'apres', email: c ? c.email : null };
-}
-function _relancesDues() {
-  return (_D && _D.articles || []).filter(a => !['publie', 'abandonne'].includes(a.status) && _relanceInfo(a));
-}
+/* La relance À FAIRE se calcule, elle n'est jamais stockée (§5.4) — la
+   règle vit dans lib/desk-rules.js, PARTAGÉE avec Kora (K-9) : ce qu'elle
+   annonce dans la conversation est ce que desK affiche ici, toujours.
+   Ces wrappers ne font que lui passer le contexte du numéro chargé.      */
+function _relCtx() { return { contribs: (_D && _D.contribs) || [], relances: (_D && _D.relances) || [] }; }
+function _contribByName(name) { return dkContribByName(name, (_D && _D.contribs) || []); }
+function _relancesOf(artId) { return dkRelancesOf(artId, (_D && _D.relances) || []); }
+function _relanceInfo(a) { return dkRelanceInfo(a, _relCtx()); }
+function _relancesDues() { return dkRelancesDues((_D && _D.articles) || [], _relCtx()); }
 
 // Gabarit de brouillon (déterministe, ZÉRO IA) — la voix reste la sienne.
 function _relanceDraft(a) {
