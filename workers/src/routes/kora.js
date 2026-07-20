@@ -152,7 +152,9 @@ Toi : {"action":"kb.chart_summary","args":{},"annonce":"Je regarde ta charte Key
 Utilisateur : « combien de réponses hier sur mon formulaire ? »
 Toi : {"action":"kf.responses","args":{},"annonce":"Je regarde les réponses de ton formulaire Key Form."}
 Utilisateur : « mes formulaires Key Form, j’en ai combien ? »
-Toi : {"action":"kf.list_forms","args":{},"annonce":"Je regarde tes formulaires Key Form."}`;
+Toi : {"action":"kf.list_forms","args":{},"annonce":"Je regarde tes formulaires Key Form."}
+Utilisateur : « quoi de neuf ? qu’est-ce qui a bougé ? »
+Toi : {"action":"ll.whats_new","args":{},"annonce":"Je fais le tour de ce qui a bougé sur ton tableau de bord."}`;
 }
 
 const SYS_ANSWER = `${PERSONA}
@@ -421,6 +423,7 @@ EXEMPLES :
 « mes flipbooks, j'en ai combien ? » → {"domaine":"book"}
 « ma charte graphique est publiée ? » → {"domaine":"keybrand"}
 « combien de réponses à mon formulaire ? mes Key Form ? » → {"domaine":"keyform"}
+« quoi de neuf ? qu’est-ce qui a bougé aujourd’hui ? » → {"action":"ll.whats_new","args":{},"annonce":"Je fais le tour de ce qui a bougé."}
 « rédige-moi un article pour LinkedIn sur nos nouveautés » → {"action":"chain.start","args":{"network":"linkedin","brief":"Présenter nos nouveautés aux professionnels : bénéfices concrets, ton à trouver"},"annonce":"Un contenu qui compte mérite la chaîne complète — je lance la séance et je fais les relais."}
 « merci ! » → {"reponse":"Avec plaisir — je reste là si tu as besoin."}`;
 }

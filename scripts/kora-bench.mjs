@@ -125,6 +125,11 @@ const CORPUS = [
   { pad:'keyform', phrase:"combien de réponses hier sur mon formulaire ?", attendu:'kf.responses',
     note:'suivi des réponses d’UN formulaire — comptes + dates, jamais le contenu (PII)' },
 
+  // ── Living Layer (K-13) — GLOBALE « quoi de neuf ? » (pas un pad) ──
+  { pad:'livinglayer', phrase:"quoi de neuf ?",                    attendu:'ll.whats_new' },
+  { pad:'livinglayer', phrase:"qu'est-ce qui a bougé aujourd'hui ?", attendu:'ll.whats_new',
+    note:'synthèse ambiante transverse — action globale, jamais le champ text (PII networK)' },
+
   // ── chaîne de contenu ──
   { pad:'chaine', phrase:"écris-moi un article promo de Keystone pour LinkedIn", attendu:'chain.start',
     note:'doctrine concierge : elle orchestre, elle ne rédige pas' },

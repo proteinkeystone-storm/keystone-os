@@ -1577,6 +1577,70 @@ export const KORA_ACTIONS = [
       return out;
     },
   },
+
+  /* ═══ Living Layer (K-13 21/07/2026 — GLOBALE « quoi de neuf ? ») ═══
+     Transverse, pas un pad → global:true dans KORA_PAD_META (n'entame pas
+     les 12 domaines routables). Lecture seule : /board calcule, ne mute rien
+     de métier. Synthèse construite depuis metrics UNIQUEMENT (zéro PII). */
+  {
+    id: 'll.whats_new', pad: 'livinglayer', mode: 'read',
+    label: 'Quoi de neuf',
+    desc: "Le point d'ENSEMBLE du tableau de bord, TOUS les pads d'un coup : à agir, alerte éventuelle, pouls global. Pour « quoi de neuf ? », « qu'est-ce qui a bougé ? ». PAS pour une question sur UN seul outil (ses scans, ses réponses).",
+    target: '#ks-living',
+    params: [],
+    run: async () => {
+      /* mêmes capteurs à l'unité que le dashboard (QR/site épinglés) */
+      const sensors = {};
+      try { const f = JSON.parse(localStorage.getItem('ks_sdqr_followed') || 'null'); if (f && f.id) sensors.followedQr = String(f.id).slice(0, 64); } catch (e) { /* no-op */ }
+      try { const f = JSON.parse(localStorage.getItem('ks_sentinel_followed') || 'null'); if (f && f.id) sensors.followedSite = String(f.id).slice(0, 64); } catch (e) { /* no-op */ }
+
+      const data = await _llBoard(sensors);
+      const m = (data && data.metrics) || {};
+      const n = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
+
+      /* À AGIR — uniquement les signaux non nuls qui appellent un geste */
+      const a_agir = [];
+      if (n(m.sitesDown) > 0)        a_agir.push(`${m.sitesDown} site(s) hors ligne (Sentinel)`);
+      if (n(m.socialFailed24h) > 0)  a_agir.push(`${m.socialFailed24h} publication(s) à reprendre (Social Manager)`);
+      if (n(m.gapsOpen) > 0)         a_agir.push(`${m.gapsOpen} trou(s) de savoir à combler (Smart Agent)`);
+      if (n(m.remindersToday) > 0)   a_agir.push(`${m.remindersToday} rappel(s) Keynapse aujourd'hui`);
+      if (n(m.keyform24h) > 0)       a_agir.push(`${m.keyform24h} nouvelle(s) réponse(s) Key Form depuis hier`);
+      if (n(m.deskInbox) > 0)        a_agir.push(`${m.deskInbox} contribution(s) dans le bac desK`);
+      if (n(m.deskOverdue) > 0)      a_agir.push(`${m.deskOverdue} copie(s) desK en retard`);
+      if (typeof m.deskBouclageDays === 'number' && m.deskBouclageDays >= 0 && m.deskBouclageDays <= 3)
+        a_agir.push(`bouclage desK dans ${m.deskBouclageDays} jour(s)`);
+
+      /* ALERTE — incident cassé, dérivé de metrics (jamais du texte PII).
+         NB : la barre du dashboard épingle aussi l'INTERCEPTION Sceau comme
+         alerte prioritaire, mais Kora ne la surface PAS — Missive/Sceau est
+         exclu par design (KORA_BRIEF §15.3 : « aucune action, pas même un
+         compteur »). D'où le message calme scopé « côté tes outils » : Kora
+         ne se prononce que sur ce qu'elle a le droit de lire. */
+      let alerte = null;
+      if (n(m.sitesDown) > 0)             alerte = `${m.sitesDown} site(s) hors ligne — à vérifier dans Sentinel.`;
+      else if (n(m.socialFailed24h) > 0)  alerte = `${m.socialFailed24h} publication(s) non aboutie(s) — à reprendre dans Social Manager.`;
+
+      /* POULS — chiffres d'ambiance, présents même quand tout va bien */
+      const pouls = {};
+      if (n(m.sitesTotal) > 0)         pouls.sites_en_ligne = `${n(m.sitesTotal) - n(m.sitesDown)}/${m.sitesTotal}`;
+      if (n(m.scans7d) > 0)            pouls.scans_qr_7j = m.scans7d;
+      if (n(m.formsPublished) > 0)     pouls.formulaires_publies = m.formsPublished;
+      if (n(m.socialConnected) > 0)    pouls.reseaux_connectes = m.socialConnected;
+      if (n(m.keybrandPublished) > 0)  pouls.chartes_publiees = m.keybrandPublished;
+      if (n(m.agentKnowledge) > 0)     pouls.fiches_savoir = m.agentKnowledge;
+      if (n(m.keynapseNotes) > 0)      pouls.notes_keynapse = m.keynapseNotes;
+      if (typeof m.ghostQuota === 'number' && m.ghostQuota > 0) pouls.ecriture_ia = `${n(m.ghostUsed)}/${m.ghostQuota}`;
+      if (m.followedQr && m.followedQr.name)
+        pouls.qr_suivi = { nom: m.followedQr.name, scans_7j: n(m.followedQr.scans7d) };
+      if (m.followedSite && m.followedSite.name)
+        pouls.site_suivi = { nom: m.followedSite.name, en_ligne: m.followedSite.ok === 1 ? true : m.followedSite.ok === 0 ? false : null };
+
+      const rien = a_agir.length === 0 && !alerte;
+      const out = { a_agir, alerte, pouls, rien_a_signaler: rien };
+      if (rien) out.message = 'Rien qui réclame ton attention côté tes outils — tout est calme. Voici le pouls du jour.';
+      return out;
+    },
+  },
 ];
 
 /* ── Ancrage « c'est quoi Keystone » (fix immobilier, 19/07) ──
@@ -2085,6 +2149,44 @@ async function _kfResolveForm(ref) {
   throw new Error(`Aucun formulaire « ${r} ». Formulaires existants : ${forms.map(titreDe).join(' · ')}.`);
 }
 
+/* ── Living Layer (K-13) — « quoi de neuf ? » = synthèse ambiante ──
+   PAS un pad : la surface transverse du dashboard (KORA_BRIEF §15.2). Une
+   SEULE action GLOBALE (montrée à l'étage 1 comme chain/os, hors des 12
+   domaines). On réutilise l'endpoint existant `/api/livinglayer/board` :
+   il calcule déjà toute la synthèse ET résout le piège tenant en interne
+   (`padTenant = isAdmin ? 'default' : claims.sub`, sauf Key Form/desK/GW =
+   claims.sub) — exactement ce que la barre du dashboard affiche. Kora ne
+   fait que relayer, rien à résoudre côté client.
+   preferMode:'calculator' = chemin DÉTERMINISTE du board (zéro LLM → pas de
+   coût ni latence IA côté board, Kora rédige elle-même sa phrase).
+   ⚠ PII : on ne lit QUE `metrics` (chiffres + noms des QR/sites suivis = les
+   siens, sûrs). Le champ `text`, lui, peut porter des noms de contacts
+   networK ou du texte libre Keynapse/desK → on le JETTE, jamais au modèle. */
+async function _llBoard(clientSensors = {}) {
+  const token = _jwt();
+  if (!token) throw new Error('Non connecté : ouvre Keystone et connecte-toi (ks_jwt absent).');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30000);
+  let res;
+  try {
+    res = await fetch(`${KORA_API}/api/livinglayer/board`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ preferMode: 'calculator', clientSensors }),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    throw (e && e.name === 'AbortError')
+      ? new Error('Living Layer met trop de temps à répondre — réessaie dans un instant.') : e;
+  }
+  clearTimeout(timer);
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* corps vide */ }
+  if (!res.ok) throw new Error((data && data.error) || `Living Layer /board → ${res.status}`);
+  return data;
+}
+
 /* Le modal Ghost Writer vit à z-index 99999 : tout outil ouvert pendant
    qu'il est affiché apparaîtrait DERRIÈRE lui (retour test réel 18/07 —
    « elle n'a pas ouvert brainstorming ») — et le fermer perdrait les
@@ -2116,6 +2218,9 @@ async function _padAccessible(padId) {
 export const KORA_PAD_META = [
   { pad: 'chaine', global: true },
   { pad: 'os',     global: true },
+  /* Living Layer (K-13) : transverse, montré à l'étage 1 comme une globale —
+     n'occupe PAS un des 12 slots de domaines routables. */
+  { pad: 'livinglayer', global: true },
   { pad: 'brainstorming', label: 'Brainstorming',
     desc: 'séances de réflexion multi-agents : lire séances, synthèses et débats, comité par défaut et préférences d’agents, lancer une séance sur un brief' },
   { pad: 'ghostwriter', label: 'Ghost Writer',

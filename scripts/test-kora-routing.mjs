@@ -85,6 +85,8 @@ console.log('\n\x1b[1m▶ Suite 2 — aiguillage domaine → choix (le chemin no
   check('étage 1 : tous les domaines non-globaux du catalogue sont listés',
     ['brainstorming', 'ghostwriter', 'social', 'sdqr', 'sentinel', 'keynapse', 'smartagent', 'desk', 'book', 'keybrand', 'keyform'].every(p => sys1.includes(`- ${p} : `)));
   check('étage 1 : les globales chain.* et os.* sont détaillées', sys1.includes('chain.start') && sys1.includes('chain.cancel') && sys1.includes('os.open_pad'));
+  check('étage 1 : la globale ll.whats_new (Living Layer) est détaillée', sys1.includes('ll.whats_new'));
+  check('étage 1 : livinglayer n’est PAS une ligne de DOMAINE (c’est une globale)', !/- livinglayer : /.test(sys1));
   check('étage 1 : AUCUN id de pad (ni snt.* ni qr.* ni sm.* ni kn.*)', !/snt\.|qr\.|sm\.|bs\.|gw\.|kn\./.test(sys1));
   check('étage 2 : les 3 actions sentinel détaillées', sys2.includes('snt.fleet') && sys2.includes('snt.site_report') && sys2.includes('snt.run_audit'));
   check('étage 2 : les desc de params y sont (valeurs admises)', /nom ou adresse/.test(sys2));
@@ -98,6 +100,12 @@ console.log('\n\x1b[1m▶ Suite 3 — étage 1 : globale, réponse, self-healing
   const g = fakeRunner(['{"action":"chain.start","args":{"brief":"x"},"annonce":"Je lance."}']);
   const dg = await _twoStageDecide({ runLLM: g.runLLM, actions: ACTIONS, pads: KORA_PAD_META, messages: MSGS });
   check('globale (chain.start) → 1 seul appel, action rendue', g.calls.length === 1 && dg.action === 'chain.start');
+
+  /* Living Layer (K-13) : action GLOBALE sans param requis → acceptée dès
+     l'étage 1, jamais renvoyée vers un étage 2 (elle n'a pas de domaine). */
+  const ll = fakeRunner(['{"action":"ll.whats_new","args":{},"annonce":"Je fais le tour."}']);
+  const dll = await _twoStageDecide({ runLLM: ll.runLLM, actions: ACTIONS, pads: KORA_PAD_META, messages: MSGS });
+  check('globale ll.whats_new (Living Layer) → 1 seul appel, action rendue', ll.calls.length === 1 && dll.action === 'll.whats_new');
 
   const r = fakeRunner(['{"reponse":"Salut !"}']);
   const dr = await _twoStageDecide({ runLLM: r.runLLM, actions: ACTIONS, pads: KORA_PAD_META, messages: MSGS });
@@ -262,7 +270,7 @@ console.log('\n\x1b[1m▶ Suite 6 — méta réelle (KORA_PAD_META vs catalogue)
   const metaPads = new Set(KORA_PAD_META.map(p => p.pad));
   const catalogPads = new Set(KORA_ACTIONS.map(a => a.pad));
   check('chaque pad du catalogue a son entrée méta', [...catalogPads].every(p => metaPads.has(p)));
-  check('chaine et os sont marqués global', KORA_PAD_META.filter(p => p.global).map(p => p.pad).sort().join(',') === 'chaine,os');
+  check('les globaux = chaine, os, livinglayer', KORA_PAD_META.filter(p => p.global).map(p => p.pad).sort().join(',') === 'chaine,livinglayer,os');
   check('desc de domaine ≤ 160 car.', KORA_PAD_META.every(p => !p.desc || p.desc.length <= 160));
   check('les non-globaux ont label + desc (pas de repli en prod)', KORA_PAD_META.filter(p => !p.global).every(p => p.label && p.desc));
 }
