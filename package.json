@@ -21,6 +21,7 @@
     "test:kora-routing": "node scripts/test-kora-routing.mjs",
     "test:kora-keynapse": "node scripts/test-kora-keynapse.mjs",
     "test:kora-sdqr-url": "node scripts/test-kora-sdqr-url.mjs",
+    "bench:kora": "node scripts/kora-bench.mjs",
     "test:kora-smart-agent": "node scripts/test-kora-smart-agent.mjs",
     "test:geo-manual": "node scripts/test-sentinel-geo-manual.mjs",
     "test:webpush": "node scripts/test-webpush.mjs",
