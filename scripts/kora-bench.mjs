@@ -111,6 +111,15 @@ const CORPUS = [
   { pad:'desk', phrase:"prépare une relance pour Martin",      attendu:'dk.prepare_relance',
     note:'PRÉPARE le brouillon — l’envoi reste le geste de la rédactrice (§7)' },
 
+  // ── booK (K-10) ──
+  { pad:'book', phrase:"j'ai combien de flipbooks dans ma bibliothèque ?", attendu:'bk.list_editions' },
+  { pad:'book', phrase:"mes livres booK, montre-moi",           attendu:'bk.list_editions' },
+
+  // ── Key Brand (K-10) ──
+  { pad:'keybrand', phrase:"mes chartes graphiques ?",          attendu:'kb.list_charts' },
+  { pad:'keybrand', phrase:"le lien public de ma charte graphique ?", attendu:'kb.chart_summary',
+    note:'formulation ciblée UNE charte → résumé + lien /b/' },
+
   // ── chaîne de contenu ──
   { pad:'chaine', phrase:"écris-moi un article promo de Keystone pour LinkedIn", attendu:'chain.start',
     note:'doctrine concierge : elle orchestre, elle ne rédige pas' },

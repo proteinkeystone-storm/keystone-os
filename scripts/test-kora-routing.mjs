@@ -83,7 +83,7 @@ console.log('\n\x1b[1m▶ Suite 2 — aiguillage domaine → choix (le chemin no
   const sys1 = calls[0].sys, sys2 = calls[1].sys;
   check('étage 1 : la ligne de domaine sentinel est là', /- sentinel : /.test(sys1));
   check('étage 1 : tous les domaines non-globaux du catalogue sont listés',
-    ['brainstorming', 'ghostwriter', 'social', 'sdqr', 'sentinel', 'keynapse', 'smartagent', 'desk'].every(p => sys1.includes(`- ${p} : `)));
+    ['brainstorming', 'ghostwriter', 'social', 'sdqr', 'sentinel', 'keynapse', 'smartagent', 'desk', 'book', 'keybrand'].every(p => sys1.includes(`- ${p} : `)));
   check('étage 1 : les globales chain.* et os.* sont détaillées', sys1.includes('chain.start') && sys1.includes('chain.cancel') && sys1.includes('os.open_pad'));
   check('étage 1 : AUCUN id de pad (ni snt.* ni qr.* ni sm.* ni kn.*)', !/snt\.|qr\.|sm\.|bs\.|gw\.|kn\./.test(sys1));
   check('étage 2 : les 3 actions sentinel détaillées', sys2.includes('snt.fleet') && sys2.includes('snt.site_report') && sys2.includes('snt.run_audit'));

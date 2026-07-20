@@ -1167,9 +1167,9 @@ export const KORA_ACTIONS = [
   {
     id: 'os.open_pad', pad: 'os', mode: 'write',
     label: 'Ouvrir un outil',
-    desc: "Ouvre un outil du catalogue : brainstorming, ghostwriter, social, qr, sentinel, keynapse, smartagent ou desk. Répond à « ouvre-moi le Social Manager ».",
+    desc: "Ouvre un outil du catalogue : brainstorming, ghostwriter, social, qr, sentinel, keynapse, smartagent, desk, book ou keybrand. Répond à « ouvre-moi le Social Manager ».",
     target: '.ws-app',
-    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming | ghostwriter | social | qr | sentinel | keynapse | smartagent | desk' }],
+    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming|ghostwriter|social|qr|sentinel|keynapse|smartagent|desk|book|keybrand' }],
     run: async (args = {}) => {
       const KORA_PADS = {
         brainstorming: ['A-COM-003', 'le Brainstorming'], ghostwriter: ['A-COM-005', 'le Ghost Writer'],
@@ -1184,6 +1184,11 @@ export const KORA_ACTIONS = [
         // desK (K-9) — la revue, le chemin de fer.
         desk: ['O-DSK-001', 'desK'], revue: ['O-DSK-001', 'desK'],
         'chemin de fer': ['O-DSK-001', 'desK'], 'epaulette': ['O-DSK-001', 'desK'],
+        // booK + Key Brand (K-10).
+        book: ['O-BOK-001', 'booK'], flipbook: ['O-BOK-001', 'booK'], flipbooks: ['O-BOK-001', 'booK'],
+        bibliotheque: ['O-BOK-001', 'booK'], 'bibliothèque': ['O-BOK-001', 'booK'],
+        keybrand: ['O-BRD-001', 'Key Brand'], 'key brand': ['O-BRD-001', 'Key Brand'],
+        charte: ['O-BRD-001', 'Key Brand'], marque: ['O-BRD-001', 'Key Brand'],
         // Alias d'ouverture SEULE des pads hors-catalogue (KORA_BRIEF §15.3,
         // « coût zéro, à poser au premier train qui touche le catalogue ») :
         // aucune action métier — juste « ouvre-moi Missive / Brief Prod ».
@@ -1192,7 +1197,7 @@ export const KORA_ACTIONS = [
       };
       const key = String(args.pad || '').trim().toLowerCase();
       const entry = KORA_PADS[key];
-      if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social, qr, sentinel, keynapse, smartagent, desk.`);
+      if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social, qr, sentinel, keynapse, smartagent, desk, book, keybrand.`);
       _guardGwModal();
       const [padId, nom] = entry;
       /* openTool = LA porte gated (licence + Living Layer, ui-renderer.js:2192) */
@@ -1400,6 +1405,88 @@ export const KORA_ACTIONS = [
             rappel: 'Le brouillon est ouvert — relis-le et clique Envoyer quand tu veux. Je n’envoie rien à ta place.' }
         : { fait: true, outil_ouvert: 'desK', a_relancer: dues.length,
             rappel: 'La liste des copies à relancer est ouverte — choisis qui relancer, l’envoi reste ton geste.' };
+    },
+  },
+
+  /* ═══ booK (pad O-BOK-001 — flipbooks souverains, K-10 20/07/2026) ═══
+     LECTURE SEULE, aucune écriture : bibliothèque = IndexedDB locale
+     (zéro worker, zéro tenant à résoudre), et openBook() ne sait pas
+     ouvrir une édition précise (pas de branche {editionId}) — rien à
+     préparer/ouvrir de plus utile qu'un clic dans la bibliothèque. */
+  {
+    id: 'bk.list_editions', pad: 'book', mode: 'read',
+    label: 'Ma bibliothèque booK',
+    desc: "Les flipbooks de ta bibliothèque booK sur CET appareil : titre, nombre de pages, poids, dernière modif. booK ne synchronise pas entre appareils. Répond à « mes flipbooks », « ma bibliothèque booK », « combien de livres j'ai créés ».",
+    target: '.bk-app .ws-topbar-title',
+    params: [],
+    run: async () => {
+      const editions = await _bkListEditions();
+      if (!editions.length)
+        return { total: 0, message: 'Aucun flipbook dans ta bibliothèque sur cet appareil pour l’instant.' };
+      const sorted = editions.slice().sort((a, b) => new Date(b.updated || 0) - new Date(a.updated || 0));
+      return {
+        total: sorted.length,
+        flipbooks: sorted.slice(0, 20).map(ed => ({
+          titre: ed.title || '(sans titre)',
+          pages: (ed.pages || []).length,
+          poids_mo: typeof ed.sizeMo === 'number' ? ed.sizeMo : null,
+          mis_a_jour: _frDate(ed.updated),
+        })),
+        en_plus: sorted.length > 20 ? sorted.length - 20 : undefined,
+        note: 'Bibliothèque propre à cet appareil — booK ne synchronise pas entre appareils.',
+      };
+    },
+  },
+
+  /* ═══ Key Brand (pad O-BRD-001 — charte graphique vivante, K-10 20/07/2026) ═══
+     LECTURE SEULE. Tenant = claims.sub simple, aucune résolution. */
+  {
+    id: 'kb.list_charts', pad: 'keybrand', mode: 'read',
+    label: 'Mes chartes Key Brand',
+    desc: "Tes chartes graphiques : nom, statut (brouillon/publiée), couleur principale, dernière modif, place restante (plafond 30). Répond à « mes chartes graphiques », « mes marques dans Key Brand », « j'ai combien de chartes ? ».",
+    target: '.kb-app .ws-topbar-title',
+    params: [],
+    run: async () => {
+      const { items, max } = await _kbApi('/charts');
+      if (!items.length)
+        return { total: 0, plafond: max, message: 'Aucune charte créée pour l’instant.' };
+      return {
+        total: items.length, plafond: max, place_restante: Math.max(0, max - items.length),
+        chartes: items.map(c => ({
+          nom: c.name,
+          statut: c.status === 'published' ? 'publiée' : 'brouillon',
+          couleur_principale: c.primary_hex || null,
+          derniere_modif: _frDate(_sqlUtc(c.updated_at)),
+        })),
+      };
+    },
+  },
+  {
+    id: 'kb.chart_summary', pad: 'keybrand', mode: 'read',
+    label: 'Résumé d’une charte Key Brand',
+    desc: "Le résumé d'UNE charte : nom, ton/baseline, nombre de couleurs/typos/variantes de logo, symbolique de marque, et son lien public /b/ si elle est publiée. Répond à « résume-moi la charte … », « le lien public de ma marque … ».",
+    target: '.kb-app [data-slot=\"main\"]',
+    params: [{ name: 'name', type: 'string', required: false, desc: 'nom (même partiel) de la charte ; inutile si une seule' }],
+    run: async (args = {}) => {
+      const c = await _kbResolve(args.name);
+      const { chart } = await _kbApi(`/charts/${encodeURIComponent(c.id)}`);
+      const kit = chart.draft || {};
+      const out = {
+        charte: chart.name,
+        statut: chart.status === 'published' ? 'publiée' : 'brouillon',
+        baseline: kit.meta?.baseline || null,
+        couleurs: Array.isArray(kit.colors?.palette) ? kit.colors.palette.length : 0,
+        typographies: Array.isArray(kit.typography?.fonts) ? kit.typography.fonts.length : 0,
+        variantes_logo: Array.isArray(kit.logo?.variants) ? kit.logo.variants.length : 0,
+        symbolique: Array.isArray(kit.branding?.symbolism) ? kit.branding.symbolism.slice(0, 5) : [],
+      };
+      if (chart.status === 'published') {
+        out.lien_public = `${KORA_API}/b/${chart.slug}`;
+        out.acces = chart.access === 'code' ? 'protégé par code' : chart.access === 'public' ? 'public, indexable' : 'lien non répertorié';
+      } else {
+        out.note = 'Cette charte n’est pas encore publiée — pas de lien public pour l’instant.';
+      }
+      return out;
     },
   },
 ];
@@ -1762,6 +1849,89 @@ function _dkPagesOf(artId, D, pub) {
   return [...new Set(ns)].sort((a, b) => a - b).map(n => dkPn(n, pub));
 }
 
+/* ── booK (pad O-BOK-001) — lecture directe IndexedDB (K-10) ──
+   V1 est FRONT-ONLY, ZÉRO WORKER (BOOK_BRIEF.md) : la bibliothèque vit
+   dans IndexedDB du navigateur (`bk_library` v1, store `editions`), PAS
+   dans une API. book.js n'exporte aucun lecteur pur (_libAll est privée
+   et sa seule appelante mute tout le DOM du pad) — on ouvre donc la MÊME
+   base ici, en LECTURE SEULE, fermée aussitôt après (jamais de connexion
+   qui traîne, pour ne jamais bloquer une future migration de schéma de
+   book.js). ⚠ On REPRODUIT le schéma de création (onupgradeneeded) à
+   l'identique de book.js:_db() : si Kora ouvrait la base la toute
+   première fois SANS créer le store, book.js ne recréerait jamais le
+   store ensuite (la version DB serait déjà à 1, onupgradeneeded ne
+   refire pas) — la bibliothèque resterait cassée à vie sur cet appareil.
+   Garder ce nom/version/store STRICTEMENT en phase avec app/book.js. */
+function _bkOpen() {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') { reject(new Error('IndexedDB indisponible dans ce navigateur.')); return; }
+    const rq = indexedDB.open('bk_library', 1);
+    rq.onupgradeneeded = () => {
+      const db = rq.result;
+      if (!db.objectStoreNames.contains('editions')) db.createObjectStore('editions', { keyPath: 'id' });
+    };
+    rq.onsuccess = () => resolve(rq.result);
+    rq.onerror = () => reject(rq.error || new Error('Impossible d’ouvrir la bibliothèque booK.'));
+  });
+}
+async function _bkListEditions() {
+  const db = await _bkOpen();
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('editions', 'readonly');
+      const rq = tx.objectStore('editions').getAll();
+      rq.onsuccess = () => resolve(rq.result || []);
+      rq.onerror = () => reject(rq.error || new Error('Lecture de la bibliothèque impossible.'));
+    });
+  } finally { db.close(); }
+}
+
+/* ── Key Brand (pad O-BRD-001) — client de lecture (K-10) ──
+   Tenant = claims.sub SIMPLE (worker _tenantOf, patron keynapse) — aucun
+   piège desK/Living Layer, aucune résolution de tenant à faire ici. */
+async function _kbApi(path, opts = {}) {
+  const token = _jwt();
+  if (!token) throw new Error('Non connecté : ouvre Keystone et connecte-toi (ks_jwt absent).');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeout || 30000);
+  let res;
+  try {
+    res = await fetch(`${KORA_API}/api/keybrand${path}`, {
+      method: opts.method || 'GET',
+      headers: { 'Authorization': `Bearer ${token}` },
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    throw (e && e.name === 'AbortError')
+      ? new Error('Key Brand met trop de temps à répondre — réessaie dans un instant.') : e;
+  }
+  clearTimeout(timer);
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* corps vide */ }
+  if (!res.ok) throw new Error(data.error || `Key Brand ${path} → ${res.status}`);
+  return data;
+}
+/* Une charte par NOM — même patron que _saResolve/_dkResolvePub. */
+async function _kbResolve(ref) {
+  const { items } = await _kbApi('/charts');
+  if (!items.length)
+    throw new Error('Aucune charte créée pour l’instant — Key Brand en crée une en quelques secondes.');
+  const r = String(ref || '').trim();
+  if (!r) {
+    if (items.length === 1) return items[0];
+    throw new Error(`Plusieurs chartes : ${items.map(c => c.name).join(' · ')}. Laquelle ?`);
+  }
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const n = norm(r);
+  const exact = items.filter(c => norm(c.name) === n);
+  const hit = exact.length ? exact : items.filter(c => norm(c.name).includes(n));
+  if (hit.length === 1) return hit[0];
+  if (hit.length > 1)
+    throw new Error(`Plusieurs chartes correspondent à « ${r} » : ${hit.map(c => c.name).join(' · ')}. Précise.`);
+  throw new Error(`Aucune charte « ${r} ». Chartes existantes : ${items.map(c => c.name).join(' · ')}.`);
+}
+
 /* Le modal Ghost Writer vit à z-index 99999 : tout outil ouvert pendant
    qu'il est affiché apparaîtrait DERRIÈRE lui (retour test réel 18/07 —
    « elle n'a pas ouvert brainstorming ») — et le fermer perdrait les
@@ -1809,6 +1979,10 @@ export const KORA_PAD_META = [
     desc: 'jumeaux de savoir-faire (plan Max) : liste des agents, trous de savoir, état du coffre Kortex, usage du lien public' },
   { pad: 'desk', label: 'desK',
     desc: 'chemin de fer d’une revue : état d’un numéro, bouclage, sommaire, copies en retard, bac à trier, préparer une relance de contributeur' },
+  { pad: 'book', label: 'booK',
+    desc: 'bibliothèque de flipbooks sur cet appareil : titres, pages, poids, dernière modif' },
+  { pad: 'keybrand', label: 'Key Brand',
+    desc: 'chartes graphiques : liste, statut, couleur principale, résumé d’une charte (couleurs/typos/logo), lien public si publiée' },
 ];
 
 /* ── Exécution ── */

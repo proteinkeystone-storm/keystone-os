@@ -65,7 +65,7 @@ if (ko===m0) ok('chaque pad a sa méta (label+desc≤160), globaux chaine+os pr�
 
 /* mots-indices de capacité par pad (doivent figurer dans la phrase de repli
    « je peux te lire : … » des DEUX prompts) — mis à jour à CHAQUE pad K-8+ */
-const CAP = { brainstorming:'séances', ghostwriter:'posts', social:'réseaux', sdqr:'QR', sentinel:'sites', keynapse:'Keynapse', smartagent:'jumeaux', desk:'desK' };
+const CAP = { brainstorming:'séances', ghostwriter:'posts', social:'réseaux', sdqr:'QR', sentinel:'sites', keynapse:'Keynapse', smartagent:'jumeaux', desk:'desK', book:'booK', keybrand:'Key Brand' };
 console.log(`\n\x1b[1m▶ Prompts worker — les DEUX chemins nomment les ${Object.keys(CAP).length} pads\x1b[0m`);
 const worker = readFileSync(join(ROOT,'workers/src/routes/kora.js'),'utf8');
 const sysDecide = worker.slice(worker.indexOf('function _sysDecide'), worker.indexOf('const SYS_ANSWER'));
