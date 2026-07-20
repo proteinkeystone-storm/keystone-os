@@ -10,7 +10,8 @@
      · chaque pad de KORA_ACTIONS a une entrée KORA_PAD_META ;
      · globaux chaine + os présents ;
      · les DEUX prompts worker (_sysDecide ET _sysStage1) nomment les
-       phrases de capacités des 6 pads (leçon : toujours les deux) ;
+       phrases de capacités de chaque pad du dict CAP ci-dessous
+       (leçon : toujours les deux) ;
      · aucune capacité COUVERTE citée comme exemple hors-catalogue.
 
    Ne vérifie PAS l'existence DOM des `target` (grep séparé) ni le
@@ -62,13 +63,13 @@ for (const m of KORA_PAD_META) {
 for (const g of ['chaine','os']) if (!KORA_PAD_META.some(m=>m.pad===g&&m.global)) fail('global "'+g+'" manquant');
 if (ko===m0) ok('chaque pad a sa méta (label+desc≤160), globaux chaine+os présents');
 
-console.log('\n\x1b[1m▶ Prompts worker — les DEUX chemins nomment les 6 pads\x1b[0m');
+/* mots-indices de capacité par pad (doivent figurer dans la phrase de repli
+   « je peux te lire : … » des DEUX prompts) — mis à jour à CHAQUE pad K-8+ */
+const CAP = { brainstorming:'séances', ghostwriter:'posts', social:'réseaux', sdqr:'QR', sentinel:'sites', keynapse:'Keynapse', smartagent:'jumeaux' };
+console.log(`\n\x1b[1m▶ Prompts worker — les DEUX chemins nomment les ${Object.keys(CAP).length} pads\x1b[0m`);
 const worker = readFileSync(join(ROOT,'workers/src/routes/kora.js'),'utf8');
 const sysDecide = worker.slice(worker.indexOf('function _sysDecide'), worker.indexOf('const SYS_ANSWER'));
 const sysStage1 = worker.slice(worker.indexOf('function _sysStage1'), worker.indexOf('function _sysStage2'));
-/* mots-indices de capacité par pad (doivent figurer dans la phrase de repli
-   « je peux te lire : … » des DEUX prompts) */
-const CAP = { brainstorming:'séances', ghostwriter:'posts', social:'réseaux', sdqr:'QR', sentinel:'sites', keynapse:'Keynapse' };
 let p0=ko;
 for (const [pad,mot] of Object.entries(CAP)) {
   if (!sysDecide.includes(mot)) fail(`_sysDecide ne cite pas la capacité "${pad}" (mot « ${mot} »)`);
@@ -81,7 +82,7 @@ for (const s of [['_sysDecide',sysDecide],['_sysStage1',sysStage1]]) {
     if (/scans? de (tes )?QR|tes QR codes.{0,20}hors/i.test(s[1])) fail(`${s[0]} : capacité QR citée comme hors-catalogue`);
   }
 }
-if (ko===p0) ok('capacités des 6 pads présentes dans _sysDecide ET _sysStage1 ; hors-catalogue sûr');
+if (ko===p0) ok(`capacités des ${Object.keys(CAP).length} pads présentes dans _sysDecide ET _sysStage1 ; hors-catalogue sûr`);
 
 console.log('\n\x1b[1m▶ SYS_ANSWER — règles anti-hallucination et mise en page\x1b[0m');
 const sysAnswer = worker.slice(worker.indexOf('const SYS_ANSWER'), worker.indexOf('/* ── Aides ── */'));

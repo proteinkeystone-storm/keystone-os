@@ -175,7 +175,8 @@ console.log('\n\x1b[1m▶ Suite 6 — kn.create_note\x1b[0m');
 console.log('\n\x1b[1m▶ Suite 7 — catalogue (caps + méta)\x1b[0m');
 {
   check('5 actions keynapse', KORA_ACTIONS.filter(a => a.pad === 'keynapse').length === 5);
-  check('36 actions au total (routage 2 étages désormais ACTIF)', KORA_ACTIONS.length === 36);
+  /* seuil, jamais un total exact — sinon chaque futur pad (K-8+) recasse ce test */
+  check('≥ 36 actions au total (routage 2 étages désormais ACTIF)', KORA_ACTIONS.length >= 36);
   check('toutes les desc ≤ 240 car.', KORA_ACTIONS.every(a => (a.desc || '').length <= 240));
   check('tous les desc de params ≤ 90 car.', KORA_ACTIONS.every(a => (a.params || []).every(p => (p.desc || '').length <= 90)));
   check('KORA_PAD_META a une entrée keynapse (label+desc)', KORA_PAD_META.some(p => p.pad === 'keynapse' && p.label && p.desc));

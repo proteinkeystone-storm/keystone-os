@@ -4,8 +4,11 @@
    Le cœur de l'agent (KORA_BRIEF §2) : un catalogue d'actions bien
    nommées, scopées par pad. V1 = la chaîne de contenu (Brainstorming,
    Ghost Writer, Social Manager) + l'état de la chaîne elle-même.
-   V1.2 (18/07) = + Smart Dynamic QR (le 1er pad hors chaîne — même
+   V1.2 (18-19/07) = + Smart Dynamic QR, Sentinel, Keynapse (même
    moule : lectures API/localStorage, écritures = préparer/ouvrir).
+   V1.3 (20/07, K-8) = + Smart Agent (jumeaux de savoir-faire, MAX
+   only) — 4 lectures, aucune écriture (pad de configuration fine,
+   pas de préparer/ouvrir qui aille plus vite qu'un clic).
 
    RÈGLES (KORA_BRIEF Annexe B) :
    · Module INERTE AU CHARGEMENT : zéro import statique de pads.
@@ -655,6 +658,115 @@ export const KORA_ACTIONS = [
     },
   },
 
+  /* ═══ SMART AGENT (pad O-AGT-001 — jumeaux de savoir-faire, K-8 20/07/2026) ═══
+     MAX only en beta : le worker répond 403 « Smart Agent est réservé au
+     plan MAX pendant la beta. » sur un plan inférieur — _saApi restitue ce
+     message tel quel (mêmes vertus que _sntApi/_knApi), pas de garde ici.
+     Résolution d'un jumeau PAR NOM, même patron que Sentinel (_sntResolve) :
+     un seul jumeau se résout tout seul sans référence. Dates SQLite UTC
+     (agents/gaps/liens) → _frDate(_sqlUtc()) ; expires_at d'un lien est une
+     date PURE (YYYY-MM-DD), _frDate la gère déjà sans heure fantôme. */
+  {
+    id: 'sa.list_agents', pad: 'smartagent', mode: 'read',
+    label: 'Lister mes jumeaux Smart Agent',
+    desc: "Mes jumeaux de savoir-faire : nom, statut (en ligne, en pause, brouillon), mission, trous de savoir ouverts (total et cette semaine). Répond à « mes agents », « combien de jumeaux j'ai », « quel agent a des trous ? ».",
+    target: '.sa-app .ws-topbar-title',
+    params: [],
+    run: async () => {
+      const { agents } = await _saApi('/agents');
+      if (!agents.length)
+        return { total: 0, message: 'Aucun jumeau créé pour l’instant — Smart Agent en crée un en quelques minutes.' };
+      const STATUT_FR = { published: 'en ligne', paused: 'en pause', draft: 'brouillon' };
+      return {
+        total: agents.length,
+        jumeaux: agents.map(a => ({
+          nom: a.name, statut: STATUT_FR[a.status] || a.status,
+          mission: a.config?.identity?.mission ? _excerpt(a.config.identity.mission, 160) : null,
+          trous_ouverts: a.gaps_open || 0, trous_semaine: a.gaps_week || 0,
+        })),
+      };
+    },
+  },
+  {
+    id: 'sa.gaps', pad: 'smartagent', mode: 'read',
+    label: 'Trous de savoir d’un jumeau',
+    desc: "Les questions auxquelles CE jumeau n'a pas su répondre : combien de fois demandées, si c'est récent (7 derniers jours). Répond à « qu'est-ce que mon agent ne sait pas répondre ? », « les trous de … ».",
+    target: '.sa-app .ws-topbar-title',
+    params: [{ name: 'name', type: 'string', required: false, desc: 'nom (même partiel) du jumeau ; inutile si un seul jumeau' }],
+    run: async (args = {}) => {
+      const agent = await _saResolve(args.name);
+      const { gaps } = await _saApi(`/gaps?agent=${encodeURIComponent(agent.id)}`);
+      if (!gaps.length)
+        return { jumeau: agent.name, total: 0, message: 'Aucun trou ouvert — ce jumeau répond à tout ce qu’on lui a demandé.' };
+      const now = Date.now();
+      /* déjà triés hits DESC, last_asked_at DESC côté serveur (smart-agent.js) —
+         le top 10 EST la plus fréquente/récente, aucun tri à refaire ici */
+      const shaped = gaps.map(g => ({
+        question: g.question, demandee: g.hits,
+        recente: Date.parse(_sqlUtc(g.last_asked_at)) >= now - 7 * 86400e3,
+        derniere_fois: _frDate(_sqlUtc(g.last_asked_at)),
+      }));
+      return {
+        jumeau: agent.name, total: shaped.length,
+        cette_semaine: shaped.filter(g => g.recente).length,
+        trous: shaped.slice(0, 10),
+        en_plus: shaped.length > 10 ? shaped.length - 10 : undefined,
+      };
+    },
+  },
+  {
+    id: 'sa.kortex_overview', pad: 'smartagent', mode: 'read',
+    label: 'État du coffre de savoir d’un jumeau',
+    desc: "Combien de fiches dans le coffre Kortex d'UN jumeau, par statut et par type (fait, procédure, question-réponse…). Répond à « combien de fiches a mon agent ? », « l'état de son coffre ».",
+    target: '.sa-app .ws-topbar-title',
+    params: [{ name: 'name', type: 'string', required: false, desc: 'nom (même partiel) du jumeau ; inutile si un seul jumeau' }],
+    run: async (args = {}) => {
+      const agent = await _saResolve(args.name);
+      const { units, counts } = await _saApi(`/kortex/units?agent=${encodeURIComponent(agent.id)}`);
+      if (!counts.total)
+        return { jumeau: agent.name, total: 0, message: 'Coffre vide — aucune fiche de savoir pour l’instant.' };
+      /* tally par type SUR LA PAGE reçue (plafond serveur 500 fiches, kortex/
+         units:83) — les compteurs de statut, eux, viennent d'un GROUP BY exact
+         et restent fiables même au-delà du plafond (revue adverse K-8) */
+      const TYPE_FR = { fact: 'fait', procedure: 'procédure', qa: 'question-réponse',
+        case: 'cas vécu', rule: 'règle', objection: 'objection', definition: 'définition' };
+      const parType = {};
+      for (const u of units) { const l = TYPE_FR[u.type] || u.type; parType[l] = (parType[l] || 0) + 1; }
+      const out = {
+        jumeau: agent.name, total: counts.total,
+        validees: counts.validated, brouillon: counts.draft,
+        quarantaine: counts.quarantine, perimees: counts.expired,
+        par_type: parType,
+      };
+      if (units.length < counts.total)
+        out.note = 'Détail par type limité aux 500 dernières fiches — les totaux par statut, eux, sont exacts.';
+      return out;
+    },
+  },
+  {
+    id: 'sa.public_usage', pad: 'smartagent', mode: 'read',
+    label: 'Usage du lien public d’un jumeau',
+    desc: "Le lien public d'UN jumeau, s'il est publié : questions posées aujourd'hui/au total, actif ou révoqué, échéance. Répond à « combien de gens ont parlé à mon agent ? », « mon lien public marche encore ? ».",
+    target: '.sa-app .ws-topbar-title',
+    params: [{ name: 'name', type: 'string', required: false, desc: 'nom (même partiel) du jumeau ; inutile si un seul jumeau' }],
+    run: async (args = {}) => {
+      const agent = await _saResolve(args.name);
+      if (agent.status !== 'published')
+        return { jumeau: agent.name, publie: false, message: 'Ce jumeau n’est pas publié — aucun lien public pour l’instant.' };
+      const { links } = await _saApi(`/agents/${encodeURIComponent(agent.id)}/links`);
+      const active = (links || []).filter(l => l.status === 'active');
+      if (!active.length)
+        return { jumeau: agent.name, publie: true, message: 'Publié, mais aucun lien actif — aucun accès public en ce moment.' };
+      return {
+        jumeau: agent.name, publie: true,
+        liens: active.map(l => ({
+          questions_aujourdhui: l.usage_today || 0, questions_total: l.usage_total || 0,
+          plafond_jour: l.max_per_day, expire_le: _frDate(l.expires_at), url: l.url,
+        })),
+      };
+    },
+  },
+
   /* ═══════════════════════════════════════════════════════════════
      V1.1 — LES ÉCRITURES SÛRES (sprint « Kora agit », 18/07/2026)
      Rien d'irréversible, rien ne part vers l'extérieur : préparer,
@@ -915,9 +1027,9 @@ export const KORA_ACTIONS = [
   {
     id: 'os.open_pad', pad: 'os', mode: 'write',
     label: 'Ouvrir un outil',
-    desc: "Ouvre un outil du catalogue : brainstorming, ghostwriter, social, qr, sentinel ou keynapse. Répond à « ouvre-moi le Social Manager ».",
+    desc: "Ouvre un outil du catalogue : brainstorming, ghostwriter, social, qr, sentinel, keynapse ou smartagent. Répond à « ouvre-moi le Social Manager ».",
     target: '.ws-app',
-    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming | ghostwriter | social | qr | sentinel | keynapse' }],
+    params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming | ghostwriter | social | qr | sentinel | keynapse | smartagent' }],
     run: async (args = {}) => {
       const KORA_PADS = {
         brainstorming: ['A-COM-003', 'le Brainstorming'], ghostwriter: ['A-COM-005', 'le Ghost Writer'],
@@ -927,10 +1039,12 @@ export const KORA_ACTIONS = [
         'qr codes': ['A-COM-001', 'Smart Dynamic QR'], 'smart dynamic qr': ['A-COM-001', 'Smart Dynamic QR'],
         sentinel: ['O-GEO-001', 'Sentinel'], audit: ['O-GEO-001', 'Sentinel'],
         keynapse: ['O-Keyn-001', 'Keynapse'], notes: ['O-Keyn-001', 'Keynapse'],
+        smartagent: ['O-AGT-001', 'le Smart Agent'], 'smart agent': ['O-AGT-001', 'le Smart Agent'],
+        jumeaux: ['O-AGT-001', 'le Smart Agent'], kortex: ['O-AGT-001', 'le Smart Agent'],
       };
       const key = String(args.pad || '').trim().toLowerCase();
       const entry = KORA_PADS[key];
-      if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social, qr, sentinel, keynapse.`);
+      if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social, qr, sentinel, keynapse, smartagent.`);
       _guardGwModal();
       const [padId, nom] = entry;
       /* openTool = LA porte gated (licence + Living Layer, ui-renderer.js:2192) */
@@ -1298,6 +1412,57 @@ async function _knResolve(ref) {
   throw new Error(`Aucune note « ${r} » dans Keynapse.`);
 }
 
+/* ── Smart Agent — accès API + résolution d'un jumeau ──
+   Même patron que _sntApi/_knApi : GET-only insuffisant (le worker est aussi
+   la porte du gating MAX — data.error restitue son message tel quel, ex.
+   « Smart Agent est réservé au plan MAX pendant la beta. »). */
+async function _saApi(path, opts = {}) {
+  const token = _jwt();
+  if (!token) throw new Error('Non connecté : ouvre Keystone et connecte-toi (ks_jwt absent).');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeout || 30000);
+  let res;
+  try {
+    res = await fetch(`${KORA_API}/api/smart-agent${path}`, {
+      method: opts.method || 'GET',
+      headers: { 'Authorization': `Bearer ${token}`, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    throw (e && e.name === 'AbortError')
+      ? new Error('Smart Agent met trop de temps à répondre — réessaie dans un instant.') : e;
+  }
+  clearTimeout(timer);
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* corps vide */ }
+  if (!res.ok) throw new Error(data.error || `Smart Agent ${path} → ${res.status}`);
+  return data;
+}
+/* Un jumeau par NOM — même patron que _sntResolve (la plupart des comptes
+   n'en ont qu'un ou deux) : sans référence, un jumeau unique se résout seul ;
+   plusieurs sans référence → on liste, on ne devine pas. */
+async function _saResolve(ref) {
+  const { agents } = await _saApi('/agents');
+  if (!agents.length)
+    throw new Error('Aucun jumeau créé pour l’instant — Smart Agent en crée un en quelques minutes.');
+  const r = String(ref || '').trim();
+  if (!r) {
+    if (agents.length === 1) return agents[0];
+    throw new Error(`Plusieurs jumeaux : ${agents.map(a => a.name).join(' · ')}. Dis-moi lequel.`);
+  }
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const n = norm(r);
+  const exact = agents.filter(a => norm(a.name) === n);
+  if (exact.length === 1) return exact[0];
+  const part = exact.length ? exact : agents.filter(a => norm(a.name).includes(n));
+  if (part.length === 1) return part[0];
+  if (part.length > 1)
+    throw new Error(`Plusieurs jumeaux correspondent à « ${r} » : ${part.map(a => a.name).join(' · ')}. Précise.`);
+  throw new Error(`Aucun jumeau « ${r} ». Jumeaux existants : ${agents.map(a => a.name).join(' · ')}.`);
+}
+
 /* Le modal Ghost Writer vit à z-index 99999 : tout outil ouvert pendant
    qu'il est affiché apparaîtrait DERRIÈRE lui (retour test réel 18/07 —
    « elle n'a pas ouvert brainstorming ») — et le fermer perdrait les
@@ -1341,6 +1506,8 @@ export const KORA_PAD_META = [
     desc: 'sites web surveillés : en ligne/hors ligne, disponibilité, rapport d’audit (scores, points à corriger), relancer un audit' },
   { pad: 'keynapse', label: 'Keynapse',
     desc: 'notes en bulles : chercher un mot-clé, rappels à venir/en retard, détail d’une note, ouvrir une note, y ajouter du texte' },
+  { pad: 'smartagent', label: 'Smart Agent',
+    desc: 'jumeaux de savoir-faire (plan Max) : liste des agents, trous de savoir, état du coffre Kortex, usage du lien public' },
 ];
 
 /* ── Exécution ── */
