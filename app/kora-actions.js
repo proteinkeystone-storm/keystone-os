@@ -1095,10 +1095,16 @@ export const KORA_ACTIONS = [
       { name: 'name', type: 'string', required: false, desc: 'nom du QR' },
     ],
     run: async (args = {}) => {
+      /* Un humain tape « protein-keystone.com », pas « https://protein-keystone.com » :
+         sans schéma, new URL() jette et l'action échouait sur une demande
+         parfaitement claire (dogfood 20/07). On préfixe https:// quand le
+         schéma manque — jamais http (on ne dégrade pas une adresse). */
+      let raw = String(args.url || '').trim();
+      if (raw && !/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) raw = 'https://' + raw;
       let u = null;
-      try { u = new URL(String(args.url || '').trim()); } catch (e) { /* invalide */ }
-      if (!u || !/^https?:$/.test(u.protocol))
-        throw new Error('Il me faut une adresse web valide (http ou https).');
+      try { u = new URL(raw); } catch (e) { /* invalide */ }
+      if (!u || !/^https?:$/.test(u.protocol) || !/\./.test(u.hostname))
+        throw new Error('Il me faut une adresse web valide (par exemple protein-keystone.com).');
       _guardGwModal();
       _guardSdqrCreate();
       /* openSDQR relaie createUrl/presetName (sdqr.js:250, deep-link Smart Agent) */
