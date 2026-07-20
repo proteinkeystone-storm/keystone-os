@@ -346,7 +346,23 @@ export function _parseStage1(raw) {
       }
     } catch (e) { /* candidat invalide */ }
   }
-  return out.length ? out[out.length - 1] : null;
+  if (out.length) return out[out.length - 1];
+  /* FILET DE SECOURS TEXTE BRUT (dogfood K-7, 19/07) — symétrique de
+     _parseDecision, qui l'avait depuis toujours ; l'étage 1 ne l'avait PAS.
+     Symptôme : « supprime ma dernière séance » → « Je me suis emmêlée »,
+     3 tours de suite, y compris sur une question banale de relance.
+     Cause : quand le modèle REFUSE (ou converse), il répond très souvent en
+     français normal au lieu du JSON demandé — un échec de FORMAT, pas de
+     contenu : cette prose EST la réponse voulue. Sans filet, _parseStage1
+     rendait null → _twoStageDecide → _EMMELEE. La régression est devenue
+     visible en prod dès que le catalogue a dépassé 32 actions (Keynapse,
+     36) et rendu le chemin 2 étages permanent.
+     On écarte quand même ce qui ressemble à du JSON cassé (mieux vaut le
+     message sobre que du brut à l'écran) — d'où les gardes ci-dessous. */
+  const txt = String(raw).replace(/```[a-z]*\n?/g, '').trim();
+  if (!txt || txt.startsWith('{')
+      || txt.includes('"action"') || txt.includes('"reponse"') || txt.includes('"domaine"')) return null;
+  return { reponse: txt.slice(0, 1200) };
 }
 
 /* Orchestrateur — runLLM injectable (les tests passent un faux moteur,

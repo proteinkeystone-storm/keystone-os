@@ -129,9 +129,18 @@ console.log('\n\x1b[1m▶ Suite 4 — replis (domaine inconnu, illisible, étage
   const dk = await _twoStageDecide({ runLLM: k.runLLM, actions: ACTIONS, pads: KORA_PAD_META, messages: MSGS });
   check('domaine hors catalogue → repli sobre', k.calls.length === 1 && /emmêlée/.test(dk.reponse || ''));
 
-  const b = fakeRunner(['blabla sans le moindre JSON']);
+  /* ⚠ RECADRÉ (dogfood K-7, 19/07). Ce cas envoyait de la prose et exigeait
+     le repli sobre — il définissait « illisible » = TOUTE prose, l'hypothèse
+     fausse qui a causé le bug « Je me suis emmêlée » sur les refus.
+     Vraiment illisible = VIDE ou JSON CASSÉ (les deux restent couverts) ;
+     la prose, elle, est la réponse du modèle et doit passer (cf. Suite 5b). */
+  const b = fakeRunner(['{"domaine":"sentinel", "oups']);      // JSON cassé
   const db = await _twoStageDecide({ runLLM: b.runLLM, actions: ACTIONS, pads: KORA_PAD_META, messages: MSGS });
-  check('étage 1 illisible → repli sobre', /emmêlée/.test(db.reponse || ''));
+  check('étage 1 JSON cassé → repli sobre', /emmêlée/.test(db.reponse || ''));
+
+  const v = fakeRunner(['']);                                   // réponse vide
+  const dv = await _twoStageDecide({ runLLM: v.runLLM, actions: ACTIONS, pads: KORA_PAD_META, messages: MSGS });
+  check('étage 1 vide → repli sobre', /emmêlée/.test(dv.reponse || ''));
 
   const h = fakeRunner(['{"domaine":"sentinel"}', '{"reponse":"Rien dans Sentinel ne couvre ça."}']);
   const dh = await _twoStageDecide({ runLLM: h.runLLM, actions: ACTIONS, pads: KORA_PAD_META, messages: MSGS });
@@ -151,7 +160,40 @@ console.log('\n\x1b[1m▶ Suite 5 — _parseStage1\x1b[0m');
   check('domaine plié en minuscules', _parseStage1('{"domaine":"Sentinel"}').domaine === 'sentinel');
   check('plusieurs objets → le DERNIER gagne', _parseStage1('{"domaine":"social"} puis {"reponse":"ok"}').reponse === 'ok');
   check('fence ```json toléré', _parseStage1('```json\n{"domaine":"sdqr"}\n```').domaine === 'sdqr');
-  check('vide / sans JSON → null', _parseStage1('') === null && _parseStage1('du texte') === null);
+  check('vide → null', _parseStage1('') === null);
+  /* ⚠ CETTE ASSERTION A CHANGÉ (dogfood K-7, 19/07). Elle exigeait
+     _parseStage1('du texte') === null — elle ENCODAIT le bug : la prose du
+     modèle était jetée, _twoStageDecide rendait « Je me suis emmêlée ».
+     Désormais la prose est acceptée comme réponse (filet symétrique de
+     _parseDecision). Le JSON cassé, lui, reste écarté. */
+  check('prose française → réponse (filet de secours)', _parseStage1('Je ne peux pas supprimer de séance.').reponse === 'Je ne peux pas supprimer de séance.');
+  check('JSON cassé → null (pas de brut à l’écran)', _parseStage1('{"reponse":"cassé') === null && _parseStage1('{"domaine":') === null);
+}
+
+// ════════════════════════════════════════════════════════════════
+/* Rejoue le dogfood réel du 19/07 (captures Stéphane) : 3 tours d'affilée
+   répondus « Je me suis emmêlée » alors que le modèle refusait correctement
+   en français. Chaque cas ci-dessous produisait _EMMELEE avant le fix. */
+console.log('\n\x1b[1m▶ Suite 5b — régression « Je me suis emmêlée » (dogfood 19/07)\x1b[0m');
+{
+  const proseRefus = 'Je ne peux pas supprimer une séance — supprimer, c’est ton geste. Je peux te la relire si tu veux.';
+  const r1 = fakeRunner([proseRefus]);
+  const d1 = await _twoStageDecide({ runLLM: r1.runLLM, actions: ACTIONS, pads: KORA_PAD_META,
+                                     messages: [{ role: 'user', content: 'supprime ma dernière séance de brainstorming' }] });
+  check('« supprime… » → le refus français est rendu (plus d’emmêlée)', d1.reponse === proseRefus);
+  check('… et AUCUNE action n’est déclenchée', !d1.action && !d1.domaine);
+  check('… un seul appel modèle (pas d’étage 2 inutile)', r1.calls.length === 1);
+
+  const proseRelance = 'Non, je ne peux pas le faire : supprimer ne fait pas partie de mes actions.';
+  const r2 = fakeRunner([proseRelance]);
+  const d2 = await _twoStageDecide({ runLLM: r2.runLLM, actions: ACTIONS, pads: KORA_PAD_META,
+                                     messages: [{ role: 'user', content: 'tu peux le faire ou pas ?' }] });
+  check('question de relance banale → vraie réponse', d2.reponse === proseRelance);
+
+  /* le chemin nominal ne doit PAS avoir bougé : un domaine JSON reste routé */
+  const r3 = fakeRunner(['{"domaine":"sentinel"}', '{"action":"snt.fleet","args":{},"annonce":"Je regarde."}']);
+  const d3 = await _twoStageDecide({ runLLM: r3.runLLM, actions: ACTIONS, pads: KORA_PAD_META, messages: MSGS });
+  check('non-régression : aiguillage JSON toujours routé en 2 étages', d3.action === 'snt.fleet' && r3.calls.length === 2);
 }
 
 // ════════════════════════════════════════════════════════════════
