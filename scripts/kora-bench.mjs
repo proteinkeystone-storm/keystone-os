@@ -57,10 +57,15 @@ const { KORA_ACTIONS, KORA_PAD_META } = await import('../app/kora-actions.js');
    répondre SANS agir (lignes rouges, hors catalogue, acquiescement).
    `note` explique pourquoi la phrase est là — la plupart viennent
    d'un bug réel ou du protocole §2/§3. */
+/* `attendu` accepte un TABLEAU quand plusieurs actions sont TOUTES correctes
+   (ex. « ouvre les QR codes » = os.open_pad générique OU qr.open spécifique :
+   les deux ouvrent le pad QR — Stéphane a tranché « accepte les deux »). Le
+   test passe si CHAQUE réponse obtenue est dans l'ensemble accepté. */
 const CORPUS = [
   // ── os ──
   { pad:'os', phrase:"ouvre-moi le social manager",            attendu:'os.open_pad' },
-  { pad:'os', phrase:"ouvre les QR codes",                     attendu:'os.open_pad', note:'alias qr' },
+  { pad:'os', phrase:"ouvre les QR codes",                     attendu:['os.open_pad','qr.open'],
+    note:'les deux ouvrent le pad QR (générique vs spécifique) — tous deux OK' },
 
   // ── brainstorming ──
   { pad:'brainstorming', phrase:"quelles séances de brainstorming j'ai ?", attendu:'bs.list_sessions' },
@@ -150,7 +155,8 @@ const CORPUS = [
    modèle. On refuse de démarrer plutôt que d'accuser Kora à tort. */
 {
   const reels = new Set(KORA_ACTIONS.map(a => a.id));
-  const faux  = [...new Set(CORPUS.map(c => c.attendu))].filter(a => a !== 'REPONSE' && !reels.has(a));
+  const allExpected = CORPUS.flatMap(c => Array.isArray(c.attendu) ? c.attendu : [c.attendu]);
+  const faux  = [...new Set(allExpected)].filter(a => a !== 'REPONSE' && !reels.has(a));
   if (faux.length) {
     console.error(`\n\x1b[31mCorpus invalide\x1b[0m — ces ids n'existent pas au catalogue : ${faux.join(', ')}`);
     console.error(`(action renommée ou faute de frappe : corriger le CORPUS, pas le modèle)\n`);
@@ -231,17 +237,21 @@ for (const c of cases) {
     console.log(`  \x1b[31m✗\x1b[0m ${c.phrase}\n      \x1b[31m${err.message}\x1b[0m`);
     continue;
   }
-  const uniques = [...new Set(obtenus)];
-  const bon     = uniques.length === 1 && uniques[0] === c.attendu;
-  const instable= uniques.length > 1;
+  const uniques  = [...new Set(obtenus)];
+  const accepted = Array.isArray(c.attendu) ? c.attendu : [c.attendu];
+  /* bon = CHAQUE réponse obtenue est acceptable (une variation entre deux
+     réponses TOUTES correctes n'est donc pas un échec) */
+  const bon      = uniques.length >= 1 && uniques.every(u => accepted.includes(u));
+  const instable = uniques.length > 1;
+  const attenduLbl = accepted.join(' | ');
 
-  if (bon) { ok++; console.log(`  \x1b[32m✓\x1b[0m ${c.phrase}  \x1b[2m→ ${c.attendu}\x1b[0m`); }
+  if (bon) { ok++; console.log(`  \x1b[32m✓\x1b[0m ${c.phrase}  \x1b[2m→ ${uniques.join(' | ')}\x1b[0m`); }
   else {
     ko++; if (instable) flaky++;
     echecs.push({ ...c, obtenu: uniques.join(' | ') });
     const tag = instable ? '\x1b[33mINSTABLE\x1b[0m' : '\x1b[31mFAUX\x1b[0m';
     console.log(`  \x1b[31m✗\x1b[0m ${c.phrase}`);
-    console.log(`      attendu \x1b[1m${c.attendu}\x1b[0m · obtenu ${tag} \x1b[1m${uniques.join(' | ')}\x1b[0m`);
+    console.log(`      attendu \x1b[1m${attenduLbl}\x1b[0m · obtenu ${tag} \x1b[1m${uniques.join(' | ')}\x1b[0m`);
     if (dernierTexte) console.log(`      \x1b[36melle a dit :\x1b[0m « ${dernierTexte.slice(0, 220).replace(/\s+/g, ' ')} »`);
     if (c.note) console.log(`      \x1b[2m${c.note}\x1b[0m`);
   }
