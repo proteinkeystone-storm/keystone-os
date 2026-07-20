@@ -250,12 +250,30 @@ function _jsonCandidates(raw) {
   }
   return out;
 }
-function _parseDecision(raw) {
+/* Le modèle rend parfois l'action IMBRIQUÉE :
+     {"action":{"id":"kn.list_reminders","args":{},"annonce":"…"}}
+   au lieu de la forme demandée :
+     {"action":"kn.list_reminders","args":{},"annonce":"…"}
+   C'est du JSON VALIDE et la décision est JUSTE — seule la forme diffère.
+   `typeof p.action === 'string'` échouait donc, et on servait « Je me suis
+   emmêlée » sur une réponse parfaite (banc de routage 20/07 : 3/3 sur
+   « mes rappels en retard ? »). On aplatit au lieu de jeter. */
+function _flattenAction(p) {
+  if (p && p.action && typeof p.action === 'object' && !Array.isArray(p.action)
+      && typeof p.action.id === 'string') {
+    return { ...p, action: p.action.id,
+             args   : (p.action.args && typeof p.action.args === 'object') ? p.action.args : p.args,
+             annonce: typeof p.action.annonce === 'string' ? p.action.annonce : p.annonce };
+  }
+  return p;
+}
+
+function _parseDecision(raw, ou) {
   if (!raw) return null;
   const decisions = [];
   for (const cand of _jsonCandidates(raw)) {
     try {
-      const p = JSON.parse(cand);
+      const p = _flattenAction(JSON.parse(cand));
       if (typeof p.action === 'string' && p.action.trim()) {
         decisions.push({
           action : p.action.trim(),
@@ -272,6 +290,13 @@ function _parseDecision(raw) {
      JSON/fence cassé → message sobre plutôt que du brut à l'écran */
   const txt = raw.replace(/```[a-z]*\n?/g, '').trim();
   if (!txt || txt.startsWith('{') || txt.includes('"action"') || txt.includes('"reponse"')) {
+    /* TROU DE JOURNALISATION COMBLÉ (banc de routage, 20/07) : ce repli-ci
+       rendait le MÊME message que _EMMELEE mais SANS trace, et comme il
+       renvoie un objet truthy, l'appelant `_parseDecision(x) || _EMMELEE(…)`
+       ne déclenchait jamais le log. Résultat : « Je me suis emmêlée » à
+       l'écran et RIEN au wrangler tail — on croyait la boucle saine.
+       `ou` distingue l'origine (etage2 vs 1 étage). */
+    console.error(`[kora] emmêlée @${ou || 'parseDecision'} — brut: ${_brut(raw)}`);
     return { reponse: 'Je me suis emmêlée — reformule ta demande, je réessaie.' };
   }
   return { reponse: txt.slice(0, 1200) };
@@ -283,8 +308,12 @@ function _parseDecision(raw) {
    puis échouait selon l'historique, impossible à diagnostiquer). Chaque
    repli journalise désormais sa cause + la sortie brute du modèle, visibles
    au `wrangler tail`. `ou` = où ça a lâché, `raw` = ce que le modèle a dit. */
+/* aplati : `wrangler tail` n'affiche QUE la 1re ligne d'un log, or le
+   modèle répond volontiers en JSON multi-lignes dans une balise ```json —
+   sans ça on ne voyait que « ```json » et jamais la cause (20/07). */
+const _brut = (r) => String(r ?? '').replace(/\s+/g, ' ').slice(0, 400);
 const _EMMELEE = (ou, raw) => {
-  console.error(`[kora] emmêlée @${ou || '?'} — brut: ${String(raw ?? '').slice(0, 400)}`);
+  console.error(`[kora] emmêlée @${ou || '?'} — brut: ${_brut(raw)}`);
   return { reponse: 'Je me suis emmêlée — reformule ta demande, je réessaie.' };
 };
 
@@ -362,7 +391,11 @@ RÈGLES :
   encore lire ça — je peux te lire : tes séances, tes posts, tes réseaux, tes
   QR codes et leurs scans, tes sites surveillés, tes notes Keynapse, tes
   jumeaux Smart Agent…"}
-- Message sans demande (« ok », « merci ») → {"reponse"} brève, ni action ni domaine.
+- Le message t'INFORME ou acquiesce au lieu de te demander quelque chose
+  (« ok je lance la séance », « c'est fait », « j'ai publié », « merci ») →
+  {"reponse"} brève, AUCUNE action, AUCUN domaine — même si la phrase
+  contient un verbe d'action : dans « je lance la séance », c'est LUI qui
+  agit, pas toi. Regarde QUI fait l'action avant de bouger.
 - Ambiguïté entre 2 domaines → choisis le plus probable, ne pose pas de question.
 - N'invente JAMAIS un nom de domaine ni un id hors des listes ci-dessus.
 
@@ -395,7 +428,7 @@ export function _parseStage1(raw) {
   const out = [];
   for (const cand of _jsonCandidates(raw)) {
     try {
-      const p = JSON.parse(cand);
+      const p = _flattenAction(JSON.parse(cand));
       if (typeof p.domaine === 'string' && p.domaine.trim()) {
         out.push({ domaine: p.domaine.trim().toLowerCase() });
       } else if (typeof p.action === 'string' && p.action.trim()) {
@@ -476,7 +509,7 @@ export async function _twoStageDecide({ runLLM, actions, pads, messages }) {
   if (!pad) return _EMMELEE('domaine-hors-catalogue:' + String(d1.domaine || '').slice(0, 40), raw1);
   const m = metaByPad.get(pad);
   const raw2 = await runLLM(_sysStage2((m && m.label) || pad, _actionsBlock(groups.get(pad))), messages);
-  return _parseDecision(raw2) || _EMMELEE('etage2-illisible', raw2);
+  return _parseDecision(raw2, 'etage2') || _EMMELEE('etage2-illisible', raw2);
 }
 
 const _corsHeaders = (origin) => ({
@@ -573,7 +606,7 @@ export async function handleKoraChat(request, env) {
            seul où un « catalogue tronqué » serait une vraie perte */
         /* non-null garanti : la validation d'entrée exige déjà au moins une
            action à `id` chaîne, seul critère de filtrage de _actionsBlock */
-        decision = _parseDecision(await runLLM(_sysDecide(_actionsBlock(body.actions)), messages));
+        decision = _parseDecision(await runLLM(_sysDecide(_actionsBlock(body.actions)), messages), '1etage');
       }
       if (!decision) throw new Error('réponse modèle vide');
       committed = true;

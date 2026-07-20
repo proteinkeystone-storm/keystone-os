@@ -227,6 +227,36 @@ console.log('\n\x1b[1m▶ Suite 5c — _resolveDomain (le modèle nomme le domai
 }
 
 // ════════════════════════════════════════════════════════════════
+/* Forme IMBRIQUÉE de l'action — cause exacte du « Je me suis emmêlée » sur
+   « mes rappels en retard ? » (banc de routage, 20/07, 3/3 reproductible).
+   Le modèle rendait {"action":{"id":…,"args":…,"annonce":…}} : JSON valide,
+   décision JUSTE, mais `typeof p.action === 'string'` échouait → repli. */
+console.log('\n\x1b[1m▶ Suite 5d — action imbriquée (forme alternative du modèle)\x1b[0m');
+{
+  const nested = '{"action":{"id":"kn.list_reminders","args":{},"annonce":"Je regarde tes rappels."}}';
+  const d = _parseStage1(nested);
+  check('étage 1 : action imbriquée aplatie', d && d.action === 'kn.list_reminders');
+  check('étage 1 : annonce récupérée dans l’objet', d && /Je regarde tes rappels/.test(d.annonce || ''));
+
+  const withArgs = '{"action":{"id":"qr.prepare_url","args":{"url":"https://x.fr"}}}';
+  const d2 = _parseStage1(withArgs);
+  check('args imbriqués récupérés', d2 && d2.args && d2.args.url === 'https://x.fr');
+
+  /* le vrai flux : étage 1 choisit le domaine, étage 2 rend la forme imbriquée */
+  const r = fakeRunner(['{"domaine":"keynapse"}', nested]);
+  const d3 = await _twoStageDecide({ runLLM: r.runLLM, actions: ACTIONS, pads: KORA_PAD_META,
+                                     messages: [{ role:'user', content:'mes rappels en retard ?' }] });
+  check('bout en bout : plus d’« emmêlée » sur la forme imbriquée', d3.action === 'kn.list_reminders');
+
+  /* non-régression : la forme normale reste prioritaire et intacte */
+  const plain = _parseStage1('{"action":"kn.search","args":{"query":"salon"},"annonce":"Je cherche."}');
+  check('non-régression : forme normale inchangée', plain.action === 'kn.search' && plain.args.query === 'salon');
+  /* et un {"action":{…}} SANS id ne doit pas être pris pour une action */
+  const bidon = _parseStage1('{"action":{"foo":"bar"}}');
+  check('objet action sans id → ignoré (pas d’action fantôme)', !bidon || !bidon.action);
+}
+
+// ════════════════════════════════════════════════════════════════
 console.log('\n\x1b[1m▶ Suite 6 — méta réelle (KORA_PAD_META vs catalogue)\x1b[0m');
 {
   const metaPads = new Set(KORA_PAD_META.map(p => p.pad));

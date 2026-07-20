@@ -95,7 +95,10 @@ const CORPUS = [
 
   // ── smart agent (K-8) ──
   { pad:'smartagent', phrase:"combien de jumeaux j'ai ?",       attendu:'sa.list_agents' },
-  { pad:'smartagent', phrase:"quels trous de savoir sont ouverts ?", attendu:'sa.gaps' },
+  { pad:'smartagent', phrase:"quels trous de savoir sont ouverts ?", attendu:'sa.list_agents',
+    note:'sans agent nommé, la vue d’ensemble est LA bonne réponse — le corpus attendait sa.gaps à tort (20/07)' },
+  { pad:'smartagent', phrase:"qu'est-ce que mon agent ne sait pas répondre ?", attendu:'sa.gaps',
+    note:'formulation ciblée UN jumeau → sa.gaps' },
 
   // ── chaîne de contenu ──
   { pad:'chaine', phrase:"écris-moi un article promo de Keystone pour LinkedIn", attendu:'chain.start',
@@ -180,9 +183,16 @@ const echecs = [];
 
 for (const c of cases) {
   const obtenus = [];
-  let err = null;
+  let err = null, dernierTexte = '';
   for (let i = 0; i < REPEAT; i++) {
-    try { obtenus.push((await decide(c.phrase)).got); }
+    try {
+      const r = await decide(c.phrase);
+      obtenus.push(r.got);
+      /* on garde le texte : « REPONSE » seul ne dit pas POURQUOI elle n'a
+         pas agi (refus ? hors-catalogue ? promesse en l'air ?) — c'est
+         précisément ce qu'on doit lire pour corriger la bonne chose */
+      if (r.got === 'REPONSE') dernierTexte = r.text || '';
+    }
     catch (e) { err = e; break; }
   }
   if (err) {
@@ -202,6 +212,7 @@ for (const c of cases) {
     const tag = instable ? '\x1b[33mINSTABLE\x1b[0m' : '\x1b[31mFAUX\x1b[0m';
     console.log(`  \x1b[31m✗\x1b[0m ${c.phrase}`);
     console.log(`      attendu \x1b[1m${c.attendu}\x1b[0m · obtenu ${tag} \x1b[1m${uniques.join(' | ')}\x1b[0m`);
+    if (dernierTexte) console.log(`      \x1b[36melle a dit :\x1b[0m « ${dernierTexte.slice(0, 220).replace(/\s+/g, ' ')} »`);
     if (c.note) console.log(`      \x1b[2m${c.note}\x1b[0m`);
   }
 }

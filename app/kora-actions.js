@@ -1501,7 +1501,7 @@ export const KORA_PAD_META = [
   { pad: 'chaine', global: true },
   { pad: 'os',     global: true },
   { pad: 'brainstorming', label: 'Brainstorming',
-    desc: 'séances de réflexion multi-agents : lire séances, synthèses et débats, préférences du comité, lancer une séance sur un brief' },
+    desc: 'séances de réflexion multi-agents : lire séances, synthèses et débats, comité par défaut et préférences d’agents, lancer une séance sur un brief' },
   { pad: 'ghostwriter', label: 'Ghost Writer',
     desc: 'rédaction IA : posts composés, variantes, brouillons, quota d’écriture, faire réécrire un texte existant' },
   { pad: 'social', label: 'Social Manager',
