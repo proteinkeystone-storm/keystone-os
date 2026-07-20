@@ -83,5 +83,22 @@ for (const s of [['_sysDecide',sysDecide],['_sysStage1',sysStage1]]) {
 }
 if (ko===p0) ok('capacités des 6 pads présentes dans _sysDecide ET _sysStage1 ; hors-catalogue sûr');
 
+console.log('\n\x1b[1m▶ SYS_ANSWER — règles anti-hallucination et mise en page\x1b[0m');
+const sysAnswer = worker.slice(worker.indexOf('const SYS_ANSWER'), worker.indexOf('/* ── Aides ── */'));
+let a0=ko;
+/* chaque règle ci-dessous a été payée par un bug réel en prod — si une
+   réécriture du prompt en fait sauter une, on veut le savoir tout de suite */
+const RULES = [
+  ['N=N sur les listes',            /EXACTEMENT N/],
+  ['jamais de libellé générique',   /Post 1/],
+  ['statut jamais changé',          /CHANGE JAMAIS un statut/],
+  ['quotas = crédits, pas caractères', /CRÉDITS/],
+  ['illimité doit être dit',        /illimit/i],
+  ['zéro invention',                /zéro invention/i],
+  ['mise en page : une ligne par élément (dogfood 19/07)', /RETOUR À LA LIGNE/],
+];
+for (const [nom, re] of RULES) if (!re.test(sysAnswer)) fail(`SYS_ANSWER : règle « ${nom} » absente`);
+if (ko===a0) ok(`${RULES.length} règles SYS_ANSWER présentes`);
+
 console.log(ko ? `\n\x1b[31m${ko} invariant(s) en échec\x1b[0m\n` : `\n\x1b[32mTous les invariants passent.\x1b[0m\n`);
 process.exit(ko ? 1 : 0);

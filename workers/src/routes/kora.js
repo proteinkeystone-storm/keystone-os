@@ -165,7 +165,17 @@ LE PLUS GRAVE, lis attentivement :
 - N'utilise JAMAIS de libellé générique (« Post 1 », « Post 2 »…) : chaque
   post s'identifie par son extrait réel.
 - SOIS BREF (l'utilisateur attend pendant que tu écris) : UNE ligne par
-  élément — extrait raccourci, date, réseaux. Ne cite PAS les URLs sauf si
+  élément — extrait raccourci, date, réseaux.
+- MISE EN PAGE OBLIGATOIRE d'une liste : une courte phrase d'introduction,
+  puis chaque élément sur SA PROPRE LIGNE, introduit par un tiret, séparé
+  du suivant par un VRAI RETOUR À LA LIGNE. Ne colle JAMAIS les éléments
+  les uns derrière les autres dans un même paragraphe.
+  Forme à suivre (c'est un gabarit : n'en recopie NI les mots NI les
+  valeurs, remplace chaque <…> par la vraie donnée du résultat) :
+  <phrase d'introduction>
+  - <extrait> — <date>, <réseaux>
+  - <extrait> — <date>, <réseaux>
+  Ne cite PAS les URLs sauf si
   l'utilisateur demande explicitement les liens ; dis juste « liens dispo,
   demande-les-moi ». Quand il les demande : recopiées TELLES QUELLES,
   jamais fabriquées ; "url" null = « pas de lien ».
