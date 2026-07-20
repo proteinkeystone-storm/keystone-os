@@ -502,8 +502,15 @@ export async function handleKoraChat(request, env) {
 
   /* ══ PHASE DECIDE — 1 crédit par tour utilisateur ══ */
   if (phase === 'decide') {
-    const actionsBlock = _actionsBlock(body.actions);
-    if (!actionsBlock) return err('actions (catalogue scopé) requis', 400, origin);
+    /* Le bloc catalogue ne sert QU'AU chemin 1 étage (le 2 étages bâtit ses
+       propres blocs par domaine). Le construire ici inconditionnellement
+       faisait crier « catalogue tronqué : 36 > 32 » à CHAQUE requête 2 étages
+       alors que le bloc tronqué était aussitôt jeté : fausse alerte
+       permanente, qui noie les vrais avertissements (vue au wrangler tail
+       pendant le dogfood K-7 — elle m'a d'abord fait croire que le routage
+       2 étages ne tournait pas). On se contente ici de VALIDER l'entrée. */
+    if (!Array.isArray(body.actions) || !body.actions.some(a => a && typeof a.id === 'string'))
+      return err('actions (catalogue scopé) requis', 400, origin);
 
     let creditsEnforced = false, creditResult = null, committed = false;
     creditsEnforced = await isEnforceEnabled(env, lookupHmac);
@@ -549,7 +556,11 @@ export async function handleKoraChat(request, env) {
       if (_wantsTwoStage(body)) {
         decision = await _twoStageDecide({ runLLM, actions: body.actions, pads: body.pads, messages });
       } else {
-        decision = _parseDecision(await runLLM(_sysDecide(actionsBlock), messages));
+        /* bâti ICI seulement : c'est le seul chemin qui s'en sert, donc le
+           seul où un « catalogue tronqué » serait une vraie perte */
+        /* non-null garanti : la validation d'entrée exige déjà au moins une
+           action à `id` chaîne, seul critère de filtrage de _actionsBlock */
+        decision = _parseDecision(await runLLM(_sysDecide(_actionsBlock(body.actions)), messages));
       }
       if (!decision) throw new Error('réponse modèle vide');
       committed = true;
