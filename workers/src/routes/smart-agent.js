@@ -710,6 +710,54 @@ function _imagesOf(row) {
   try { return validateImages(JSON.parse(row.images)); } catch (_) { return []; }
 }
 
+// ── SA-15.2 — ménage R2 à la suppression d'un agent ────────────
+// Tout ce qui touche à l'agent doit partir avec lui. Or l'ancien ménage
+// n'énumérait que `config.cards` : les PLANCHES (SA-15.2), rangées sous le
+// même préfixe `sa-cards/<agent>/`, restaient sur R2 pour toujours. Sur un
+// manuel de 267 pages, ça n'est pas une poussière.
+//
+// Le piège : une planche peut illustrer une fiche d'un coffre PARTAGÉ, qui
+// SURVIT à l'agent (ses fiches ont agent_id NULL et ne sont pas purgées).
+// Un balayage par préfixe seul casserait ces fiches-là. On ne supprime donc
+// qu'une clé que PLUS AUCUNE fiche du tenant ne référence.
+//
+// Pur (testé) : sépare le décidable du réseau.
+export function keysToReap(objects, keep) {
+  const out = [];
+  for (const o of (objects || [])) {
+    const k = typeof o === 'string' ? o : o?.key;
+    if (typeof k === 'string' && k && !keep.has(k)) out.push(k);
+  }
+  return out;
+}
+
+async function _reapAgentMedia(env, tenant, agentId) {
+  if (!env.HELP_MEDIA) return 0;
+  // Clés ENCORE référencées par une fiche survivante (appelé APRÈS la purge
+  // des fiches de l'agent : ce qui reste est ce qui reste vraiment).
+  const keep = new Set();
+  try {
+    const { results } = await env.DB
+      .prepare("SELECT images FROM kortex_units WHERE tenant_id = ? AND images IS NOT NULL AND images != ''")
+      .bind(tenant).all();
+    for (const r of results) for (const im of _imagesOf(r)) keep.add(im.key);
+  } catch (_) {
+    return 0;   // On n'a pas pu établir ce qui sert encore → on ne supprime RIEN.
+  }
+  let deleted = 0, cursor;
+  try {
+    do {
+      const page = await env.HELP_MEDIA.list({ prefix: `sa-cards/${agentId}/`, cursor });
+      for (const key of keysToReap(page?.objects, keep)) {
+        await env.HELP_MEDIA.delete(key).catch(() => {});
+        deleted++;
+      }
+      cursor = page?.truncated ? page.cursor : null;
+    } while (cursor);
+  } catch (_) { /* best-effort : le ménage ne doit jamais casser la suppression */ }
+  return deleted;
+}
+
 // ── Synchronisation FTS5 (lexical, servira la recherche SA-2) ───
 // Seules les fiches VALIDÉES sont indexées : une fiche en brouillon ou
 // en quarantaine ne doit jamais pouvoir être servie par la recherche.
@@ -3278,21 +3326,6 @@ export async function handleAgentDelete(request, env, agentId) {
   const gate = await _gate(request, env, origin);
   if (gate.error) return gate.error;
   await ensureSmartAgentSchema(env);
-  // Lot 3 — images de cartes (R2), best-effort, AVANT de perdre la config.
-  if (env.HELP_MEDIA) {
-    try {
-      const { results: agRows } = await env.DB
-        .prepare('SELECT config FROM sa_agents WHERE id = ? AND tenant_id = ?')
-        .bind(agentId, gate.tenant).all();
-      if (agRows.length) {
-        let cfg = {}; try { cfg = JSON.parse(agRows[0].config); } catch (_) {}
-        const cards = Array.isArray(cfg.cards) ? cfg.cards : [];
-        for (const c of cards) {
-          if (c && typeof c.img === 'string' && c.img) await env.HELP_MEDIA.delete(c.img).catch(() => {});
-        }
-      }
-    } catch (_) { /* best-effort */ }
-  }
   // SA-4.4.3 — supprime l'agent et son coffre PRIVÉ (savoir, trous, golden,
   // dialogue). Les coffres PARTAGÉS du dossier sont CONSERVÉS (leurs fiches
   // ont agent_id NULL, jamais purgées ci-dessous). Confirmation côté front.
@@ -3326,7 +3359,14 @@ export async function handleAgentDelete(request, env, agentId) {
   const res = await env.DB.prepare('DELETE FROM sa_agents WHERE id = ? AND tenant_id = ?')
     .bind(agentId, gate.tenant).run();
   if (!res.meta?.changes) return err('Agent introuvable', 404, origin);
-  return json({ ok: true }, 200, origin);
+
+  // SA-15.2 — ménage R2 EN DERNIER, et seulement sur une suppression réelle :
+  // un 404 ne doit pas détruire les médias d'un agent qu'on n'a pas supprimé.
+  // Balayage par PRÉFIXE (donc cartes d'accueil ET planches — l'ancien ménage
+  // n'énumérait que config.cards, et laissait au passage les images orphelines
+  // d'une carte modifiée plus tôt), en épargnant ce qui sert encore.
+  const media = await _reapAgentMedia(env, gate.tenant, agentId);
+  return json({ ok: true, media_deleted: media }, 200, origin);
 }
 
 // ═══════════════════════════════════════════════════════════════

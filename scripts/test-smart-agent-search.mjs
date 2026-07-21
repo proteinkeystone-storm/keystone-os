@@ -17,7 +17,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   validateImportUrl, htmlToText, clampExtractText, importFileKindOf, stripRepeatedFollowup,
   gapMergeTarget, attachGapCounts, sanitizePublicUrl, validateCards,
   detectSocialIntent, pickSocialReply, extractUnitCap, unitWarning, validateImages,
-  splitPagesBatches }
+  splitPagesBatches, keysToReap }
   from '../workers/src/routes/smart-agent.js';
 // SA-15.4 — fonctions pures du module front (aucune dépendance DOM).
 import { photoRefs, plancheAlt } from '../app/sa-planches.js';
@@ -182,6 +182,23 @@ console.log('── SA-15.2 — validateImages : tolérant par doctrine ──')
   check('non-tableau / vide → [] (fiche sans image = cas nominal)',
     validateImages(null).length === 0 && validateImages('x').length === 0 && validateImages([]).length === 0);
   check('alt tronqué à 300', validateImages([{ key: K1, alt: 'x'.repeat(500) }])[0].alt.length === 300);
+}
+
+console.log('── SA-15.2 — keysToReap : ne jamais supprimer une planche encore utilisée ──');
+{
+  const A = 'sa-cards/agent-1/aaa.webp';   // planche d'une fiche du coffre PARTAGÉ (survit)
+  const B = 'sa-cards/agent-1/bbb.webp';   // planche d'une fiche supprimée avec l'agent
+  const C = 'sa-cards/agent-1/ccc.jpg';    // image d'une carte d'accueil (part avec l'agent)
+  const objs = [{ key: A }, { key: B }, { key: C }];
+  // LE cas qui compte : un coffre partagé survit à l'agent, ses planches aussi.
+  check('clé encore référencée ÉPARGNÉE, les autres balayées',
+    JSON.stringify(keysToReap(objs, new Set([A]))) === JSON.stringify([B, C]));
+  check('rien de référencé → tout part', keysToReap(objs, new Set()).length === 3);
+  check('tout référencé → rien ne part', keysToReap(objs, new Set([A, B, C])).length === 0);
+  check('liste vide / nulle → [] (jamais d\'exception)',
+    keysToReap([], new Set()).length === 0 && keysToReap(null, new Set()).length === 0);
+  check('entrées malformées ignorées (pas de suppression de clé vide)',
+    keysToReap([{ key: '' }, {}, null, 'x', { key: B }], new Set()).length === 2);
 }
 
 console.log('── SA-15.3 — splitPagesBatches : une frontière de lot ne coupe pas une page ──');
