@@ -2879,6 +2879,14 @@ function _renderOverlay() {
     const slot = _root.querySelector('[data-slot="overlay"]');
     if (!_ex.open) { slot.innerHTML = ''; return; }
 
+    // SA-15.3 (dogfood 21/07) — la liste de relecture est un conteneur
+    // défilant (.sa-ex-props, max-height 46vh) que ce rendu RECONSTRUIT
+    // entièrement. Sans mémoriser sa position, chaque clic — cocher une
+    // fiche, attacher une planche — renvoyait l'instructeur en haut de la
+    // liste : les dernières propositions d'un lot devenaient pénibles à
+    // atteindre. On restaure la position après le rendu.
+    const keepScroll = slot.querySelector('.sa-ex-props')?.scrollTop || 0;
+
     let inner;
     // SA-14.4b — la file d'attente multi-lots prend la main sur tout le reste.
     // SA-15.3 — sauf la lecture du PDF, qui passe devant : elle peut durer
@@ -2992,6 +3000,14 @@ function _renderOverlay() {
       <h3 class="sa-modal-title">${icon('sparkles', 18)} Nourrir le coffre</h3>
       ${inner}
     </div>`;
+    // Restaure la position de la liste (cf. keepScroll plus haut). Après
+    // innerHTML, le conteneur est neuf : on écrit directement, sans attendre
+    // de frame — la hauteur est déjà connue, le CSS ne dépend d'aucune image.
+    if (keepScroll) {
+        const props = slot.querySelector('.sa-ex-props');
+        if (props) props.scrollTop = keepScroll;
+    }
+
     // SA-8.1 — input file : retient le fichier choisi et réaffiche son nom.
     const fi = slot.querySelector('[data-slot="ex-file"]');
     if (fi) fi.addEventListener('change', () => { _ex.file = fi.files?.[0] || null; _ex.error = null; _renderOverlay(); });

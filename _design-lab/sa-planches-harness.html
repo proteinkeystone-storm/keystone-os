@@ -67,6 +67,10 @@ function _lightbox(url, name) {
 
 function renderReview() {
   const batchPages = _ig.batchPages.filter(n => _ig.planches.has(n));
+  // Miroir du correctif de _renderOverlay : .sa-ex-props est le conteneur
+  // défilant que le rendu reconstruit ; sans mémoriser sa position, chaque
+  // clic renvoyait en haut de la liste.
+  const keepScroll = document.querySelector('#review .sa-ex-props')?.scrollTop || 0;
   document.getElementById('review').innerHTML = `<div class="sa-ex-props">` + _ig.proposals.map((p, i) => {
     const att = _ig.attach.get(i) || new Set();
     const strip = batchPages.length ? `
@@ -87,6 +91,10 @@ function renderReview() {
         <span class="sa-prop-txt"><strong>${esc(p.title)}</strong><span>${esc(p.snip)}</span></span>
       </label>${strip}</div>`;
   }).join('') + `</div>`;
+  if (keepScroll) {
+    const props = document.querySelector('#review .sa-ex-props');
+    if (props) props.scrollTop = keepScroll;
+  }
 }
 
 document.getElementById('review').addEventListener('click', (e) => {
