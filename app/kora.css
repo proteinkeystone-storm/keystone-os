@@ -16,6 +16,19 @@
   transition:width .38s cubic-bezier(.3,.9,.3,1);
   cursor:pointer; border-radius:8px;
   background:transparent; border:1px solid transparent;
+  /* talkie-walkie : le MAINTIEN ne doit JAMAIS déclencher la sélection de
+     texte ni la loupe/callout iOS (poignées bleues dans le header), ni de
+     scroll/zoom concurrent, ni le flash de tap bleu. */
+  -webkit-user-select:none; user-select:none;
+  -webkit-touch-callout:none; touch-action:none;
+  -webkit-tap-highlight-color:transparent;
+}
+/* Pendant un maintien (talkie-walkie), RIEN sur la page n'est sélectionnable
+   — tue les « sélections hasardeuses » qui débordaient sur le header iOS.
+   Retiré au relâchement (kora-voice.js : classe posée au pointerdown). */
+body.kora-holding, body.kora-holding *{
+  -webkit-user-select:none !important; user-select:none !important;
+  -webkit-touch-callout:none !important;
 }
 .kora-dock.kora-mini{ width:36px; }
 /* ── Dans les headers d'outils (.ws-topbar-actions) : vrai bouton,
@@ -90,7 +103,10 @@ body[data-kora-state="besoin"]    { --kora-1:#f0b04c; --kora-2:#f0291a; }
   position:fixed; z-index:100001; top:62px; right:8px; bottom:8px;
   width:min(40vw, 560px);
   display:none; flex-direction:column; overflow:hidden;
-  background:rgba(13,15,32,.92);
+  /* fond quasi-opaque + verre dépoli : le dashboard ne transparaît plus (le
+     .92 laissait tout lire dessous → « bug graphique » mobile signalé 21/07) */
+  background:rgba(13,15,32,.97);
+  backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
   border:1px solid rgba(255,255,255,.10); border-radius:14px;
   opacity:0; transform:translateY(8px);
   transition:opacity .28s ease, transform .28s ease;
@@ -119,6 +135,7 @@ body[data-kora-state="besoin"]    { --kora-1:#f0b04c; --kora-2:#f0291a; }
   cursor:pointer; color:rgba(232,233,245,.5);
   background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12);
   border-radius:9px; transition:color .2s, background .2s, border-color .2s;
+  -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none;
 }
 .kora-newconv:hover, .kora-voicetoggle:hover{ color:#c9ccff; background:rgba(139,144,255,.14); }
 .kora-voicetoggle.kora-voice-on{
@@ -177,7 +194,12 @@ html.light-mode .kora-newconv, html.light-mode .kora-voicetoggle{
 @media (max-width:640px){
   .kora-dock{ width:130px; }
   .kora-dock.kora-mini{ width:36px; }
-  .kora-panel{ top:62px; left:8px; right:8px; bottom:8px; width:auto; }
+  /* feuille mobile : plein écran sous le header + fond OPAQUE (le petit
+     écran laissait tout transparaître au .92) → plus d'arrière-fond visible */
+  .kora-panel{
+    top:60px; left:0; right:0; bottom:0; width:auto; border-radius:16px 16px 0 0;
+    background:rgba(9,11,26,.99);
+  }
   .kora-head{ padding:18px 20px 0; }
 }
 

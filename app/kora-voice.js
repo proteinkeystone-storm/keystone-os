@@ -340,6 +340,13 @@ function _onPointerDown(e) {
 
   _holding = true; _pointerId = e.pointerId;
   _downX = e.clientX; _downY = e.clientY;
+  /* dès le pointerdown (AVANT même que le callout iOS ~500 ms se déclenche) :
+     page non sélectionnable + purge d'une sélection éventuelle → plus de
+     « sélections hasardeuses » / poignées bleues dans le header. Retiré au
+     relâchement (_endHold). Posé pour TOUT maintien (tap compris) : c'est
+     momentané et sans effet sur le tap. */
+  try { document.body.classList.add('kora-holding'); } catch (_) {}
+  try { const s = window.getSelection && window.getSelection(); if (s && s.removeAllRanges) s.removeAllRanges(); } catch (_) {}
   addEventListener('pointerup', _onPointerUp, true);
   addEventListener('pointermove', _onPointerMove, true);
   addEventListener('pointercancel', _onPointerCancel, true);
@@ -358,6 +365,7 @@ function _onPointerMove(e) {
 function _endHold() {
   _holding = false; _pointerId = null;
   if (_holdTimer) { clearTimeout(_holdTimer); _holdTimer = 0; }
+  try { document.body.classList.remove('kora-holding'); } catch (_) {}
   removeEventListener('pointerup', _onPointerUp, true);
   removeEventListener('pointermove', _onPointerMove, true);
   removeEventListener('pointercancel', _onPointerCancel, true);
