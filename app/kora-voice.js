@@ -123,6 +123,14 @@ export function koraOpenSpeech() {
   } catch (_) { return null; }
 }
 
+// Coupe la lecture en cours ET invalide le jeton (`_gen++`) : tout callback
+// tardif (onState 'idle', transcription en retard) devient périmé et ne
+// repeindra plus l'état. Utilisé par « nouvelle conversation ».
+export function koraStopSpeech() {
+  _gen++;
+  try { stopSpeaking(); } catch (_) {}
+}
+
 // Lecture ONE-SHOT d'un texte COMPLET (réponses directes de la phase decide,
 // messages d'erreur/429/annulation) — elles ne passent PAS par le flux answer.
 // Réutilise le pipeline phrase-par-phrase (push tout + end). Rend le flux pour
@@ -414,7 +422,7 @@ function _toggleVoice() {
 }
 function _buildToggle() {
   if (!_panel || !_outputSupported()) return;   // pas de moteur voix → pas de bouton
-  const head = _panel.querySelector('.kora-head');
+  const head = _panel.querySelector('.kora-headtools') || _panel.querySelector('.kora-head');
   if (!head || head.querySelector('.kora-voicetoggle')) return;
   const btn = document.createElement('button');
   btn.type = 'button';

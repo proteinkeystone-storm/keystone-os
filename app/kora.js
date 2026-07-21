@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const KORA_CSS_V = '12';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
+const KORA_CSS_V = '13';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
 
 /* ── Shader (verbatim harnais kora-galet-morph.html) ── */
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -186,6 +186,11 @@ export function koraClose() {
      PENDANT que la réponse d'une écriture streame — la vider perdait
      l'échange ; rouvrir le galet doit montrer la conversation complète. */
 }
+/* Vide les bulles affichées (le fil visuel). Utilisé par « nouvelle
+   conversation » (kora-loop remet aussi _history à zéro). */
+export function koraClearLog() {
+  if (_log) _log.innerHTML = '';
+}
 export function koraSay(html) {
   if (!_inited || !_log) return null;
   const d = document.createElement('div');
@@ -281,6 +286,7 @@ export function initKora() {
     <div class="kora-head">
       <div class="kora-title">K O R A</div>
       <div class="kora-sub"></div>
+      <div class="kora-headtools"></div>
     </div>
     <div class="kora-log"></div>`;
   document.body.appendChild(_panel);

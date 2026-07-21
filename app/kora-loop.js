@@ -14,7 +14,7 @@
 'use strict';
 
 import { KORA_ACTIONS, KORA_PAD_META, koraAction, runKoraAction } from './kora-actions.js';
-import { koraSay, koraState, koraRing, koraClearRings } from './kora.js';
+import { koraSay, koraState, koraRing, koraClearRings, koraClearLog } from './kora.js';
 import { icon } from './lib/ui-icons.js';
 
 const KORA_API = (typeof window !== 'undefined' && window.__KS_API_BASE__) ||
@@ -43,6 +43,23 @@ async function _voice() {
 export function koraSubmit(text) {
   const t = String(text || '').trim();
   if (t) _send(t);
+}
+
+/* « Nouvelle conversation » — repart d'un fil VIDE. Le fil (bulles +
+   _history) est volontairement persistant sur la session (décision 19/07 :
+   ne pas perdre un échange en cours à la fermeture) ; ce bouton est le
+   SEUL moyen propre de le remettre à zéro sans recharger la page. Refusé en
+   plein tour (le stream écrit encore) : on ne coupe pas Kora au milieu. */
+export function koraNewConversation() {
+  if (_busy) return;
+  _history = [];
+  koraClearLog();
+  koraClearRings();
+  koraState('repos');
+  /* coupe une éventuelle lecture voix en cours (jeton _gen invalidé côté
+     kora-voice pour qu'aucun callback tardif ne repeigne l'état) */
+  _voice().then(vm => { if (vm && vm.koraStopSpeech) vm.koraStopSpeech(); }).catch(() => {});
+  if (_input) { _input.value = ''; try { _input.focus(); } catch (_) {} }
 }
 
 function _esc(s) {
@@ -269,4 +286,18 @@ export function initKoraLoop(panel) {
   };
   _sendBtn.addEventListener('click', go);
   _input.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+
+  /* bouton « nouvelle conversation » dans l'en-tête (conteneur .kora-headtools
+     créé par kora.js ; le toggle voix y vit aussi). icon() du registre. */
+  const tools = panel.querySelector('.kora-headtools');
+  if (tools && !tools.querySelector('.kora-newconv')) {
+    const nb = document.createElement('button');
+    nb.type = 'button';
+    nb.className = 'kora-newconv';
+    nb.title = 'Nouvelle conversation';
+    nb.setAttribute('aria-label', 'Nouvelle conversation');
+    nb.innerHTML = icon('edit-3', 16);
+    nb.addEventListener('click', koraNewConversation);
+    tools.appendChild(nb);
+  }
 }
