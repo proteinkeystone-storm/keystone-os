@@ -58,17 +58,36 @@ const MAX_PAD_ACTIONS = 24;   // actions détaillées par domaine à l'étage 2
 const MAX_PAD_DESC    = 160;  // desc d'un domaine (étage 1)
 
 /* ── STT talkie-walkie (K-14 vocal, V-1) ──────────────────────────
-   Voie de Keynapse recopiée (KORA_VOCAL_BRIEF §3.1) : même modèle
-   Whisper, entrée en TABLEAU D'OCTETS, sortie res.text. Le blob part
-   du client (maintien du galet → MediaRecorder). Souveraineté : rien
-   ne sort chez un tiers, tout reste sur Workers AI.
+   Le blob part du client (maintien du galet → MediaRecorder). Souveraineté :
+   rien ne sort chez un tiers, tout reste sur Workers AI.
    COÛT : PAS de crédit ici — 1 crédit/tour tout compris (§14) est pris
    en phase 'decide' du même tour ; la transcription est seulement MÉTRÉE
-   (recordUsage 'kora-stt') sous le garde-fou budget global. */
-const WHISPER_MODEL = '@cf/openai/whisper';
+   (recordUsage 'kora-stt') sous le garde-fou budget global.
+
+   ⚠ MODÈLE — leçon du 1er test réel (21/07, « The Monday and the
+   Wednesday » : du FRANÇAIS transcrit en ANGLAIS) : `@cf/openai/whisper`
+   (base) AUTO-DÉTECTE la langue (et se trompe / traduit vers l'anglais),
+   sans moyen de la forcer. On passe donc à `whisper-large-v3-turbo`, qui
+   accepte `language:'fr'` + `task:'transcribe'` (jamais 'translate') — MAIS
+   attend l'audio en BASE64, pas en tableau d'octets (piège déjà noté dans
+   keynapse.js). D'où _koraB64() ci-dessous. */
+const WHISPER_MODEL = '@cf/openai/whisper-large-v3-turbo';
+const WHISPER_LANG  = 'fr';   // V1 = français uniquement (Siwis côté voix)
 /* filet de sécurité serveur ; le vrai plafond est le cap 60 s côté client
    (~2 Mo en opus/webm, un peu plus en mp4/AAC — marge prise sans excès) */
 const MAX_STT_BYTES = 5 * 1024 * 1024;
+
+/* ArrayBuffer → base64 (runtime Worker : btoa). Chunké : String.fromCharCode
+   sur un très grand tableau explose la pile (60 s d'audio = plusieurs Mo). */
+function _koraB64(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+}
 
 /* ── Persona gravée (décisions du 17/07/2026, KORA_BRIEF §14) ── */
 const PERSONA = `Tu es Kora, l'assistante intégrée de Keystone OS.
@@ -772,7 +791,11 @@ export async function _koraTranscribe(env, ct, buf) {
   if (buf.byteLength > MAX_STT_BYTES) return { status: 413, error: 'Enregistrement trop lourd (max ~60 s)' };
   let text = '';
   try {
-    const res = await env.AI.run(WHISPER_MODEL, { audio: [...new Uint8Array(buf)] });
+    const res = await env.AI.run(WHISPER_MODEL, {
+      audio: _koraB64(buf),        // turbo attend du base64 (pas des octets)
+      language: WHISPER_LANG,      // FORCE le français : pas d'auto-détection foireuse
+      task: 'transcribe',          // jamais 'translate' (sinon sortie anglaise)
+    });
     text = String(res?.text ?? res?.transcription ?? '').trim();
   } catch (e) {
     console.error('[kora] stt échec :', e?.message || e);

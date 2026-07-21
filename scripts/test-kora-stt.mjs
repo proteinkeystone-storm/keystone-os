@@ -69,19 +69,21 @@ console.log('\n\x1b[1m▶ Suite 1 — garde-fous d\'entrée\x1b[0m');
   check('blob trop lourd → 413', r.status === 413);
 }
 
-console.log('\n\x1b[1m▶ Suite 2 — appel Whisper (octets, conteneur-agnostique)\x1b[0m');
+console.log('\n\x1b[1m▶ Suite 2 — appel Whisper (turbo : base64 + langue forcée)\x1b[0m');
 {
   const { env, calls } = fakeEnv({ text: 'bonjour Kora' });
   const r = await _koraTranscribe(env, 'audio/webm;codecs=opus', audioBuf(4));
   check('webm/opus accepté → 200', r.status === 200 && r.text === 'bonjour Kora');
-  check('appel { audio: [octets] } (Array)', calls.length === 1 && Array.isArray(calls[0].input.audio));
-  check('modèle = @cf/openai/whisper', calls[0].model === '@cf/openai/whisper');
+  check('audio en BASE64 (string, pas octets)', calls.length === 1 && typeof calls[0].input.audio === 'string');
+  check('modèle = whisper-large-v3-turbo', calls[0].model === '@cf/openai/whisper-large-v3-turbo');
+  check('language:"fr" FORCÉ (anti « transcrit en anglais »)', calls[0].input.language === 'fr');
+  check('task:"transcribe" (jamais translate)', calls[0].input.task === 'transcribe');
 }
 {
   const { env, calls } = fakeEnv({ text: 'salut' });
   const r = await _koraTranscribe(env, 'audio/mp4', audioBuf(4));
   check('mp4 (Safari) accepté → 200', r.status === 200 && r.text === 'salut');
-  check('mp4 : mêmes octets envoyés', calls.length === 1 && Array.isArray(calls[0].input.audio));
+  check('mp4 : base64 + fr aussi', calls.length === 1 && typeof calls[0].input.audio === 'string' && calls[0].input.language === 'fr');
 }
 
 console.log('\n\x1b[1m▶ Suite 3 — façonnage de la sortie\x1b[0m');
