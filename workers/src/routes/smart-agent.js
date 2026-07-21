@@ -61,7 +61,7 @@ import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-
 import { streamLLM }                               from '../lib/llm-stream.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-14.2';
+const SA_ENGINE_VERSION = 'SA-14.3';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -1561,6 +1561,80 @@ export async function _rerank(env, query, hits) {
   } catch (_) { return hits; }
 }
 
+// ── SA-14.3 — query expansion BORNÉE (un retry, pas un fan-out) ────
+// Le cas visé : une question courte et vague (surtout au canal public)
+// qui n'accroche rien parce qu'elle n'emploie pas le vocabulaire du
+// coffre. Aujourd'hui elle finit en repli honnête + trou gap-driven.
+//
+// Ce qu'on NE fait PAS : la query expansion multi-variantes du doc source
+// (3 reformulations × 3 recherches). Disproportionné vu les quotas du
+// canal public, et le doc lui-même signale le risque de dérive de sens.
+// UNE reformulation, UNE seconde recherche, et on garde le repli si ça
+// ne donne rien — on remplace un échec par une tentative, on n'ajoute
+// rien au chemin déjà heureux (la question qui trouve sa fiche du 1er coup).
+const EXPAND_MAX_WORDS  = 6;    // au-delà, la question est déjà bien formée
+const EXPAND_MAX_TOKENS = 60;   // reformulation = une ligne, pas un paragraphe
+const EXPAND_MAX_LEN    = 160;  // borne dure sur la requête reformulée
+
+// Vrai seulement si (a) la 1ʳᵉ passe ne s'ancre pas ET (b) la question est
+// courte/vague. Une question déjà ancrée ou déjà bien formée ne déclenche
+// JAMAIS d'appel. Pur → testé.
+export function needsExpansion(query, grounded, maxWords = EXPAND_MAX_WORDS) {
+  if (grounded) return false;
+  const q = String(query || '').trim();
+  if (q.length < 3) return false;                       // « ok », « ? » : rien à reformuler
+  const words = q.split(/\s+/).filter(w => /[\p{L}\p{N}]/u.test(w));
+  return words.length > 0 && words.length <= maxWords;
+}
+
+// BEST-EFFORT : toute panne (IA absente, quota, réponse vide ou suspecte)
+// rend '' → l'appelant garde le repli d'origine. Ne jette jamais.
+// Exportée pour que le repli silencieux soit prouvé par un test (IA mockée).
+export async function _expandQuery(env, query, byok = null, lang = 'fr') {
+  if (!env?.AI || typeof env.AI.run !== 'function') return '';
+  const langName = SA_LANG_NAMES[normLang(lang)] || SA_LANG_NAMES.fr;
+  try {
+    const raw = await _agentLLM(env, {
+      engine: byok?.engine, apiKey: byok?.apiKey,
+      system: `Tu reformules une question trop courte en une REQUÊTE DE RECHERCHE documentaire, EN ${langName.toUpperCase()}. Développe les sous-entendus en mots-clés explicites que contiendrait une fiche de documentation professionnelle. N'invente AUCUN fait, ne réponds PAS à la question, ne pose pas de question. Réponds UNIQUEMENT par la requête reformulée, sur une seule ligne, sans guillemets ni préfixe.`,
+      messages: [{ role: 'user', content: String(query).slice(0, 300) }],
+      max_tokens: EXPAND_MAX_TOKENS,
+      temperature: 0.2,
+    });
+    const out = String(raw || '').trim()
+      .split('\n')[0]
+      .replace(/^["«»\s:–-]+|["«»\s]+$/g, '')
+      .slice(0, EXPAND_MAX_LEN)
+      .trim();
+    // Une reformulation identique à l'entrée ne vaut pas une seconde
+    // recherche (même requête ⇒ mêmes résultats, coût pur).
+    return out.toLowerCase() === String(query).trim().toLowerCase() ? '' : out;
+  } catch (_) { return ''; }
+}
+
+// Récupération + décision d'ancrage, avec le retry SA-14.3 intégré.
+// Point d'entrée UNIQUE des deux canaux de chat (interne et public) pour
+// qu'ils ne puissent pas diverger. Renvoie exactement ce que renvoyaient
+// _retrieve + isGrounded, plus `expandedFrom` (la requête reformulée qui a
+// sauvé le tour, ou null) pour l'observabilité.
+async function _retrieveGrounded(env, tenant, q, opts, { byok = null, lang = 'fr' } = {}) {
+  const first = await _retrieve(env, tenant, q, opts);
+  const g1 = isGrounded({ semantic: first.semantic, hits: first.hits });
+  const keep = { ...first, grounded: g1.grounded, grounding: g1.grounding, expandedFrom: null };
+  // Une panne de recherche n'est pas un problème de vocabulaire : reformuler
+  // ne la réparerait pas, ça brûlerait juste un appel IA. On s'abstient.
+  if (g1.grounded || first.degraded || !needsExpansion(q, g1.grounded)) return keep;
+
+  const alt = await _expandQuery(env, q, byok, lang);
+  if (!alt) return keep;
+  const second = await _retrieve(env, tenant, alt, opts);
+  const g2 = isGrounded({ semantic: second.semantic, hits: second.hits });
+  // La reformulation ne PEUT que sauver un tour perdu : si elle n'ancre pas
+  // davantage, on rend le résultat d'origine à l'identique.
+  if (!g2.grounded) return keep;
+  return { ...second, grounded: true, grounding: g2.grounding, expandedFrom: alt };
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // P2 — Grounding Kortex pour le Gest du Brainstorming (invité maison)
 // ═══════════════════════════════════════════════════════════════════
@@ -3030,13 +3104,12 @@ export async function handleAgentChat(request, env, agentId) {
     ? `${message} — (je réponds « ${message} » à ta proposition précédente : « ${followupQ} ». Traite cela comme ma demande et réponds-y à partir des fiches, sans répéter ta réponse précédente.)`
     : message;
   const vaultIds = await _vaultsForAgent(env, gate.tenant, agentId);
-  const { semantic, hits, degraded } = await _retrieve(env, gate.tenant, retrievalQuery, {
-    topk: CHAT_TOPK,
-    vaultIds,
-  });
-
-  // ── Seuil d'ancrage : accroche lexicale OU similarité suffisante ──
-  const { grounded, grounding } = isGrounded({ semantic, hits });
+  // ── Seuil d'ancrage : accroche lexicale OU similarité suffisante.
+  //    SA-14.3 : si ça n'accroche pas ET que la question est courte/vague,
+  //    UNE reformulation + UNE seconde recherche avant de se replier.
+  const { semantic, hits, degraded, grounded, grounding } = await _retrieveGrounded(
+    env, gate.tenant, retrievalQuery, { topk: CHAT_TOPK, vaultIds },
+    { byok, lang: respondLang });
   const fallbackText = agent.config?.scope?.fallback_text || FALLBACK_DEFAULT;
 
   // Audit 2026-07-16 — `gcode` distingue enfin les replis en base (avant :
@@ -3403,9 +3476,11 @@ export async function handlePublicAgentChat(request, env, slug) {
     ? `${message} — (je réponds « ${message} » à ta proposition précédente : « ${followupQ} ». Traite cela comme ma demande et réponds-y à partir des fiches, sans répéter ta réponse précédente.)`
     : message;
   const vaultIds = await _vaultsForAgent(env, tenant, link.agent_id);
-  const { semantic, hits, degraded } = await _retrieve(env, tenant, retrievalQuery, { topk: CHAT_TOPK, vaultIds });
-
-  const { grounded, grounding } = isGrounded({ semantic, hits });
+  // SA-14.3 — même retry borné qu'au chat interne (canal public = le cas le
+  // plus exposé aux questions courtes et vagues, cf. plan).
+  const { semantic, hits, degraded, grounded, grounding } = await _retrieveGrounded(
+    env, tenant, retrievalQuery, { topk: CHAT_TOPK, vaultIds },
+    { byok, lang: respondLang });
   const fallbackText = agent.config?.scope?.fallback_text || FALLBACK_DEFAULT;
 
   // gcode : 0 = vrai trou serveur · -1 = refus [GAP] du modèle · -2 = panne

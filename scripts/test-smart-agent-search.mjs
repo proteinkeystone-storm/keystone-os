@@ -12,7 +12,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   lastAgentQuestion, isAffirmation, validateFolderName, validateVaultName,
   validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions,
   splitGapReply, pickFallback, groundedFromSignals, sweepGroundThreshold,
-  needsRerank, applyRerank, _rerank, clampRelevance,
+  needsRerank, applyRerank, _rerank, clampRelevance, needsExpansion, _expandQuery,
   validateImportUrl, htmlToText, clampExtractText, importFileKindOf, stripRepeatedFollowup,
   gapMergeTarget, attachGapCounts, sanitizePublicUrl, validateCards,
   detectSocialIntent, pickSocialReply }
@@ -812,6 +812,55 @@ console.log('── SA-14.1 — _rerank (best-effort : une panne ne casse jamais
     check('contexte envoyé = titre + corps, un par fiche',
       seen.contexts.length === 2 && seen.contexts[0].text === 'A\nx');
     check('la requête est transmise telle quelle', seen.query === 'quels horaires ?');
+  }
+}
+
+console.log('── SA-14.3 — needsExpansion (jamais sur le chemin heureux) ──');
+{
+  check('question déjà ancrée → JAMAIS de reformulation, même très courte',
+    needsExpansion('tarifs ?', true) === false);
+  check('question courte non ancrée → reformulation',
+    needsExpansion('remboursement ?', false) === true);
+  check('6 mots = la borne, incluse',
+    needsExpansion('comment faire pour un remboursement partiel', false) === true);
+  check('7 mots → question déjà bien formée, on ne paie pas',
+    needsExpansion('comment faire pour obtenir un remboursement partiel aujourd\'hui', false) === false);
+  check('ponctuation seule ne compte pas comme un mot',
+    needsExpansion('remboursement ? ! ...', false) === true);
+  check('trop court pour vouloir dire quelque chose → abstention',
+    needsExpansion('ok', false) === false && needsExpansion('?', false) === false);
+  check('vide / null → false', needsExpansion('', false) === false && needsExpansion(null, false) === false);
+  check('borne paramétrable', needsExpansion('un deux trois quatre', false, 3) === false);
+}
+
+console.log('── SA-14.3 — _expandQuery (best-effort, jamais bloquant) ──');
+{
+  const ai = (fn) => ({ AI: { run: fn } });
+  const ok = (text) => ai(async () => ({ response: text }));
+  check('IA en échec → chaîne vide (l\'appelant garde son repli)',
+    await _expandQuery(ai(async () => { throw new Error('quota'); }), 'remboursement ?') === '');
+  check('binding AI absent → chaîne vide',
+    await _expandQuery({}, 'remboursement ?') === '' && await _expandQuery(null, 'x') === '');
+  check('réponse vide → chaîne vide', await _expandQuery(ok('   '), 'remboursement ?') === '');
+  check('reformulation propre renvoyée',
+    await _expandQuery(ok('procédure de remboursement délai conditions'), 'remboursement ?')
+      === 'procédure de remboursement délai conditions');
+  check('guillemets et préfixes retirés',
+    await _expandQuery(ok('« procédure de remboursement »'), 'remboursement ?') === 'procédure de remboursement');
+  check('bavardage multiligne → première ligne seulement',
+    await _expandQuery(ok('procédure de remboursement\n\nJ\'espère que cela aide !'), 'remboursement ?')
+      === 'procédure de remboursement');
+  check('reformulation identique à l\'entrée → vide (une 2e recherche identique ne coûterait que du temps)',
+    await _expandQuery(ok('Remboursement ?'), 'remboursement ?') === '');
+  check('sortie bornée à 160 caractères',
+    (await _expandQuery(ok('a'.repeat(400)), 'q ?')).length === 160);
+  {
+    let seen = null;
+    await _expandQuery({ AI: { run: async (_m, p) => { seen = p; return { response: 'r' }; } } }, 'horaires ?', null, 'en');
+    check('langue de la question transmise au prompt (pas de bascule en français)',
+      /ANGLAIS/.test(seen.messages[0].content));
+    check('température basse et génération bornée',
+      seen.temperature === 0.2 && seen.max_tokens === 60);
   }
 }
 
