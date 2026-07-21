@@ -341,6 +341,16 @@ def build():
       qu'imprimée, schémas et photos compris. Pendant la relecture, vous la rattachez d'un clic aux
       fiches de votre choix, et vous décochez celles dont vous ne voulez pas. Le poids exact de ce qui
       va être envoyé s'affiche avant que vous validiez.</p>
+      """)
+
+    # ── La capture de la relecture avec planches ─────────────
+    P.append(f"""
+      <figure style="margin-top:0">
+        <img src="{ASSETS['cap7']}" alt="Relecture d'un lot avec les planches">
+        <figcaption>La relecture d'un lot : sous chaque fiche proposée, les planches des pages dont elle
+        provient. Celles en surbrillance sont rattachées à cette fiche — un clic les attache ou les
+        détache. En bas à gauche, le poids exact de ce qui partira de votre poste si vous validez.</figcaption>
+      </figure>
       <div class="callout neutral">
         <div class="t">Pourquoi la page entière, et pas la photo découpée</div>
         <p>Les planches d'un manuel sont composites : photos, tracés, flèches, étiquettes numérotées.

@@ -41,3 +41,28 @@ Viser 170–275 mm par page. Sous 150, fusionner avec la suivante.
 `img/` contient les six captures de l'édition du 16/07, extraites du PDF. Pour
 les refaire, ouvrir `_design-lab/sa-notice-harness.html` (il simule l'API avec
 des données de démonstration, aucun backend requis) et photographier les écrans.
+
+## La capture des planches (capture-7)
+
+Les six premières captures viennent du pad réel via `sa-notice-harness.html`.
+La septième — la relecture avec les planches — ne pouvait pas en venir : l'état
+`_ig` est privé au module, on ne peut pas l'injecter de l'extérieur. Elle est
+donc produite par `harnais-planches.html`, qui reproduit **le balisage exact**
+émis par `_igRenderReview()` en chargeant la vraie CSS du pad.
+
+⚠ **Si `_igRenderReview()` change, ce harnais doit changer avec lui** — sinon la
+notice montrera une interface qui n'existe plus.
+
+Le document illustré de la capture est fabriqué par `demo-doc.py` : une notice
+de montage « Atelier Lumen », dans l'univers de démonstration déjà utilisé par
+les autres captures. **Ne jamais utiliser un document client réel** pour une
+capture de notice : elle part chez tous les clients.
+
+```bash
+python3 demo-doc.py     # → demo-lumen.pdf + planche-demo-*.png
+# puis servir harnais-planches.html et photographier :
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 \
+  --window-size=860,1100 --screenshot="img/capture-7-planches.png" \
+  "http://localhost:3003/_design-lab/.tmp-capture.html"
+```
