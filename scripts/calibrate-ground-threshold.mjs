@@ -19,7 +19,13 @@
 
    COÛT : le replay golden est GRATUIT côté récupération (aucun LLM), sauf
    pour les questions « doit ignorer » qui s'ancrent quand même (bornées à
-   6 appels IA par agent, plafond du worker). Rien n'est écrit.
+   REPLAY_LLM_MAX = 16 appels IA par agent, plafond du worker). Rien n'est écrit.
+
+   MESURE DU 21/07 : sur 44 questions étalons et 3 agents réels, les 31
+   seuils de 0.30 à 0.60 donnent le MÊME score. Cause : `anyLex` est presque
+   toujours vrai (30 sondes hors sujet sur 30 accrochent une fiche), donc la
+   règle `anyLex || !semantic || topVec >= seuil` court-circuite le seuil.
+   GROUND_MIN_VEC n'arbitre rien aujourd'hui — le bouger serait sans effet.
 
    USAGE
      export SA_TEST_JWT="<le ks_jwt de ton navigateur>"
@@ -100,6 +106,7 @@ for (const a of targets) {
   const s = rep.results.map(r => ({
     expect: r.expect, topVec: r.topVec, anyLex: r.anyLex,
     semantic: r.semantic, hitCount: r.hitCount, llmCites: r.llmCites,
+    gapMarked: r.gapMarked,   // SA-14.5 — vrai signal du repli
   }));
   signals.push(...s);
   perAgent.push({ id: a.id, name: a.name, total: rep.total, score: rep.score, signals: s });

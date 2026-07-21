@@ -1925,10 +1925,17 @@ function _msgHTML(m) {
         <span class="sa-sources-lbl">Sources&nbsp;:</span>
         ${m.citations.map(c => `<button class="sa-srcref" data-act="chat-cite" data-uid="${c.unit_id}" title="${_escAttr(c.title)}">[${c.n}] ${_esc(c.title)}</button>`).join('')}
       </div>` : '';
+    // SA-14.5 — troisième état : l'agent n'avait PAS la réponse à la question
+    // posée, mais a redirigé vers du savoir réel qu'il cite. La réponse est
+    // utile et s'affiche normalement (sources comprises) — seule une note
+    // discrète signale que la question, elle, reste un trou à combler.
+    const deflected = m.deflected ? `
+      <span class="sa-msg-note">Réponse de côté — la question posée n'est pas encore dans le coffre, elle est notée comme « trou ».</span>` : '';
     return `
     <div class="sa-msg is-agent">
       <div class="sa-bubble" data-act="chat-say" title="Toucher pour écouter">${_renderReply(m.content, m.citations || [])}</div>
       ${sources}
+      ${deflected}
     </div>`;
 }
 
@@ -2184,7 +2191,7 @@ async function _sendChat() {
         speech = await startSpeech();
         const reader = res.body.getReader();
         const decoder = new TextDecoder('utf-8');
-        let buffer = '', gapped = false, citations = [], finalReply = '';
+        let buffer = '', gapped = false, deflected = false, citations = [], finalReply = '';
         for (;;) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -2210,7 +2217,7 @@ async function _sendChat() {
                     if (live) { live.innerHTML = _renderReply(acc, []); _scrollChatBottom(); }
                     if (speech) speech.push(acc);
                 } else if (ev.type === 'done') {
-                    gapped = !!ev.gapped; citations = ev.citations || [];
+                    gapped = !!ev.gapped; deflected = !!ev.deflected; citations = ev.citations || [];
                     finalReply = (ev.reply != null) ? ev.reply : acc;
                 } else if (ev.type === 'error') {
                     throw new Error(ev.error || 'Dialogue impossible');
@@ -2220,9 +2227,9 @@ async function _sendChat() {
         const reply = finalReply || acc;
         if (gotChunk) {
             const last = _chat.messages[_chat.messages.length - 1];
-            last.content = reply; last.citations = citations; last.gapped = gapped; last.streaming = false;
+            last.content = reply; last.citations = citations; last.gapped = gapped; last.deflected = deflected; last.streaming = false;
         } else {
-            _chat.messages.push({ role: 'agent', content: reply, citations, gapped });
+            _chat.messages.push({ role: 'agent', content: reply, citations, gapped, deflected });
         }
         if (speech) speech.end(reply);
     } catch (e) {
@@ -2251,7 +2258,7 @@ async function _sendChatJSON(message) {
         _chat.sessionId = res.session_id || _chat.sessionId;
         _chat.messages.push({
             role: 'agent', content: res.reply || '',
-            citations: res.citations || [], gapped: !!res.gapped,
+            citations: res.citations || [], gapped: !!res.gapped, deflected: !!res.deflected,
         });
         _speak(res.reply || '');
     } catch (e) {

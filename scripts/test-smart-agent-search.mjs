@@ -13,7 +13,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions,
   splitGapReply, pickFallback, groundedFromSignals, sweepGroundThreshold,
   needsRerank, applyRerank, _rerank, clampRelevance, needsExpansion, _expandQuery,
-  splitMarkdownBatches, buildBatchPrompt,
+  splitMarkdownBatches, buildBatchPrompt, gapOutcome,
   validateImportUrl, htmlToText, clampExtractText, importFileKindOf, stripRepeatedFollowup,
   gapMergeTarget, attachGapCounts, sanitizePublicUrl, validateCards,
   detectSocialIntent, pickSocialReply }
@@ -658,10 +658,46 @@ console.log('── goldenVerdict (SA-5.3 — replay fidèle des « doit ignorer
   check('answer non ancré → ko (savoir manquant)', goldenVerdict('answer', false, null).ok === false);
   check('fallback non ancré → ok (se tait, gratuit)', goldenVerdict('fallback', false, null).ok === true);
   check('fallback ancré + 0 citation → ok (repli réel)', goldenVerdict('fallback', true, 0).ok === true);
-  check('fallback ancré + citations → ko (débordement réel)', goldenVerdict('fallback', true, 2).ok === false);
+  check('fallback ancré + citations SANS marqueur → ko (vrai débordement)', goldenVerdict('fallback', true, 2).ok === false);
   check('fallback ancré + pas d\'IA (cap) → ko prudent', goldenVerdict('fallback', true, null).ok === false);
   check('predicted cohérent (fallback repli)', goldenVerdict('fallback', true, 0).predicted === 'fallback');
   check('predicted cohérent (fallback débordement)', goldenVerdict('fallback', true, 3).predicted === 'answer');
+}
+
+console.log('── SA-14.5 — goldenVerdict : le MARQUEUR prime sur la citation ──');
+{
+  // Mesuré le 21/07 : « le livre ne donne pas cette information, en revanche
+  // je peux vous parler de… [1] » est un repli CORRECT. L'ancienne règle le
+  // comptait débordement et faisait tomber un agent sain de 88 % à 36 %.
+  check('fallback + marqueur + redirection citée → ok (repli avec redirection)',
+    goldenVerdict('fallback', true, 2, true).ok === true);
+  check('predicted = fallback dans ce cas',
+    goldenVerdict('fallback', true, 2, true).predicted === 'fallback');
+  check('fallback + marqueur sans citation → ok (trou sec)',
+    goldenVerdict('fallback', true, 0, true).ok === true);
+  check('SANS marqueur, citer reste un débordement (la règle ne s\'effondre pas)',
+    goldenVerdict('fallback', true, 2, false).ok === false);
+  check('le marqueur ne sauve JAMAIS un « doit répondre » resté non ancré',
+    goldenVerdict('answer', false, 0, true).ok === false);
+  check('4e paramètre absent → comportement d\'avant strictement conservé',
+    goldenVerdict('fallback', true, 2).ok === false && goldenVerdict('fallback', true, 0).ok === true);
+}
+
+console.log('── SA-14.5 — gapOutcome (trou sec vs repli avec redirection) ──');
+{
+  check('marqueur + aucune citation → trou SEC (crédit à rendre)',
+    gapOutcome(true, 0).gapped === true && gapOutcome(true, 0).deflected === false);
+  check('marqueur + citations → redirection sourcée (pas de remboursement)',
+    gapOutcome(true, 3).deflected === true && gapOutcome(true, 3).gapped === false);
+  check('aucun marqueur → ni l\'un ni l\'autre (réponse normale)',
+    gapOutcome(false, 0).gapped === false && gapOutcome(false, 2).deflected === false);
+  check('les deux états sont EXCLUSIFS (jamais vrais ensemble)',
+    [[true, 0], [true, 5], [false, 0], [false, 5]].every(([m, c]) => {
+      const o = gapOutcome(m, c);
+      return !(o.gapped && o.deflected);
+    }));
+  check('entrées molles tolérées (undefined, string)',
+    gapOutcome(true).gapped === true && gapOutcome(true, '2').deflected === true);
 }
 
 console.log('── SA-14.0 — groundedFromSignals (la formule d\'ancrage isolée) ──');
