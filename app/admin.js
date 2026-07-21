@@ -3497,11 +3497,11 @@ async function renderBudget(panel) {
           ${_budgetSvg('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>')} Coupure automatique
         </div>
         <p style="font-size:12px;color:var(--text-muted);margin:0">
-          Coupe l'IA toute seule quand l'estimation du mois dépasse ce plafond.
+          Coupe l'IA toute seule quand l'estimation du cycle de facturation en cours dépasse ce plafond.
         </p>
         <div style="display:flex;align-items:flex-end;gap:10px">
           <div class="form-group" style="flex:1">
-            <label class="form-label" for="budget-threshold">Plafond mensuel (€)</label>
+            <label class="form-label" for="budget-threshold">Plafond par cycle (€)</label>
             <input type="number" id="budget-threshold" class="form-input" min="0" max="10000" step="1"
                    value="${Number(state.control?.threshold_eur ?? 10)}">
           </div>
