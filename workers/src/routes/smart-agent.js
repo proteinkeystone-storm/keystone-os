@@ -4218,7 +4218,12 @@ export async function handleGoldenReplay(request, env, agentId) {
   // récup seule est PESSIMISTE : on fait PARLER l'agent et on regarde s'il cite
   // une fiche (débordement = ko) ou s'il se replie (= ok). Gratuit pour le
   // client, mais borné (REPLAY_LLM_MAX appels IA) pour rester rapide.
-  const REPLAY_LLM_MAX = 6;
+  // SA-14.0 bis (21/07) — était 6, calibré sur des jeux étalons d'une poignée
+  // de questions. La mesure du 21/07 a montré que TOUTE question hors sujet
+  // s'ancre quand même (anyLex quasi toujours vrai) : les « doit ignorer » ont
+  // donc TOUS besoin de l'appel IA pour être jugés. À 6, les suivants
+  // tombaient en KO « par prudence » et le score ne mesurait plus rien.
+  const REPLAY_LLM_MAX = 16;
   let llmUsed = 0;
   const fallbackText = agent.config?.scope?.fallback_text || FALLBACK_DEFAULT;
   for (const g of golden) {
