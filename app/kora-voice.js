@@ -116,10 +116,26 @@ export function koraOpenSpeech() {
       voiceId: PIPER_VOICE,
       onState: (st) => {
         if (gen !== _gen) return;               // session périmée (barge-in) → on ne touche à rien
-        if (st === 'idle') koraState('repos');
+        if (st === 'speaking') koraState('travail');   // elle parle → galet « travail »
+        else if (st === 'idle') koraState('repos');    // fin de lecture → repos
       },
     });
   } catch (_) { return null; }
+}
+
+// Lecture ONE-SHOT d'un texte COMPLET (réponses directes de la phase decide,
+// messages d'erreur/429/annulation) — elles ne passent PAS par le flux answer.
+// Réutilise le pipeline phrase-par-phrase (push tout + end). Rend le flux pour
+// que kora-loop.js reporte le repos à la fin de lecture (comme le stream).
+export function koraSpeakOneShot(text) {
+  if (!koraVoiceOutputActive()) return null;
+  const t = String(text || '').trim();
+  if (!t) return null;
+  const sp = koraOpenSpeech();
+  if (!sp) return null;
+  koraState('travail');
+  sp.push(t); sp.end(t);
+  return sp;
 }
 
 /* ═══ V-1 — talkie-walkie ═══ */

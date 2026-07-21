@@ -114,6 +114,7 @@ async function _send(text) {
       const msg = r.ok ? (r.data?.message || 'J’arrête de suivre la chaîne.') : r.error;
       koraSay(_esc(msg));
       _push('assistant', msg);
+      if (voiceOut && vm) speech = vm.koraSpeakOneShot(msg);
       return;
     }
 
@@ -129,7 +130,9 @@ async function _send(text) {
     });
     if (res.status === 429) {
       const j = await res.json().catch(() => ({}));
-      koraSay(_esc(j.error || 'Tes crédits IA du mois sont épuisés.'));
+      const msg = j.error || 'Tes crédits IA du mois sont épuisés.';
+      koraSay(_esc(msg));
+      if (voiceOut && vm) speech = vm.koraSpeakOneShot(msg);
       return;
     }
     if (!res.ok) throw new Error(`décision ${res.status}`);
@@ -138,6 +141,10 @@ async function _send(text) {
     if (d.type === 'reponse') {
       koraSay(_esc(d.text).replace(/\n/g, '<br>'));
       _push('assistant', d.text);
+      /* réponse DIRECTE (decide) : elle ne passe PAS par le flux answer —
+         c'est le cas le plus fréquent (salutations, « je sais pas lire ça »,
+         clarifications). Sans ça, la voix restait muette sur ces tours. */
+      if (voiceOut && vm) speech = vm.koraSpeakOneShot(d.text);
       return;
     }
     if (d.type !== 'action') throw new Error('réponse inattendue');
@@ -145,8 +152,10 @@ async function _send(text) {
     /* ── phase 2 : lecture (anneau sur la cible) puis réponse streamée ── */
     const act = koraAction(d.id);
     if (!act) {
-      koraSay('Je me suis emmêlée dans mes lectures — reformule, je réessaie.');
+      const msg = 'Je me suis emmêlée dans mes lectures — reformule, je réessaie.';
+      koraSay(msg);
       _push('assistant', `(action inconnue demandée : ${d.id})`);
+      if (voiceOut && vm) speech = vm.koraSpeakOneShot(msg);
       return;
     }
     if (d.annonce) { koraSay(_esc(d.annonce)); _push('assistant', d.annonce); }
@@ -171,6 +180,7 @@ async function _send(text) {
     if (!result.ok) {
       koraSay(_esc(result.error));
       _push('assistant', `(action ${d.id} en échec : ${result.error})`);
+      if (voiceOut && vm) speech = vm.koraSpeakOneShot(result.error);
       return;
     }
 
@@ -225,6 +235,8 @@ async function _send(text) {
   } catch (e) {
     if (speech) { try { speech.cancel(); } catch (_) {} speech = null; }
     koraSay('Petit souci de mon côté (' + _esc(e?.message || 'réseau') + '). Réessaie dans un instant.');
+    /* en vocal, un échec MUET ressemble à une panne (§6 piège 10) : on le dit */
+    if (voiceOut && vm) speech = vm.koraSpeakOneShot('Petit souci de mon côté, réessaie dans un instant.');
   } finally {
     koraClearRings();
     /* voix : le galet reste en « travail » tant que Piper parle — c'est la
