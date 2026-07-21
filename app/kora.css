@@ -202,7 +202,16 @@ html.light-mode .kora-newconv, html.light-mode .kora-voicetoggle{
     background:rgba(9,11,26,.99);
   }
   .kora-head{ padding:18px 20px 0; }
+  /* MODALE PLEIN ÉCRAN : le fond ne défile plus tant que la feuille est
+     ouverte (sinon barre de défilement à droite + le header/galet se décale
+     quand on scrolle le dashboard derrière). On fige body ET le conteneur
+     .main (qui porte le vrai défilement du dashboard). */
+  body.kora-open, body.kora-open .main{ overflow:hidden !important; }
+  /* la barre de saisie remonte au-dessus de la barre d'accueil iPhone */
+  .kora-inputbar{ padding-bottom:max(16px, env(safe-area-inset-bottom)); }
 }
+/* le défilement des bulles ne se propage JAMAIS au fond (chaînage = décalage) */
+.kora-log{ overscroll-behavior:contain; }
 
 /* ── Mode clair de la fenêtre (retour Stéphane 18/07) ── */
 html.light-mode .kora-panel{

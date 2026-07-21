@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const KORA_CSS_V = '15';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
+const KORA_CSS_V = '16';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
 
 /* ── Shader (verbatim harnais kora-galet-morph.html) ── */
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -172,6 +172,13 @@ export function koraOpen() {
   if (!_inited) return;
   _panel.classList.add('kora-open');
   document.body.classList.add('kora-open');   // le dashboard se pousse à gauche
+  /* mobile : la feuille est plein écran → on ramène le dashboard EN HAUT avant
+     de figer son défilement (CSS body.kora-open overflow:hidden). Sinon, si le
+     fond était scrollé, son header (qui porte le galet) restait décalé vers le
+     bas sous la feuille. Ordre : reset scroll PUIS mesure du header. */
+  if (matchMedia('(max-width:640px)').matches) {
+    try { scrollTo(0, 0); const m = document.querySelector('.main'); if (m) m.scrollTop = 0; } catch (_) {}
+  }
   _positionSheet();                           // mobile : caler sous le header (pas de liseré)
   requestAnimationFrame(() => _panel.classList.add('kora-in'));
 }
