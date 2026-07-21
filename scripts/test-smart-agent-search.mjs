@@ -11,7 +11,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   resolveVaultIds, mergeVectorMatches,
   lastAgentQuestion, isAffirmation, validateFolderName, validateVaultName,
   validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions,
-  splitGapReply, pickFallback,
+  splitGapReply, pickFallback, groundedFromSignals, sweepGroundThreshold,
   validateImportUrl, htmlToText, clampExtractText, importFileKindOf, stripRepeatedFollowup,
   gapMergeTarget, attachGapCounts, sanitizePublicUrl, validateCards,
   detectSocialIntent, pickSocialReply }
@@ -617,6 +617,79 @@ console.log('── goldenVerdict (SA-5.3 — replay fidèle des « doit ignorer
   check('fallback ancré + pas d\'IA (cap) → ko prudent', goldenVerdict('fallback', true, null).ok === false);
   check('predicted cohérent (fallback repli)', goldenVerdict('fallback', true, 0).predicted === 'fallback');
   check('predicted cohérent (fallback débordement)', goldenVerdict('fallback', true, 3).predicted === 'answer');
+}
+
+console.log('── SA-14.0 — groundedFromSignals (la formule d\'ancrage isolée) ──');
+{
+  const sig = (o) => ({ topVec: 0, anyLex: false, semantic: true, hitCount: 1, ...o });
+  check('aucune fiche → jamais ancré, quel que soit le seuil',
+    groundedFromSignals(sig({ hitCount: 0, topVec: 0.99 }), 0.30) === false);
+  check('accroche lexicale → ancré même sous le seuil',
+    groundedFromSignals(sig({ anyLex: true, topVec: 0.10 }), 0.42) === true);
+  check('sans couche sémantique → ancré dès qu\'il y a une fiche',
+    groundedFromSignals(sig({ semantic: false }), 0.42) === true);
+  check('cosinus au seuil exact → ancré (borne incluse)',
+    groundedFromSignals(sig({ topVec: 0.42 }), 0.42) === true);
+  check('cosinus juste sous le seuil → non ancré (la « falaise »)',
+    groundedFromSignals(sig({ topVec: 0.4199 }), 0.42) === false);
+  // Garde-fou anti-dérive : la prod (isGrounded) et la calibration doivent
+  // TOUJOURS décider pareil, sinon on calibre autre chose que ce qui tourne.
+  const cas = [
+    { semantic: true,  hits: [] },
+    { semantic: true,  hits: [{ vecScore: 0.55 }] },
+    { semantic: true,  hits: [{ vecScore: 0.20 }] },
+    { semantic: true,  hits: [{ vecScore: 0.10, lexRank: 1 }] },
+    { semantic: false, hits: [{ vecScore: 0 }] },
+  ];
+  check('parité stricte avec isGrounded sur tous les cas de figure',
+    cas.every(c => {
+      const ref = isGrounded(c);
+      return groundedFromSignals({
+        topVec: c.hits.reduce((m, h) => Math.max(m, h.vecScore || 0), 0),
+        anyLex: c.hits.some(h => h.lexRank), semantic: c.semantic, hitCount: c.hits.length,
+      }) === ref.grounded;
+    }));
+}
+
+console.log('── SA-14.0 — sweepGroundThreshold (optimum connu à l\'avance) ──');
+{
+  const s = (expect, topVec, extra = {}) => ({ expect, topVec, anyLex: false, semantic: true, hitCount: 1, llmCites: null, ...extra });
+  // Optimum UNIQUE construit à la main : « répondre » à 0.50, « se taire » à
+  // 0.49 → seul t = 0.50 satisfait les deux familles (≥ 0.50 ancre, > 0.49 tait).
+  {
+    const sw = sweepGroundThreshold([
+      s('answer', 0.50), s('answer', 0.50), s('answer', 0.50),
+      s('fallback', 0.49), s('fallback', 0.49), s('fallback', 0.49),
+    ]);
+    check('trouve l\'optimum unique 0.50', sw.best.threshold === 0.50 && sw.best.passed === 6);
+    check('score en pourcentage', sw.best.score === 100 && sw.total === 6);
+    check('seuil actuel (0.42) mesuré en comparaison : 3/6',
+      sw.current.threshold === 0.42 && sw.current.passed === 3);
+    check('un candidat par pas, bornes incluses (0.30→0.60)',
+      sw.candidates.length === 31 && sw.candidates[0].threshold === 0.30
+      && sw.candidates[30].threshold === 0.60);
+  }
+  // Plateau : quand plusieurs seuils font le même score, on NE BOUGE PAS la
+  // constante pour rien → le gagnant doit être le plus proche de l'actuel.
+  {
+    const sw = sweepGroundThreshold([
+      s('answer', 0.45), s('answer', 0.50), s('answer', 0.55),
+      s('fallback', 0.35), s('fallback', 0.38),
+    ]);
+    check('plateau 0.39→0.45 : le seuil ACTUEL gagne l\'égalité (aucun déplacement gratuit)',
+      sw.best.passed === 5 && sw.best.threshold === 0.42);
+  }
+  check('accroche lexicale : aucun seuil ne peut la faire taire',
+    sweepGroundThreshold([s('fallback', 0.05, { anyLex: true })]).best.passed === 0);
+  check('« doit ignorer » qui cite vraiment 0 fiche → ok même ancré',
+    sweepGroundThreshold([s('fallback', 0.90, { llmCites: 0 })]).current.passed === 1);
+  check('signaux vides → total 0, score null (pas de division par zéro)',
+    sweepGroundThreshold([]).total === 0 && sweepGroundThreshold([]).best.score === null);
+  check('non-tableau toléré', sweepGroundThreshold(null).total === 0);
+  {
+    const sw = sweepGroundThreshold([s('answer', 0.50)], { from: 0.40, to: 0.44, step: 0.02 });
+    check('bornes/pas personnalisables', sw.candidates.length === 3 && sw.candidates[1].threshold === 0.42);
+  }
 }
 
 console.log('── parseQuestions (SA-6.1 — interview libre) ──');

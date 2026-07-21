@@ -61,7 +61,7 @@ import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-
 import { streamLLM }                               from '../lib/llm-stream.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-13.4';
+const SA_ENGINE_VERSION = 'SA-14.0';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -1862,9 +1862,20 @@ export function validatePublicLinkPatch(b) {
 export function isGrounded({ semantic, hits }, minVec = GROUND_MIN_VEC) {
   const topVec = (hits || []).reduce((m, h) => Math.max(m, h.vecScore || 0), 0);
   const anyLex = (hits || []).some(h => h.lexRank);
-  const grounded = (hits || []).length > 0 && (anyLex || !semantic || topVec >= minVec);
+  const grounded = groundedFromSignals(
+    { topVec, anyLex, semantic, hitCount: (hits || []).length }, minVec);
   const grounding = Math.round(Math.max(topVec, anyLex ? 0.5 : 0) * 100) / 100;
   return { grounded, grounding, topVec, anyLex };
+}
+
+// SA-14.0 — la FORMULE d'ancrage, isolée des fiches brutes. Même vérité
+// pour isGrounded (qui part des `hits` du tour courant) et pour
+// sweepGroundThreshold, qui rejoue la décision sur des signaux ARCHIVÉS
+// (golden replay) sans avoir les fiches sous la main. Une seule formule =
+// pas de dérive entre ce que la prod décide et ce que la calibration mesure.
+export function groundedFromSignals({ topVec = 0, anyLex = false, semantic = false, hitCount = 0 } = {},
+                                    minVec = GROUND_MIN_VEC) {
+  return hitCount > 0 && (!!anyLex || !semantic || topVec >= minVec);
 }
 
 // Retire les marqueurs de citation [n] d'un texte. Sert à nettoyer
@@ -3649,6 +3660,47 @@ export function goldenVerdict(expect, grounded, llmCites) {
   return { ok: grounded, predicted: grounded ? 'answer' : 'fallback' };
 }
 
+// SA-14.0 — balayage du seuil d'ancrage sur des signaux de replay archivés.
+// `signals` = [{ expect, topVec, anyLex, semantic, hitCount, llmCites }] tels
+// que renvoyés par /golden/replay. Pour chaque seuil candidat, on rejoue la
+// décision (groundedFromSignals) puis le verdict (goldenVerdict) et on compte
+// les réussites — 100 % pur, aucun appel réseau ni IA.
+//
+// ⚠ BIAIS ASSUMÉ, à garder en tête en lisant le rapport : `llmCites` n'a été
+// mesuré que pour les questions ancrées AU SEUIL COURANT. Un seuil plus bas
+// ancre des questions « doit ignorer » dont on n'a pas fait parler l'agent →
+// goldenVerdict les compte ko par prudence. Le balayage est donc PESSIMISTE
+// vers le bas : un seuil bas qui gagne quand même est un vrai gain.
+export function sweepGroundThreshold(signals, { from = 0.30, to = 0.60, step = 0.01,
+                                                current = GROUND_MIN_VEC } = {}) {
+  const list = Array.isArray(signals) ? signals : [];
+  const round = (x) => Math.round(x * 10000) / 10000;
+  const scoreAt = (t) => {
+    let passed = 0;
+    for (const s of list) {
+      const grounded = groundedFromSignals(s, t);
+      if (goldenVerdict(s.expect, grounded, s.llmCites).ok) passed++;
+    }
+    return { threshold: t, passed, total: list.length,
+             score: list.length ? Math.round((passed / list.length) * 100) : null };
+  };
+
+  const candidates = [];
+  const n = Math.max(0, Math.round((to - from) / step));
+  for (let i = 0; i <= n; i++) candidates.push(scoreAt(round(from + i * step)));
+
+  // Meilleur = score max ; à égalité, le PLUS PROCHE du seuil actuel (on ne
+  // déplace pas une constante de prod pour un gain nul), puis le plus bas.
+  const best = candidates.reduce((b, c) => {
+    if (!b || c.passed > b.passed) return c;
+    if (c.passed < b.passed) return b;
+    const dc = Math.abs(c.threshold - current), db = Math.abs(b.threshold - current);
+    return dc < db || (dc === db && c.threshold < b.threshold) ? c : b;
+  }, null);
+
+  return { total: list.length, candidates, best, current: scoreAt(round(current)) };
+}
+
 export async function handleGoldenReplay(request, env, agentId) {
   const origin = getAllowedOrigin(env, request);
   const gate = await _gate(request, env, origin);
@@ -3677,7 +3729,7 @@ export async function handleGoldenReplay(request, env, agentId) {
   const fallbackText = agent.config?.scope?.fallback_text || FALLBACK_DEFAULT;
   for (const g of golden) {
     const { semantic, hits } = await _retrieve(env, gate.tenant, g.question, { topk: CHAT_TOPK, vaultIds });
-    const { grounded, grounding } = isGrounded({ semantic, hits });
+    const { grounded, grounding, topVec, anyLex } = isGrounded({ semantic, hits });
     let llmCites = null;
     if (g.expect === 'fallback' && grounded && llmUsed < REPLAY_LLM_MAX
         && env.AI && typeof env.AI.run === 'function') {
@@ -3709,7 +3761,13 @@ export async function handleGoldenReplay(request, env, agentId) {
     }
     const { ok, predicted } = goldenVerdict(g.expect, grounded, llmCites);
     if (ok) passed++;
-    out.push({ id: g.id, question: g.question, expect: g.expect, predicted, grounding, ok });
+    // SA-14.0 — signaux BRUTS de la décision d'ancrage exposés en plus du
+    // verdict : ils permettent de rejouer le seuil hors ligne
+    // (scripts/calibrate-ground-threshold.mjs). Purement additif — le front
+    // n'en lit aucun, le comportement du replay est inchangé.
+    out.push({ id: g.id, question: g.question, expect: g.expect, predicted, grounding, ok,
+               topVec: Math.round(topVec * 10000) / 10000, anyLex: !!anyLex,
+               semantic: !!semantic, hitCount: hits.length, llmCites });
   }
   const score = Math.round((passed / golden.length) * 100);
   return json({ total: golden.length, passed, score, results: out }, 200, origin);
