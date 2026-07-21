@@ -25,6 +25,26 @@ let _history = [];          // session seulement — rien de persistant
 let _busy = false;
 let _input = null, _sendBtn = null;
 
+/* ── Pont vocal (K-14) — importé paresseusement (comme kora-chain) pour
+   ne charger le moteur voix QUE si le mode vocal existe. `false` = module
+   absent/indisponible → on retombe sur le mode écrit, sans jamais casser. */
+let _voiceMod = null;
+async function _voice() {
+  if (_voiceMod === null) {
+    try { _voiceMod = await import('./kora-voice.js'); }
+    catch (_) { _voiceMod = false; }
+  }
+  return _voiceMod || null;
+}
+
+/* Entrée vocale : le texte transcrit entre dans la boucle EXACTEMENT
+   comme s'il était tapé (KORA_VOCAL_BRIEF §3.1) — zéro chemin nouveau,
+   _send garde déjà le verrou occupé. */
+export function koraSubmit(text) {
+  const t = String(text || '').trim();
+  if (t) _send(t);
+}
+
 function _esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c =>
     ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -65,6 +85,14 @@ async function _send(text) {
   if (userLine) userLine.classList.add('kora-user');
   _push('user', text);
   koraState('reflexion');
+
+  /* voix (V-2) : si la lecture est active, on chauffe le moteur Piper
+     PENDANT que decide tourne (latence masquée, patron SA-9.2). `speech`
+     = le flux de lecture ouvert à la phase answer, ou null (mode écrit). */
+  let speech = null;
+  const vm = await _voice();
+  const voiceOut = !!(vm && vm.koraVoiceOutputActive());
+  if (voiceOut) vm.koraWarmVoice();
 
   try {
     /* ── arrêt DÉTERMINISTE de la chaîne (fix 19/07, 2e retour « l'anneau
@@ -154,7 +182,10 @@ async function _send(text) {
     });
     if (!ans.ok || !ans.body) throw new Error(`réponse ${ans.status}`);
 
-    /* streaming SSE → la ligne se remplit au fil de l'eau */
+    /* streaming SSE → la ligne se remplit au fil de l'eau ; en mode vocal,
+       Piper lit dès la 1ʳᵉ phrase complète (createSpeechStream, §3.2). On
+       lui POUSSE le texte CUMULÉ (il découpe/pipeline en interne). */
+    if (voiceOut && vm) speech = vm.koraOpenSpeech();
     const line = koraSay('');
     const reader = ans.body.getReader();
     const decoder = new TextDecoder();
@@ -175,10 +206,12 @@ async function _send(text) {
           if (j.type === 'chunk' && typeof j.text === 'string' && j.text.length) {
             fullText += j.text;
             if (line) line.textContent = fullText;
+            if (speech) speech.push(fullText);
           }
         } catch (e) { /* fragment incomplet */ }
       }
     }
+    if (speech) speech.end(fullText);
     if (!fullText && line) line.textContent = 'Lecture faite — mais je n’ai rien su en dire. Réessaie ?';
     _push('assistant', fullText || '(réponse vide)');
     /* écriture sur mobile : la feuille couvre l'outil qu'on vient
@@ -190,10 +223,15 @@ async function _send(text) {
       koraClose();
     }
   } catch (e) {
+    if (speech) { try { speech.cancel(); } catch (_) {} speech = null; }
     koraSay('Petit souci de mon côté (' + _esc(e?.message || 'réseau') + '). Réessaie dans un instant.');
   } finally {
     koraClearRings();
-    koraState('repos');
+    /* voix : le galet reste en « travail » tant que Piper parle — c'est la
+       fin de lecture (onState 'idle', dans koraOpenSpeech) qui rend l'état
+       repos. Sans voix (ou flux non ouvert : speech null), on repose tout de
+       suite, exactement comme le mode écrit d'avant (non-régression). */
+    if (!speech) koraState('repos');
     _setBusy(false);
   }
 }

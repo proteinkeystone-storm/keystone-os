@@ -43,7 +43,7 @@ import { handleSaveUserKey, handleDeleteUserKey, handleListUserKeys }   from './
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
 import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './routes/ghostwriter.js';
-import { handleKoraChat }                                               from './routes/kora.js';
+import { handleKoraChat, handleKoraStt }                                from './routes/kora.js';
 import { handleAiCreditsQuota }                                         from './routes/ai-credits.js';
 import { handleBrainstormingAgentRespond, handleBrainstormingSynthesize, handleBrainstormingPostIdeas, handleBrainstormingPickRoster } from './routes/brainstorming.js';
 import { handleFetchSource } from './routes/content-source.js';
@@ -625,6 +625,12 @@ export default {
       // 1 crédit/tour (tool 'kora'), réponse finale en streaming SSE.
       if (path === '/api/kora/chat' && (method === 'POST' || method === 'OPTIONS')) {
         return handleKoraChat(request, env);
+      }
+      // Mode vocal (K-14, V-1) — transcription talkie-walkie : blob audio
+      // (MediaRecorder) → Whisper → texte. Pas de crédit débité ici (1
+      // crédit/tour pris en phase 'decide') ; métré 'kora-stt'.
+      if (path === '/api/kora/stt' && (method === 'POST' || method === 'OPTIONS')) {
+        return handleKoraStt(request, env);
       }
       // Phase 2 — quota serveur par licence (DEMO=1 / STARTER=3 /
       // PRO=10 / MAX=50 / ADMIN=∞). Lecture seule, pas de bump.

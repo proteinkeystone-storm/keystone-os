@@ -57,6 +57,19 @@ const MAX_PADS        = 12;   // domaines montrés à l'étage 1
 const MAX_PAD_ACTIONS = 24;   // actions détaillées par domaine à l'étage 2
 const MAX_PAD_DESC    = 160;  // desc d'un domaine (étage 1)
 
+/* ── STT talkie-walkie (K-14 vocal, V-1) ──────────────────────────
+   Voie de Keynapse recopiée (KORA_VOCAL_BRIEF §3.1) : même modèle
+   Whisper, entrée en TABLEAU D'OCTETS, sortie res.text. Le blob part
+   du client (maintien du galet → MediaRecorder). Souveraineté : rien
+   ne sort chez un tiers, tout reste sur Workers AI.
+   COÛT : PAS de crédit ici — 1 crédit/tour tout compris (§14) est pris
+   en phase 'decide' du même tour ; la transcription est seulement MÉTRÉE
+   (recordUsage 'kora-stt') sous le garde-fou budget global. */
+const WHISPER_MODEL = '@cf/openai/whisper';
+/* filet de sécurité serveur ; le vrai plafond est le cap 60 s côté client
+   (~2 Mo en opus/webm, un peu plus en mp4/AAC — marge prise sans excès) */
+const MAX_STT_BYTES = 5 * 1024 * 1024;
+
 /* ── Persona gravée (décisions du 17/07/2026, KORA_BRIEF §14) ── */
 const PERSONA = `Tu es Kora, l'assistante intégrée de Keystone OS.
 Féminine, complice et chaleureuse : tu TUTOIES toujours. Phrases courtes,
@@ -745,4 +758,57 @@ export async function handleKoraChat(request, env) {
       'Cache-Control': 'no-cache, no-store',
     },
   });
+}
+
+/* Cœur STT — PUR (hors auth/CORS/budget) : validation d'entrée + appel
+   Whisper. Isolé pour être testable avec un faux env.AI (banc STT).
+   Retour : { status, text } sur succès, { status, error } sinon. */
+export async function _koraTranscribe(env, ct, buf) {
+  if (!env || !env.AI || typeof env.AI.run !== 'function')
+    return { status: 503, error: 'Workers AI non configuré sur ce Worker.' };
+  if (!/^audio\//i.test(String(ct || '')))
+    return { status: 400, error: 'Audio attendu (Content-Type audio/…)' };
+  if (!buf || buf.byteLength === 0) return { status: 400, error: 'Enregistrement vide' };
+  if (buf.byteLength > MAX_STT_BYTES) return { status: 413, error: 'Enregistrement trop lourd (max ~60 s)' };
+  let text = '';
+  try {
+    const res = await env.AI.run(WHISPER_MODEL, { audio: [...new Uint8Array(buf)] });
+    text = String(res?.text ?? res?.transcription ?? '').trim();
+  } catch (e) {
+    console.error('[kora] stt échec :', e?.message || e);
+    return { status: 502, error: 'Transcription indisponible pour le moment — réessaie.' };
+  }
+  return { status: 200, text };
+}
+
+/* ═══ POST /api/kora/stt — transcription talkie-walkie (V-1) ═══
+   Corps = le blob audio brut (Content-Type audio/…, le réel envoyé par
+   MediaRecorder : webm/opus sur Chrome, mp4 sur Safari — Whisper accepte
+   les deux). Réponse : { ok:true, text:"…" }. Pas de crédit débité ici
+   (cf. commentaire sur WHISPER_MODEL) ; JWT requis, blob plafonné. */
+export async function handleKoraStt(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: _corsHeaders(origin) });
+  }
+
+  const claims = await requireJWT(request, env);
+  if (!claims) return err('Authentification requise (JWT licence)', 401, origin);
+  if (!claims.sub) return err('JWT incomplet (sub manquant) — re-login requis', 401, origin);
+
+  /* même garde-fou budget opérateur que la boucle : la transcription
+     consomme des neurones, elle passe donc par le frein global */
+  const throttled = await budgetGuard(env, origin);
+  if (throttled) return throttled;
+
+  const ct  = request.headers.get('content-type') || '';
+  const buf = await request.arrayBuffer();
+  const r   = await _koraTranscribe(env, ct, buf);
+  if (r.status !== 200) return err(r.error, r.status, origin);
+
+  /* métrage seul (pas de crédit) : visibilité au ledger sous 'kora-stt' ;
+     l'audio n'est pas du texte, on impute la sortie (le transcript) */
+  await recordUsage(env, 'kora-stt', { outText: r.text }).catch(() => {});
+
+  return json({ ok: true, text: r.text }, 200, origin);
 }

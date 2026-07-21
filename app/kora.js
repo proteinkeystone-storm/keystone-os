@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const KORA_CSS_V = '11';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
+const KORA_CSS_V = '12';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
 
 /* ── Shader (verbatim harnais kora-galet-morph.html) ── */
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -161,6 +161,12 @@ export function koraState(s) {
   _stateName = s;
   document.body.dataset.koraState = s;
   if (_sub) _sub.textContent = SUBTITLES[s] || '';
+}
+/* Niveau voix 0..1 — le mode vocal (kora-voice.js) y pousse l'amplitude
+   micro lissée pendant l'écoute ; l'onde du galet la suit (uLevel, état
+   Écoute). Hors écoute, remettre 0 pour rendre la main à l'animation. */
+export function koraLevel(v) {
+  _level0 = Math.max(0, Math.min(1, Number(v) || 0));
 }
 export function koraOpen() {
   if (!_inited) return;
@@ -323,6 +329,13 @@ export function initKora() {
   /* la boucle conversationnelle (decide/answer + catalogue lecture) */
   import('./kora-loop.js').then(m => m.initKoraLoop(_panel))
     .catch(e => console.warn('[kora] boucle indisponible', e));
+
+  /* le mode vocal (K-14) — talkie-walkie sur le galet + voix de réponse ;
+     dormant si le navigateur n'a ni micro ni WASM. Le galet (_dock) est la
+     surface d'émission desktop ; ses écouteurs pointer survivent aux
+     déplacements du dock (cc-bar ↔ header d'outil). */
+  import('./kora-voice.js').then(m => m.initKoraVoice({ galet: _dock, panel: _panel }))
+    .catch(e => console.warn('[kora] mode vocal indisponible', e));
 
   /* accès console pour la validation (pas une API produit) */
   window.kora = { state: koraState, open: koraOpen, close: koraClose,
