@@ -34,3 +34,14 @@ workers/.dev.vars
 
 # OPS-3 smoke-prod — baseline gardien QR (local, par-machine)
 scripts/.smoke-qr-baseline.json
+
+# Manuel client (584 Mo) — analyse locale UNIQUEMENT, ne doit jamais être versionné
+LIvre T3-T1-13-11-2025.pdf
+
+# Aperçus temporaires (contenu client) — jamais versionnés
+.preview-tmp/
+
+# Notice Smart Agent — artefacts régénérables (le PDF vit dans CLD-AI/KEYSTONE/Notices)
+_design-lab/notice-sa-src/assets.py
+_design-lab/notice-sa-src/NOTICE_SMART_AGENT.html
+_design-lab/notice-sa-src/NOTICE_SMART_AGENT.pdf
