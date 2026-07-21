@@ -61,7 +61,7 @@ import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-
 import { streamLLM }                               from '../lib/llm-stream.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-14.6';
+const SA_ENGINE_VERSION = 'SA-15.1';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -666,6 +666,33 @@ async function _ftsSync(env, unit) {
   }
 }
 
+// ── SA-15.0 — le danger d'une fiche, remonté À PART de la réponse ──
+// Le modèle rédige, donc il résume, donc il lisse. Un avertissement ne se
+// résume pas : sur le manuel client, « la gorge est une cible à effet
+// potentiellement radical » ne doit pas dépendre du bon vouloir d'une
+// génération. On le sort du texte libre et on l'expose tel qu'il est écrit
+// dans la fiche, pour que le front l'affiche à son propre niveau.
+// Pur (testé).
+export function unitWarning(row) {
+  if (!row || row.type !== 'procedure') return null;
+  let body = row.body;
+  if (typeof body === 'string') { try { body = JSON.parse(body); } catch (_) { return null; } }
+  const w = (body && typeof body.warnings === 'string') ? body.warnings.trim() : '';
+  return w ? w.slice(0, 600) : null;
+}
+
+// Citations d'un tour : [n] → fiche. `warning` n'est présent QUE s'il y en
+// a un (une clé toujours là, souvent nulle, se lit vite comme du bruit).
+function _citationsFrom(hits, ns) {
+  return ns.map(n => {
+    const row = hits[n - 1].row;
+    const c = { n, unit_id: row.id, title: row.title, type: row.type };
+    const w = unitWarning(row);
+    if (w) c.warning = w;
+    return c;
+  });
+}
+
 function _rowToUnit(r) {
   let body = {};
   try { body = JSON.parse(r.body); } catch (_) {}
@@ -927,7 +954,31 @@ const EXTRACT_MAX_UNITS = 25;
 // au lieu de rendre le lot vide.
 const EXTRACT_MAX_TOKENS = 6000;
 
-const EXTRACT_SYSTEM_PROMPT = `Tu es l'extracteur de connaissances de Keystone. On te donne un texte brut (notes, email, documentation, transcription). Tu en extrais des fiches de savoir typées, en français.
+// ── SA-15.1 — plafond PROPORTIONNEL à la densité du lot ────────
+// Face sombre de SA-14.6, mesurée le 21/07 sur le manuel client : sur un
+// lot de 2 619 caractères, le modèle a rendu 25 fiches — une fiche pour
+// 105 caractères, la même unité pédagogique émise 3 à 5 fois sous des
+// gabarits différents (procedure + definition + 3 qa qui disent la même
+// chose). Et `saturated` devenait une FAUSSE alerte : il annonçait du
+// contenu manquant alors que le modèle avait rembourré.
+// Le plafond absolu reste 25 (le gain de SA-14.6 sur un lot dense de
+// 12 000 car. est intact : 12000/400 = 30 → borné à 25), mais un petit
+// lot ne peut plus rendre plus que ce que son volume porte.
+const EXTRACT_CHARS_PER_UNIT = 400;
+const EXTRACT_MIN_UNITS      = 3;    // un lot court garde droit à ses 2-3 vraies fiches
+
+// Pur (testé) : plafond de fiches admissible pour un texte donné.
+export function extractUnitCap(text) {
+  const n = String(text || '').trim().length;
+  if (!n) return EXTRACT_MIN_UNITS;
+  const cap = Math.ceil(n / EXTRACT_CHARS_PER_UNIT);
+  return Math.max(EXTRACT_MIN_UNITS, Math.min(EXTRACT_MAX_UNITS, cap));
+}
+
+// SA-15.1 — le plafond entre DANS le prompt (le modèle doit connaître sa
+// borne, sinon il produit 25 fiches qu'on tronque ensuite en silence).
+function extractSystemPrompt(maxUnits = EXTRACT_MAX_UNITS) {
+  return `Tu es l'extracteur de connaissances de Keystone. On te donne un texte brut (notes, email, documentation, transcription). Tu en extrais des fiches de savoir typées, en français.
 
 Types autorisés et gabarits (champs du "body") :
 - "fact"       : { "statement": "...", "context": "..." (optionnel) }
@@ -942,15 +993,26 @@ RÈGLES STRICTES :
 1. N'extrais QUE ce qui est réellement dans le texte. Aucune invention, aucun enrichissement extérieur.
 2. Chaque fiche est autonome et compréhensible seule.
 3. "title" : court et descriptif (max 12 mots).
-4. Maximum ${EXTRACT_MAX_UNITS} fiches. Qualité avant quantité : n'en produis pas pour faire du nombre, mais n'en omets aucune qui porte un vrai savoir.
-5. Si le texte contient des noms de personnes privées, remplace-les par leur rôle (« le client », « le visiteur »).
-6. "relevance" : note de 1 à 10 l'utilité de la fiche pour un agent qui doit RÉPONDRE À DES QUESTIONS.
+4. Maximum ${maxUnits} fiches pour CE texte. Ce plafond est calculé sur son volume : ne le remplis pas pour faire du nombre.
+   UNE unité pédagogique = UNE fiche. N'émets JAMAIS le même contenu sous deux gabarits (une "procedure" ET une "definition" ET des "qa" qui redisent la même chose). Choisis le gabarit le plus juste, et passe au contenu suivant.
+   S'il n'y a que trois choses à dire dans le texte, rends trois fiches.
+5. "warnings" (gabarit "procedure") est le champ du DANGER. Il n'accepte QUE ce que la source signale elle-même comme tel :
+   - un bloc « AVERTISSEMENT », « ATTENTION », « DANGER », « MISE EN GARDE », « RAPPEL DE SÉCURITÉ », un encadré ou un pavé de sécurité ;
+   - une mention explicite de risque corporel, vital, légal ou irréversible (blessure, décès, séquelle, sanction, perte de données) ;
+   - une interdiction formelle (« ne jamais… », « en aucun cas… »).
+   Reprends-le au plus près des mots de la source, sans l'adoucir.
+   INTERDIT dans "warnings" : un avantage, un bénéfice, un gain d'efficacité, une justification, une explication de pourquoi le geste fonctionne, un conseil de performance ou de confort. Tout cela va dans "goal" ou dans une étape.
+   Exemple de ce qu'il NE faut PAS y mettre : « ce déplacement permet de sortir de l'axe d'attaque et réduit le risque de contre-attaque » — c'est un bénéfice, pas un danger.
+   Dans le doute, laisse "warnings" ABSENT. Un champ de danger dilué par des avantages n'est plus lu, et le vrai avertissement passe inaperçu.
+6. Si le texte contient des noms de personnes privées, remplace-les par leur rôle (« le client », « le visiteur »).
+7. "relevance" : note de 1 à 10 l'utilité de la fiche pour un agent qui doit RÉPONDRE À DES QUESTIONS.
    - 8 à 10 : savoir réutilisable et autonome (une procédure, une règle, une réponse à une vraie question).
    - 5 à 7 : utile mais partiel, contextuel ou redondant.
    - 1 à 4 : sommaire, en-tête, mention de page, formule de politesse, hors-sujet.
    Sois honnête et discriminant : si tout se vaut, la note ne sert à rien.
-7. Réponds UNIQUEMENT avec un tableau JSON valide, sans texte autour :
+8. Réponds UNIQUEMENT avec un tableau JSON valide, sans texte autour :
 [{"type":"...","title":"...","relevance":8,"body":{...}}, ...]`;
+}
 
 export async function handleKortexExtract(request, env) {
   const origin = getAllowedOrigin(env, request);
@@ -963,7 +1025,8 @@ export async function handleKortexExtract(request, env) {
   if (text.length < 30)    return err('Texte trop court (30 caractères minimum)', 400, origin);
   if (text.length > 20000) return err('Texte trop long (20 000 caractères maximum)', 400, origin);
 
-  const r = await _aiExtract(env, gate, EXTRACT_SYSTEM_PROMPT, `TEXTE À ANALYSER :\n\n${text}`, _byokFromBody(b));
+  const cap = extractUnitCap(text);
+  const r = await _aiExtract(env, gate, extractSystemPrompt(cap), `TEXTE À ANALYSER :\n\n${text}`, _byokFromBody(b), cap);
   if (!r.ok) return json({ error: r.error, code: r.code, quota: r.quota }, r.status, origin);
   if (!r.proposals.length) return json({ proposals: [], note: 'Aucune fiche exploitable extraite de ce texte.' }, 200, origin);
   return json({ proposals: r.proposals, saturated: !!r.saturated, model: KS_AI_MODEL, credits: r.creditPayload }, 200, origin);
@@ -1067,8 +1130,9 @@ async function _extractFromImport(env, gate, origin, rawText, sourceRef, byok = 
   if (text.length < 30) {
     return err('Contenu illisible ou vide — si la page est très dynamique, copiez son texte et utilisez « Coller du texte ».', 422, origin);
   }
-  const r = await _aiExtract(env, gate, EXTRACT_SYSTEM_PROMPT,
-    `TEXTE À ANALYSER (importé de : ${sourceRef}) :\n\n${text}`, byok);
+  const cap = extractUnitCap(text);
+  const r = await _aiExtract(env, gate, extractSystemPrompt(cap),
+    `TEXTE À ANALYSER (importé de : ${sourceRef}) :\n\n${text}`, byok, cap);
   if (!r.ok) return json({ error: r.error, code: r.code, quota: r.quota }, r.status, origin);
   if (!r.proposals.length) {
     return json({ proposals: [], truncated, source_ref: sourceRef, note: 'Aucune fiche exploitable extraite de ce contenu.' }, 200, origin);
@@ -1418,8 +1482,12 @@ export async function handleIngestBatch(request, env, jobId, idxRaw) {
   const batch = br[0];
 
   const b = await parseBody(request);
-  const r = await _aiExtract(env, gate, EXTRACT_SYSTEM_PROMPT,
-    buildBatchPrompt(batch, jr[0].source_ref), _byokFromBody(b));
+  // SA-15.1 — plafond calculé sur le TEXTE du lot seul : le chevauchement
+  // (fin du lot précédent) est un contexte déjà analysé, il ne porte pas
+  // de fiches et ne doit donc pas gonfler la borne.
+  const cap = extractUnitCap(batch.text);
+  const r = await _aiExtract(env, gate, extractSystemPrompt(cap),
+    buildBatchPrompt(batch, jr[0].source_ref), _byokFromBody(b), cap);
   if (!r.ok) return json({ error: r.error, code: r.code, quota: r.quota }, r.status, origin);
 
   // Marqué traité même sans proposition : un lot vide (sommaire, page de
@@ -1615,7 +1683,7 @@ function _sseChatResponse(origin, run) {
   });
 }
 
-async function _aiExtract(env, gate, systemPrompt, userContent, byok = null) {
+async function _aiExtract(env, gate, systemPrompt, userContent, byok = null, maxUnits = EXTRACT_MAX_UNITS) {
   if (!env.AI || typeof env.AI.run !== 'function') {
     return { ok: false, status: 503, error: 'Moteur IA indisponible' };
   }
@@ -1643,13 +1711,17 @@ async function _aiExtract(env, gate, systemPrompt, userContent, byok = null) {
       messages: [{ role: 'user', content: userContent }],
       max_tokens: EXTRACT_MAX_TOKENS,
     });
-    const proposals = _parseProposals(raw);
+    const proposals = _parseProposals(raw, maxUnits);
     if (!proposals.length) { await refund(); return { ok: true, proposals: [], creditPayload: null }; }
     // SA-14.6 — le plafond atteint SIGNIFIE probablement que le texte avait
     // plus à donner. On le DIT, au lieu de laisser croire que tout a été
     // extrait : perdre du savoir en silence est le pire des scénarios pour
     // un client qui construit un coffre de référence.
-    const saturated = proposals.length >= EXTRACT_MAX_UNITS;
+    // SA-15.1 — c'est le plafond CALCULÉ qui fait foi, pas le plafond absolu :
+    // sinon un petit lot rembourré à 25 fiches criait « il en manque » alors
+    // qu'il en avait produit trois fois trop. Une fausse alerte de saturation
+    // coûte aussi cher qu'une perte silencieuse : elle décrédibilise l'alerte.
+    const saturated = proposals.length >= maxUnits;
     return { ok: true, proposals, saturated, creditPayload: credit?.payload || null };
   } catch (e) {
     await refund();
@@ -3574,9 +3646,7 @@ export async function handleAgentChat(request, env, agentId) {
         const { gapped: gapMarked, text: cleanText } = splitGapReply(raw, fallbackText);
         const replyText = stripRepeatedFollowup(cleanText, history);
         const ns = extractCitations(replyText, hits.length);
-        const citations = ns.map(n => ({
-          n, unit_id: hits[n - 1].row.id, title: hits[n - 1].row.title, type: hits[n - 1].row.type,
-        }));
+        const citations = _citationsFrom(hits, ns);
         const { gapped, deflected } = gapOutcome(gapMarked, citations.length);
         if (gapMarked) await _logGap(env, gate.tenant, agentId, message);
         if (gapped)    await _refund();
@@ -3603,12 +3673,7 @@ export async function handleAgentChat(request, env, agentId) {
     // SA-8.5 — une relance déjà posée dans la session est coupée (anti-radotage).
     const replyText = stripRepeatedFollowup(cleanText, history);
     const ns = extractCitations(replyText, hits.length);
-    const citations = ns.map(n => ({
-      n,
-      unit_id: hits[n - 1].row.id,
-      title:   hits[n - 1].row.title,
-      type:    hits[n - 1].row.type,
-    }));
+    const citations = _citationsFrom(hits, ns);
 
     // Le modèle a choisi le repli malgré la récupération → c'est un trou.
     const { gapped, deflected } = gapOutcome(gapMarked, citations.length);

@@ -16,7 +16,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   splitMarkdownBatches, buildBatchPrompt, gapOutcome, salvageJsonObjects,
   validateImportUrl, htmlToText, clampExtractText, importFileKindOf, stripRepeatedFollowup,
   gapMergeTarget, attachGapCounts, sanitizePublicUrl, validateCards,
-  detectSocialIntent, pickSocialReply }
+  detectSocialIntent, pickSocialReply, extractUnitCap, unitWarning }
   from '../workers/src/routes/smart-agent.js';
 
 let passed = 0, failed = 0;
@@ -118,6 +118,60 @@ console.log('── SA-14.6 — parseProposals : plafond 25 + tolérance à la t
     parseProposals('```json\n[' + fiche(1) + ']\n```').length === 1);
   check('vrai JSON cassé → [] (on ne fabrique rien)',
     parseProposals('pas du json [').length === 0);
+  check('SA-15.1 — plafond passé explicitement (le lot pauvre est borné plus bas)',
+    parseProposals('[' + Array.from({ length: 40 }, (_, i) => fiche(i)).join(',') + ']', 7).length === 7);
+}
+
+console.log('── SA-15.1 — extractUnitCap : le plafond suit la densité du lot ──');
+{
+  // Le cas mesuré le 21/07 : 2 619 caractères → 25 fiches rendues, soit une
+  // fiche pour 105 caractères, la même unité pédagogique émise 3 à 5 fois
+  // sous des gabarits différents. Le plafond doit tomber bien plus bas.
+  check('lot pauvre du dogfood (2 619 car.) → 7, très loin des 25',
+    extractUnitCap('x'.repeat(2619)) === 7);
+  // Le gain de SA-14.6 (36 → 73 fiches sur le même document dense) DOIT
+  // survivre : un lot d'ingestion plein fait 12 000 car. → 30 → borné à 25.
+  check('lot d\'ingestion plein (12 000 car.) → 25 : le gain SA-14.6 est intact',
+    extractUnitCap('x'.repeat(12000)) === 25);
+  check('document très dense (30 000 car.) → 25 (plafond absolu, jamais dépassé)',
+    extractUnitCap('x'.repeat(30000)) === 25);
+  check('1 fiche / 400 caractères', extractUnitCap('x'.repeat(4000)) === 10);
+  check('plancher à 3 : un texte court garde droit à ses vraies fiches',
+    extractUnitCap('x'.repeat(50)) === 3 && extractUnitCap('x'.repeat(1200)) === 3);
+  check('vide / null / espaces → plancher (jamais 0, jamais NaN)',
+    extractUnitCap('') === 3 && extractUnitCap(null) === 3 && extractUnitCap('   ') === 3);
+  check('les espaces de bord ne comptent pas',
+    extractUnitCap('  ' + 'x'.repeat(2619) + '  ') === 7);
+  {
+    let mono = true, prev = 0;
+    for (let n = 0; n <= 30000; n += 137) {
+      const c = extractUnitCap('x'.repeat(n));
+      if (c < prev) mono = false;
+      prev = c;
+    }
+    check('croissant : plus de texte ne donne jamais droit à moins de fiches', mono);
+  }
+}
+
+console.log('── SA-15.0 — unitWarning : le danger sort du texte, pas du modèle ──');
+{
+  const proc = (w) => ({ type: 'procedure', body: JSON.stringify({ goal: 'G', steps: ['a'], ...(w !== undefined ? { warnings: w } : {}) }) });
+  check('avertissement réel remonté mot pour mot',
+    unitWarning(proc('La gorge est une cible à effet potentiellement radical.'))
+      === 'La gorge est une cible à effet potentiellement radical.');
+  check('procédure sans avertissement → null (pas de bloc vide sous la réponse)',
+    unitWarning(proc()) === null);
+  check('champ vide / espaces → null', unitWarning(proc('')) === null && unitWarning(proc('   \n ')) === null);
+  check('espaces de bord retirés', unitWarning(proc('  DANGER  ')) === 'DANGER');
+  check('body déjà désérialisé (objet) accepté',
+    unitWarning({ type: 'procedure', body: { goal: 'G', steps: ['a'], warnings: 'ATTENTION' } }) === 'ATTENTION');
+  check('seul le gabarit "procedure" porte un avertissement',
+    unitWarning({ type: 'rule', body: JSON.stringify({ rule: 'R', exceptions: 'E' }) }) === null);
+  check('body illisible → null (une fiche cassée ne casse jamais la réponse)',
+    unitWarning({ type: 'procedure', body: '{pas du json' }) === null);
+  check('row absente → null', unitWarning(null) === null && unitWarning(undefined) === null);
+  check('avertissement fleuve borné à 600 car.',
+    unitWarning(proc('D'.repeat(900))).length === 600);
 }
 
 console.log('── SA-14.2 — clampRelevance (jamais bloquant) ──');

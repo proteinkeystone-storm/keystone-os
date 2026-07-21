@@ -589,6 +589,90 @@
   text-transform: uppercase;
   color: var(--tx3);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   SA-15.0 — le champ du DANGER, à son propre niveau
+
+   Mesuré sur un manuel de techniques létales : « warnings » portait à la
+   fois « peut entraîner la mort » et « ce déplacement réduit le risque de
+   contre-attaque » (un avantage), dans la même grisaille que le reste.
+   Mélangés, le champ cesse d'être lu. Ici il ne peut plus se confondre :
+   même famille visuelle (rouge --danger) dans l'éditeur, dans les listes
+   et sous les réponses de l'agent.
+   ═══════════════════════════════════════════════════════════════ */
+.sa-field-danger {
+  padding: 11px 12px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent);
+  background: color-mix(in srgb, var(--danger) 5%, transparent);
+}
+.sa-field-danger .sa-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--danger);
+}
+.sa-field-danger .sa-field-label > .ws-icon { flex: none; }
+.sa-field-danger .sa-textarea:focus { border-color: color-mix(in srgb, var(--danger) 55%, transparent); }
+.sa-field-danger .sa-field-hint { margin: 0; }
+
+/* Pastille d'aperçu : proposition d'extraction et ligne du coffre. */
+.sa-danger-chip {
+  align-self: flex-start;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: 3px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 11px !important;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--danger) !important;
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent);
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+}
+.sa-danger-chip > .ws-icon { flex: none; margin-top: 1px; }
+/* Le texte porte sa PROPRE classe, et ce n'est pas cosmétique : la pastille
+   vit dans .sa-prop-txt, dont la règle `span { color: var(--tx3) }` a la même
+   spécificité qu'un `> span` nu et gagne parce qu'elle est plus bas dans le
+   fichier. Résultat mesuré au harnais : le danger reprenait EXACTEMENT le gris
+   des autres champs — le défaut même qu'on corrige. Deux classes (0,2,0)
+   passent devant (0,1,1) où qu'on déplace le bloc. */
+.sa-danger-chip > .sa-danger-txt {
+  min-width: 0;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+/* Bloc sous une réponse de l'agent : l'avertissement de la fiche citée,
+   rendu tel qu'il est ÉCRIT — jamais tel que le modèle l'a reformulé. */
+.sa-danger-note {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 2px 0 0;
+  padding: 9px 12px;
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--danger) 38%, transparent);
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+}
+.sa-danger-hd {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--danger);
+}
+.sa-danger-hd > .ws-icon { flex: none; }
+.sa-danger-note p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--tx2); }
+.sa-danger-note p strong { color: var(--danger); font-weight: 700; }
 .sa-input, .sa-textarea {
   width: 100%;
   box-sizing: border-box;

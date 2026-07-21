@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SA-15.0 — le champ « warnings » à son propre niveau</title>
+<link rel="stylesheet" href="../app/style.css">
+<link rel="stylesheet" href="../app/smart-agent.css">
+<style>
+  body { padding: 24px; font: 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .harness-h { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+               color: var(--tx3); margin: 26px 0 10px; }
+  .harness-wrap { max-width: 560px; }
+  .harness-bar { display: flex; gap: 8px; margin-bottom: 8px; }
+  .harness-bar button { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--bd);
+                        background: transparent; color: var(--tx2); cursor: pointer; font: inherit; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="harness-bar">
+  <button id="theme">Clair / sombre</button>
+  <button id="w360">360 px</button>
+  <button id="wfull">Pleine largeur</button>
+</div>
+<div class="harness-wrap" id="wrap">
+
+  <p class="harness-h">1 — Éditeur de fiche (gabarit « procedure »)</p>
+  <section class="sa-kx sa-ed" id="s-editor"></section>
+
+  <p class="harness-h">2 — Propositions d'extraction (relecture)</p>
+  <div class="sa-ex-props" id="s-props"></div>
+
+  <p class="harness-h">3 — Ligne du coffre</p>
+  <div class="sa-units" id="s-units"></div>
+
+  <p class="harness-h">4 — Réponse de l'agent</p>
+  <div class="sa-chat" id="s-chat" style="display:flex;flex-direction:column;gap:14px"></div>
+
+</div>
+
+<script type="module">
+import { icon } from '../app/lib/ui-icons.js';
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* Texte RÉEL du manuel client — page 64 (vrai avertissement) et page 86
+   (des « avantages majeurs » : ce qui ne doit PLUS arriver dans le champ). */
+const DANGER_64 = 'La gorge est une cible à effet potentiellement radical (pouvant entraîner la mort). Elle ne doit être visée qu\'en dernier recours, après une évaluation précise de la situation.';
+
+const dangerChip = (body, max = 100) => {
+  const w = (body && typeof body.warnings === 'string') ? body.warnings.trim() : '';
+  if (!w) return '';
+  const t = w.length > max ? w.slice(0, max) + '…' : w;
+  return `<span class="sa-danger-chip">${icon('alert-triangle', 12)}<span class="sa-danger-txt">${esc(t)}</span></span>`;
+};
+
+// 1 — éditeur : le champ de danger sorti du flux des autres champs
+document.getElementById('s-editor').innerHTML = `
+  <label class="sa-field">
+    <span class="sa-field-label">Objectif *</span>
+    <input class="sa-input" value="Porter un coup de poing direct à la gorge">
+  </label>
+  <label class="sa-field">
+    <span class="sa-field-label">Étapes — une par ligne *</span>
+    <textarea class="sa-textarea" rows="5">le poing est à plat, les doigts sont dirigés vers le bas - Photo 5
+la frappe se fera avec l'ensemble du poing</textarea>
+  </label>
+  <label class="sa-field sa-field-danger">
+    <span class="sa-field-label">${icon('alert-triangle', 13)} Avertissement — danger (optionnel)</span>
+    <textarea class="sa-textarea" rows="3">${esc(DANGER_64)}</textarea>
+    <span class="sa-field-hint">Ce champ est mis en évidence partout — dans la liste du coffre comme sous les réponses de l'agent. Un avantage ou une justification rangés ici affaiblissent les vrais avertissements.</span>
+  </label>`;
+
+// 2 — propositions : avec et sans danger, côte à côte
+const props = [
+  { type: 'procedure', title: 'Coup de poing direct à la gorge', rel: 'Fort',
+    body: { goal: 'Porter un coup de poing direct à la gorge', steps: ['poing à plat, doigts vers le bas', 'frapper avec l\'ensemble du poing'], warnings: DANGER_64 } },
+  { type: 'procedure', title: 'Reprise de distance en quart de cercle', rel: 'Fort',
+    body: { goal: 'Créer une bulle de sécurité après la défense', steps: ['pivoter vers le côté de l\'attaquant', 'conserver la garde'] } },
+];
+document.getElementById('s-props').innerHTML = props.map((p, i) => {
+  const flat = Object.entries(p.body).filter(([k]) => k !== 'warnings')
+    .map(([, v]) => Array.isArray(v) ? v.join(' · ') : String(v)).join(' — ');
+  return `
+  <label class="sa-prop is-on">
+    <span class="sa-prop-check">${icon('check', 13)}</span>
+    <span class="sa-prop-type">${icon('kortex', 13)} Procédure</span>
+    <span class="sa-prop-txt">
+      <strong>${esc(p.title)}</strong>
+      <span>${esc(flat.slice(0, 140))}</span>
+      ${dangerChip(p.body)}
+    </span>
+    <span class="sa-prop-rel is-high">${p.rel}</span>
+  </label>`;
+}).join('');
+
+// 3 — ligne du coffre
+document.getElementById('s-units').innerHTML = props.map(p => {
+  const flat = Object.entries(p.body).filter(([k]) => k !== 'warnings')
+    .map(([, v]) => Array.isArray(v) ? v.join(' · ') : String(v)).join(' — ');
+  return `
+  <article class="sa-unit" role="button" tabindex="0">
+    <span class="sa-unit-ico">${icon('kortex', 18)}</span>
+    <div class="sa-unit-txt">
+      <strong class="sa-unit-title">${esc(p.title)}</strong>
+      <span class="sa-unit-snip">${esc(flat.slice(0, 130))}</span>
+      ${dangerChip(p.body)}
+      <span class="sa-unit-meta">Procédure · manuel T3-T1</span>
+    </div>
+  </article>`;
+}).join('');
+
+// 4 — réponse de l'agent : l'avertissement remonté TEL QUEL par le worker
+const citations = [
+  { n: 1, title: 'Coup de poing direct à la gorge', warning: DANGER_64 },
+  { n: 2, title: 'Reprise de distance en quart de cercle' },
+];
+const dangers = citations.filter(c => c.warning);
+document.getElementById('s-chat').innerHTML = `
+  <div class="sa-msg is-agent">
+    <div class="sa-bubble">Le poing est à plat, doigts dirigés vers le bas, et la frappe se fait avec l'ensemble du poing <button class="sa-cite">1</button>. Enchaînez ensuite sur une reprise de distance en quart de cercle <button class="sa-cite">2</button>.</div>
+    <div class="sa-danger-note">
+      <span class="sa-danger-hd">${icon('alert-triangle', 14)} Avertissement porté par la fiche citée</span>
+      ${dangers.map(c => `<p><strong>[${c.n}] ${esc(c.title)}</strong> — ${esc(c.warning)}</p>`).join('')}
+    </div>
+    <div class="sa-sources">
+      <span class="sa-sources-lbl">Sources&nbsp;:</span>
+      ${citations.map(c => `<button class="sa-srcref">[${c.n}] ${esc(c.title)}</button>`).join('')}
+    </div>
+  </div>`;
+
+// Le mode clair de Keystone = classe `light-mode` sur <html> (pas data-theme).
+document.getElementById('theme').onclick = () => {
+  document.documentElement.classList.toggle('light-mode');
+};
+document.getElementById('w360').onclick = () => { document.getElementById('wrap').style.maxWidth = '360px'; };
+document.getElementById('wfull').onclick = () => { document.getElementById('wrap').style.maxWidth = '560px'; };
+</script>
+</body>
+</html>

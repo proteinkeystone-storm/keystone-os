@@ -84,7 +84,7 @@ const FIELD_TEMPLATES = {
     procedure: [
         { k: 'goal',      label: 'Objectif',                               kind: 'input',    req: true,  ph: 'Ex. : Traiter une demande de remboursement' },
         { k: 'steps',     label: 'Étapes — une par ligne',                 kind: 'textarea', req: true,  list: true, ph: 'Vérifier le ticket\nContrôler le délai légal\nÉtablir l\'avoir…' },
-        { k: 'warnings',  label: 'Points de vigilance (optionnel)',        kind: 'textarea',             ph: 'Ce qui ne doit jamais être fait, les pièges connus…' },
+        { k: 'warnings',  label: 'Avertissement — danger (optionnel)',     kind: 'textarea', danger: true, ph: 'UNIQUEMENT un vrai danger : ce qui blesse, ce qui est irréversible, ce qui est formellement interdit. Pas un avantage, pas un conseil d\'efficacité.' },
     ],
     qa: [
         { k: 'question',  label: 'La question',                            kind: 'input',    req: true,  ph: 'Ex. : Peut-on payer en plusieurs fois ?' },
@@ -110,6 +110,38 @@ const FIELD_TEMPLATES = {
         { k: 'definition',label: 'La définition, dans vos mots',           kind: 'textarea', req: true,  ph: 'Comme vous l\'expliqueriez à un nouveau collègue.' },
     ],
 };
+
+/* ═══════════════════════════════════════════════════════════════
+   SA-15.0 — « warnings » n'est pas un champ comme les autres
+
+   Sur le manuel client (techniques létales), le même champ portait
+   « la gorge est une cible à effet potentiellement radical (pouvant
+   entraîner la mort) » ET « ce déplacement permet de sortir de l'axe
+   d'attaque » — un danger et un avantage, au même niveau visuel, dans
+   la même phrase grise. Mélangés, l'instructeur apprend à ne plus lire
+   le champ : c'est un défaut de SÉCURITÉ, pas de confort.
+   Le worker discipline ce qui y ENTRE (EXTRACT_SYSTEM_PROMPT) ; ici on
+   lui donne son propre niveau visuel partout où une fiche s'affiche —
+   éditeur, aperçus de propositions, liste du coffre, réponse de l'agent.
+   ═══════════════════════════════════════════════════════════════ */
+function _dangerOf(body) {
+    const w = (body && typeof body.warnings === 'string') ? body.warnings.trim() : '';
+    return w;
+}
+/* Aplat d'un body POUR L'APERÇU. Le danger en est RETIRÉ : il ne se noie
+   plus dans la ligne grise, il s'affiche à part juste en dessous. */
+function _flatBody(body) {
+    return Object.entries(body || {})
+        .filter(([k]) => k !== 'warnings')
+        .map(([, v]) => Array.isArray(v) ? v.join(' · ') : String(v))
+        .join(' — ');
+}
+function _dangerChip(body, max = 100) {
+    const w = _dangerOf(body);
+    if (!w) return '';
+    const t = w.length > max ? w.slice(0, max) + '…' : w;
+    return `<span class="sa-danger-chip">${icon('alert-triangle', 12)}<span class="sa-danger-txt">${_esc(t)}</span></span>`;
+}
 
 const STATUS_META = {
     draft:      { label: 'Brouillon',   cls: 'is-draft' },
@@ -1660,7 +1692,8 @@ function _interviewHTML() {
             <span class="sa-prop-check">${_iv.checked.has(i) ? icon('check', 13) : ''}</span>
             <span class="sa-prop-type">${icon(t.icon, 13)} ${t.label}</span>
             <span class="sa-prop-txt"><strong>${_esc(p.title)}</strong>
-              <span>${_esc(Object.values(p.body).map(v => Array.isArray(v) ? v.join(' · ') : v).join(' — ')).slice(0, 140)}</span></span>
+              <span>${_esc(_flatBody(p.body).slice(0, 140))}</span>
+              ${_dangerChip(p.body)}</span>
             ${_relBadge(p, _iv.proposals)}
           </label>`;
         }).join('');
@@ -1931,9 +1964,20 @@ function _msgHTML(m) {
     // discrète signale que la question, elle, reste un trou à combler.
     const deflected = m.deflected ? `
       <span class="sa-msg-note">Réponse de côté — la question posée n'est pas encore dans le coffre, elle est notée comme « trou ».</span>` : '';
+    // SA-15.0 — l'avertissement d'une fiche citée ne dépend PAS de ce que le
+    // modèle a bien voulu reprendre dans sa prose : il est remonté tel quel
+    // par le worker (citations[].warning) et rendu à son propre niveau, sous
+    // la réponse. Une génération qui lisse un danger ne peut plus l'effacer.
+    const dangers = (m.citations || []).filter(c => c.warning);
+    const dangerBlock = dangers.length ? `
+      <div class="sa-danger-note">
+        <span class="sa-danger-hd">${icon('alert-triangle', 14)} Avertissement porté par ${dangers.length > 1 ? 'les fiches citées' : 'la fiche citée'}</span>
+        ${dangers.map(c => `<p><strong>[${c.n}] ${_esc(c.title)}</strong> — ${_esc(c.warning)}</p>`).join('')}
+      </div>` : '';
     return `
     <div class="sa-msg is-agent">
       <div class="sa-bubble" data-act="chat-say" title="Toucher pour écouter">${_renderReply(m.content, m.citations || [])}</div>
+      ${dangerBlock}
       ${sources}
       ${deflected}
     </div>`;
@@ -2452,6 +2496,7 @@ function _searchResultsHTML() {
         <div class="sa-unit-txt">
           <strong class="sa-unit-title">${_esc(r.unit.title)}</strong>
           <span class="sa-unit-snip">${_esc(_snippet(r.unit))}</span>
+          ${_dangerChip(r.unit.body)}
           <span class="sa-unit-meta">${t.label}</span>
         </div>
         <div class="sa-srcs">
@@ -2528,6 +2573,7 @@ function _unitRowHTML(u) {
       <div class="sa-unit-txt">
         <strong class="sa-unit-title">${_esc(u.title)}</strong>
         ${snippet ? `<span class="sa-unit-snip">${snippet}</span>` : ''}
+        ${_dangerChip(u.body)}
         <span class="sa-unit-meta">${t.label}${u.source_ref ? ` · ${_esc(u.source_ref)}` : ''}</span>
       </div>
       <span class="sa-badge ${st.cls}">${st.label}</span>
@@ -2544,11 +2590,10 @@ function _unitRowHTML(u) {
   `;
 }
 
-// Snippet = body_text sans la 1re ligne (le titre)
+// Snippet = body_text sans la 1re ligne (le titre). SA-15.0 — et sans le
+// danger, qui a sa propre pastille juste en dessous (cf. _dangerChip).
 function _snippet(u) {
-    const vals = Object.values(u.body || {})
-        .map(v => Array.isArray(v) ? v.join(' · ') : String(v))
-        .join(' — ');
+    const vals = _flatBody(u.body);
     return vals.length > 130 ? vals.slice(0, 130) + '…' : vals;
 }
 
@@ -2597,12 +2642,17 @@ function _editorHTML() {
     const fields = FIELD_TEMPLATES[type].map(f => {
         let val = body[f.k] ?? '';
         if (f.list && Array.isArray(val)) val = val.join('\n');
+        // SA-15.0 — le champ de danger sort du flux des autres champs : cadre
+        // rouge, picto, et la consigne écrite noir sur blanc. Un instructeur
+        // doit voir au premier coup d'œil s'il y a un avertissement — et ne
+        // jamais hésiter sur ce qui a le droit d'y figurer.
         return `
-      <label class="sa-field">
-        <span class="sa-field-label">${f.label}${f.req ? ' *' : ''}</span>
+      <label class="sa-field${f.danger ? ' sa-field-danger' : ''}">
+        <span class="sa-field-label">${f.danger ? `${icon('alert-triangle', 13)} ` : ''}${f.label}${f.req ? ' *' : ''}</span>
         ${f.kind === 'input'
             ? `<input class="sa-input" data-field="${f.k}" value="${_escAttr(val)}" placeholder="${_escAttr(f.ph || '')}">`
             : `<textarea class="sa-textarea" data-field="${f.k}" rows="${f.list ? 5 : 3}" placeholder="${_escAttr(f.ph || '')}">${_esc(val)}</textarea>`}
+        ${f.danger ? '<span class="sa-field-hint">Ce champ est mis en évidence partout — dans la liste du coffre comme sous les réponses de l\'agent. Un avantage ou une justification rangés ici affaiblissent les vrais avertissements.</span>' : ''}
       </label>`;
     }).join('');
 
@@ -2797,7 +2847,8 @@ function _renderOverlay() {
             <span class="sa-prop-type">${icon(t.icon, 13)} ${t.label}</span>
             <span class="sa-prop-txt">
               <strong>${_esc(p.title)}</strong>
-              <span>${_esc(Object.values(p.body).map(v => Array.isArray(v) ? v.join(' · ') : v).join(' — ').slice(0, 140))}</span>
+              <span>${_esc(_flatBody(p.body).slice(0, 140))}</span>
+              ${_dangerChip(p.body)}
             </span>
             ${_relBadge(p, _ex.proposals)}
           </label>`;
@@ -2930,7 +2981,10 @@ async function _exCall(call) {
         else if (res.truncated) _toast('Document long : seul le début a été analysé.', 'ok');
         // SA-14.6 — plafond atteint : le texte avait probablement plus à donner.
         // On le dit plutôt que de laisser croire que tout a été extrait.
-        else if (res.saturated) _toast(`Texte dense : ${_ex.proposals.length} fiches extraites (maximum). Découpez-le pour n'en rien perdre.`, 'ok');
+        // SA-15.1 — le plafond est calculé sur le volume du texte : l'alerte ne
+        // se déclenche donc plus que sur une VRAIE densité, jamais sur un petit
+        // texte que le modèle avait rembourré jusqu'au plafond absolu.
+        else if (res.saturated) _toast(`Texte dense : ${_ex.proposals.length} fiches extraites, le maximum pour ce volume. Découpez-le pour n'en rien perdre.`, 'ok');
     } catch (e) {
         _ex.error = (e.data?.code === 'AI_CREDITS_EXHAUSTED')
             ? 'Crédits IA épuisés ce mois — rachetez un pack ou attendez le 1er du mois.'
@@ -3182,13 +3236,14 @@ function _igRenderReview() {
             <span class="sa-prop-check">${_ig.checked.has(i) ? icon('check', 13) : ''}</span>
             <span class="sa-prop-type">${icon(t.icon, 13)} ${t.label}</span>
             <span class="sa-prop-txt"><strong>${_esc(p.title)}</strong>
-              <span>${_esc(Object.values(p.body).map(v => Array.isArray(v) ? v.join(' · ') : v).join(' — ')).slice(0, 140)}</span></span>
+              <span>${_esc(_flatBody(p.body).slice(0, 140))}</span>
+              ${_dangerChip(p.body)}</span>
             ${_relBadge(p, _ig.proposals)}
           </label>`;
     }).join('');
     return `
       ${head}
-      ${_ig.saturated ? `<p class="sa-field-hint sa-ig-warn">${icon('alert-triangle', 13)} Lot très dense : ${_ig.proposals.length} fiches extraites, c'est le maximum par lot. Une partie du contenu de ce lot peut manquer.</p>` : ''}
+      ${_ig.saturated ? `<p class="sa-field-hint sa-ig-warn">${icon('alert-triangle', 13)} Lot très dense : ${_ig.proposals.length} fiches extraites, le maximum pour le volume de ce lot. Une partie du contenu peut manquer.</p>` : ''}
       ${_ig.proposals.length
         ? `<div class="sa-ex-props">${props}</div>`
         : `<p class="sa-field-hint">Aucune fiche exploitable dans ce lot (page de garde, sommaire…). Passez au suivant.</p>`}
