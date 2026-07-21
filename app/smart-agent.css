@@ -772,6 +772,64 @@
 }
 .sa-prop-rel.is-low { opacity: .55; }
 
+/* ── SA-14.4b — file d'attente d'ingestion (gros document) ────── */
+.sa-ig-resume {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
+  background: color-mix(in srgb, var(--gold) 8%, transparent);
+}
+.sa-ig-resume p { flex: 1; min-width: 0; margin: 0; font-size: 11.5px; color: var(--tx3); line-height: 1.45; }
+.sa-ig-resume strong { color: var(--text); }
+.sa-ig-facts { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+/* Deux enfants flex EXACTEMENT (picto + span) : sans le span, chaque nœud
+   de texte devient un item flex et la phrase se casse en colonnes. */
+.sa-ig-facts li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--tx3);
+  line-height: 1.45;
+}
+/* icon() rend un <span class="ws-icon"> (pas un <svg> nu) : sans le
+   :not(), le picto devient lui aussi un item flex:1 et prend la moitié
+   de la largeur. */
+.sa-ig-facts li > .ws-icon { flex: none; margin-top: 2px; }
+.sa-ig-facts li > span:not(.ws-icon) { flex: 1; min-width: 0; }
+.sa-ig-facts li strong { color: var(--text); }
+.sa-ig-head { margin-bottom: 12px; }
+.sa-ig-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  overflow: hidden;
+}
+.sa-ig-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--gold);
+  transition: width .25s ease;
+}
+.sa-ig-step {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.sa-ig-step em { font-style: normal; font-weight: 500; color: var(--tx3); }
+.sa-ig-tally {
+  float: right;
+  font-weight: 500;
+  color: var(--gold);
+}
+
 /* ── Recherche hybride (SA-2) ─────────────────────────────────── */
 .sa-search {
   display: flex;

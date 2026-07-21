@@ -414,6 +414,16 @@ function _onClick(e) {
     }
     if (act === 'ed-delete')    { _deleteUnit(_kx.editing?.id, true); return; }
     // ── Extraction ──
+    // SA-14.4b — file d'attente multi-lots
+    if (act === 'ig-start')     { _igRunBatch(); return; }
+    if (act === 'ig-toggle')    { const i = parseInt(actEl.dataset.i, 10);
+                                  _ig.checked.has(i) ? _ig.checked.delete(i) : _ig.checked.add(i);
+                                  _renderOverlay(); return; }
+    if (act === 'ig-next')      { _igAddAndNext(); return; }
+    if (act === 'ig-skip')      { _ig.skipped++; _igNext(); return; }
+    if (act === 'ig-pause')     { _igPause(); return; }
+    if (act === 'ig-cancel')    { _igAbandon(); return; }
+    if (act === 'ig-resume')    { _igResume(); return; }
     if (act === 'ex-close')     { _closeExtract(); return; }
     if (act === 'ex-run')       { _runExtract(); return; }
     if (act === 'ex-toggle')    { _toggleProposal(parseInt(actEl.dataset.i, 10)); return; }
@@ -2741,7 +2751,16 @@ async function _deleteUnit(id, fromEditor = false) {
 function _openExtract() {
     _ex.open = true; _ex.busy = false; _ex.proposals = []; _ex.checked = new Set(); _ex.error = null;
     _ex.mode = 'paste'; _ex.source = null; _ex.file = null;
+    _ig.phase = null; _ig.resumable = null;
     _renderOverlay();
+    // SA-14.4b — un import laissé en cours (onglet fermé, pause) se
+    // rappelle au bon souvenir : sans ça, le client relancerait tout
+    // depuis zéro et repaierait les lots déjà analysés.
+    _igResumable().then(job => {
+        if (!job || !_ex.open || _ig.phase) return;
+        _ig.resumable = job;
+        _renderOverlay();
+    });
 }
 function _closeExtract() {
     _ex.open = false;
@@ -2753,7 +2772,10 @@ function _renderOverlay() {
     if (!_ex.open) { slot.innerHTML = ''; return; }
 
     let inner;
-    if (_ex.busy) {
+    // SA-14.4b — la file d'attente multi-lots prend la main sur tout le reste.
+    if (_ig.phase === 'plan')        inner = _igRenderPlan();
+    else if (_ig.phase === 'review') inner = _igRenderReview();
+    else if (_ex.busy) {
         inner = `<div class="sa-ex-busy">${icon('sparkles', 22)}<p>Analyse du texte en cours…<br><small>L'IA propose des fiches — rien n'est ajouté sans votre relecture.</small></p></div>`;
     } else if (_ex.proposals.length) {
         inner = `
@@ -2790,6 +2812,13 @@ function _renderOverlay() {
         ];
         const chips = `<div class="sa-ex-modes">${modes.map(m => `
           <button class="sa-ex-mode ${_ex.mode === m.id ? 'is-on' : ''}" data-act="ex-mode" data-v="${m.id}">${icon(m.icon, 13)} ${m.label}</button>`).join('')}</div>`;
+        // SA-14.4b — reprise d'un import laissé en cours.
+        const resume = _ig.resumable ? `
+      <div class="sa-ig-resume">
+        <p>${icon('history', 14)} <strong>${_esc(_ig.resumable.source_ref)}</strong> — analyse interrompue,
+        ${_ig.resumable.done} / ${_ig.resumable.total} lots relus.</p>
+        <button class="sa-btn is-primary" data-act="ig-resume">Reprendre</button>
+      </div>` : '';
         let zone;
         if (_ex.mode === 'url') {
             zone = `
@@ -2823,7 +2852,7 @@ function _renderOverlay() {
         <button class="sa-btn is-primary" data-act="ex-run">${icon('sparkles', 15)} Analyser le texte <em class="sa-credit-note">1 crédit IA</em></button>
       </div>`;
         }
-        inner = chips + zone;
+        inner = resume + chips + zone;
     }
 
     slot.innerHTML = `
@@ -2843,6 +2872,9 @@ async function _runExtract() {
     const text = (ta?.value || '').trim();
     if (text.length < 30) { _ex.error = 'Texte trop court (30 caractères minimum).'; _renderOverlay(); return; }
     _ex.source = null;
+    // SA-14.4 — au-delà de la borne d'un seul appel, on ne refuse plus le
+    // texte (« Texte trop long ») : on le découpe en lots relus un par un.
+    if (text.length > EXTRACT_ONESHOT_MAX) return _igPlan({ text, source_ref: 'texte collé' });
     await _exCall(() => _api('/kortex/extract', { method: 'POST', body: { text, ...byokRequestFields() } }));
 }
 
@@ -2863,6 +2895,9 @@ async function _runImportFile() {
     if (!f) { _ex.error = 'Choisissez d\'abord un fichier.'; _renderOverlay(); return; }
     if (f.size > 8 * 1024 * 1024) { _ex.error = 'Fichier trop lourd (8 Mo max).'; _renderOverlay(); return; }
     _ex.source = { ref: f.name };
+    // SA-14.4 — un gros fichier passe par le découpage en lots plutôt que
+    // d'être tronqué en silence à ses 8 premières pages.
+    if (f.size > FILE_ONESHOT_MAX) return _igPlanFile(f);
     await _exCall(async () => {
         const res = await fetch(`${API_BASE}/api/smart-agent/kortex/import-file?name=${encodeURIComponent(f.name)}`, {
             method: 'POST',
@@ -2925,6 +2960,242 @@ async function _addProposals() {
         : `${added} fiche${added > 1 ? 's' : ''} ajoutée${added > 1 ? 's' : ''} en brouillon — validez-les après relecture.`,
         failed ? 'error' : 'ok');
     _kxReload();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SA-14.4b — INGESTION GROS VOLUME : file d'attente de relecture
+   ─────────────────────────────────────────────────────────────
+   Un document volumineux est découpé côté worker en lots (aux titres,
+   avec chevauchement). Ici on pilote la RELECTURE : un lot à la fois,
+   avec progression, reprise possible, et le coût annoncé AVANT de
+   lancer quoi que ce soit.
+
+   Ce que ça ne fait PAS : accélérer la relecture. Le goulot reste
+   humain — l'écran le dit franchement plutôt que de le masquer.
+   ═══════════════════════════════════════════════════════════════ */
+const EXTRACT_ONESHOT_MAX = 20000;              // borne du worker pour UN appel
+const FILE_ONESHOT_MAX    = 400 * 1024;         // au-delà, découpage en lots
+const IG_JOB_KEY          = 'sa_ingest_job';    // reprise (hors PREFS_KEYS : jamais synchronisé)
+
+const _ig = { job: null, idx: 0, phase: null, busy: false, adding: false, error: null,
+    proposals: [], checked: new Set(), added: 0, skipped: 0, resumable: null };
+
+function _igReset() {
+    Object.assign(_ig, { job: null, idx: 0, phase: null, busy: false, adding: false,
+        error: null, proposals: [], checked: new Set(), added: 0, skipped: 0, resumable: null });
+    try { localStorage.removeItem(IG_JOB_KEY); } catch (_) {}
+}
+
+// Un job existe-t-il encore côté serveur (onglet fermé, reprise) ?
+async function _igResumable() {
+    let id = null;
+    try { id = localStorage.getItem(IG_JOB_KEY); } catch (_) {}
+    if (!id) return null;
+    try {
+        const job = await _api(`/kortex/ingest/${id}`);
+        if (job.done >= job.total) { try { localStorage.removeItem(IG_JOB_KEY); } catch (_) {} return null; }
+        return job;
+    } catch (_) {
+        try { localStorage.removeItem(IG_JOB_KEY); } catch (_) {}   // expiré (TTL 7 j)
+        return null;
+    }
+}
+
+function _igAdopt(job) {
+    _ig.job = job;
+    _ig.phase = 'plan';
+    _ig.idx = (job.batches || []).findIndex(b => b.status === 'pending');
+    if (_ig.idx < 0) _ig.idx = 0;
+    try { localStorage.setItem(IG_JOB_KEY, job.job_id); } catch (_) {}
+    _renderOverlay();
+}
+
+async function _igCall(call) {
+    _ig.busy = true; _ig.error = null; _renderOverlay();
+    try { const out = await call(); _ig.busy = false; return out; }
+    catch (e) {
+        _ig.busy = false;
+        _ig.error = (e.data?.code === 'AI_CREDITS_EXHAUSTED')
+            ? 'Crédits IA épuisés ce mois — rachetez un pack ou attendez le 1er du mois.'
+            : (e.message || 'Erreur inattendue.');
+        _renderOverlay();
+        return null;
+    }
+}
+
+// Découpage seul : GRATUIT (aucune extraction). C'est ce qui permet
+// d'annoncer le coût avant que le client n'engage un seul crédit.
+async function _igPlan(body) {
+    const job = await _igCall(() => _api('/kortex/ingest/plan', { method: 'POST', body }));
+    if (job) _igAdopt(job);
+}
+async function _igPlanFile(f) {
+    const job = await _igCall(async () => {
+        const res = await fetch(`${API_BASE}/api/smart-agent/kortex/ingest/plan-file?name=${encodeURIComponent(f.name)}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${_jwt()}`, 'Content-Type': f.type || 'application/octet-stream' },
+            body: f,
+        });
+        let data = {};
+        try { data = await res.json(); } catch (_) {}
+        if (!res.ok) { const e = new Error(data.error || `Erreur ${res.status}`); e.data = data; throw e; }
+        return data;
+    });
+    if (job) _igAdopt(job);
+}
+
+// Extrait le lot courant (1 crédit) et bascule en relecture.
+async function _igRunBatch() {
+    const b = _ig.job?.batches?.[_ig.idx];
+    if (!b) return _igFinish();
+    _ig.phase = 'review';
+    const out = await _igCall(() => _api(`/kortex/ingest/${_ig.job.job_id}/batch/${b.index}`,
+        { method: 'POST', body: { ...byokRequestFields() } }));
+    if (!out) return;
+    _ig.proposals = out.proposals || [];
+    _ig.checked = new Set(_ig.proposals.map((_, i) => i));
+    b.status = 'done';
+    _renderOverlay();
+}
+
+function _igNext() {
+    _ig.proposals = []; _ig.checked = new Set(); _ig.error = null;
+    _ig.idx++;
+    if (_ig.idx >= (_ig.job?.total || 0)) return _igFinish();
+    _igRunBatch();
+}
+
+function _igFinish() {
+    const added = _ig.added;
+    _api(`/kortex/ingest/${_ig.job?.job_id}`, { method: 'DELETE' }).catch(() => {});
+    _igReset();
+    _closeExtract();
+    _toast(added
+        ? `Document relu — ${added} fiche${added > 1 ? 's' : ''} ajoutée${added > 1 ? 's' : ''} en brouillon.`
+        : 'Document relu — aucune fiche retenue.', 'ok');
+    _kxReload();
+}
+
+// Ajoute les fiches cochées du lot courant, puis enchaîne.
+async function _igAddAndNext() {
+    if (_ig.adding) return;
+    _ig.adding = true; _renderOverlay();
+    let added = 0;
+    for (const i of _ig.checked) {
+        const p = _ig.proposals[i];
+        try {
+            await _api('/kortex/units', {
+                method: 'POST',
+                body: { type: p.type, title: p.title, body: p.body, status: 'draft',
+                    source_kind: 'import', source_ref: _ig.job.source_ref,
+                    ...((_kx.scope === 'shared' && _kx.sharedVault) ? { vault_id: _kx.sharedVault.id } : { agent_id: _cur.id }) },
+            });
+            added++;
+        } catch (_) { /* une fiche ratée ne doit pas bloquer la file */ }
+    }
+    _ig.added += added;
+    _ig.adding = false;
+    _igNext();
+}
+
+// Pause : le job reste côté serveur (7 jours), la bannière de reprise
+// réapparaîtra à la prochaine ouverture. On ne perd RIEN de ce qui a été
+// ajouté — chaque lot validé a déjà écrit ses fiches en brouillon.
+function _igPause() {
+    const added = _ig.added;
+    Object.assign(_ig, { phase: null, proposals: [], checked: new Set(), busy: false, error: null });
+    _closeExtract();
+    _toast(added
+        ? `Analyse en pause — ${added} fiche${added > 1 ? 's' : ''} déjà ajoutée${added > 1 ? 's' : ''}. Reprenez quand vous voulez.`
+        : 'Analyse en pause — reprenez quand vous voulez.', 'ok');
+    _kxReload();
+}
+
+// Abandon explicite : le job est supprimé côté serveur (sas de travail).
+async function _igAbandon() {
+    const id = _ig.job?.job_id;
+    _igReset();
+    _renderOverlay();
+    if (id) { try { await _api(`/kortex/ingest/${id}`, { method: 'DELETE' }); } catch (_) {} }
+}
+
+async function _igResume() {
+    const job = await _igResumable();
+    if (job) _igAdopt(job);
+    else { _toast('Cet import a expiré.', 'error'); _igReset(); _renderOverlay(); }
+}
+
+function _igRenderPlan() {
+    const j = _ig.job;
+    const done = (j.batches || []).filter(b => b.status !== 'pending').length;
+    const reste = j.total - done;
+    return `
+      <div class="sa-ig-plan">
+        <p class="sa-ex-lead"><strong>${_esc(j.source_ref)}</strong> — ${j.chars.toLocaleString('fr-FR')} caractères,
+        découpé en <strong>${j.total} lot${j.total > 1 ? 's' : ''}</strong> en suivant les titres du document.</p>
+        <ul class="sa-ig-facts">
+          <li>${icon('sparkles', 13)}<span>L'analyse consommera environ <strong>${reste} crédit${reste > 1 ? 's' : ''} IA</strong> (1 par lot).</span></li>
+          <li>${icon('check-square', 13)}<span>Vous relisez et validez <strong>chaque lot</strong> — rien n'entre dans le coffre sans vous.</span></li>
+          <li>${icon('history', 13)}<span>Vous pouvez vous arrêter à tout moment et reprendre plus tard.</span></li>
+          ${j.truncated ? `<li>${icon('lock', 13)}<span>Document très long : seuls les 400 000 premiers caractères sont couverts.</span></li>` : ''}
+          ${done ? `<li>${icon('check', 13)}<span>${done} lot${done > 1 ? 's' : ''} déjà relu${done > 1 ? 's' : ''} — on reprend au suivant.</span></li>` : ''}
+        </ul>
+        <p class="sa-field-hint">La relecture reste manuelle : comptez quelques minutes par lot. C'est ce qui garantit qu'aucune fiche fausse n'entre dans le coffre.</p>
+        ${_ig.error ? `<p class="sa-ed-error">${_esc(_ig.error)}</p>` : ''}
+        <div class="sa-ed-actions">
+          <button class="sa-btn" data-act="ig-cancel">Annuler</button>
+          <button class="sa-btn is-primary" data-act="ig-start" ${_ig.busy ? 'disabled' : ''}>
+            ${icon('sparkles', 15)} Lancer l'analyse${done ? ' (reprendre)' : ''}
+          </button>
+        </div>
+      </div>`;
+}
+
+function _igRenderReview() {
+    const j = _ig.job;
+    const b = j.batches[_ig.idx] || {};
+    const pct = Math.round((_ig.idx / Math.max(1, j.total)) * 100);
+    const head = `
+      <div class="sa-ig-head">
+        <div class="sa-ig-bar"><span style="width:${pct}%"></span></div>
+        <p class="sa-ig-step">Lot ${_ig.idx + 1} / ${j.total}${b.breadcrumb ? ` · <em>${_esc(b.breadcrumb)}</em>` : ''}
+          ${_ig.added ? `<span class="sa-ig-tally">${_ig.added} fiche${_ig.added > 1 ? 's' : ''} retenue${_ig.added > 1 ? 's' : ''}</span>` : ''}</p>
+      </div>`;
+    if (_ig.busy) {
+        return `${head}<div class="sa-ex-busy">${icon('sparkles', 22)}<p>Analyse du lot ${_ig.idx + 1}…<br><small>Rien n'est ajouté sans votre relecture.</small></p></div>`;
+    }
+    const props = _ig.proposals.map((p, i) => {
+        const t = KORTEX_TYPES.find(x => x.id === p.type) || { icon: 'kortex', label: p.type };
+        return `
+          <label class="sa-prop ${_ig.checked.has(i) ? 'is-on' : ''}" data-act="ig-toggle" data-i="${i}">
+            <span class="sa-prop-check">${_ig.checked.has(i) ? icon('check', 13) : ''}</span>
+            <span class="sa-prop-type">${icon(t.icon, 13)} ${t.label}</span>
+            <span class="sa-prop-txt"><strong>${_esc(p.title)}</strong>
+              <span>${_esc(Object.values(p.body).map(v => Array.isArray(v) ? v.join(' · ') : v).join(' — ')).slice(0, 140)}</span></span>
+            ${_relBadge(p, _ig.proposals)}
+          </label>`;
+    }).join('');
+    return `
+      ${head}
+      ${_ig.proposals.length
+        ? `<div class="sa-ex-props">${props}</div>`
+        : `<p class="sa-field-hint">Aucune fiche exploitable dans ce lot (page de garde, sommaire…). Passez au suivant.</p>`}
+      ${_ig.error ? `<p class="sa-ed-error">${_esc(_ig.error)}</p>` : ''}
+      <div class="sa-ed-actions">
+        <button class="sa-btn" data-act="ig-pause">${icon('history', 15)} Reprendre plus tard</button>
+        <button class="sa-btn" data-act="ig-skip" ${_ig.adding ? 'disabled' : ''}>Ignorer ce lot</button>
+        <button class="sa-btn is-primary" data-act="ig-next" ${(!_ig.checked.size || _ig.adding) ? 'disabled' : ''}>
+          ${icon('check', 15)} Ajouter ${_ig.checked.size} et continuer
+        </button>
+      </div>`;
+}
+
+// Exporté pour le harnais _design-lab/sa-ingest-harness.html UNIQUEMENT :
+// rend le VRAI écran depuis un état simulé, sans worker, sans crédit et
+// sans document réel. Jamais appelé par l'application.
+export function __igPreview(state) {
+    Object.assign(_ig, state);
+    return _ig.phase === 'review' ? _igRenderReview() : _igRenderPlan();
 }
 
 // ═══════════════════════════════════════════════════════════════

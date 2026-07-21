@@ -1,0 +1,50 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SA-14.4b — file d'attente d'ingestion (harnais)</title>
+<!-- Harnais isolé : rend les VRAIS écrans (__igPreview) avec le VRAI
+     smart-agent.css, depuis un état simulé — aucun worker, aucun crédit,
+     aucun document réel. -->
+<link rel="stylesheet" href="../app/style.css">
+<link rel="stylesheet" href="../app/smart-agent.css">
+<style>
+  body { padding: 28px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  h2 { color: var(--text); font-size: 13px; font-weight: 900; letter-spacing: -0.02em; margin: 26px 0 10px; }
+  .lab-case { max-width: 660px; padding: 16px; border: 1px solid var(--bd); border-radius: 14px; }
+</style>
+<div id="out"></div>
+<script type="module">
+  import { __igPreview } from '../app/smart-agent.js';
+
+  const batches = Array.from({ length: 21 }, (_, i) => ({
+    index: i, breadcrumb: i < 3 ? 'Manuel › Sécurité' : 'Manuel › Procédures › Incidents',
+    chars: 11800, status: i < 2 ? 'done' : 'pending',
+  }));
+  const job = { job_id: 'demo', source_ref: 'manuel-operations.pdf', total: 21,
+                chars: 248000, truncated: false, batches };
+
+  const props = [
+    { type: 'procedure', title: 'Procédure d\'évacuation du bâtiment B', relevance: 9,
+      body: { goal: 'Évacuer', steps: ['Déclencher l\'alarme', 'Guider vers le point de rassemblement'] } },
+    { type: 'rule', title: 'Interdiction d\'utiliser les ascenseurs', relevance: 8,
+      body: { rule: 'Ne jamais emprunter l\'ascenseur pendant une alarme.' } },
+    { type: 'fact', title: 'Numéro du responsable sécurité', relevance: 4,
+      body: { statement: 'Poste 4412.' } },
+  ];
+
+  const CAS = [
+    ['Écran de plan — le coût est annoncé AVANT tout crédit engagé',
+      { job, idx: 2, phase: 'plan', busy: false, error: null, added: 0 }],
+    ['Reprise — 2 lots déjà relus, le coût restant est recalculé',
+      { job: { ...job, batches: batches.map((b, i) => ({ ...b, status: i < 2 ? 'done' : 'pending' })) },
+        idx: 2, phase: 'plan', busy: false, error: null, added: 7 }],
+    ['Relecture d\'un lot — progression, fil d\'ariane, badges de pertinence',
+      { job, idx: 4, phase: 'review', busy: false, error: null, adding: false,
+        proposals: props, checked: new Set([0, 1]), added: 7 }],
+    ['Lot vide (page de garde, sommaire) — on passe, sans drame',
+      { job, idx: 5, phase: 'review', busy: false, error: null, adding: false,
+        proposals: [], checked: new Set(), added: 7 }],
+  ];
+
+  document.getElementById('out').innerHTML = CAS.map(([titre, st]) =>
+    `<h2>${titre}</h2><div class="lab-case">${__igPreview(st)}</div>`).join('');
+</script>

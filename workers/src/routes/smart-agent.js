@@ -61,7 +61,7 @@ import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-
 import { streamLLM }                               from '../lib/llm-stream.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-14.4a';
+const SA_ENGINE_VERSION = 'SA-14.4';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
