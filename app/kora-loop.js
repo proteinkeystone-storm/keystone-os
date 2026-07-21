@@ -270,13 +270,29 @@ export function initKoraLoop(panel) {
   if (!panel || panel.querySelector('.kora-inputbar')) return;
   const bar = document.createElement('div');
   bar.className = 'kora-inputbar';
+  /* La zone de saisie se transforme en BANDEAU d'enregistrement quand on
+     maintient le bouton voix (kora-voice.js ajoute .kora-rec/.kora-cancel).
+     Le bouton voix lui-même est injecté par kora-voice (dépend du support
+     micro) à droite de « Envoyer ». */
   bar.innerHTML = `
-    <input class="kora-input" type="text" maxlength="1000"
-           placeholder="Demande-moi — « prépare-moi un post sur… »" aria-label="Parler à Kora">
+    <div class="kora-field">
+      <input class="kora-input" type="text" maxlength="1000"
+             placeholder="Demande-moi — « prépare-moi un post sur… »" aria-label="Parler à Kora">
+      <div class="kora-recstrip" aria-hidden="true">
+        <span class="kora-rs-dot"></span>
+        <span class="kora-rs-timer">0:00</span>
+        <canvas class="kora-rs-wave"></canvas>
+        <span class="kora-rs-hint">glisse ← pour annuler</span>
+      </div>
+    </div>
     <button class="kora-send" title="Envoyer" aria-label="Envoyer">${icon('send', 16)}</button>`;
   panel.appendChild(bar);
   _input = bar.querySelector('.kora-input');
   _sendBtn = bar.querySelector('.kora-send');
+
+  /* bouton voix (galet à droite d'Envoyer) : câblé par kora-voice si le
+     micro est dispo — sinon barre en mode écrit seul, sans bouton */
+  _voice().then(vm => { if (vm && vm.attachVoiceBar) vm.attachVoiceBar(bar); });
 
   const go = () => {
     const t = (_input.value || '').trim();

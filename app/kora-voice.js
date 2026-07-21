@@ -39,11 +39,15 @@ const KORA_API = (typeof window !== 'undefined' && window.__KS_API_BASE__) ||
   'https://keystone-os-api.keystone-os.workers.dev';
 const PIPER_VOICE = DEFAULT_VOICE;   // V1 = français uniquement (Siwis, §3.2)
 
-/* ── Réglages talkie-walkie ── */
-const HOLD_MS       = 150;    // < 150 ms = un TAP (ouvre/ferme, geste actuel) — §4 anti-tap
-const MAX_MS        = 60000;  // coupe propre à 60 s (§4)
-const CANCEL_MARGIN = 44;     // px hors du galet = zone « relâche pour annuler » (WhatsApp)
-const MIN_BLOB      = 700;    // ms mini pour envoyer (sinon « rien entendu »)
+/* ── Réglages talkie-walkie ──
+   Surface d'émission = le BOUTON VOIX (galet) à droite d'« Envoyer » dans la
+   barre de saisie (direction validée par Stéphane le 21/07 ; l'ancien maintien
+   du galet-header a été abandonné). Maintien = parler ; la zone de saisie
+   devient le bandeau d'enregistrement ; glisser vers la GAUCHE = annuler. */
+const MAX_MS   = 60000;  // coupe propre à 60 s (§4)
+const MIN_BLOB = 700;    // ms mini pour envoyer (sinon « rien entendu »)
+const MIN_TAP  = 300;    // < 300 ms = tap accidentel → annulation SILENCIEUSE (pas de bulle)
+const CANCEL_DX = 56;    // px de glissé vers la gauche = zone d'annulation
 
 /* ── Constantes micro (VERBATIM harnais) ── */
 const MIC_FLOOR = 0.012, MIC_GAIN = 5.5, MIC_ATTACK = 30, MIC_RELEASE = 9;
@@ -57,12 +61,16 @@ let _toggleBtn = null;
 let _gen = 0;                         // jeton de génération (barge-in / callbacks tardifs)
 let _micDenied = false;              // refus mémorisé (§6 piège 11 : pas de re-prompt en boucle)
 
-let _holding = false, _holdTimer = 0, _downX = 0, _downY = 0, _pointerId = null;
-let _suppressClick = false, _suppressTimer = 0;
+let _holding = false, _startX = 0;   // geste en cours sur le bouton voix
 
-let _rec = null;                     // enregistrement en cours { stream, mr, chunks, mime, t0, send, cancelZone, maxTimer }
+let _rec = null;                     // enregistrement en cours { stream, mr, chunks, mime, t0, send, cancelZone, maxTimer, gen }
 let _audioCtx = null, _analyser = null, _micBuf = null;
 let _micLevel = 0, _levelRAF = 0, _levelLast = 0;
+
+/* bouton voix + bandeau d'enregistrement (câblés par attachVoiceBar) */
+let _bar = null, _talkBtn = null, _rsTimer = null, _rsHint = null, _secTimer = 0;
+let _talkCv = null, _talkCtx = null, _rsCv = null, _rsCtx = null, _drawRAF = 0;
+let _visActive = 0, _visLevel = 0;   // valeurs lissées pour l'animation des ondes
 
 /* préparation voix (1er téléchargement du modèle ~60 Mo, une seule fois) */
 let _warming = false, _prepLine = null;
@@ -77,10 +85,6 @@ function _inputSupported() {
 function _outputSupported() { try { return !!ttsSupported(); } catch (_) { return false; } }
 
 function _jwt() { try { return localStorage.getItem('ks_jwt') || ''; } catch (_) { return ''; } }
-function _setHint(text) {
-  const sub = _panel && _panel.querySelector('.kora-sub');
-  if (sub && text != null) sub.textContent = text;
-}
 
 /* ═══ V-2 — pont voix (appelé par kora-loop.js) ═══ */
 
@@ -177,7 +181,6 @@ function _stopLevelLoop() {
 }
 
 async function _beginRecording() {
-  _holdTimer = 0;
   if (!_holding || _rec || !_inputSupported()) return;
 
   // Half-duplex : on coupe toute voix en cours AVANT d'ouvrir le micro.
@@ -193,7 +196,7 @@ async function _beginRecording() {
     if (!_micDenied) {
       koraOpen();
       koraSay((e && (e.name === 'NotAllowedError' || e.name === 'SecurityError'))
-        ? 'Micro refusé — autorise-le dans ton navigateur, puis re-maintiens le galet pour me parler. Tu peux aussi juste écrire.'
+        ? 'Micro refusé — autorise-le dans ton navigateur, puis re-maintiens le bouton voix pour me parler. Tu peux aussi juste écrire.'
         : 'Micro indisponible sur cet appareil — écris-moi, je réponds pareil.');
     }
     _micDenied = true;
@@ -233,18 +236,16 @@ async function _beginRecording() {
     _micBuf = new Uint8Array(_analyser.fftSize);
   } catch (_) { _analyser = null; _micBuf = null; }
 
-  koraOpen();
   koraState('ecoute');
   /* Latence masquée (brief §3.2, patron SA-9.2) : on chauffe la VOIX dès le
      MAINTIEN — le modèle Piper + phonémiseur + kernels ONNX se chargent
      PENDANT que tu parles et que le STT tourne, plus dans le chemin critique
-     du 1er son. Ici (hold confirmé ≥150 ms), pas au pointerdown (un simple
-     tap ne doit pas déclencher le téléchargement du modèle 60 Mo). No-op si
-     la voix est coupée. */
+     du 1er son. No-op si la voix est coupée. */
   koraWarmVoice();
   try { mr.start(); }
   catch (_) { _teardownRec(); koraState('repos'); koraSay('Enregistrement impossible sur cet appareil — écris-moi.'); return; }
   _startLevelLoop();
+  _showRecUI(true);                                                 // la saisie → bandeau d'enregistrement
   _rec.maxTimer = setTimeout(() => _stopRecording(true), MAX_MS);   // coupe propre à 60 s
 }
 
@@ -254,7 +255,6 @@ function _stopRecording(send) {
   if (_rec.maxTimer) { clearTimeout(_rec.maxTimer); _rec.maxTimer = 0; }
   _stopLevelLoop();
   koraState(send ? 'reflexion' : 'repos');
-  _setHint('');
   try {
     if (_rec.mr && _rec.mr.state !== 'inactive') _rec.mr.stop();   // → 'stop' → _onRecStop
     else _onRecStop();
@@ -264,6 +264,7 @@ function _stopRecording(send) {
 function _teardownRec() {
   const rec = _rec; _rec = null;
   _stopLevelLoop();
+  _showRecUI(false);                 // le bandeau redevient la barre de saisie
   if (rec) {
     if (rec.maxTimer) clearTimeout(rec.maxTimer);
     try { rec.stream.getTracks().forEach((x) => x.stop()); } catch (_) {}
@@ -317,95 +318,115 @@ async function _transcribe(blob, gen) {
   koraSubmit(text);                              // le texte entre dans la boucle comme s'il était tapé
 }
 
-/* ═══ Gestes pointer sur le galet ═══ */
-
-function _outsideGalet(e) {
-  if (!_galet) return false;
-  const r = _galet.getBoundingClientRect();
-  const m = CANCEL_MARGIN;
-  return e.clientX < r.left - m || e.clientX > r.right + m
-      || e.clientY < r.top - m  || e.clientY > r.bottom + m;
+/* ═══ Bandeau d'enregistrement (la barre de saisie se transforme) ═══ */
+function _fmt(s) { return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function _showRecUI(on) {
+  if (!_bar) return;
+  if (on) {
+    _bar.classList.add('kora-rec'); _bar.classList.remove('kora-cancel');
+    if (_talkBtn) { _talkBtn.classList.add('kora-rec'); _talkBtn.classList.remove('kora-cancel'); }
+    if (_rsTimer) _rsTimer.textContent = '0:00';
+    if (_rsHint) _rsHint.textContent = 'glisse ← pour annuler';
+    if (_secTimer) clearInterval(_secTimer);
+    const t0 = Date.now();
+    _secTimer = setInterval(() => { if (_rsTimer) _rsTimer.textContent = _fmt(Math.floor((Date.now() - t0) / 1000)); }, 500);
+  } else {
+    _bar.classList.remove('kora-rec', 'kora-cancel');
+    if (_talkBtn) _talkBtn.classList.remove('kora-rec', 'kora-cancel');
+    if (_secTimer) { clearInterval(_secTimer); _secTimer = 0; }
+  }
+}
+function _setCancelUI(on) {
+  if (_bar) _bar.classList.toggle('kora-cancel', on);
+  if (_talkBtn) _talkBtn.classList.toggle('kora-cancel', on);
+  if (_rsHint) _rsHint.textContent = on ? 'relâche pour annuler' : 'glisse ← pour annuler';
 }
 
-function _onPointerDown(e) {
-  if (e.button != null && e.button !== 0) return;        // clic secondaire ignoré
-  if (_holding) return;
+/* ═══ Onde du bouton voix + du bandeau — reprend l'esprit du galet
+   (violet au repos → turquoise à l'écoute, amplitude = vraie voix) ═══ */
+const _REST_A = [125, 107, 240], _REST_B = [74, 125, 245],
+      _TEAL_A = [26, 224, 158], _TEAL_B = [38, 191, 217], _ROSE = [240, 112, 138];
+function _lerp3(a, b, k) { return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k]; }
+function _sizeCanvas(cv) {
+  const dpr = Math.min(devicePixelRatio || 1, 2), r = cv.getBoundingClientRect();
+  const w = Math.max(2, Math.round(r.width * dpr)), h = Math.max(2, Math.round(r.height * dpr));
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  return dpr;
+}
+function _drawBars(cv, ctx, n, t, active, lvl, cancel) {
+  const dpr = _sizeCanvas(cv), w = cv.width, h = cv.height;
+  ctx.clearRect(0, 0, w, h);
+  const gap = Math.max(2, 2 * dpr), bw = (w - gap * (n - 1)) / n, mid = h / 2;
+  for (let i = 0; i < n; i++) {
+    const ph = t * 2.1 + i * 0.55;
+    const env = 0.35 + 0.65 * Math.abs(Math.sin(i / n * Math.PI));
+    const amp = (0.18 + active * 0.30) + lvl * 0.6 * active;
+    let hh = (0.12 + amp * env * (0.5 + 0.5 * Math.sin(ph)) + 0.05 * Math.sin(ph * 2.3)) * h;
+    hh = Math.max(2.4 * dpr, Math.min(h * 0.94, hh));
+    const k = i / (n - 1);
+    let col = cancel ? _ROSE : (active > 0.5 ? _lerp3(_TEAL_A, _TEAL_B, k) : _lerp3(_REST_A, _REST_B, k));
+    col = _lerp3(col, [255, 255, 255], 0.10 * (0.5 + 0.5 * Math.sin(ph)));
+    ctx.fillStyle = 'rgba(' + (col[0] | 0) + ',' + (col[1] | 0) + ',' + (col[2] | 0) + ',' + (0.6 + 0.35 * active) + ')';
+    const x = i * (bw + gap), rr = Math.min(bw / 2, 2.4 * dpr), y = mid - hh / 2;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, bw, hh, rr); else ctx.rect(x, y, bw, hh);
+    ctx.fill();
+  }
+}
+function _drawTick(now) {
+  _drawRAF = requestAnimationFrame(_drawTick);
+  if (!_panel || !_panel.classList.contains('kora-open')) return;   // fenêtre fermée = bouton invisible
+  const t = (now || 0) / 1000;
+  _visActive += ((_rec ? 1 : 0) - _visActive) * 0.12;
+  _visLevel  += ((_rec ? _micLevel : 0) - _visLevel) * 0.15;
+  const cancel = !!(_rec && _rec.cancelZone);
+  if (_talkCtx) _drawBars(_talkCv, _talkCtx, 9, t, _visActive, _visLevel, cancel);
+  if (_rsCtx) {
+    if (_rec) _drawBars(_rsCv, _rsCtx, 20, t, 1, _visLevel, cancel);
+    else _rsCtx.clearRect(0, 0, _rsCv.width, _rsCv.height);
+  }
+}
 
-  // Barge-in : un appui pendant que Kora parle coupe la voix immédiatement
-  // (le texte, lui, continue de s'écrire côté loop). Puis on (re)bénit l'audio.
+/* ═══ Geste : maintien du bouton voix, glisser vers la GAUCHE = annuler ═══ */
+function _onTalkDown(e) {
+  if (e.button != null && e.button !== 0) return;   // clic secondaire ignoré
+  if (_holding || _rec) return;
+  e.preventDefault();
+  try { _talkBtn.setPointerCapture(e.pointerId); } catch (_) {}
+  // barge-in : couper la voix si elle parle + (re)bénir l'audio DANS le geste
   if (koraVoiceOutputActive()) { try { stopSpeaking(); } catch (_) {} try { primeAudio(); } catch (_) {} }
-
-  // Micro absent : on ne vole pas le tap — le clic natif ouvre/ferme la fenêtre.
-  if (!_inputSupported()) return;
-
-  _holding = true; _pointerId = e.pointerId;
-  _downX = e.clientX; _downY = e.clientY;
-  /* dès le pointerdown (AVANT même que le callout iOS ~500 ms se déclenche) :
-     page non sélectionnable + purge d'une sélection éventuelle → plus de
-     « sélections hasardeuses » / poignées bleues dans le header. Retiré au
-     relâchement (_endHold). Posé pour TOUT maintien (tap compris) : c'est
-     momentané et sans effet sur le tap. */
+  if (!_inputSupported()) {
+    if (!_micDenied) koraSay('L’enregistrement vocal n’est pas disponible sur cet appareil — écris-moi, je réponds pareil.');
+    _micDenied = true; return;
+  }
+  _holding = true; _startX = e.clientX;
+  /* page non sélectionnable pendant le maintien (anti-callout/sélection iOS) */
   try { document.body.classList.add('kora-holding'); } catch (_) {}
   try { const s = window.getSelection && window.getSelection(); if (s && s.removeAllRanges) s.removeAllRanges(); } catch (_) {}
-  addEventListener('pointerup', _onPointerUp, true);
-  addEventListener('pointermove', _onPointerMove, true);
-  addEventListener('pointercancel', _onPointerCancel, true);
-  _holdTimer = setTimeout(_beginRecording, HOLD_MS);      // ≥150 ms = parler ; sinon = tap
+  addEventListener('pointermove', _onTalkMove, true);
+  addEventListener('pointerup', _onTalkUp, true);
+  addEventListener('pointercancel', _onTalkUp, true);
+  _beginRecording();   // bouton dédié : on démarre tout de suite (pas de délai anti-tap)
 }
-
-function _onPointerMove(e) {
+function _onTalkMove(e) {
   if (!_holding || !_rec) return;
-  const out = _outsideGalet(e);
-  if (out !== _rec.cancelZone) {
-    _rec.cancelZone = out;
-    _setHint(out ? 'Relâche pour annuler' : 'à l’écoute…');
-  }
+  const cz = (_startX - e.clientX) > CANCEL_DX;   // glissé vers la GAUCHE (vers le champ)
+  if (cz !== _rec.cancelZone) { _rec.cancelZone = cz; _setCancelUI(cz); }
 }
-
 function _endHold() {
-  _holding = false; _pointerId = null;
-  if (_holdTimer) { clearTimeout(_holdTimer); _holdTimer = 0; }
+  _holding = false;
   try { document.body.classList.remove('kora-holding'); } catch (_) {}
-  removeEventListener('pointerup', _onPointerUp, true);
-  removeEventListener('pointermove', _onPointerMove, true);
-  removeEventListener('pointercancel', _onPointerCancel, true);
+  removeEventListener('pointermove', _onTalkMove, true);
+  removeEventListener('pointerup', _onTalkUp, true);
+  removeEventListener('pointercancel', _onTalkUp, true);
 }
-
-function _onPointerUp() {
-  const wasRecording = !!_rec;
-  const cancel = _rec ? _rec.cancelZone : false;
+function _onTalkUp() {
+  const rec = _rec;
   _endHold();
-  if (wasRecording) {
-    // Maintien long → on avale le CLIC qui suit (sinon la fenêtre basculerait).
-    _armClickSuppression();
-    _stopRecording(!cancel);
-  }
-  // Sinon : tap court → on laisse le clic natif ouvrir/fermer (comportement actuel).
-}
-
-function _onPointerCancel() {
-  const wasRecording = !!_rec;
-  _endHold();
-  if (wasRecording) { _armClickSuppression(); _stopRecording(false); }
-}
-
-// Le clic qui suit un maintien long doit être neutralisé AVANT le handler de
-// bascule (posé par kora.js sur le galet). Écouteur en CAPTURE sur document →
-// s'exécute avant les handlers de la cible. Auto-nettoyage si aucun clic ne
-// suit (maintien glissé sans clic) pour ne pas manger un vrai tap ultérieur.
-function _armClickSuppression() {
-  _suppressClick = true;
-  if (_suppressTimer) clearTimeout(_suppressTimer);
-  _suppressTimer = setTimeout(() => { _suppressClick = false; _suppressTimer = 0; }, 700);
-}
-function _onClickCapture(e) {
-  if (!_suppressClick) return;
-  if (!_galet || !(_galet === e.target || _galet.contains(e.target))) return;
-  _suppressClick = false;
-  if (_suppressTimer) { clearTimeout(_suppressTimer); _suppressTimer = 0; }
-  e.stopPropagation();
-  if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-  e.preventDefault();
+  if (!rec) return;                       // getUserMedia pas résolu / relâché trop tôt
+  const dur = Date.now() - rec.t0, cancel = rec.cancelZone;
+  const tooShort = dur < MIN_TAP && !cancel;   // tap accidentel → annulation SILENCIEUSE
+  _stopRecording(!cancel && !tooShort);
 }
 
 /* ═══ Toggle voix (dans la fenêtre) ═══ */
@@ -442,21 +463,41 @@ function _buildToggle() {
   _applyToggleUI();
 }
 
+/* ═══ Bouton voix (galet à droite d'« Envoyer ») — surface d'émission ═══
+   Appelé par kora-loop.js quand la barre de saisie est construite. Le galet
+   du header redevient un simple tap ouvre/ferme (kora.js) + témoin d'état. */
+export function attachVoiceBar(bar) {
+  if (!bar || _talkBtn) return;
+  _bar = bar;
+  _panel = _panel || bar.closest('.kora-panel');
+  _rsTimer = bar.querySelector('.kora-rs-timer');
+  _rsHint  = bar.querySelector('.kora-rs-hint');
+  _rsCv    = bar.querySelector('.kora-rs-wave');
+  if (_rsCv) _rsCtx = _rsCv.getContext('2d');
+
+  if (!_inputSupported()) return;   // pas de micro → barre en mode écrit seul, aucun bouton voix
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'kora-talk';
+  btn.title = 'Maintiens pour me parler';
+  btn.setAttribute('aria-label', 'Maintiens pour me parler');
+  const cv = document.createElement('canvas');
+  cv.className = 'kora-talk-galet';
+  btn.appendChild(cv);
+  bar.appendChild(btn);                       // à droite d'« Envoyer »
+  _talkBtn = btn; _talkCv = cv; _talkCtx = cv.getContext('2d');
+
+  btn.addEventListener('pointerdown', _onTalkDown);
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());   // pas de menu au maintien
+  if (!_drawRAF) _drawRAF = requestAnimationFrame(_drawTick);       // onde vivante du bouton
+}
+
 /* ═══ Init ═══ */
 export function initKoraVoice({ galet, panel } = {}) {
   if (_inited || !galet || !panel) return;
   _galet = galet; _panel = panel;
   try { _voiceOn = localStorage.getItem('kora_voice_on') === '1'; } catch (_) { _voiceOn = false; }
-
-  _buildToggle();
-
-  // Talkie-walkie sur le galet. Les écouteurs vivent sur l'élément galet lui-
-  // même (survit à ses déplacements cc-bar ↔ header d'outil). La suppression
-  // du clic est en capture sur document (avant le handler de bascule).
-  _galet.addEventListener('pointerdown', _onPointerDown);
-  document.addEventListener('click', _onClickCapture, true);
-  // Empêche le menu contextuel / la sélection pendant un maintien long.
-  _galet.addEventListener('contextmenu', (e) => { if (_rec) e.preventDefault(); });
-
+  _buildToggle();                 // toggle voix dans l'en-tête (le bouton voix, lui, vient d'attachVoiceBar)
   _inited = true;
 }

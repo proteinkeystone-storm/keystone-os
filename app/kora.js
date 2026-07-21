@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const KORA_CSS_V = '16';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
+const KORA_CSS_V = '17';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
 
 /* ── Shader (verbatim harnais kora-galet-morph.html) ── */
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;

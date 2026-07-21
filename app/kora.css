@@ -191,6 +191,43 @@ html.light-mode .kora-newconv, html.light-mode .kora-voicetoggle{
 .kora-send:hover{ background:rgba(139,144,255,.22); }
 .kora-send:disabled{ opacity:.5; cursor:default; }
 
+/* ── Bouton voix (K-14) : galet à droite d'« Envoyer », même gabarit.
+   Maintien pour parler ; la zone de saisie devient le bandeau
+   d'enregistrement ; glisser vers la gauche = annuler. ── */
+.kora-field{ flex:1 1 auto; min-width:0; position:relative; }
+.kora-field .kora-input{ flex:none; display:block; width:100%; }
+.kora-recstrip{
+  position:absolute; inset:0; display:none; align-items:center; gap:9px;
+  padding:0 12px; border-radius:10px;
+  background:rgba(26,224,158,.10); border:1px solid rgba(26,224,158,.42);
+}
+.kora-inputbar.kora-rec .kora-input{ opacity:0; }
+.kora-inputbar.kora-rec .kora-recstrip{ display:flex; }
+.kora-inputbar.kora-rec .kora-send{ opacity:.28; pointer-events:none; }
+.kora-inputbar.kora-cancel .kora-recstrip{ background:rgba(240,112,138,.14); border-color:rgba(240,112,138,.5); }
+.kora-rs-dot{ flex:0 0 auto; width:8px; height:8px; border-radius:50%; background:#1ae09e; box-shadow:0 0 8px #1ae09e; animation:kora-rspulse 1.1s ease-in-out infinite; }
+.kora-inputbar.kora-cancel .kora-rs-dot{ background:#f0708a; box-shadow:0 0 8px #f0708a; }
+.kora-rs-timer{ flex:0 0 auto; font-variant-numeric:tabular-nums; font-size:12.5px; font-weight:600; color:#8ce0c4; min-width:32px; }
+.kora-inputbar.kora-cancel .kora-rs-timer{ color:#f0708a; }
+.kora-rs-wave{ flex:1 1 auto; min-width:0; height:22px; display:block; }
+.kora-rs-hint{ flex:0 0 auto; font-size:11px; color:rgba(232,233,245,.5); white-space:nowrap; }
+.kora-inputbar.kora-cancel .kora-rs-hint{ color:#f0708a; font-weight:600; }
+@keyframes kora-rspulse{ 0%,100%{ opacity:1; transform:scale(1);} 50%{ opacity:.45; transform:scale(.8);} }
+
+.kora-talk{
+  flex:0 0 auto; width:40px; height:38px; border-radius:10px; padding:0; overflow:hidden;
+  cursor:pointer; position:relative; touch-action:none;
+  -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none;
+  border:1px solid rgba(125,107,240,.42); background:rgba(125,107,240,.10);
+  transition:background .2s, border-color .2s, box-shadow .2s, transform .12s;
+}
+.kora-talk:active{ transform:scale(.96); }
+.kora-talk canvas{ display:block; width:100%; height:100%; }
+.kora-talk.kora-rec{ border-color:rgba(26,224,158,.55); background:rgba(26,224,158,.16);
+  box-shadow:0 0 0 1px rgba(26,224,158,.22), 0 6px 22px -8px rgba(26,224,158,.7); }
+.kora-talk.kora-cancel{ border-color:rgba(240,112,138,.55); background:rgba(240,112,138,.16); box-shadow:0 0 0 1px rgba(240,112,138,.22); }
+@media (prefers-reduced-motion:reduce){ .kora-rs-dot{ animation:none; } }
+
 @media (max-width:640px){
   .kora-dock{ width:130px; }
   .kora-dock.kora-mini{ width:36px; }
