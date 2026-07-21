@@ -899,6 +899,217 @@
 }
 .sa-ig-warn > .ws-icon { flex: none; margin-top: 1px; color: var(--gold); }
 
+/* ═══════════════════════════════════════════════════════════════
+   SA-15.3 — PLANCHES ILLUSTRÉES
+
+   Règle qui commande tout le bloc : une planche est une PAGE ENTIÈRE de
+   manuel. Laissée libre dans le flux, elle écrase la fiche qu'elle est
+   censée illustrer (vérifié en maquette). Toutes les vignettes sont donc
+   PLAFONNÉES en hauteur ; le plein écran est réservé au clic explicite.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Note de souveraineté + option, dans le choix de fichier */
+.sa-pl-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--tx3);
+  border: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+  background: color-mix(in srgb, var(--green) 6%, transparent);
+}
+.sa-pl-note > .ws-icon { flex: none; margin-top: 1px; color: var(--green); }
+.sa-pl-note strong { color: var(--tx2); }
+.sa-pl-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 8px 0 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--tx3);
+  border: 1px solid var(--bd);
+  cursor: pointer;
+}
+.sa-pl-opt input { flex: none; margin-top: 2px; accent-color: var(--gold); }
+.sa-pl-opt strong { color: var(--tx2); }
+.sa-pl-opt em { font-style: normal; opacity: .8; }
+
+/* Bande de planches sous une proposition, en relecture */
+.sa-prop-wrap { display: flex; flex-direction: column; }
+/* Un lot peut couvrir 5-6 pages. En `wrap`, la bande empile des rangées et
+   le bouton plein écran part seul sur une ligne vide (vu à 360 px). Elle
+   défile donc HORIZONTALEMENT dans son propre conteneur — jamais la page. */
+.sa-pl-strip {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  margin: -2px 0 0;
+  padding: 7px 10px 8px 40px;      /* aligné sous le texte de la proposition */
+  overflow-x: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+.sa-pl-strip > * { flex: none; }
+.sa-pl-lbl {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--tx3);
+}
+.sa-pl-thumb {
+  position: relative;
+  width: 46px;
+  height: 60px;                    /* PLAFOND : la planche ne dicte pas la hauteur */
+  padding: 0;
+  border-radius: 7px;
+  overflow: hidden;
+  border: 1.5px solid var(--bd);
+  background: var(--navy3);
+  cursor: pointer;
+  opacity: .5;
+  transition: opacity .15s, border-color .15s;
+}
+.sa-pl-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
+.sa-pl-thumb.is-on { opacity: 1; border-color: var(--gold); }
+.sa-pl-thumb:hover { opacity: .85; }
+.sa-pl-thumb.is-on:hover { opacity: 1; }
+.sa-pl-n {
+  position: absolute;
+  left: 2px; bottom: 2px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(0, 0, 0, .6);
+}
+.sa-pl-on {
+  position: absolute;
+  top: 2px; right: 2px;
+  width: 15px; height: 15px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--gold);
+}
+.sa-pl-zoom {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  color: var(--tx3);
+  background: transparent;
+  border: 1px solid var(--bd);
+  cursor: pointer;
+}
+.sa-pl-zoom:hover { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+
+/* Planches d'une fiche, dans l'éditeur */
+.sa-pl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+}
+.sa-pl-fig { margin: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.sa-pl-open {
+  position: relative;
+  padding: 0;
+  height: 128px;                   /* PLAFOND, encore : cf. en-tête de section */
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--bd);
+  background: var(--navy3);
+  cursor: zoom-in;
+}
+.sa-pl-open img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
+.sa-pl-open .sa-pl-n { left: auto; right: 3px; bottom: 3px; font-size: 9.5px; padding: 1px 5px; }
+.sa-pl-fig figcaption {
+  font-size: 10.5px;
+  color: var(--tx3);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ce qui part du poste en validant le lot — poussé à gauche des boutons. */
+.sa-pl-outgoing {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--tx3);
+}
+.sa-pl-outgoing:empty { flex: 1; }
+
+/* SA-15.4 — planches sous une réponse de l'agent. Plafonnées elles aussi :
+   une planche pleine page sous une bulle de chat noierait la réponse. */
+.sa-pl-answer { display: flex; flex-direction: column; gap: 5px; padding-left: 4px; }
+.sa-pl-answer-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+.sa-pl-answer-row > * { flex: none; }
+.sa-pl-answer-thumb { width: 72px; height: 94px; cursor: zoom-in; }
+
+/* Plein écran */
+.sa-pl-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;                 /* au-dessus du workspace plein écran du pad */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, .88);
+  backdrop-filter: blur(6px);
+  cursor: zoom-out;
+}
+.sa-pl-lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+  cursor: default;
+}
+.sa-pl-close, .sa-pl-dl {
+  position: absolute;
+  top: 16px;
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(255, 255, 255, .14);
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+}
+.sa-pl-close { right: 16px; }
+.sa-pl-dl    { right: 62px; }
+.sa-pl-close:hover, .sa-pl-dl:hover { background: rgba(255, 255, 255, .28); }
+
+@media (max-width: 560px) {
+  .sa-pl-strip { padding-left: 12px; }
+  .sa-pl-grid  { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
+  .sa-pl-open  { height: 104px; }
+}
+
 .sa-ig-head { margin-bottom: 12px; }
 .sa-ig-bar {
   height: 4px;

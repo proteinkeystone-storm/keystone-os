@@ -61,7 +61,7 @@ import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-
 import { streamLLM }                               from '../lib/llm-stream.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-15.1';
+const SA_ENGINE_VERSION = 'SA-15.4';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -286,6 +286,14 @@ async function ensureSmartAgentSchema(env) {
   // ALTER idempotent (SQLite n'a pas ADD COLUMN IF NOT EXISTS).
   await safe('ALTER TABLE kortex_units ADD COLUMN agent_id TEXT');
   await safe('CREATE INDEX IF NOT EXISTS idx_kortex_units_agent ON kortex_units(tenant_id, agent_id, status)');
+  // SA-15.2 — planches illustrées : liste ORDONNÉE d'images sur la fiche,
+  // JSON [{ key, alt, n }]. Strictement ADDITIF (ALTER idempotent, comme
+  // agent_id ci-dessus) : les fiches existantes restent intactes, colonne
+  // NULL = aucune image, ce qui est le cas nominal.
+  // ⚠ Cette liste n'entre JAMAIS dans body_text : ni l'index FTS ni
+  // l'embedding ne doivent voir une clé R2 (elle n'a aucun sens sémantique
+  // et polluerait le corpus de recherche).
+  await safe('ALTER TABLE kortex_units ADD COLUMN images TEXT');
   // Audit 2026-07-16 — FTS v2 : l'index lexical porte tenant_id + vault_id
   // (UNINDEXED = stockés, filtrables en WHERE, hors du corpus indexé). Le
   // cloisonnement se fait DANS la requête MATCH : le top-K lexical est celui
@@ -409,6 +417,10 @@ async function ensureSmartAgentSchema(env) {
       PRIMARY KEY (job_id, idx)
     )
   `);
+  // SA-15.3 — pages d'origine du lot (JSON [n, …]) quand le client a
+  // rasterisé un PDF. NULL pour tous les imports texte : additif, les jobs
+  // en cours au moment du déploiement continuent de fonctionner.
+  await safe('ALTER TABLE sa_ingest_batches ADD COLUMN pages TEXT');
   await safe('CREATE INDEX IF NOT EXISTS idx_sa_ingest_jobs_tenant ON sa_ingest_jobs(tenant_id, created_at)');
 
   // ── SA-4.4 — COFFRES DÉCOUPLÉS (vault) + DOSSIERS D'AGENTS ──────
@@ -653,6 +665,51 @@ function validateUnit(type, title, rawBody) {
   return { ok: true, body: clean, bodyText };
 }
 
+// ── SA-15.2 — planches illustrées attachées à une fiche ────────
+// Liste ORDONNÉE : le manuel lie le texte aux photos numérotées
+// (« … pivote le pied d'appui - Photo 2 »), donc l'ordre porte du sens.
+//
+// TOLÉRANT par doctrine (brief §SA-15.2) : une fiche sans image reste
+// valide, et une image invalide n'invalide JAMAIS la fiche — elle est
+// simplement écartée. Perdre une planche est ennuyeux ; perdre la fiche
+// de savoir qui la porte serait grave.
+//
+// La clé R2 réutilise STRICTEMENT SA_CARD_KEY_RE (`sa-cards/<agent>/<uuid>.<ext>`)
+// et le service existant `card-img` : pas de second chemin de stockage à
+// sécuriser, pas de seconde regex anti-traversal à maintenir.
+const UNIT_MAX_IMAGES = 12;      // une fiche = un objet pédagogique, pas un album
+const UNIT_ALT_MAX    = 300;
+
+// Pur (testé).
+export function validateImages(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const it of raw) {
+    if (out.length >= UNIT_MAX_IMAGES) break;
+    if (!it || typeof it !== 'object' || Array.isArray(it)) continue;
+    const key = (typeof it.key === 'string') ? it.key.trim() : '';
+    if (!SA_CARD_KEY_RE.test(key)) continue;   // clé hors format = écartée, pas d'exception
+    if (seen.has(key)) continue;               // même planche deux fois : sans objet
+    seen.add(key);
+    const img = { key };
+    const alt = (typeof it.alt === 'string') ? it.alt.trim().slice(0, UNIT_ALT_MAX) : '';
+    if (alt) img.alt = alt;
+    // n = numéro de photo IMPRIMÉ sur la planche, quand il existe (SA-15.4).
+    const n = Number(it.n);
+    if (Number.isInteger(n) && n >= 1 && n <= 999) img.n = n;
+    out.push(img);
+  }
+  return out;
+}
+
+// Colonne `images` (TEXT JSON) → liste sûre. Une colonne illisible rend []
+// plutôt que de faire échouer la lecture de la fiche.
+function _imagesOf(row) {
+  if (!row || !row.images) return [];
+  try { return validateImages(JSON.parse(row.images)); } catch (_) { return []; }
+}
+
 // ── Synchronisation FTS5 (lexical, servira la recherche SA-2) ───
 // Seules les fiches VALIDÉES sont indexées : une fiche en brouillon ou
 // en quarantaine ne doit jamais pouvoir être servie par la recherche.
@@ -689,6 +746,11 @@ function _citationsFrom(hits, ns) {
     const c = { n, unit_id: row.id, title: row.title, type: row.type };
     const w = unitWarning(row);
     if (w) c.warning = w;
+    // SA-15.4 — les planches de la fiche citée. L'agent écrit « … - Photo 2 »
+    // (le prompt d'extraction conserve le renvoi) ; c'est ceci qui permet de
+    // MONTRER la planche correspondante au lieu de laisser le renvoi orphelin.
+    const imgs = _imagesOf(row);
+    if (imgs.length) c.images = imgs;
     return c;
   });
 }
@@ -698,6 +760,7 @@ function _rowToUnit(r) {
   try { body = JSON.parse(r.body); } catch (_) {}
   return {
     id: r.id, type: r.type, title: r.title, body,
+    images: _imagesOf(r),                       // SA-15.2 — [] si aucune (cas nominal)
     status: r.status,
     source_kind: r.source_kind, source_ref: r.source_ref,
     lang: r.lang, review_at: r.review_at,
@@ -816,6 +879,9 @@ export async function handleKortexUnitCreate(request, env) {
     title: b.title.trim(),
     body: JSON.stringify(v.body),
     body_text: v.bodyText,
+    // SA-15.2 — les planches vivent À CÔTÉ du body, jamais dedans : v.bodyText
+    // (donc FTS + embedding) ne doit pas voir de clé R2.
+    images: JSON.stringify(validateImages(b.images)),
     status,
     source_kind: sourceKind,
     source_ref: (typeof b.source_ref === 'string' && b.source_ref.trim()) ? b.source_ref.trim().slice(0, 300) : null,
@@ -824,11 +890,12 @@ export async function handleKortexUnitCreate(request, env) {
 
   await env.DB.prepare(`
     INSERT INTO kortex_units
-      (id, tenant_id, agent_id, vault_id, type, title, body, body_text, status, source_kind, source_ref, review_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, tenant_id, agent_id, vault_id, type, title, body, body_text, status, source_kind, source_ref, review_at, images)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     unit.id, unit.tenant_id, unit.agent_id, unit.vault_id, unit.type, unit.title,
     unit.body, unit.body_text, unit.status, unit.source_kind, unit.source_ref, unit.review_at,
+    unit.images,
   ).run();
 
   await _ftsSync(env, unit);
@@ -888,15 +955,21 @@ export async function handleKortexUnitUpdate(request, env, unitId) {
     : (typeof b.review_at === 'string' && /^\d{4}-\d{2}-\d{2}/.test(b.review_at)) ? b.review_at : cur.review_at;
   const nextSource = (b.source_ref === null) ? null
     : (typeof b.source_ref === 'string') ? b.source_ref.trim().slice(0, 300) : cur.source_ref;
+  // SA-15.2 — `images` ABSENT du PATCH = on ne touche pas aux planches.
+  // Sans cette distinction, tout PATCH partiel (un simple changement de
+  // statut) effacerait les planches de la fiche en silence.
+  const nextImages = (b.images === undefined)
+    ? (cur.images || null)
+    : JSON.stringify(validateImages(b.images));
 
   await env.DB.prepare(`
     UPDATE kortex_units
        SET title = ?, body = ?, body_text = ?, status = ?,
-           review_at = ?, source_ref = ?, updated_at = datetime('now')
+           review_at = ?, source_ref = ?, images = ?, updated_at = datetime('now')
      WHERE id = ? AND tenant_id = ?
   `).bind(
     nextTitle.trim(), nextBodyJson, nextBodyText, nextStatus,
-    nextReview, nextSource, unitId, gate.tenant,
+    nextReview, nextSource, nextImages, unitId, gate.tenant,
   ).run();
 
   await _ftsSync(env, {
@@ -1004,13 +1077,16 @@ RÈGLES STRICTES :
    INTERDIT dans "warnings" : un avantage, un bénéfice, un gain d'efficacité, une justification, une explication de pourquoi le geste fonctionne, un conseil de performance ou de confort. Tout cela va dans "goal" ou dans une étape.
    Exemple de ce qu'il NE faut PAS y mettre : « ce déplacement permet de sortir de l'axe d'attaque et réduit le risque de contre-attaque » — c'est un bénéfice, pas un danger.
    Dans le doute, laisse "warnings" ABSENT. Un champ de danger dilué par des avantages n'est plus lu, et le vrai avertissement passe inaperçu.
-6. Si le texte contient des noms de personnes privées, remplace-les par leur rôle (« le client », « le visiteur »).
-7. "relevance" : note de 1 à 10 l'utilité de la fiche pour un agent qui doit RÉPONDRE À DES QUESTIONS.
+6. RENVOIS AUX ILLUSTRATIONS : si une étape ou une phrase renvoie à une image numérotée (« - Photo 2 », « voir photo 5 », « fig. 3 », « schéma 1 »), CONSERVE ce renvoi tel quel, à sa place, dans l'étape concernée. Ne le déplace pas, ne le reformule pas, ne le supprime pas.
+   Sur un manuel illustré, ce renvoi est ce qui relie le geste décrit à l'image qui le montre : sans lui, l'étape devient inexploitable pour celui qui apprend.
+   Si le texte indique un numéro de page (« ## Page 64 »), ne le recopie PAS dans la fiche : ce n'est pas du savoir, seulement un repère de découpage.
+7. Si le texte contient des noms de personnes privées, remplace-les par leur rôle (« le client », « le visiteur »).
+8. "relevance" : note de 1 à 10 l'utilité de la fiche pour un agent qui doit RÉPONDRE À DES QUESTIONS.
    - 8 à 10 : savoir réutilisable et autonome (une procédure, une règle, une réponse à une vraie question).
    - 5 à 7 : utile mais partiel, contextuel ou redondant.
    - 1 à 4 : sommaire, en-tête, mention de page, formule de politesse, hors-sujet.
    Sois honnête et discriminant : si tout se vaut, la note ne sert à rien.
-8. Réponds UNIQUEMENT avec un tableau JSON valide, sans texte autour :
+9. Réponds UNIQUEMENT avec un tableau JSON valide, sans texte autour :
 [{"type":"...","title":"...","relevance":8,"body":{...}}, ...]`;
 }
 
@@ -1335,6 +1411,69 @@ export function splitMarkdownBatches(md, {
   }));
 }
 
+// ── SA-15.3 — découpage PAR PAGES (PDF rasterisé côté client) ──
+// splitMarkdownBatches découpe aux titres, ce qui est le bon grain pour un
+// document texte. Mais quand le client rasterise un PDF, chaque lot doit
+// savoir de QUELLES PAGES il vient : c'est le seul moyen de proposer les
+// bonnes planches au moment de relire le lot. Une frontière de lot ne
+// tombe donc JAMAIS au milieu d'une page (sauf page seule trop grosse).
+//
+// Renvoie la même forme que splitMarkdownBatches, plus `pages: [n, …]`.
+// 100 % pur → testé, aucun appel réseau ni IA.
+export function splitPagesBatches(pages, {
+  maxChars = INGEST_BATCH_CHARS,
+  overlapRatio = INGEST_OVERLAP_RATIO,
+  maxBatches = INGEST_MAX_BATCHES,
+} = {}) {
+  const src = (Array.isArray(pages) ? pages : [])
+    .map(p => ({
+      n: Number(p?.n),
+      text: String(p?.text || '').replace(/\r\n?/g, '\n').trim(),
+    }))
+    .filter(p => Number.isInteger(p.n) && p.n >= 1 && p.text);
+  if (!src.length) return [];
+  const overlap = Math.max(0, Math.round(maxChars * overlapRatio));
+
+  const packed = [];
+  let buf = null;
+  const flush = () => { if (buf && buf.text.trim()) packed.push(buf); buf = null; };
+  for (const pg of src) {
+    // Le numéro de page reste DANS le texte : le modèle s'en sert pour
+    // rattacher « - Photo 2 » à la bonne planche (SA-15.4).
+    const block = `## Page ${pg.n}\n\n${pg.text}`;
+    if (block.length > maxChars) {
+      // Page seule plus grosse qu'un lot : elle occupe plusieurs lots, qui
+      // pointent TOUS vers elle (sa planche reste proposable partout).
+      flush();
+      for (const piece of _splitOversized(block, maxChars)) packed.push({ pages: [pg.n], text: piece });
+      continue;
+    }
+    if (!buf) { buf = { pages: [pg.n], text: block }; continue; }
+    if (buf.text.length + 2 + block.length <= maxChars) { buf.text += '\n\n' + block; buf.pages.push(pg.n); }
+    else { flush(); buf = { pages: [pg.n], text: block }; }
+  }
+  flush();
+
+  return packed.slice(0, maxBatches).map((b, i, arr) => ({
+    index: i,
+    breadcrumb: b.pages.length > 1 ? `Pages ${b.pages[0]}–${b.pages[b.pages.length - 1]}` : `Page ${b.pages[0]}`,
+    overlap: i > 0 && overlap ? _cleanTail(arr[i - 1].text, overlap) : '',
+    text: b.text,
+    chars: b.text.length,
+    pages: b.pages,
+  }));
+}
+
+// Colonne `pages` d'un lot → liste sûre. Colonne absente (import texte) ou
+// illisible → [] : un lot sans planche est le cas nominal, pas une erreur.
+function _batchPages(row) {
+  if (!row || !row.pages) return [];
+  try {
+    const a = JSON.parse(row.pages);
+    return Array.isArray(a) ? a.filter(n => Number.isInteger(n) && n >= 1) : [];
+  } catch (_) { return []; }
+}
+
 // Contenu envoyé à l'extraction pour UN lot. Le chevauchement n'est PAS
 // un simple rappel décoratif : c'est ce qui doit permettre au modèle de
 // recomposer en UNE fiche une procédure coupée entre deux lots. La
@@ -1354,12 +1493,35 @@ export function buildBatchPrompt({ breadcrumb = '', overlap = '', text = '' }, s
 }
 
 // Crée le job : découpe, purge les jobs périmés, persiste les lots.
-async function _ingestPlan(env, gate, origin, rawText, sourceRef) {
-  const doc = String(rawText || '').trim();
-  if (doc.length < 30) return err('Contenu illisible ou vide.', 422, origin);
-  const truncated = doc.length > INGEST_MAX_CHARS;
-  const kept = truncated ? doc.slice(0, INGEST_MAX_CHARS) : doc;
-  const batches = splitMarkdownBatches(kept);
+// SA-15.3 — `pages` non nul = le client a rasterisé un PDF et envoie le
+// texte page par page ; on découpe alors AUX PAGES pour que chaque lot
+// sache d'où il vient (et donc quelles planches proposer).
+async function _ingestPlan(env, gate, origin, rawText, sourceRef, pages = null) {
+  let batches, keptChars, truncated;
+  if (Array.isArray(pages) && pages.length) {
+    // Troncature au niveau de la PAGE : couper une page en deux perdrait le
+    // lien texte↔planche, qui est tout l'objet du découpage par pages.
+    const kept = [];
+    let total = 0;
+    truncated = false;
+    for (const p of pages) {
+      const t = String(p?.text || '').trim();
+      if (!t) continue;
+      if (total + t.length > INGEST_MAX_CHARS) { truncated = true; break; }
+      total += t.length;
+      kept.push({ n: p?.n, text: t });
+    }
+    keptChars = total;
+    batches = splitPagesBatches(kept);
+    if (keptChars < 30) return err('Contenu illisible ou vide.', 422, origin);
+  } else {
+    const doc = String(rawText || '').trim();
+    if (doc.length < 30) return err('Contenu illisible ou vide.', 422, origin);
+    truncated = doc.length > INGEST_MAX_CHARS;
+    const kept = truncated ? doc.slice(0, INGEST_MAX_CHARS) : doc;
+    keptChars = kept.length;
+    batches = splitMarkdownBatches(kept);
+  }
   if (!batches.length) return err('Aucun contenu exploitable dans ce document.', 422, origin);
 
   // TTL : un job abandonné en cours de relecture ne doit pas s'accumuler.
@@ -1376,19 +1538,21 @@ async function _ingestPlan(env, gate, origin, rawText, sourceRef) {
   const jobId = generateId();
   await env.DB.prepare(
     'INSERT INTO sa_ingest_jobs (id, tenant_id, source_ref, total, chars, truncated) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(jobId, gate.tenant, sourceRef, batches.length, kept.length, truncated ? 1 : 0).run();
+  ).bind(jobId, gate.tenant, sourceRef, batches.length, keptChars, truncated ? 1 : 0).run();
   const ins = env.DB.prepare(
-    'INSERT INTO sa_ingest_batches (job_id, idx, breadcrumb, overlap, text, chars) VALUES (?, ?, ?, ?, ?, ?)'
+    'INSERT INTO sa_ingest_batches (job_id, idx, breadcrumb, overlap, text, chars, pages) VALUES (?, ?, ?, ?, ?, ?, ?)'
   );
-  await env.DB.batch(batches.map(x => ins.bind(jobId, x.index, x.breadcrumb, x.overlap, x.text, x.chars)));
+  await env.DB.batch(batches.map(x => ins.bind(jobId, x.index, x.breadcrumb, x.overlap, x.text, x.chars,
+    x.pages ? JSON.stringify(x.pages) : null)));
 
   // `estimated_credits` : 1 appel d'extraction par lot. Le front DOIT
   // l'annoncer avant de lancer quoi que ce soit (arbitrage Stéphane :
   // on ne bride pas, on rend le coût visible).
   return json({
     job_id: jobId, source_ref: sourceRef, total: batches.length,
-    chars: kept.length, truncated, estimated_credits: batches.length,
-    batches: batches.map(x => ({ index: x.index, breadcrumb: x.breadcrumb, chars: x.chars, status: 'pending' })),
+    chars: keptChars, truncated, estimated_credits: batches.length,
+    batches: batches.map(x => ({ index: x.index, breadcrumb: x.breadcrumb, chars: x.chars, status: 'pending',
+      ...(x.pages ? { pages: x.pages } : {}) })),
   }, 200, origin);
 }
 
@@ -1401,7 +1565,13 @@ export async function handleIngestPlan(request, env) {
   await ensureSmartAgentSchema(env);
   const b = await parseBody(request);
   const src = (typeof b?.source_ref === 'string' ? b.source_ref : '').trim().slice(0, 200);
-  return _ingestPlan(env, gate, origin, typeof b?.text === 'string' ? b.text : '', src || 'texte collé');
+  // SA-15.3 — { pages: [{n, text}] } : le PDF a été rasterisé SUR LE POSTE,
+  // seul son texte arrive ici. Le fichier lui-même ne quitte jamais le poste
+  // de l'instructeur (souveraineté), et on contourne au passage la borne
+  // d'upload de 8 Mo qui rendait les gros manuels inimportables.
+  const pages = Array.isArray(b?.pages) ? b.pages : null;
+  return _ingestPlan(env, gate, origin, typeof b?.text === 'string' ? b.text : '',
+    src || (pages ? 'document PDF' : 'texte collé'), pages);
 }
 
 // POST /api/smart-agent/kortex/ingest/plan-file?name=<fichier> — corps BINAIRE
@@ -1448,14 +1618,15 @@ export async function handleIngestStatus(request, env, jobId) {
     .bind(jobId, gate.tenant).all();
   if (!jr.length) return err('Import introuvable (peut-être expiré).', 404, origin);
   const { results: br } = await env.DB
-    .prepare('SELECT idx, breadcrumb, chars, status FROM sa_ingest_batches WHERE job_id = ? ORDER BY idx')
+    .prepare('SELECT idx, breadcrumb, chars, status, pages FROM sa_ingest_batches WHERE job_id = ? ORDER BY idx')
     .bind(jobId).all();
   const done = br.filter(x => x.status !== 'pending').length;
   return json({
     job_id: jr[0].id, source_ref: jr[0].source_ref, total: jr[0].total,
     chars: jr[0].chars, truncated: !!jr[0].truncated, created_at: jr[0].created_at,
     done, remaining_credits: jr[0].total - done,
-    batches: br.map(x => ({ index: x.idx, breadcrumb: x.breadcrumb, chars: x.chars, status: x.status })),
+    batches: br.map(x => ({ index: x.idx, breadcrumb: x.breadcrumb, chars: x.chars, status: x.status,
+      ...(_batchPages(x).length ? { pages: _batchPages(x) } : {}) })),
   }, 200, origin);
 }
 
@@ -1500,6 +1671,7 @@ export async function handleIngestBatch(request, env, jobId, idxRaw) {
   return json({
     job_id: jobId, index: idx, breadcrumb: batch.breadcrumb, total: jr[0].total,
     proposals: r.proposals, source_ref: jr[0].source_ref, saturated: !!r.saturated,
+    pages: _batchPages(batch),         // SA-15.3 — planches à proposer pour ce lot
     model: KS_AI_MODEL, credits: r.creditPayload,
   }, 200, origin);
 }

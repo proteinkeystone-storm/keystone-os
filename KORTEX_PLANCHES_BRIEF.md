@@ -126,7 +126,7 @@ gabarit : 4 `procedure` (4 techniques distinctes) + 1 `definition` + 1 `fact`.
 **Le gain de SA-14.6 survit, et c'est testé** : un lot d'ingestion plein (12 000 car.)
 donne 30 → borné à 25, donc inchangé. Seuls les lots pauvres sont bridés.
 
-### SA-15.2 — Champs image sur la fiche *(worker + migration)*
+### ✅ SA-15.2 — Champs image sur la fiche *(worker + migration)* — **CODÉ, non déployé**
 
 - `kortex_units` : ajout additif d'une liste ordonnée `{ key, alt, n }`
   (`n` = numéro de photo imprimé, quand il existe).
@@ -138,7 +138,15 @@ donne 30 → borné à 25, donc inchangé. Seuls les lots pauvres sont bridés.
 **Moteur : Opus 4.8.** Touche la table du savoir — la plus sensible du système. Une
 migration ratée là se paie en fiches perdues.
 
-### SA-15.3 — Rasterisation + file de relecture *(front, le gros morceau)*
+**LIVRÉ.** `ALTER TABLE kortex_units ADD COLUMN images TEXT` (idempotent, même patron que
+`agent_id` en SA-4.3) — aucune donnée existante touchée, colonne NULL = cas nominal.
+`validateImages()` tolérant : clé hors `SA_CARD_KEY_RE` écartée, doublon écarté, plafond
+12, `alt` borné à 300, `n` entier 1-99 — une image invalide n'invalide **jamais** la fiche.
+Jamais dans `body_text` (ni FTS ni embedding ne voient une clé R2).
+⚠ Piège trouvé en écrivant le PATCH : `images` **absent** du corps ≠ `images: []`. Sans la
+distinction, un simple changement de statut effaçait les planches en silence.
+
+### ✅ SA-15.3 — Rasterisation + file de relecture *(front, le gros morceau)* — **CODÉ, non déployé**
 
 - Reprise de `booK._importPDF` (rasterisation + durcissement mémoire iOS) et du
   `getTextContent()` de desK, branchés sur la file `_ig` de SA-14.4b.
@@ -151,7 +159,25 @@ migration ratée là se paie en fiches perdues.
 **Moteur : Sonnet 5.** Beaucoup de code front bien cadré, avec deux implémentations de
 référence à suivre. Passer à Opus 4.8 si la gestion mémoire iOS résiste.
 
-### SA-15.4 — Numéros de photos *(worker + front)*
+**LIVRÉ.** Module `app/sa-planches.js` (`readPdf`). **Un PDF n'est plus JAMAIS envoyé au
+worker** : il est lu sur le poste, seuls le texte et les planches retenues partent. Le mur
+des 8 Mo disparaît — c'est ce qui rendait le manuel de 584 Mo inimportable.
+Trois écarts assumés par rapport à booK :
+1. **Blob, pas dataURI** — booK a besoin de dataURI (export HTML autoporté) ; ici le base64
+   coûterait +33 %, en mémoire JS, sur 267 pages : exactement le volume qui fait tomber un iPhone.
+2. **Plafond de temps sur `page.render()` (20 s)** — trouvé au banc : un rendu peut ne jamais
+   rendre la main. Sans ce plafond, UNE page bloque l'import entier. La règle est : on perd la
+   planche, on garde le texte, on continue, et **on le dit** (`failed` → toast).
+3. **Découpage par pages côté worker** (`splitPagesBatches`) — une frontière de lot ne coupe
+   jamais une page, sinon le lien texte↔planche est perdu. C'est ce qui permet de proposer
+   les bonnes planches au bon moment de la relecture.
+Envoi R2 **uniquement à la validation**, mémoïsé par page (une planche sur deux fiches ne
+s'envoie qu'une fois). Le poids exact de ce qui va partir est affiché avant le clic.
+⚠ **Reprise après pause : les planches sont perdues** (elles n'ont jamais quitté le poste ;
+seul le texte survit 7 jours côté serveur). Un bandeau le dit au lieu de servir une relecture
+sans images l'air de rien. Persistance IndexedDB = candidat SA-15.6 si le dogfood la réclame.
+
+### ✅ SA-15.4 — Numéros de photos *(worker + front)* — **CODÉ, non déployé**
 
 - `EXTRACT_SYSTEM_PROMPT` : conserver les renvois « - Photo 2 » dans les étapes
   (aujourd'hui ils disparaissent).
@@ -160,6 +186,17 @@ référence à suivre. Passer à Opus 4.8 si la gestion mémoire iOS résiste.
 
 **Moteur : Opus 4.8.** Le lien texte↔image est le cœur pédagogique du manuel ; c'est
 le sprint où une approximation se voit immédiatement à l'usage.
+
+**LIVRÉ.** Règle 6 du prompt : les renvois (« - Photo 2 », « fig. 3 », « schéma 1 ») sont
+conservés **à leur place dans l'étape**, jamais reformulés — et les repères de découpage
+« ## Page 64 » explicitement exclus des fiches. `photoRefs()` relève, page par page, les
+numéros imprimés ; `plancheAlt()` en fait la légende (« Page 64 — photo 5 »).
+`citations[].images` expose les planches de la fiche citée → l'agent écrit « - Photo 5 »
+**et montre la planche qui la porte**.
+⚠ Choix de fond : la planche est une PAGE, qui peut porter 3 photos numérotées. `n` n'est
+donc rempli que si la page ne porte **qu'un seul** numéro — sinon il serait faux. La légende,
+elle, les cite tous. Un `n` inventé sur une planche à trois photos enverrait l'instructeur
+vers la mauvaise image, ce qui est pire que pas de numéro du tout.
 
 ### SA-15.5 *(conditionnel)* — Canal public
 
@@ -171,9 +208,12 @@ instructeurs sont authentifiés.
 
 ## 6. Points hors code, à poser avec le client
 
-1. **Visages parfaitement identifiables.** Des images de personnes reconnaissables dans
-   R2, ce n'est plus seulement de la donnée sensible : c'est de la **donnée personnelle**.
-   Cela s'ajoute à la question de souveraineté, cela ne s'y confond pas.
+1. ~~**Visages parfaitement identifiables.**~~ **TRANCHÉ (21/07/2026, Stéphane) : le client
+   dispose d'un CONSENTEMENT ÉCRIT des personnes photographiées.** Le point RGPD est clos,
+   ne pas le rouvrir.
+   **Contrôle d'accès — TRANCHÉ AUSSI (21/07/2026, Stéphane) : on garde `card-img` public**,
+   conforme au brief (clé UUID non devinable, aucune authentification). C'est un choix posé
+   sciemment, pas un oubli. Ne pas re-proposer la bascule derrière le JWT sans demande.
 2. **Techniques létales avec cadre légal.** Le manuel encadre lui-même ses techniques
    (proportionnalité, nécessité). Le coffre doit préserver ce cadre — c'est l'objet de
    SA-15.0 — et l'accès doit être contrôlé.

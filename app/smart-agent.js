@@ -34,6 +34,7 @@ import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 import { byokRequestFields }                  from './lib/engines.js';
+import { readPdf, planchesWeight, photoRefs, plancheAlt, PLANCHES_MAX_PAGES } from './sa-planches.js';
 
 const WORKSPACE_META = { id: 'O-AGT-001', name: 'Smart Agent' };
 
@@ -453,6 +454,13 @@ function _onClick(e) {
                                   _renderOverlay(); return; }
     if (act === 'ig-next')      { _igAddAndNext(); return; }
     if (act === 'ig-skip')      { _ig.skipped++; _igNext(); return; }
+    if (act === 'ig-stop-raster')  { _ig.stopRaster = true; return; }
+    if (act === 'ig-planche')      { _igTogglePlanche(+actEl.dataset.i, +actEl.dataset.n); return; }
+    if (act === 'ig-planche-zoom') { _igZoomPlanche(+actEl.dataset.n); return; }
+    if (act === 'ed-planche')      { _edZoomPlanche(+actEl.dataset.k); return; }
+    // La clé voyage sur le bouton : plusieurs réponses coexistent à l'écran,
+    // un état de module partagé ouvrirait la planche de la mauvaise bulle.
+    if (act === 'chat-planche')    { _lightbox(_cardImgUrl(actEl.dataset.key), actEl.dataset.alt || 'planche'); return; }
     if (act === 'ig-pause')     { _igPause(); return; }
     if (act === 'ig-cancel')    { _igAbandon(); return; }
     if (act === 'ig-resume')    { _igResume(); return; }
@@ -1974,10 +1982,31 @@ function _msgHTML(m) {
         <span class="sa-danger-hd">${icon('alert-triangle', 14)} Avertissement porté par ${dangers.length > 1 ? 'les fiches citées' : 'la fiche citée'}</span>
         ${dangers.map(c => `<p><strong>[${c.n}] ${_esc(c.title)}</strong> — ${_esc(c.warning)}</p>`).join('')}
       </div>` : '';
+    // SA-15.4 — les planches des fiches citées. Le renvoi « - Photo 2 » que
+    // l'agent a conservé dans son texte ne vaut que si l'image est là :
+    // sinon l'instructeur lit une référence à une photo qu'il ne voit pas.
+    const shots = [];
+    for (const c of (m.citations || [])) {
+        for (const im of (c.images || [])) shots.push({ ...im, n_cite: c.n, title: c.title });
+    }
+    const planches = shots.length ? `
+      <div class="sa-pl-answer">
+        <span class="sa-pl-lbl">${icon('image', 12)} ${shots.length > 1 ? 'Planches citées' : 'Planche citée'}</span>
+        <div class="sa-pl-answer-row">
+          ${shots.slice(0, 6).map(im => `
+            <button class="sa-pl-open sa-pl-answer-thumb" data-act="chat-planche"
+                    data-key="${_escAttr(im.key)}" data-alt="${_escAttr(im.alt || 'planche')}"
+                    title="${_escAttr(`[${im.n_cite}] ${im.title} — ${im.alt || ''}`)}">
+              <img src="${_cardImgUrl(im.key)}" alt="${_escAttr(im.alt || 'Planche')}" loading="lazy">
+              ${im.n ? `<span class="sa-pl-n">Photo ${im.n}</span>` : ''}
+            </button>`).join('')}
+        </div>
+      </div>` : '';
     return `
     <div class="sa-msg is-agent">
       <div class="sa-bubble" data-act="chat-say" title="Toucher pour écouter">${_renderReply(m.content, m.citations || [])}</div>
       ${dangerBlock}
+      ${planches}
       ${sources}
       ${deflected}
     </div>`;
@@ -2656,6 +2685,27 @@ function _editorHTML() {
       </label>`;
     }).join('');
 
+    // SA-15.2 — planches de la fiche. Vignette PLAFONNÉE en hauteur : une
+    // planche pleine page laissée libre écrase la fiche (vérifié en maquette).
+    // Plein écran et téléchargement au clic explicite.
+    const imgs = Array.isArray(u.images) ? u.images : [];
+    const planches = imgs.length ? `
+      <div class="sa-field">
+        <span class="sa-field-label">${icon('image', 13)} Planches — ${imgs.length} image${imgs.length > 1 ? 's' : ''}</span>
+        <div class="sa-pl-grid">
+          ${imgs.map((im, k) => `
+            <figure class="sa-pl-fig">
+              <button class="sa-pl-open" data-act="ed-planche" data-k="${k}" title="Voir en grand">
+                <img src="${_cardImgUrl(im.key)}" alt="${_escAttr(im.alt || `Planche ${k + 1}`)}" loading="lazy">
+                ${im.n ? `<span class="sa-pl-n">Photo ${im.n}</span>` : ''}
+              </button>
+              <figcaption>${_esc(im.alt || `Planche ${k + 1}`)}</figcaption>
+            </figure>`).join('')}
+        </div>
+        <span class="sa-field-hint">Ces images accompagnent la fiche. Elles ne sont pas lues par la recherche —
+        c'est le texte de la fiche qui la rend trouvable.</span>
+      </div>` : '';
+
     const st = STATUS_META[u.status]?.label;
     return `
     <section class="sa-kx sa-ed">
@@ -2677,6 +2727,7 @@ function _editorHTML() {
       </label>
 
       ${fields}
+      ${planches}
 
       <div class="sa-ed-meta">
         <label class="sa-field">
@@ -2830,7 +2881,10 @@ function _renderOverlay() {
 
     let inner;
     // SA-14.4b — la file d'attente multi-lots prend la main sur tout le reste.
-    if (_ig.phase === 'plan')        inner = _igRenderPlan();
+    // SA-15.3 — sauf la lecture du PDF, qui passe devant : elle peut durer
+    // plusieurs minutes sur un gros manuel et doit rester interruptible.
+    if (_ig.raster)                  inner = _igRenderRaster();
+    else if (_ig.phase === 'plan')   inner = _igRenderPlan();
     else if (_ig.phase === 'review') inner = _igRenderReview();
     else if (_ex.busy) {
         inner = `<div class="sa-ex-busy">${icon('sparkles', 22)}<p>Analyse du texte en cours…<br><small>L'IA propose des fiches — rien n'est ajouté sans votre relecture.</small></p></div>`;
@@ -2889,15 +2943,33 @@ function _renderOverlay() {
         <button class="sa-btn is-primary" data-act="ex-run-url">${icon('sparkles', 15)} Lire la page <em class="sa-credit-note">1 crédit IA</em></button>
       </div>`;
         } else if (_ex.mode === 'file') {
+            // SA-15.3 — un PDF suit un chemin différent : lu SUR LE POSTE, il
+            // n'est pas soumis aux 8 Mo et rend ses planches. On le dit, parce
+            // que c'est un argument de souveraineté, pas un détail technique.
+            const isPdf = _isPdf(_ex.file);
+            const pdfNote = isPdf ? `
+      <div class="sa-pl-note">
+        ${icon('shield-check', 15)}
+        <span><strong>PDF lu sur votre poste.</strong> Le fichier lui-même ne part pas —
+        seuls le texte et les planches que vous retenez sont envoyés. Aucune limite de taille.</span>
+      </div>
+      <label class="sa-pl-opt">
+        <input type="checkbox" data-slot="ex-planches" ${_ex.planches !== false ? 'checked' : ''}>
+        <span><strong>Récupérer aussi les planches</strong> (l'image de chaque page).
+        Sur un manuel illustré, l'image porte souvent ce que le texte ne dit pas.
+        <em>Sans les planches, la lecture est bien plus rapide.</em></span>
+      </label>` : '';
             zone = `
       <p class="sa-ex-lead">Vos documents existants contiennent déjà le savoir : plaquette, carte, tarifs, procédures.
-      Formats : PDF, Word, Excel, CSV, texte — <strong>8 Mo max</strong>. Relecture avant tout ajout.</p>
+      Formats : PDF, Word, Excel, CSV, texte. Relecture avant tout ajout.</p>
       <label class="sa-btn sa-ex-filebtn">${icon('upload-cloud', 15)} ${_ex.file ? _esc(_ex.file.name) : 'Choisir un fichier…'}
         <input type="file" data-slot="ex-file" hidden accept=".pdf,.docx,.xlsx,.xls,.ods,.odt,.csv,.html,.htm,.xml,.txt,.md"></label>
+      ${pdfNote}
       ${_ex.error ? `<p class="sa-ed-error">${_esc(_ex.error)}</p>` : ''}
       <div class="sa-ed-actions">
         <button class="sa-btn" data-act="ex-close">Annuler</button>
-        <button class="sa-btn is-primary" data-act="ex-run-file" ${_ex.file ? '' : 'disabled'}>${icon('sparkles', 15)} Analyser le fichier <em class="sa-credit-note">1 crédit IA</em></button>
+        <button class="sa-btn is-primary" data-act="ex-run-file" ${_ex.file ? '' : 'disabled'}>
+          ${icon('sparkles', 15)} ${isPdf ? 'Lire le document' : 'Analyser le fichier'} <em class="sa-credit-note">${isPdf ? 'lecture gratuite' : '1 crédit IA'}</em></button>
       </div>`;
         } else {
             zone = `
@@ -2923,6 +2995,9 @@ function _renderOverlay() {
     // SA-8.1 — input file : retient le fichier choisi et réaffiche son nom.
     const fi = slot.querySelector('[data-slot="ex-file"]');
     if (fi) fi.addEventListener('change', () => { _ex.file = fi.files?.[0] || null; _ex.error = null; _renderOverlay(); });
+    // SA-15.3 — case « récupérer les planches » (état porté par _ex, pas par le DOM).
+    const pl = slot.querySelector('[data-slot="ex-planches"]');
+    if (pl) pl.addEventListener('change', () => { _ex.planches = pl.checked; });
 }
 
 async function _runExtract() {
@@ -2951,8 +3026,11 @@ async function _runImportUrl() {
 async function _runImportFile() {
     const f = _ex.file;
     if (!f) { _ex.error = 'Choisissez d\'abord un fichier.'; _renderOverlay(); return; }
-    if (f.size > 8 * 1024 * 1024) { _ex.error = 'Fichier trop lourd (8 Mo max).'; _renderOverlay(); return; }
     _ex.source = { ref: f.name };
+    // SA-15.3 — un PDF est TOUJOURS lu sur le poste : le fichier ne part
+    // pas, la borne des 8 Mo ne s'applique plus, et on récupère les planches.
+    if (_isPdf(f)) return _igPlanPdf(f, _ex.planches !== false);
+    if (f.size > 8 * 1024 * 1024) { _ex.error = 'Fichier trop lourd (8 Mo max).'; _renderOverlay(); return; }
     // SA-14.4 — un gros fichier passe par le découpage en lots plutôt que
     // d'être tronqué en silence à ses 8 premières pages.
     if (f.size > FILE_ONESHOT_MAX) return _igPlanFile(f);
@@ -2967,6 +3045,20 @@ async function _runImportFile() {
         if (!res.ok) { const e = new Error(data.error || `Erreur ${res.status}`); e.data = data; throw e; }
         return data;
     });
+}
+
+// SA-15.2 — URL de service d'une planche. Réutilise STRICTEMENT `card-img`
+// et le format de clé existants (SA_CARD_KEY_RE) : pas de second chemin de
+// stockage à sécuriser.
+// ⚠ `card-img` est PUBLIC (clé UUID non devinable, pas d'authentification).
+// Acceptable pour une carte d'accueil ; à retrancher derrière le JWT si un
+// coffre porte des visages identifiables — cf. brief §6.1, arbitrage client.
+function _cardImgUrl(key) {
+    return `${API_BASE}/api/smart-agent/card-img/${key}`;
+}
+
+function _isPdf(f) {
+    return !!f && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name || ''));
 }
 
 // Tronc commun des trois sources : appel → propositions cochées → erreurs.
@@ -3042,11 +3134,39 @@ const FILE_ONESHOT_MAX    = 400 * 1024;         // au-delà, découpage en lots
 const IG_JOB_KEY          = 'sa_ingest_job';    // reprise (hors PREFS_KEYS : jamais synchronisé)
 
 const _ig = { job: null, idx: 0, phase: null, busy: false, adding: false, error: null,
-    proposals: [], checked: new Set(), added: 0, skipped: 0, resumable: null, saturated: false };
+    proposals: [], checked: new Set(), added: 0, skipped: 0, resumable: null, saturated: false,
+    // ── SA-15.3 — planches ──
+    // planches : n° de page → Blob, gardé EN MÉMOIRE seulement. Rien n'est
+    // envoyé tant que l'instructeur n'a pas validé le lot.
+    planches: new Map(),
+    // pageKeys : n° de page → clé R2, une fois la planche envoyée. Une même
+    // page peut illustrer plusieurs fiches : elle ne s'envoie qu'UNE fois.
+    pageKeys: new Map(),
+    // attach : index de proposition → Set(n° de page) pour le lot courant.
+    attach: new Map(),
+    batchPages: [],      // pages d'origine du lot courant
+    planchesSent: 0,
+    raster: null,        // { page, total, phase } pendant la lecture du PDF
+    stopRaster: false,
+    objUrls: [] };
+
+// Les URLs d'objet doivent être révoquées : 267 planches non révoquées
+// retiennent leurs Blob et refont exactement la fuite qu'on cherche à éviter.
+function _igFreeUrls() {
+    for (const u of _ig.objUrls) { try { URL.revokeObjectURL(u); } catch (_) {} }
+    _ig.objUrls = [];
+    // Le cache page→URL DOIT tomber avec les URLs qu'il indexe : sinon le
+    // job suivant ressort l'URL révoquée de la page 3 du job précédent —
+    // une planche muette, ou pire, la mauvaise planche sur la bonne fiche.
+    _plUrls.clear();
+}
 
 function _igReset() {
+    _igFreeUrls();
     Object.assign(_ig, { job: null, idx: 0, phase: null, busy: false, adding: false,
-        error: null, proposals: [], checked: new Set(), added: 0, skipped: 0, resumable: null, saturated: false });
+        error: null, proposals: [], checked: new Set(), added: 0, skipped: 0, resumable: null, saturated: false,
+        planches: new Map(), pageKeys: new Map(), attach: new Map(), batchPages: [], planchesSent: 0,
+        raster: null, stopRaster: false, objUrls: [] });
     try { localStorage.removeItem(IG_JOB_KEY); } catch (_) {}
 }
 
@@ -3093,6 +3213,64 @@ async function _igPlan(body) {
     const job = await _igCall(() => _api('/kortex/ingest/plan', { method: 'POST', body }));
     if (job) _igAdopt(job);
 }
+// ── SA-15.3 — PDF lu SUR LE POSTE (texte + planches) ───────────
+// Ce chemin remplace l'envoi binaire pour les PDF. Il lève le mur des
+// 8 Mo (le manuel client en fait 584) et le PDF ne quitte jamais le poste.
+async function _igPlanPdf(f, withPlanches) {
+    _ig.stopRaster = false;
+    _ig.raster = { page: 0, total: 0, phase: withPlanches ? 'planches' : 'texte' };
+    _ig.error = null;
+    _renderOverlay();
+    let out;
+    try {
+        out = await readPdf(f, {
+            planches: withPlanches,
+            shouldStop: () => _ig.stopRaster,
+            onProgress: (p) => { _ig.raster = p; _renderOverlay(); },
+        });
+    } catch (e) {
+        _ig.raster = null;
+        _ig.error = `PDF illisible : ${e?.message || 'erreur inconnue'}. Si le document est protégé, exportez-le à nouveau.`;
+        _renderOverlay();
+        return;
+    }
+    _ig.raster = null;
+    if (_ig.stopRaster) { _ig.stopRaster = false; _renderOverlay(); return; }
+
+    // Un PDF fait d'images scannées ne rend quasiment aucun texte : le dire
+    // AVANT d'engager des crédits, plutôt que de livrer un coffre vide.
+    const chars = out.pages.reduce((s, p) => s + p.text.length, 0);
+    if (chars < 30) {
+        _ig.error = out.pages.some(p => p.blob)
+            ? 'Ce PDF ne contient presque aucun texte — il est probablement scanné en images. Les planches seules ne peuvent pas alimenter le coffre : il faut un PDF avec une couche texte.'
+            : 'Ce PDF ne contient aucun texte exploitable.';
+        _renderOverlay();
+        return;
+    }
+
+    _ig.planches = new Map();
+    _ig.photoRefs = new Map();
+    if (withPlanches) for (const p of out.pages) { if (p.blob) _ig.planches.set(p.n, p.blob); }
+    // SA-15.4 — quels numéros de photo sont imprimés sur quelle page. C'est
+    // ce qui permettra de dire « à l'étape 3, voir la photo 2 » ET de montrer
+    // la bonne planche : les numéros sont locaux à la page, pas globaux.
+    for (const p of out.pages) {
+        const refs = photoRefs(p.text);
+        if (refs.length) _ig.photoRefs.set(p.n, refs);
+    }
+
+    const job = await _igCall(() => _api('/kortex/ingest/plan', {
+        method: 'POST',
+        body: { pages: out.pages.map(p => ({ n: p.n, text: p.text })), source_ref: f.name.slice(0, 200) },
+    }));
+    if (!job) return;
+    if (out.truncated) _toast(`Document très long : les ${PLANCHES_MAX_PAGES} premières pages ont été retenues.`, 'ok');
+    // Une planche abandonnée (rendu trop lent, page récalcitrante) se DIT :
+    // sans ça, l'instructeur croit que la page n'avait pas d'illustration.
+    if (out.failed) _toast(`${out.failed} planche${out.failed > 1 ? 's' : ''} n'a pas pu être préparée — le texte de ces pages est intact.`, 'ok');
+    _igAdopt(job);
+}
+
 async function _igPlanFile(f) {
     const job = await _igCall(async () => {
         const res = await fetch(`${API_BASE}/api/smart-agent/kortex/ingest/plan-file?name=${encodeURIComponent(f.name)}`, {
@@ -3119,12 +3297,29 @@ async function _igRunBatch() {
     _ig.proposals = out.proposals || [];
     _ig.saturated = !!out.saturated;
     _ig.checked = new Set(_ig.proposals.map((_, i) => i));
+    // SA-15.3 — pages d'origine du lot → planches proposables.
+    _ig.batchPages = Array.isArray(out.pages) ? out.pages : [];
+    // Défaut : les planches du lot vont à la PREMIÈRE procédure (sur une page
+    // de manuel, c'est elle que les photos illustrent). Les attacher à toutes
+    // les fiches du lot ferait 5 fois la même planche dans le coffre ; n'en
+    // attacher aucune obligerait à tout recocher à la main. L'instructeur
+    // corrige d'un clic dans les deux sens.
+    _ig.attach = new Map();
+    const avail = _ig.batchPages.filter(n => _ig.planches.has(n));
+    if (avail.length) {
+        let target = _ig.proposals.findIndex(p => p.type === 'procedure');
+        if (target < 0) target = 0;
+        if (_ig.proposals.length) _ig.attach.set(target, new Set(avail));
+    }
     b.status = 'done';
     _renderOverlay();
 }
 
 function _igNext() {
     _ig.proposals = []; _ig.checked = new Set(); _ig.error = null; _ig.saturated = false;
+    // SA-15.3 — les attaches sont indexées par position dans le lot COURANT :
+    // les garder ferait hériter au lot suivant les planches du précédent.
+    _ig.attach = new Map(); _ig.batchPages = [];
     _ig.idx++;
     if (_ig.idx >= (_ig.job?.total || 0)) return _igFinish();
     _igRunBatch();
@@ -3132,33 +3327,77 @@ function _igNext() {
 
 function _igFinish() {
     const added = _ig.added;
+    const pl = _ig.planchesSent || 0;
     _api(`/kortex/ingest/${_ig.job?.job_id}`, { method: 'DELETE' }).catch(() => {});
     _igReset();
     _closeExtract();
     _toast(added
-        ? `Document relu — ${added} fiche${added > 1 ? 's' : ''} ajoutée${added > 1 ? 's' : ''} en brouillon.`
+        ? `Document relu — ${added} fiche${added > 1 ? 's' : ''} ajoutée${added > 1 ? 's' : ''} en brouillon${pl ? `, ${pl} planche${pl > 1 ? 's' : ''} jointe${pl > 1 ? 's' : ''}` : ''}.`
         : 'Document relu — aucune fiche retenue.', 'ok');
     _kxReload();
+}
+
+// SA-15.3 — envoie UNE planche sur R2 et retourne sa clé. Mémoïsé par page :
+// une même planche attachée à deux fiches ne s'envoie qu'une fois (et ne se
+// paie qu'une fois en stockage). Renvoie null en cas d'échec — une planche
+// perdue ne doit JAMAIS empêcher la fiche de savoir d'être créée.
+async function _igUploadPlanche(n) {
+    if (_ig.pageKeys.has(n)) return _ig.pageKeys.get(n);
+    const blob = _ig.planches.get(n);
+    if (!blob) return null;
+    try {
+        const ext = blob.type === 'image/webp' ? 'webp' : 'jpg';
+        const fd = new FormData();
+        fd.append('file', blob, `planche-${n}.${ext}`);
+        const res = await fetch(`${API_BASE}/api/smart-agent/agents/${_cur.id}/cards/image`, {
+            method: 'POST', headers: { 'Authorization': `Bearer ${_jwt()}` }, body: fd,
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const key = data.key || null;
+        if (key) _ig.pageKeys.set(n, key);
+        return key;
+    } catch (_) { return null; }
 }
 
 // Ajoute les fiches cochées du lot courant, puis enchaîne.
 async function _igAddAndNext() {
     if (_ig.adding) return;
     _ig.adding = true; _renderOverlay();
-    let added = 0;
+    let added = 0, planchesSent = 0;
     for (const i of _ig.checked) {
         const p = _ig.proposals[i];
+        // Les planches ne partent QU'ICI : au moment où l'instructeur valide.
+        // Tant qu'il relit, rien n'a quitté son poste.
+        const wanted = [...(_ig.attach.get(i) || new Set())].sort((a, b) => a - b);
+        const images = [];
+        for (const n of wanted) {
+            const had = _ig.pageKeys.has(n);
+            const key = await _igUploadPlanche(n);
+            if (!key) continue;
+            // SA-15.4 — `n` porte le numéro de photo IMPRIMÉ, et seulement
+            // quand il est sans ambiguïté (une seule photo numérotée sur la
+            // page). Sur une planche qui en porte trois, un numéro unique
+            // serait faux : la légende les cite toutes, le champ reste vide.
+            const refs = _ig.photoRefs?.get(n) || [];
+            const im = { key, alt: plancheAlt(n, refs) };
+            if (refs.length === 1) im.n = refs[0];
+            images.push(im);
+            if (!had) planchesSent++;
+        }
         try {
             await _api('/kortex/units', {
                 method: 'POST',
                 body: { type: p.type, title: p.title, body: p.body, status: 'draft',
                     source_kind: 'import', source_ref: _ig.job.source_ref,
+                    ...(images.length ? { images } : {}),
                     ...((_kx.scope === 'shared' && _kx.sharedVault) ? { vault_id: _kx.sharedVault.id } : { agent_id: _cur.id }) },
             });
             added++;
         } catch (_) { /* une fiche ratée ne doit pas bloquer la file */ }
     }
     _ig.added += added;
+    _ig.planchesSent = (_ig.planchesSent || 0) + planchesSent;
     _ig.adding = false;
     _igNext();
 }
@@ -3188,6 +3427,102 @@ async function _igResume() {
     const job = await _igResumable();
     if (job) _igAdopt(job);
     else { _toast('Cet import a expiré.', 'error'); _igReset(); _renderOverlay(); }
+}
+
+// Ce qui va RÉELLEMENT partir du poste en validant ce lot. Le PDF ne bouge
+// pas ; seules les planches cochées s'envoient, et une page déjà envoyée ne
+// repart pas. L'annoncer en chiffres est le cœur de l'argument de
+// souveraineté : « rien ne part sans que vous le sachiez ».
+function _igOutgoing() {
+    const pages = new Set();
+    for (const i of _ig.checked) {
+        for (const n of (_ig.attach.get(i) || [])) { if (!_ig.pageKeys.has(n)) pages.add(n); }
+    }
+    if (!pages.size) return '';
+    const blobs = [...pages].map(n => _ig.planches.get(n)).filter(Boolean);
+    if (!blobs.length) return '';
+    return `${icon('upload-cloud', 12)} ${blobs.length} planche${blobs.length > 1 ? 's' : ''} à envoyer · ${planchesWeight(blobs)}`;
+}
+
+// Reprise après une pause : le job (texte) survit 7 jours côté serveur, mais
+// les planches n'ont JAMAIS quitté le poste — elles sont donc perdues au
+// rechargement. On le DIT plutôt que de servir une relecture sans images en
+// laissant croire que le document n'en avait pas.
+function _igPlanchesLost() {
+    return _ig.batchPages.length > 0 && _ig.planches.size === 0;
+}
+
+// URL d'affichage d'une planche. Créée à la demande et MÉMORISÉE pour être
+// révoquée à la fin : sans révocation, chaque re-rendu de la liste fuirait
+// un Blob de plusieurs centaines de Ko.
+const _plUrls = new Map();
+function _igPlancheUrl(n) {
+    if (_plUrls.has(n)) return _plUrls.get(n);
+    const b = _ig.planches.get(n);
+    if (!b) return '';
+    const u = URL.createObjectURL(b);
+    _plUrls.set(n, u);
+    _ig.objUrls.push(u);
+    return u;
+}
+
+// Attache / détache une planche à UNE proposition précise.
+function _igTogglePlanche(i, n) {
+    const s = _ig.attach.get(i) || new Set();
+    if (s.has(n)) s.delete(n); else s.add(n);
+    _ig.attach.set(i, s);
+    _renderOverlay();
+}
+
+// Plein écran : une planche pleine page écrase la fiche si on la laisse
+// couler dans le flux (vérifié en maquette) — d'où la vignette plafonnée
+// dans la liste, et le plein écran RÉSERVÉ au clic explicite.
+function _igZoomPlanche(n) {
+    const url = _igPlancheUrl(n);
+    if (url) _lightbox(url, `planche-page-${n}`);
+}
+
+// Plein écran d'une planche DÉJÀ au coffre (éditeur de fiche).
+function _edZoomPlanche(k) {
+    const im = (_kx.editing?.images || [])[k];
+    if (!im) return;
+    _lightbox(_cardImgUrl(im.key), im.alt || `planche-${k + 1}`);
+}
+
+// Visionneuse commune : plein écran + téléchargement + fermeture (croix,
+// fond, Échap). Une planche pleine page ne doit s'afficher QUE sur demande.
+function _lightbox(url, name) {
+    const box = document.createElement('div');
+    box.className = 'sa-pl-lightbox';
+    box.innerHTML = `
+      <button class="sa-pl-close" aria-label="Fermer">${icon('x', 18)}</button>
+      <a class="sa-pl-dl" href="${_escAttr(url)}" download="${_escAttr(String(name).replace(/[^\w.-]+/g, '-'))}" title="Télécharger">${icon('download', 18)}</a>
+      <img src="${_escAttr(url)}" alt="${_escAttr(name)}">`;
+    const close = () => { box.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    box.addEventListener('click', (e) => { if (e.target === box || e.target.closest('.sa-pl-close')) close(); });
+    document.addEventListener('keydown', onKey);
+    (_root || document.body).appendChild(box);
+}
+
+// SA-15.3 — lecture du PDF sur le poste. Rien n'est encore parti, rien n'est
+// encore facturé : on le dit, et on laisse la porte de sortie ouverte.
+function _igRenderRaster() {
+    const r = _ig.raster || {};
+    const pct = r.total ? Math.round((r.page / r.total) * 100) : 0;
+    return `
+      <div class="sa-ig-head">
+        <p class="sa-ig-step">Lecture du document sur votre poste — page ${r.page} / ${r.total || '…'}</p>
+        <div class="sa-ig-bar"><span style="width:${pct}%"></span></div>
+      </div>
+      <ul class="sa-ig-facts">
+        <li>${icon('shield-check', 14)}<span>Le PDF <strong>ne quitte pas votre poste</strong>. Rien n'a encore été envoyé.</span></li>
+        <li>${icon('sparkles', 14)}<span>Aucun crédit consommé — la lecture est gratuite, seule l'extraction coûte.</span></li>
+        ${r.phase === 'planches' ? `<li>${icon('image', 14)}<span>Les planches sont préparées en même temps que le texte.</span></li>` : ''}
+      </ul>
+      <div class="sa-ed-actions">
+        <button class="sa-btn" data-act="ig-stop-raster">Arrêter</button>
+      </div>`;
 }
 
 function _igRenderPlan() {
@@ -3229,9 +3564,28 @@ function _igRenderReview() {
     if (_ig.busy) {
         return `${head}<div class="sa-ex-busy">${icon('sparkles', 22)}<p>Analyse du lot ${_ig.idx + 1}…<br><small>Rien n'est ajouté sans votre relecture.</small></p></div>`;
     }
+    // SA-15.3 — planches disponibles pour CE lot (pages d'origine du lot).
+    const batchPages = (_ig.batchPages || []).filter(n => _ig.planches.has(n));
     const props = _ig.proposals.map((p, i) => {
         const t = KORTEX_TYPES.find(x => x.id === p.type) || { icon: 'kortex', label: p.type };
+        // La pastille de planche vit HORS du <label> de la proposition :
+        // imbriquée dedans, tout clic dessus cocherait/décocherait la fiche.
+        const att = _ig.attach.get(i) || new Set();
+        const strip = batchPages.length ? `
+          <div class="sa-pl-strip">
+            <span class="sa-pl-lbl">${icon('image', 12)} Planches</span>
+            ${batchPages.map(n => `
+              <button class="sa-pl-thumb ${att.has(n) ? 'is-on' : ''}" data-act="ig-planche" data-i="${i}" data-n="${n}"
+                      title="Page ${n} — ${att.has(n) ? 'attachée à cette fiche' : 'cliquer pour attacher'}">
+                <img src="${_igPlancheUrl(n)}" alt="Page ${n}" loading="lazy">
+                <span class="sa-pl-n">${n}</span>
+                ${att.has(n) ? `<span class="sa-pl-on">${icon('check', 11)}</span>` : ''}
+              </button>`).join('')}
+            <button class="sa-pl-zoom" data-act="ig-planche-zoom" data-n="${batchPages[0]}"
+                    title="Voir la planche en grand">${icon('maximize', 13)}</button>
+          </div>` : '';
         return `
+        <div class="sa-prop-wrap">
           <label class="sa-prop ${_ig.checked.has(i) ? 'is-on' : ''}" data-act="ig-toggle" data-i="${i}">
             <span class="sa-prop-check">${_ig.checked.has(i) ? icon('check', 13) : ''}</span>
             <span class="sa-prop-type">${icon(t.icon, 13)} ${t.label}</span>
@@ -3239,17 +3593,21 @@ function _igRenderReview() {
               <span>${_esc(_flatBody(p.body).slice(0, 140))}</span>
               ${_dangerChip(p.body)}</span>
             ${_relBadge(p, _ig.proposals)}
-          </label>`;
+          </label>
+          ${strip}
+        </div>`;
     }).join('');
     return `
       ${head}
       ${_ig.saturated ? `<p class="sa-field-hint sa-ig-warn">${icon('alert-triangle', 13)} Lot très dense : ${_ig.proposals.length} fiches extraites, le maximum pour le volume de ce lot. Une partie du contenu peut manquer.</p>` : ''}
+      ${_igPlanchesLost() ? `<p class="sa-field-hint sa-ig-warn">${icon('image', 13)} Ce document avait des planches, mais elles <strong>ne sont pas rechargées</strong> : elles vivaient sur votre poste, pas sur le serveur. Le texte, lui, est intact. Pour les retrouver, reprenez l'import depuis le PDF d'origine.</p>` : ''}
       ${_ig.proposals.length
         ? `<div class="sa-ex-props">${props}</div>`
         : `<p class="sa-field-hint">Aucune fiche exploitable dans ce lot (page de garde, sommaire…). Passez au suivant.</p>`}
       ${_ig.error ? `<p class="sa-ed-error">${_esc(_ig.error)}</p>` : ''}
       <div class="sa-ed-actions">
         <button class="sa-btn" data-act="ig-pause">${icon('history', 15)} Reprendre plus tard</button>
+        <span class="sa-pl-outgoing">${_igOutgoing()}</span>
         <button class="sa-btn" data-act="ig-skip" ${_ig.adding ? 'disabled' : ''}>Ignorer ce lot</button>
         <button class="sa-btn is-primary" data-act="ig-next" ${(!_ig.checked.size || _ig.adding) ? 'disabled' : ''}>
           ${icon('check', 15)} Ajouter ${_ig.checked.size} et continuer

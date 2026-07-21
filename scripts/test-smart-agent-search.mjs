@@ -16,8 +16,11 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   splitMarkdownBatches, buildBatchPrompt, gapOutcome, salvageJsonObjects,
   validateImportUrl, htmlToText, clampExtractText, importFileKindOf, stripRepeatedFollowup,
   gapMergeTarget, attachGapCounts, sanitizePublicUrl, validateCards,
-  detectSocialIntent, pickSocialReply, extractUnitCap, unitWarning }
+  detectSocialIntent, pickSocialReply, extractUnitCap, unitWarning, validateImages,
+  splitPagesBatches }
   from '../workers/src/routes/smart-agent.js';
+// SA-15.4 — fonctions pures du module front (aucune dépendance DOM).
+import { photoRefs, plancheAlt } from '../app/sa-planches.js';
 
 let passed = 0, failed = 0;
 function check(name, cond) {
@@ -151,6 +154,96 @@ console.log('── SA-15.1 — extractUnitCap : le plafond suit la densité du 
     }
     check('croissant : plus de texte ne donne jamais droit à moins de fiches', mono);
   }
+}
+
+console.log('── SA-15.2 — validateImages : tolérant par doctrine ──');
+{
+  const K1 = 'sa-cards/agent-1/aaaa-bbbb.webp';
+  const K2 = 'sa-cards/agent-1/cccc-dddd.jpg';
+  check('liste valide conservée dans l\'ORDRE (le manuel numérote ses photos)',
+    JSON.stringify(validateImages([{ key: K2 }, { key: K1 }])) === JSON.stringify([{ key: K2 }, { key: K1 }]));
+  check('alt et n conservés', JSON.stringify(validateImages([{ key: K1, alt: ' Garde ', n: 2 }]))
+    === JSON.stringify([{ key: K1, alt: 'Garde', n: 2 }]));
+  check('champs vides omis (pas de clés nulles qui polluent)',
+    JSON.stringify(validateImages([{ key: K1, alt: '  ', n: 0 }])) === JSON.stringify([{ key: K1 }]));
+  // Le cœur de la doctrine : une image invalide n'invalide JAMAIS la fiche.
+  check('image invalide ÉCARTÉE, les valides survivent (jamais d\'exception)',
+    validateImages([{ key: '../../etc/passwd' }, { key: K1 }, null, 'x', { key: K2 }]).length === 2);
+  check('traversée de chemin refusée par SA_CARD_KEY_RE',
+    validateImages([{ key: 'sa-cards/a/../../secret.jpg' }]).length === 0);
+  check('extension non-image refusée',
+    validateImages([{ key: 'sa-cards/agent-1/x.svg' }, { key: 'sa-cards/agent-1/x.pdf' }]).length === 0);
+  check('doublon de planche écarté (même clé deux fois = sans objet)',
+    validateImages([{ key: K1 }, { key: K1 }]).length === 1);
+  check('n hors bornes ignoré, entier requis',
+    !('n' in validateImages([{ key: K1, n: 1000 }])[0]) && !('n' in validateImages([{ key: K1, n: 1.5 }])[0]));
+  check('plafond 12 planches par fiche (une fiche, pas un album)',
+    validateImages(Array.from({ length: 30 }, (_, i) => ({ key: `sa-cards/a/img-${i}.webp` }))).length === 12);
+  check('non-tableau / vide → [] (fiche sans image = cas nominal)',
+    validateImages(null).length === 0 && validateImages('x').length === 0 && validateImages([]).length === 0);
+  check('alt tronqué à 300', validateImages([{ key: K1, alt: 'x'.repeat(500) }])[0].alt.length === 300);
+}
+
+console.log('── SA-15.3 — splitPagesBatches : une frontière de lot ne coupe pas une page ──');
+{
+  const pages = (n, len) => Array.from({ length: n }, (_, i) => ({ n: i + 1, text: 'x'.repeat(len) }));
+  {
+    const b = splitPagesBatches(pages(10, 300), { maxChars: 1000 });
+    check('pages groupées, chaque lot déclare ses pages',
+      b.length > 1 && b.every(x => Array.isArray(x.pages) && x.pages.length));
+    const all = b.flatMap(x => x.pages);
+    check('AUCUNE page perdue et aucune dupliquée entre lots',
+      all.length === 10 && new Set(all).size === 10 && all.join() === [...all].sort((p, q) => p - q).join());
+    check('lots sous le plafond', b.every(x => x.chars <= 1000));
+  }
+  check('le numéro de page reste DANS le texte (rattachement « - Photo 2 », SA-15.4)',
+    splitPagesBatches(pages(1, 50))[0].text.startsWith('## Page 1'));
+  check('breadcrumb lisible : page seule vs plage',
+    splitPagesBatches(pages(1, 50))[0].breadcrumb === 'Page 1'
+    && splitPagesBatches(pages(4, 100), { maxChars: 5000 })[0].breadcrumb === 'Pages 1–4');
+  {
+    // Page seule plus grosse qu'un lot : plusieurs lots pointent vers elle,
+    // sa planche reste proposable sur chacun.
+    const b = splitPagesBatches([{ n: 7, text: 'y'.repeat(2500) }], { maxChars: 1000 });
+    check('page géante → plusieurs lots, tous rattachés à la page 7',
+      b.length > 1 && b.every(x => x.pages.length === 1 && x.pages[0] === 7));
+  }
+  check('pages vides / numéros invalides écartés sans casser',
+    splitPagesBatches([{ n: 1, text: '' }, { n: 0, text: 'a' }, { n: 2, text: 'ok texte' }]).length === 1);
+  check('entrée vide → [] (jamais d\'exception)',
+    splitPagesBatches(null).length === 0 && splitPagesBatches([]).length === 0);
+  check('chevauchement posé à partir du 2e lot (procédure à cheval)',
+    splitPagesBatches(pages(10, 300), { maxChars: 1000 })[1].overlap.length > 0);
+  check('maxBatches respecté', splitPagesBatches(pages(50, 300), { maxChars: 400, maxBatches: 6 }).length === 6);
+}
+
+console.log('── SA-15.4 — photoRefs / plancheAlt : relier le renvoi à la planche ──');
+{
+  // Phrases RÉELLES du manuel client (pages 64 et 68).
+  check('« - Photo 5 » du manuel repéré',
+    JSON.stringify(photoRefs('le poing est à plat, les doigts sont dirigés vers le bas - Photo 5,')) === '[5]');
+  check('plusieurs renvois sur une même page, dédoublonnés et triés',
+    JSON.stringify(photoRefs('pivote le pied d\'appui - Photo 2, le buste se penche - Photo 3. Voir Photo 2.')) === '[2,3]');
+  check('fig. / figure / schéma / planche acceptés',
+    JSON.stringify(photoRefs('cf. fig. 3')) === '[3]' && JSON.stringify(photoRefs('schéma 1')) === '[1]'
+    && JSON.stringify(photoRefs('Figure 7')) === '[7]' && JSON.stringify(photoRefs('planche 4')) === '[4]');
+  check('« photo n° 2 » accepté', JSON.stringify(photoRefs('voir photo n° 2')) === '[2]');
+  // Volontairement strict : sans numéro, ce n'est pas un renvoi exploitable.
+  check('mention non numérotée ignorée (« photographie de la garde »)',
+    photoRefs('photographie de la garde, photos ci-dessus').length === 0);
+  check('numéro invalide / hors bornes ignoré',
+    photoRefs('photo 0').length === 0 && photoRefs('photo 250').length === 0);
+  check('vide / null → [] (jamais d\'exception)',
+    photoRefs('').length === 0 && photoRefs(null).length === 0 && photoRefs(undefined).length === 0);
+  // Le regex est global : sans reset de lastIndex, un appel sur deux échoue.
+  check('appels répétés stables (piège du /g partagé)',
+    JSON.stringify(photoRefs('Photo 2')) === '[2]' && JSON.stringify(photoRefs('Photo 2')) === '[2]'
+    && JSON.stringify(photoRefs('Photo 2')) === '[2]');
+
+  check('légende sans renvoi = provenance seule', plancheAlt(34, []) === 'Page 34');
+  check('légende à un renvoi', plancheAlt(64, [5]) === 'Page 64 — photo 5');
+  check('légende à plusieurs renvois', plancheAlt(68, [1, 2, 3]) === 'Page 68 — photos 1, 2, 3');
+  check('null toléré', plancheAlt(12, null) === 'Page 12');
 }
 
 console.log('── SA-15.0 — unitWarning : le danger sort du texte, pas du modèle ──');

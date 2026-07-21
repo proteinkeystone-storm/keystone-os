@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SA-15.3 — planches : rasterisation réelle + relecture</title>
+<link rel="stylesheet" href="../app/style.css">
+<link rel="stylesheet" href="../app/smart-agent.css">
+<style>
+  body { padding: 20px; font: 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .h { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+       color: var(--tx3); margin: 22px 0 10px; }
+  .wrap { max-width: 620px; }
+  #log { font: 11px ui-monospace, monospace; color: var(--tx3); white-space: pre-wrap; line-height: 1.6; }
+  .bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .bar button { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--bd);
+                background: transparent; color: var(--tx2); cursor: pointer; font: inherit; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button id="run">Lire le PDF (4 pages réelles du manuel)</button>
+  <button id="fake">Planches synthétiques (vérif. de l'UI sans pdf.js)</button>
+  <button id="theme">Clair / sombre</button>
+  <button id="w360">360 px</button>
+</div>
+<div class="wrap" id="wrap">
+  <p class="h">Journal</p>
+  <div id="log">—</div>
+  <p class="h">Relecture d'un lot (planches attachables par fiche)</p>
+  <div id="review"></div>
+  <p class="h">SA-15.4 — planches sous la réponse de l'agent</p>
+  <div id="answer"></div>
+  <p class="h">SA-15.2 — planches d'une fiche (éditeur)</p>
+  <section class="sa-kx sa-ed" id="editor"></section>
+</div>
+
+<script type="module">
+import { readPdf, planchesWeight, PLANCHES_MAX_PAGES } from '../app/sa-planches.js';
+import { icon } from '../app/lib/ui-icons.js';
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const log = (m) => { document.getElementById('log').textContent += '\n' + m; };
+
+// Miroir EXACT de l'état et du rendu de app/smart-agent.js (_ig).
+const _ig = { planches: new Map(), attach: new Map(), batchPages: [], objUrls: [], proposals: [] };
+const _plUrls = new Map();
+function _igPlancheUrl(n) {
+  if (_plUrls.has(n)) return _plUrls.get(n);
+  const b = _ig.planches.get(n);
+  if (!b) return '';
+  const u = URL.createObjectURL(b);
+  _plUrls.set(n, u); _ig.objUrls.push(u);
+  return u;
+}
+function _lightbox(url, name) {
+  const box = document.createElement('div');
+  box.className = 'sa-pl-lightbox';
+  box.innerHTML = `<button class="sa-pl-close">${icon('x', 18)}</button>
+    <a class="sa-pl-dl" href="${url}" download="${name}">${icon('download', 18)}</a>
+    <img src="${url}" alt="${esc(name)}">`;
+  const close = () => box.remove();
+  box.addEventListener('click', e => { if (e.target === box || e.target.closest('.sa-pl-close')) close(); });
+  document.body.appendChild(box);
+}
+
+function renderReview() {
+  const batchPages = _ig.batchPages.filter(n => _ig.planches.has(n));
+  document.getElementById('review').innerHTML = `<div class="sa-ex-props">` + _ig.proposals.map((p, i) => {
+    const att = _ig.attach.get(i) || new Set();
+    const strip = batchPages.length ? `
+      <div class="sa-pl-strip">
+        <span class="sa-pl-lbl">${icon('image', 12)} Planches</span>
+        ${batchPages.map(n => `
+          <button class="sa-pl-thumb ${att.has(n) ? 'is-on' : ''}" data-act="ig-planche" data-i="${i}" data-n="${n}">
+            <img src="${_igPlancheUrl(n)}" alt="Page ${n}" loading="lazy">
+            <span class="sa-pl-n">${n}</span>
+            ${att.has(n) ? `<span class="sa-pl-on">${icon('check', 11)}</span>` : ''}
+          </button>`).join('')}
+        <button class="sa-pl-zoom" data-act="zoom" data-n="${batchPages[0]}">${icon('maximize', 13)}</button>
+      </div>` : '';
+    return `<div class="sa-prop-wrap">
+      <label class="sa-prop is-on">
+        <span class="sa-prop-check">${icon('check', 13)}</span>
+        <span class="sa-prop-type">${icon('kortex', 13)} ${esc(p.type)}</span>
+        <span class="sa-prop-txt"><strong>${esc(p.title)}</strong><span>${esc(p.snip)}</span></span>
+      </label>${strip}</div>`;
+  }).join('') + `</div>`;
+}
+
+document.getElementById('review').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  e.preventDefault();
+  if (el.dataset.act === 'zoom') return _lightbox(_igPlancheUrl(+el.dataset.n), 'planche');
+  const i = +el.dataset.i, n = +el.dataset.n;
+  const s = _ig.attach.get(i) || new Set();
+  s.has(n) ? s.delete(n) : s.add(n);
+  _ig.attach.set(i, s);
+  renderReview();
+});
+
+document.getElementById('run').onclick = async () => {
+  document.getElementById('log').textContent = 'Téléchargement du PDF de test…';
+  const res = await fetch('./.tmp-planches-test.pdf');
+  const blob = await res.blob();
+  log(`PDF : ${(blob.size / 1024 / 1024).toFixed(2)} Mo`);
+  const t0 = performance.now();
+  const out = await readPdf(blob, {
+    planches: true,
+    onProgress: ({ page, total }) => { document.getElementById('log').textContent = `Page ${page} / ${total}…`; },
+  });
+  const ms = Math.round(performance.now() - t0);
+  document.getElementById('log').textContent = `Lu en ${ms} ms — ${out.pages.length} pages (plafond ${PLANCHES_MAX_PAGES})`;
+  const blobs = out.pages.map(p => p.blob).filter(Boolean);
+  log(`planches produites : ${blobs.length} / ${out.pages.length}`);
+  log(`type d'encodage    : ${blobs[0]?.type || 'aucun'}`);
+  log(`poids total        : ${planchesWeight(blobs)}`);
+  for (const p of out.pages) {
+    log(`  page ${p.n} : ${p.text.length} car. · planche ${p.blob ? Math.round(p.blob.size / 1024) + ' Ko' : 'ABSENTE'}`);
+    if (p.blob) _ig.planches.set(p.n, p.blob);
+  }
+  // Contrôle : le texte réel du manuel a-t-il bien survécu ?
+  const all = out.pages.map(p => p.text).join(' ');
+  log(`\nAVERTISSEMENT p.64 présent : ${all.includes('AVERTISSEMENT') ? 'OUI' : 'NON'}`);
+  log(`renvoi « - Photo 2 » présent : ${/-\s*Photo\s*2/i.test(all) ? 'OUI' : 'NON'}`);
+
+  _ig.batchPages = out.pages.map(p => p.n);
+  _ig.proposals = [
+    { type: 'procedure',  title: 'Coup de poing direct à la gorge',    snip: 'poing à plat, doigts vers le bas' },
+    { type: 'procedure',  title: 'Coup de pied latéral en Krav Maga',  snip: 'le genou monte pour armer' },
+    { type: 'definition', title: 'Reprise de distance',                snip: 'quart de cercle ou en ligne' },
+  ];
+  // Défaut identique au pad : première procédure, toutes les planches du lot.
+  _ig.attach.set(0, new Set(_ig.batchPages));
+  renderReview();
+};
+
+// pdf.js `page.render()` ne rend pas la main dans le navigateur intégré
+// (vérifié : le canvas nu et l'encodeur WebP, eux, marchent). Ce bouton
+// fabrique des planches au format d'une page A4 pour valider TOUTE la
+// chaîne d'affichage — vignettes plafonnées, attache par fiche, plein écran.
+document.getElementById('fake').onclick = async () => {
+  const mk = (n) => new Promise(res => {
+    const c = document.createElement('canvas');
+    c.width = 1013; c.height = 1575;
+    const x = c.getContext('2d');
+    x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    x.fillStyle = '#1a1a2e'; x.font = 'bold 90px sans-serif';
+    x.fillText(`Page ${n}`, 70, 150);
+    x.fillStyle = '#c0392b'; x.fillRect(70, 260, 880, 620);
+    x.fillStyle = '#fff'; x.font = 'bold 60px sans-serif';
+    x.fillText(`Photo ${n}`, 400, 590);
+    x.fillStyle = '#555'; x.font = '38px sans-serif';
+    for (let i = 0; i < 9; i++) x.fillText('Ligne de texte de la planche ' + (i + 1), 70, 990 + i * 62);
+    c.toBlob(b => res(b), 'image/webp', 0.82);
+  });
+  document.getElementById('log').textContent = 'Fabrication de 4 planches…';
+  _ig.planches = new Map(); _plUrls.clear(); _ig.objUrls = [];
+  for (const n of [34, 64, 68, 86]) _ig.planches.set(n, await mk(n));
+  _ig.batchPages = [34, 64, 68, 86];
+  _ig.proposals = [
+    { type: 'procedure',  title: 'Coup de poing direct à la gorge',    snip: 'poing à plat, doigts dirigés vers le bas' },
+    { type: 'procedure',  title: 'Coup de pied latéral en Krav Maga',  snip: 'le genou monte pour armer le coup de pied' },
+    { type: 'definition', title: 'Reprise de distance',                snip: 'quart de cercle ou en ligne « couloir »' },
+  ];
+  _ig.attach = new Map([[0, new Set([34, 64, 68, 86])]]);
+  renderAnswer(); renderEditor();
+  document.getElementById('log').textContent =
+    `4 planches synthétiques — ${[..._ig.planches.values()].map(b => Math.round(b.size/1024) + ' Ko').join(', ')}\n`
+    + `type : ${[..._ig.planches.values()][0].type}\n`
+    + `poids total : ${planchesWeight([..._ig.planches.values()])}`;
+  renderReview();
+};
+
+// SA-15.4 — réponse de l'agent : le renvoi « - Photo 5 » conservé dans le
+// texte, ET la planche qui le montre. Miroir du rendu de _msgHTML.
+function renderAnswer() {
+  const shots = [
+    { key: 64, alt: 'Page 64 — photo 5', n: 5, n_cite: 1, title: 'Coup de poing direct à la gorge' },
+    { key: 68, alt: 'Page 68 — photos 2, 3', n_cite: 2, title: 'Coup de pied latéral' },
+  ];
+  document.getElementById('answer').innerHTML = `
+    <div class="sa-msg is-agent">
+      <div class="sa-bubble">Le poing est à plat, les doigts dirigés vers le bas <strong>- Photo 5</strong>
+        <button class="sa-cite">1</button>. Pour le coup de pied latéral, le pied d'appui pivote
+        talon vers l'adversaire <strong>- Photo 2</strong> <button class="sa-cite">2</button>.</div>
+      <div class="sa-danger-note">
+        <span class="sa-danger-hd">${icon('alert-triangle', 14)} Avertissement porté par la fiche citée</span>
+        <p><strong>[1] Coup de poing direct à la gorge</strong> — La gorge est une cible à effet potentiellement radical (pouvant entraîner la mort).</p>
+      </div>
+      <div class="sa-pl-answer">
+        <span class="sa-pl-lbl">${icon('image', 12)} Planches citées</span>
+        <div class="sa-pl-answer-row">
+          ${shots.map(im => `
+            <button class="sa-pl-open sa-pl-answer-thumb" data-act="zoom" data-n="${im.key}" title="${esc(im.alt)}">
+              <img src="${_igPlancheUrl(im.key)}" alt="${esc(im.alt)}">
+              ${im.n ? `<span class="sa-pl-n">Photo ${im.n}</span>` : ''}
+            </button>`).join('')}
+        </div>
+      </div>
+      <div class="sa-sources"><span class="sa-sources-lbl">Sources&nbsp;:</span>
+        <button class="sa-srcref">[1] Coup de poing direct à la gorge</button></div>
+    </div>`;
+}
+
+// SA-15.2 — grille des planches d'une fiche, dans l'éditeur.
+function renderEditor() {
+  const imgs = [
+    { key: 64, alt: 'Page 64 — photo 5', n: 5 },
+    { key: 68, alt: 'Page 68 — photos 2, 3' },
+    { key: 86, alt: 'Page 86' },
+  ];
+  document.getElementById('editor').innerHTML = `
+    <div class="sa-field">
+      <span class="sa-field-label">${icon('image', 13)} Planches — ${imgs.length} images</span>
+      <div class="sa-pl-grid">
+        ${imgs.map(im => `
+          <figure class="sa-pl-fig">
+            <button class="sa-pl-open" data-act="zoom" data-n="${im.key}">
+              <img src="${_igPlancheUrl(im.key)}" alt="${esc(im.alt)}">
+              ${im.n ? `<span class="sa-pl-n">Photo ${im.n}</span>` : ''}
+            </button>
+            <figcaption>${esc(im.alt)}</figcaption>
+          </figure>`).join('')}
+      </div>
+      <span class="sa-field-hint">Ces images accompagnent la fiche. Elles ne sont pas lues par la recherche —
+      c'est le texte de la fiche qui la rend trouvable.</span>
+    </div>`;
+}
+for (const id of ['answer', 'editor']) {
+  document.getElementById(id).addEventListener('click', (e) => {
+    const el = e.target.closest('[data-act="zoom"]');
+    if (el) { e.preventDefault(); _lightbox(_igPlancheUrl(+el.dataset.n), 'planche'); }
+  });
+}
+
+document.getElementById('theme').onclick = () => document.documentElement.classList.toggle('light-mode');
+document.getElementById('w360').onclick = () => {
+  const w = document.getElementById('wrap');
+  w.style.maxWidth = w.style.maxWidth === '360px' ? '620px' : '360px';
+};
+</script>
+</body>
+</html>
