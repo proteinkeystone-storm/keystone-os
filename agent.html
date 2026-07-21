@@ -318,6 +318,18 @@
     .sav2-card-pill { position: absolute; left: 6px; right: 6px; bottom: 6px; padding: 5px 9px; border-radius: 11px;
       background: rgba(8,8,22,.66); color: #fff; font-size: 13px; font-weight: 500; line-height: 1.25; text-align: center;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+    /* Repère de défilement : la barre native est masquée et une souris classique
+       (Windows, molette verticale seule) ne sait pas défiler à l'horizontale →
+       poignée de points sous les cartes + glisser à la souris + molette mappée. */
+    .sav2-cards.is-draggable { cursor: grab; }
+    .sav2-cards.is-dragging  { cursor: grabbing; scroll-snap-type: none; scroll-behavior: auto; }
+    .sav2-dots { display: none; justify-content: center; align-items: center; gap: 2px; padding: 2px 16px 4px; }
+    .sav2-dots.is-on { display: flex; }
+    .sav2-dot { width: auto; min-width: 18px; height: 16px; padding: 0 3px; border: none; background: transparent; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
+    .sav2-dot::after { content: ''; display: block; width: 6px; height: 6px; border-radius: 3px;
+      background: rgba(164,162,255,.32); transition: width .18s ease, background .18s ease; }
+    .sav2-dot.is-on::after { width: 17px; background: var(--sav2-brand-lt); }
 
     /* Zone de réponse : UNE seule réponse, centrée (pas de fil) */
     .sav2-answer { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; position: relative; }
@@ -1425,7 +1437,7 @@
           ${hasVoice ? `<button class="sav2-top-btn sav2-voice ${_voiceOn ? 'is-on' : ''}" id="sa-voice" type="button" aria-pressed="${_voiceOn ? 'true' : 'false'}" title="${_voiceOn ? escape(t('voiceOn')) : escape(t('voiceOff'))}">${SVG_V2.voice}</button>` : ''}
         </header>
         ${cards.length ? `<div class="sav2-cards" id="sav2-cards">${cards.map((c, i) =>
-            `<button class="sav2-card" type="button" data-i="${i}" aria-label="${escape(cardTitle(c) || t('suggested'))}"><img class="sav2-card-img" src="${escape(c.image)}" alt="${escape(c.alt || '')}" loading="lazy">${hasAnyTitle(c) ? `<span class="sav2-card-pill"${cardTitle(c) ? '' : ' style="display:none"'}>${escape(cardTitle(c))}</span>` : ''}</button>`).join('')}</div>` : ''}
+            `<button class="sav2-card" type="button" data-i="${i}" aria-label="${escape(cardTitle(c) || t('suggested'))}"><img class="sav2-card-img" src="${escape(c.image)}" alt="${escape(c.alt || '')}" loading="lazy">${hasAnyTitle(c) ? `<span class="sav2-card-pill"${cardTitle(c) ? '' : ' style="display:none"'}>${escape(cardTitle(c))}</span>` : ''}</button>`).join('')}</div><div class="sav2-dots" id="sav2-dots"></div>` : ''}
         <main class="sav2-answer" id="sav2-answer">
           <div class="sav2-answer-scroll"><div class="sav2-answer-text" id="sav2-answer-text"></div></div>
           <div class="sav2-thinking" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -1476,6 +1488,7 @@
         document.querySelectorAll('.sav2-card').forEach(btn => {
           btn.addEventListener('click', () => { const c = cards[+btn.dataset.i]; if (c && c.question) askCard(c.question); });
         });
+        mountCardsNav();
       }
       const ansText = document.getElementById('sav2-answer-text');
       if (ansText) ansText.addEventListener('click', () => { const txt = ansText.dataset.text; if (txt) speakTap(txt); });
@@ -1497,6 +1510,85 @@
       setAnswerV2(greetingText());   // jamais d'écran vide ; accueil natif ou générique localisé
       input.focus();
     }
+
+    /* Carrousel de cartes — rendre le défilement possible SANS geste tactile ni
+       trackpad horizontal. Trois affordances, toutes optionnelles :
+         • poignée de points sous les cartes (indique + permet de sauter d'un écran),
+         • glisser à la souris sur la bande (le clic reste intact tant qu'on ne bouge pas),
+         • molette verticale mappée sur l'axe horizontal quand la souris est dessus.
+       Les points disparaissent d'eux-mêmes si tout tient dans la largeur. */
+    function mountCardsNav() {
+      const el   = document.getElementById('sav2-cards');
+      const dots = document.getElementById('sav2-dots');
+      if (!el || !dots) return;
+
+      const pageW  = () => Math.max(1, el.clientWidth - 32);   // un « écran » = la largeur visible, moins un chevauchement
+      const pages  = () => Math.max(1, Math.ceil((el.scrollWidth - el.clientWidth) / pageW()) + 1);
+      let n = 0;
+
+      function build() {
+        const p = el.scrollWidth - el.clientWidth > 4 ? pages() : 1;
+        el.classList.toggle('is-draggable', p > 1);
+        dots.classList.toggle('is-on', p > 1);
+        if (p === n) { sync(); return; }
+        n = p;
+        dots.innerHTML = p > 1
+          ? Array.from({ length: p }, (_, i) =>
+              `<button class="sav2-dot" type="button" data-p="${i}" aria-label="${escape(t('suggested'))} ${i + 1}/${p}"></button>`).join('')
+          : '';
+        dots.querySelectorAll('.sav2-dot').forEach(b => {
+          b.addEventListener('click', () => el.scrollTo({ left: (+b.dataset.p) * pageW(), behavior: 'smooth' }));
+        });
+        sync();
+      }
+      function sync() {
+        if (n < 2) return;
+        const cur = Math.min(n - 1, Math.round(el.scrollLeft / pageW()));
+        dots.querySelectorAll('.sav2-dot').forEach((b, i) => b.classList.toggle('is-on', i === cur));
+      }
+
+      el.addEventListener('scroll', () => { if (!_rafDots) _rafDots = requestAnimationFrame(() => { _rafDots = 0; sync(); }); }, { passive: true });
+
+      // Molette : sur une souris classique il n'y a QUE deltaY → on le convertit.
+      el.addEventListener('wheel', (e) => {
+        if (el.scrollWidth - el.clientWidth < 4) return;
+        const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        if (!d) return;
+        const max = el.scrollWidth - el.clientWidth;
+        if ((d < 0 && el.scrollLeft <= 0) || (d > 0 && el.scrollLeft >= max - 1)) return;  // en butée : on rend la main à la page
+        e.preventDefault();
+        el.scrollLeft += d;
+      }, { passive: false });
+
+      // Glisser à la souris (souris sans axe horizontal). Le pointeur tactile
+      // garde le défilement natif : on n'intercepte que la souris.
+      let dragging = false, moved = false, x0 = 0, l0 = 0;
+      el.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'mouse' || e.button !== 0) return;
+        if (el.scrollWidth - el.clientWidth < 4) return;
+        dragging = true; moved = false; x0 = e.clientX; l0 = el.scrollLeft;
+      });
+      el.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const dx = e.clientX - x0;
+        if (!moved && Math.abs(dx) < 5) return;                 // sous 5 px : c'est un clic, pas un glissé
+        if (!moved) { moved = true; el.classList.add('is-dragging'); el.setPointerCapture(e.pointerId); }
+        el.scrollLeft = l0 - dx;
+      });
+      const endDrag = () => { if (!dragging) return; dragging = false; el.classList.remove('is-dragging'); };
+      el.addEventListener('pointerup', endDrag);
+      el.addEventListener('pointercancel', endDrag);
+      // Un glissé ne doit pas déclencher la question de la carte relâchée
+      // (le drapeau retombe ici, ou au prochain appui : jamais sur un minuteur).
+      el.addEventListener('click', (e) => { if (moved) { moved = false; e.preventDefault(); e.stopPropagation(); } }, true);
+
+      build();
+      if (window.ResizeObserver) new ResizeObserver(build).observe(el);
+      else window.addEventListener('resize', build);
+      // Les images arrivent en `loading="lazy"` : la largeur totale bouge encore après le rendu.
+      el.querySelectorAll('img').forEach(img => img.addEventListener('load', build, { once: true }));
+    }
+    let _rafDots = 0;
 
     // Réponse unique : on REMPLACE le contenu, on n'empile jamais.
     function setAnswerV2(text, isFallback) {
