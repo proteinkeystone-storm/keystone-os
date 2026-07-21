@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const KORA_CSS_V = '14';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
+const KORA_CSS_V = '15';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
 
 /* ── Shader (verbatim harnais kora-galet-morph.html) ── */
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -172,7 +172,20 @@ export function koraOpen() {
   if (!_inited) return;
   _panel.classList.add('kora-open');
   document.body.classList.add('kora-open');   // le dashboard se pousse à gauche
+  _positionSheet();                           // mobile : caler sous le header (pas de liseré)
   requestAnimationFrame(() => _panel.classList.add('kora-in'));
+}
+/* Mobile : la feuille démarre EXACTEMENT au bas du header (cc-bar), mesuré au
+   pixel — sinon un liseré du dashboard (bout de logo) reste visible entre le
+   header et la feuille, la hauteur réelle du header variant selon l'appareil
+   (notch / safe-area). Desktop : le CSS gère le panneau latéral, on efface
+   l'inline. Ré-appliqué au resize/rotation tant que la fenêtre est ouverte. */
+function _positionSheet() {
+  if (!_panel) return;
+  const mobile = matchMedia('(max-width:640px)').matches;
+  if (!mobile) { _panel.style.top = ''; return; }
+  const r = _ccBar && _ccBar.getBoundingClientRect();
+  _panel.style.top = (r && r.height > 0) ? Math.max(0, Math.round(r.bottom)) + 'px' : '';
 }
 export function koraClose() {
   if (!_inited) return;
@@ -324,6 +337,10 @@ export function initKora() {
     _panel.classList.contains('kora-open') ? koraClose() : koraOpen());
   addEventListener('keydown', e => {
     if (e.key === 'Escape' && _panel.classList.contains('kora-open')) koraClose();
+  });
+  /* la feuille mobile suit la hauteur réelle du header (rotation, barre iOS) */
+  addEventListener('resize', () => {
+    if (_panel.classList.contains('kora-open')) _positionSheet();
   });
 
   document.body.dataset.koraState = 'repos';

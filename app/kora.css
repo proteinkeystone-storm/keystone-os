@@ -194,10 +194,11 @@ html.light-mode .kora-newconv, html.light-mode .kora-voicetoggle{
 @media (max-width:640px){
   .kora-dock{ width:130px; }
   .kora-dock.kora-mini{ width:36px; }
-  /* feuille mobile : plein écran sous le header + fond OPAQUE (le petit
-     écran laissait tout transparaître au .92) → plus d'arrière-fond visible */
+  /* feuille mobile : bord-à-bord, fond OPAQUE, coins droits (un coin arrondi
+     laisserait voir un triangle de dashboard). Le `top` est CALÉ EN JS sur le
+     bas réel du header (_positionSheet) ; ce 60px n'est qu'un repli. */
   .kora-panel{
-    top:60px; left:0; right:0; bottom:0; width:auto; border-radius:16px 16px 0 0;
+    top:60px; left:0; right:0; bottom:0; width:auto; border-radius:0;
     background:rgba(9,11,26,.99);
   }
   .kora-head{ padding:18px 20px 0; }
