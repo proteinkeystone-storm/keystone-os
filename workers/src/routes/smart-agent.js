@@ -61,7 +61,7 @@ import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-
 import { streamLLM }                               from '../lib/llm-stream.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-14.3';
+const SA_ENGINE_VERSION = 'SA-14.4a';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -377,6 +377,39 @@ async function ensureSmartAgentSchema(env) {
     )
   `);
   await safe('CREATE INDEX IF NOT EXISTS idx_sa_golden_agent ON sa_golden(agent_id)');
+
+  // ── SA-14.4 — INGESTION GROS VOLUME (jobs de lots) ─────────────
+  // Un document volumineux est découpé UNE fois (aux titres Markdown,
+  // avec chevauchement), puis extrait lot par lot à la demande. Le job
+  // porte l'état pour que la relecture humaine soit REPRENABLE : on ne
+  // perd pas 30 lots parce qu'un onglet s'est fermé.
+  // Ces tables sont un SAS DE TRAVAIL, pas du savoir : rien n'entre dans
+  // kortex_units sans validation humaine, et le job s'auto-purge (TTL).
+  await safe(`
+    CREATE TABLE IF NOT EXISTS sa_ingest_jobs (
+      id          TEXT PRIMARY KEY,
+      tenant_id   TEXT NOT NULL DEFAULT 'default',
+      source_ref  TEXT NOT NULL,
+      total       INTEGER NOT NULL,
+      chars       INTEGER NOT NULL,
+      truncated   INTEGER NOT NULL DEFAULT 0,
+      created_at  TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    )
+  `);
+  await safe(`
+    CREATE TABLE IF NOT EXISTS sa_ingest_batches (
+      job_id      TEXT NOT NULL,
+      idx         INTEGER NOT NULL,
+      breadcrumb  TEXT NOT NULL DEFAULT '',
+      overlap     TEXT NOT NULL DEFAULT '',
+      text        TEXT NOT NULL,
+      chars       INTEGER NOT NULL,
+      status      TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','done','skipped')),
+      PRIMARY KEY (job_id, idx)
+    )
+  `);
+  await safe('CREATE INDEX IF NOT EXISTS idx_sa_ingest_jobs_tenant ON sa_ingest_jobs(tenant_id, created_at)');
 
   // ── SA-4.4 — COFFRES DÉCOUPLÉS (vault) + DOSSIERS D'AGENTS ──────
   // Le coffre devient une entité de 1er rang : un agent possède UN coffre
@@ -1106,6 +1139,303 @@ export async function handleKortexImportFile(request, env) {
     if (!text) return err('Conversion indisponible pour ce fichier — réessayez, ou copiez son texte dans « Coller du texte ».', 502, origin);
   }
   return _extractFromImport(env, gate, origin, text, name);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SA-14.4 — INGESTION GROS VOLUME
+// ─────────────────────────────────────────────────────────────
+// L'extraction actuelle est plafonnée à ~20 000 caractères (≈ 8 pages) :
+// pensée pour un coffre boutique, pas pour une documentation métier.
+// On fait scaler l'ALIMENTATION du pipeline — PAS la vitesse de relecture
+// humaine, qui reste le goulot et ne doit jamais être sur-promise.
+//
+// Découpage retenu (arbitrage Stéphane, 21/07) : par STRUCTURE du document
+// (les titres Markdown que env.AI.toMarkdown produit déjà) plutôt que par
+// taille fixe ou par chunking sémantique IA — prévisible, gratuit, et il
+// respecte la logique de l'auteur du document.
+//
+// Le risque n°1 identifié : une PROCÉDURE coupée entre deux lots. Une fiche
+// qui n'a que la moitié des étapes est plus dangereuse qu'un trou : elle a
+// l'air complète. 1ʳᵉ ligne de défense = CHEVAUCHEMENT (la fin du lot N est
+// redonnée en contexte au lot N+1, à charge pour le modèle de recomposer
+// UNE fiche complète). Le pont explicite « suite de → » reste en réserve,
+// à ne construire que si le chevauchement se montre insuffisant en réel.
+const INGEST_MAX_CHARS     = 400000;  // ≈ 160 pages — plafond global d'un document
+const INGEST_BATCH_CHARS   = 12000;   // taille visée d'un lot (sous EXTRACT_MAX_CHARS)
+const INGEST_OVERLAP_RATIO = 0.15;    // 15 % de chevauchement entre lots consécutifs
+const INGEST_MAX_BATCHES   = 40;      // garde-fou dur (400k/12k ≈ 34)
+const INGEST_TTL_DAYS      = 7;       // un job non terminé s'auto-purge
+
+// Fin d'un texte, coupée PROPREMENT : on recule jusqu'à un début de
+// paragraphe, sinon de phrase, pour ne jamais commencer le contexte au
+// milieu d'un mot. Pur.
+function _cleanTail(s, n) {
+  if (s.length <= n) return s;
+  const t = s.slice(-n);
+  const p = t.indexOf('\n\n');
+  if (p !== -1 && p < n * 0.6) return t.slice(p + 2).trim();
+  const d = t.search(/[.!?]\s/);
+  if (d !== -1 && d < n * 0.6) return t.slice(d + 2).trim();
+  return t.trim();
+}
+
+// Découpe un bloc TROP GROS pour un lot : d'abord aux paragraphes, et en
+// dernier recours coupe dure (un « paragraphe » de 30 000 caractères
+// existe : tableau converti, transcription sans retour à la ligne). Pur.
+function _splitOversized(text, maxChars) {
+  const out = [];
+  let buf = '';
+  for (const para of text.split(/\n{2,}/)) {
+    let p = para;
+    while (p.length > maxChars) {                     // paragraphe monstre
+      if (buf) { out.push(buf); buf = ''; }
+      out.push(p.slice(0, maxChars));
+      p = p.slice(maxChars);
+    }
+    if (!buf) { buf = p; continue; }
+    if (buf.length + 2 + p.length <= maxChars) buf += '\n\n' + p;
+    else { out.push(buf); buf = p; }
+  }
+  if (buf.trim()) out.push(buf);
+  return out.filter(s => s.trim());
+}
+
+// Découpe un document Markdown en LOTS d'extraction, aux titres, avec fil
+// d'ariane et chevauchement. 100 % pur → testé, aucun appel réseau ni IA.
+// Renvoie [{ index, breadcrumb, overlap, text, chars }].
+export function splitMarkdownBatches(md, {
+  maxChars = INGEST_BATCH_CHARS,
+  overlapRatio = INGEST_OVERLAP_RATIO,
+  maxBatches = INGEST_MAX_BATCHES,
+} = {}) {
+  const doc = String(md || '').replace(/\r\n?/g, '\n').trim();
+  if (!doc) return [];
+  const overlap = Math.max(0, Math.round(maxChars * overlapRatio));
+
+  // 1. Sections délimitées par les titres ATX, fil d'ariane tenu à jour.
+  //    Le titre reste DANS sa section : l'extracteur doit le voir.
+  const sections = [];
+  let stack = [];
+  let cur = { crumbs: [], lines: [] };
+  const closeSection = () => {
+    const t = cur.lines.join('\n').trim();
+    if (t) sections.push({ crumbs: cur.crumbs.slice(), text: t });
+  };
+  for (const line of doc.split('\n')) {
+    const m = /^(#{1,6})\s+(.*\S)\s*$/.exec(line);
+    if (!m) { cur.lines.push(line); continue; }
+    closeSection();
+    const level = m[1].length;
+    stack = stack.filter(s => s.level < level);
+    stack.push({ level, title: m[2].trim().slice(0, 120) });
+    cur = { crumbs: stack.map(s => s.title), lines: [line] };
+  }
+  closeSection();
+
+  // 2. Regroupement des sections en lots (on remplit jusqu'à maxChars, on
+  //    ne coupe une section que si elle dépasse à elle seule).
+  const packed = [];
+  let buf = null;
+  const flush = () => { if (buf && buf.text.trim()) packed.push(buf); buf = null; };
+  for (const sec of sections) {
+    if (sec.text.length > maxChars) {
+      flush();
+      for (const piece of _splitOversized(sec.text, maxChars)) packed.push({ crumbs: sec.crumbs, text: piece });
+      continue;
+    }
+    if (!buf) { buf = { crumbs: sec.crumbs, text: sec.text }; continue; }
+    if (buf.text.length + 2 + sec.text.length <= maxChars) buf.text += '\n\n' + sec.text;
+    else { flush(); buf = { crumbs: sec.crumbs, text: sec.text }; }
+  }
+  flush();
+
+  // 3. Chevauchement : chaque lot reçoit la fin du précédent.
+  return packed.slice(0, maxBatches).map((b, i, arr) => ({
+    index: i,
+    breadcrumb: b.crumbs.join(' › '),
+    overlap: i > 0 && overlap ? _cleanTail(arr[i - 1].text, overlap) : '',
+    text: b.text,
+    chars: b.text.length,
+  }));
+}
+
+// Contenu envoyé à l'extraction pour UN lot. Le chevauchement n'est PAS
+// un simple rappel décoratif : c'est ce qui doit permettre au modèle de
+// recomposer en UNE fiche une procédure coupée entre deux lots. La
+// consigne le dit explicitement, sinon il produirait deux moitiés. Pur.
+export function buildBatchPrompt({ breadcrumb = '', overlap = '', text = '' }, sourceRef = '') {
+  const parts = [];
+  if (overlap) {
+    parts.push(`FIN DU LOT PRÉCÉDENT (déjà analysé) :\n${overlap}\n\n` +
+      'N\'en extrais AUCUNE fiche pour lui-même. Sers-t\'en UNIQUEMENT si une procédure, une règle ou ' +
+      'une explication commencée là se POURSUIT dans le texte ci-dessous : dans ce cas, produis UNE ' +
+      'SEULE fiche complète qui couvre l\'ensemble, jamais deux moitiés.');
+  }
+  const head = [sourceRef && `importé de : ${sourceRef}`, breadcrumb && `section : ${breadcrumb}`]
+    .filter(Boolean).join(' — ');
+  parts.push(`TEXTE À ANALYSER${head ? ` (${head})` : ''} :\n\n${text}`);
+  return parts.join('\n\n───\n\n');
+}
+
+// Crée le job : découpe, purge les jobs périmés, persiste les lots.
+async function _ingestPlan(env, gate, origin, rawText, sourceRef) {
+  const doc = String(rawText || '').trim();
+  if (doc.length < 30) return err('Contenu illisible ou vide.', 422, origin);
+  const truncated = doc.length > INGEST_MAX_CHARS;
+  const kept = truncated ? doc.slice(0, INGEST_MAX_CHARS) : doc;
+  const batches = splitMarkdownBatches(kept);
+  if (!batches.length) return err('Aucun contenu exploitable dans ce document.', 422, origin);
+
+  // TTL : un job abandonné en cours de relecture ne doit pas s'accumuler.
+  // C'est un sas de travail, jamais du savoir (le savoir vit dans
+  // kortex_units, et uniquement après validation humaine).
+  try {
+    await env.DB.prepare(`DELETE FROM sa_ingest_batches WHERE job_id IN
+      (SELECT id FROM sa_ingest_jobs WHERE created_at < datetime('now', ?))`)
+      .bind(`-${INGEST_TTL_DAYS} days`).run();
+    await env.DB.prepare("DELETE FROM sa_ingest_jobs WHERE created_at < datetime('now', ?)")
+      .bind(`-${INGEST_TTL_DAYS} days`).run();
+  } catch (_) { /* purge best-effort : ne doit jamais empêcher un import */ }
+
+  const jobId = generateId();
+  await env.DB.prepare(
+    'INSERT INTO sa_ingest_jobs (id, tenant_id, source_ref, total, chars, truncated) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(jobId, gate.tenant, sourceRef, batches.length, kept.length, truncated ? 1 : 0).run();
+  const ins = env.DB.prepare(
+    'INSERT INTO sa_ingest_batches (job_id, idx, breadcrumb, overlap, text, chars) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+  await env.DB.batch(batches.map(x => ins.bind(jobId, x.index, x.breadcrumb, x.overlap, x.text, x.chars)));
+
+  // `estimated_credits` : 1 appel d'extraction par lot. Le front DOIT
+  // l'annoncer avant de lancer quoi que ce soit (arbitrage Stéphane :
+  // on ne bride pas, on rend le coût visible).
+  return json({
+    job_id: jobId, source_ref: sourceRef, total: batches.length,
+    chars: kept.length, truncated, estimated_credits: batches.length,
+    batches: batches.map(x => ({ index: x.index, breadcrumb: x.breadcrumb, chars: x.chars, status: 'pending' })),
+  }, 200, origin);
+}
+
+// POST /api/smart-agent/kortex/ingest/plan — { text, source_ref } → plan de lots.
+// AUCUNE extraction ici : découper est gratuit, c'est le lot qui coûte.
+export async function handleIngestPlan(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const b = await parseBody(request);
+  const src = (typeof b?.source_ref === 'string' ? b.source_ref : '').trim().slice(0, 200);
+  return _ingestPlan(env, gate, origin, typeof b?.text === 'string' ? b.text : '', src || 'texte collé');
+}
+
+// POST /api/smart-agent/kortex/ingest/plan-file?name=<fichier> — corps BINAIRE
+// (même contrat que import-file, mais découpé en lots au lieu d'être tronqué).
+export async function handleIngestPlanFile(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+
+  const name = decodeURIComponent(new URL(request.url).searchParams.get('name') || '').trim().slice(0, 200);
+  const fk = importFileKindOf(name);
+  if (!fk.ok) return err(fk.msg, 400, origin);
+
+  const len = parseInt(request.headers.get('content-length') || '0', 10);
+  if (len > IMPORT_MAX_FILE) return err('Fichier trop lourd (8 Mo max).', 413, origin);
+  let buf;
+  try { buf = await request.arrayBuffer(); } catch (_) { buf = null; }
+  if (!buf || !buf.byteLength) return err('Fichier vide ou illisible.', 400, origin);
+  if (buf.byteLength > IMPORT_MAX_FILE) return err('Fichier trop lourd (8 Mo max).', 413, origin);
+
+  let text;
+  if (fk.kind === 'text') {
+    text = new TextDecoder().decode(buf);
+  } else {
+    const mime = request.headers.get('content-type') || 'application/octet-stream';
+    text = await _mdFromBlob(env, name, buf, mime);
+    if (!text) return err('Conversion indisponible pour ce fichier — réessayez, ou copiez son texte dans « Coller du texte ».', 502, origin);
+  }
+  return _ingestPlan(env, gate, origin, text, name);
+}
+
+// GET /api/smart-agent/kortex/ingest/:jobId — état du job (REPRISE de la
+// relecture). Le TEXTE des lots n'est jamais renvoyé : il pèse lourd et le
+// front n'en a pas besoin, il demande l'extraction lot par lot.
+export async function handleIngestStatus(request, env, jobId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+
+  const { results: jr } = await env.DB
+    .prepare('SELECT * FROM sa_ingest_jobs WHERE id = ? AND tenant_id = ?')
+    .bind(jobId, gate.tenant).all();
+  if (!jr.length) return err('Import introuvable (peut-être expiré).', 404, origin);
+  const { results: br } = await env.DB
+    .prepare('SELECT idx, breadcrumb, chars, status FROM sa_ingest_batches WHERE job_id = ? ORDER BY idx')
+    .bind(jobId).all();
+  const done = br.filter(x => x.status !== 'pending').length;
+  return json({
+    job_id: jr[0].id, source_ref: jr[0].source_ref, total: jr[0].total,
+    chars: jr[0].chars, truncated: !!jr[0].truncated, created_at: jr[0].created_at,
+    done, remaining_credits: jr[0].total - done,
+    batches: br.map(x => ({ index: x.idx, breadcrumb: x.breadcrumb, chars: x.chars, status: x.status })),
+  }, 200, origin);
+}
+
+// POST /api/smart-agent/kortex/ingest/:jobId/batch/:idx — extrait UN lot.
+// 1 crédit, comme n'importe quelle extraction. Rejouable : un lot déjà
+// traité peut être redemandé (le front peut avoir perdu ses propositions).
+export async function handleIngestBatch(request, env, jobId, idxRaw) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+
+  const idx = parseInt(idxRaw, 10);
+  if (!Number.isInteger(idx) || idx < 0) return err('Lot invalide.', 400, origin);
+
+  const { results: jr } = await env.DB
+    .prepare('SELECT * FROM sa_ingest_jobs WHERE id = ? AND tenant_id = ?')
+    .bind(jobId, gate.tenant).all();
+  if (!jr.length) return err('Import introuvable (peut-être expiré).', 404, origin);
+  const { results: br } = await env.DB
+    .prepare('SELECT * FROM sa_ingest_batches WHERE job_id = ? AND idx = ?')
+    .bind(jobId, idx).all();
+  if (!br.length) return err('Lot introuvable.', 404, origin);
+  const batch = br[0];
+
+  const b = await parseBody(request);
+  const r = await _aiExtract(env, gate, EXTRACT_SYSTEM_PROMPT,
+    buildBatchPrompt(batch, jr[0].source_ref), _byokFromBody(b));
+  if (!r.ok) return json({ error: r.error, code: r.code, quota: r.quota }, r.status, origin);
+
+  // Marqué traité même sans proposition : un lot vide (sommaire, page de
+  // garde) est une réponse légitime, pas un échec à rejouer indéfiniment.
+  try {
+    await env.DB.prepare("UPDATE sa_ingest_batches SET status = 'done' WHERE job_id = ? AND idx = ?")
+      .bind(jobId, idx).run();
+  } catch (_) { /* best-effort */ }
+
+  return json({
+    job_id: jobId, index: idx, breadcrumb: batch.breadcrumb, total: jr[0].total,
+    proposals: r.proposals, source_ref: jr[0].source_ref,
+    model: KS_AI_MODEL, credits: r.creditPayload,
+  }, 200, origin);
+}
+
+// DELETE /api/smart-agent/kortex/ingest/:jobId — abandon explicite.
+export async function handleIngestDelete(request, env, jobId) {
+  const origin = getAllowedOrigin(env, request);
+  const gate = await _gate(request, env, origin);
+  if (gate.error) return gate.error;
+  await ensureSmartAgentSchema(env);
+  const res = await env.DB.prepare('DELETE FROM sa_ingest_jobs WHERE id = ? AND tenant_id = ?')
+    .bind(jobId, gate.tenant).run();
+  if (!res.meta?.changes) return err('Import introuvable.', 404, origin);
+  try { await env.DB.prepare('DELETE FROM sa_ingest_batches WHERE job_id = ?').bind(jobId).run(); }
+  catch (_) { /* best-effort */ }
+  return json({ ok: true }, 200, origin);
 }
 
 // ── Cœur d'extraction IA (crédit DORMANT + appel KS_AI_MODEL + parse) ──

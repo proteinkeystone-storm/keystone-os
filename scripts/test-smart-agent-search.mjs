@@ -13,6 +13,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions,
   splitGapReply, pickFallback, groundedFromSignals, sweepGroundThreshold,
   needsRerank, applyRerank, _rerank, clampRelevance, needsExpansion, _expandQuery,
+  splitMarkdownBatches, buildBatchPrompt,
   validateImportUrl, htmlToText, clampExtractText, importFileKindOf, stripRepeatedFollowup,
   gapMergeTarget, attachGapCounts, sanitizePublicUrl, validateCards,
   detectSocialIntent, pickSocialReply }
@@ -861,6 +862,86 @@ console.log('── SA-14.3 — _expandQuery (best-effort, jamais bloquant) ─�
       /ANGLAIS/.test(seen.messages[0].content));
     check('température basse et génération bornée',
       seen.temperature === 0.2 && seen.max_tokens === 60);
+  }
+}
+
+console.log('── SA-14.4 — splitMarkdownBatches (découpage par structure) ──');
+{
+  const para = (n, c) => Array.from({ length: n }, (_, i) => `${c}${i} `.repeat(40).trim()).join('\n\n');
+  {
+    const doc = `# Manuel\n\nIntro du manuel.\n\n## Sécurité\n\nRègle de sécurité.\n\n### Alarme\n\nDésactiver l'alarme.`;
+    const b = splitMarkdownBatches(doc, { maxChars: 10000 });
+    check('petit document → un seul lot (on ne découpe pas pour le plaisir)', b.length === 1);
+    check('aucun chevauchement sur le premier lot', b[0].overlap === '');
+    check('fil d\'ariane = la chaîne des titres du DÉBUT du lot', b[0].breadcrumb === 'Manuel');
+    check('le contenu est intégralement conservé',
+      b[0].text.includes('Intro du manuel') && b[0].text.includes('Désactiver l\'alarme'));
+    check('les titres restent DANS le texte (l\'extracteur doit les voir)', b[0].text.includes('# Manuel'));
+  }
+  {
+    // Trois sections d'environ 730 caractères, lots de 1000 → une par lot
+    // (deux ne tiennent pas ensemble, une seule ne se coupe pas).
+    const doc = ['# A', para(6, 'a'), '# B', para(6, 'b'), '# C', para(6, 'c')].join('\n\n');
+    const b = splitMarkdownBatches(doc, { maxChars: 1000, overlapRatio: 0.15 });
+    check('découpé aux titres, un lot par section', b.length === 3);
+    check('fil d\'ariane par lot', b.map(x => x.breadcrumb).join(',') === 'A,B,C');
+    check('index séquentiels', b.map(x => x.index).join(',') === '0,1,2');
+    check('chevauchement présent dès le 2e lot',
+      b[0].overlap === '' && b[1].overlap.length > 0 && b[2].overlap.length > 0);
+    check('le chevauchement vient bien de la FIN du lot précédent',
+      b[0].text.endsWith(b[1].overlap.slice(-40)));
+    check('chevauchement borné (~15 % de la taille de lot)', b[1].overlap.length <= 150);
+    check('AUCUN contenu perdu : la concaténation des lots couvre tout le document',
+      ['a0', 'a2', 'b0', 'b2', 'c0', 'c2'].every(t => b.map(x => x.text).join('\n').includes(t)));
+  }
+  {
+    // Fil d'ariane hiérarchique : un sous-titre hérite de ses ancêtres.
+    const doc = ['# Manuel', para(2, 'm'), '## Sécurité', para(2, 's'), '### Alarme', para(2, 'x')].join('\n\n');
+    const b = splitMarkdownBatches(doc, { maxChars: 700 });
+    check('sous-section → fil d\'ariane complet « Manuel › Sécurité › Alarme »',
+      b.some(x => x.breadcrumb === 'Manuel › Sécurité › Alarme'));
+    check('un titre de même niveau REMPLACE son pair, il ne s\'empile pas',
+      splitMarkdownBatches(['# A', 'x'.repeat(300), '# B', 'y'.repeat(300)].join('\n\n'), { maxChars: 400 })
+        .every(x => !x.breadcrumb.includes('A › B')));
+  }
+  {
+    // Section unique trop grosse pour un lot → coupée aux paragraphes.
+    const doc = '# Gros\n\n' + para(20, 'p');
+    const b = splitMarkdownBatches(doc, { maxChars: 1000 });
+    check('section trop grosse → plusieurs lots', b.length > 1);
+    check('tous les lots respectent la borne', b.every(x => x.chars <= 1000));
+    check('le fil d\'ariane de la section est conservé sur chaque morceau',
+      b.every(x => x.breadcrumb === 'Gros'));
+    check('rien de perdu à la coupe',
+      ['p0', 'p9', 'p19'].every(t => b.map(x => x.text).join('\n').includes(t)));
+  }
+  check('paragraphe monstre sans respiration → coupe dure, jamais de lot hors borne',
+    splitMarkdownBatches('x'.repeat(5000), { maxChars: 1000 }).every(x => x.chars <= 1000));
+  check('document sans AUCUN titre → découpe par paragraphes, pas d\'échec',
+    splitMarkdownBatches(para(20, 'n'), { maxChars: 1000 }).length > 1);
+  check('plafond du nombre de lots respecté',
+    splitMarkdownBatches(para(200, 'z'), { maxChars: 200, maxBatches: 5 }).length === 5);
+  check('vide / null → aucun lot (jamais un lot fantôme)',
+    splitMarkdownBatches('').length === 0 && splitMarkdownBatches(null).length === 0);
+  check('retours chariot Windows normalisés',
+    splitMarkdownBatches('# T\r\n\r\nligne').length === 1);
+}
+
+console.log('── SA-14.4 — buildBatchPrompt (le chevauchement doit RECOMPOSER) ──');
+{
+  const p = buildBatchPrompt({ breadcrumb: 'Manuel › Sécurité', overlap: 'fin du lot 1', text: 'suite' }, 'manuel.pdf');
+  check('rappel du lot précédent présent', p.includes('FIN DU LOT PRÉCÉDENT') && p.includes('fin du lot 1'));
+  check('consigne EXPLICITE de recomposer une seule fiche (pas deux moitiés)',
+    p.includes('UNE\nSEULE fiche complète') || p.includes('UNE SEULE fiche complète'));
+  check('interdiction d\'extraire le chevauchement pour lui-même (anti-doublon)',
+    p.includes('N\'en extrais AUCUNE fiche pour lui-même'));
+  check('fil d\'ariane et source dans l\'en-tête (traçabilité)',
+    p.includes('section : Manuel › Sécurité') && p.includes('importé de : manuel.pdf'));
+  check('texte du lot présent', p.includes('suite'));
+  {
+    const first = buildBatchPrompt({ breadcrumb: '', overlap: '', text: 'début' });
+    check('premier lot : aucun bloc de chevauchement, en-tête propre',
+      !first.includes('FIN DU LOT PRÉCÉDENT') && first.startsWith('TEXTE À ANALYSER :'));
   }
 }
 

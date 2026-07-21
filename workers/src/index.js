@@ -135,7 +135,9 @@ import { handleSmartAgentHealth,
          handlePublicAgentMeta, handlePublicAgentChat,
          handleAgentPublish, handleAgentLinksList, handlePublicLinkRevoke, handlePublicLinkUpdate,
          handleSmartAgentLifecycle, handleExploreQuestions, handleAgentStructure,
-         handleCardImageServe, handleAgentCardImageUpload } from './routes/smart-agent.js';
+         handleCardImageServe, handleAgentCardImageUpload,
+         handleIngestPlan, handleIngestPlanFile, handleIngestStatus,
+         handleIngestBatch, handleIngestDelete } from './routes/smart-agent.js';
 
 // ── Keynapse — espace de connaissances en bulles (Pad O-Keyn-001 · KN-0) ──
 import { handleKeynapseHealth, handleKeynapseState,
@@ -442,6 +444,14 @@ export default {
       // SA-8.1 — ingestion sans friction : page web / fichier → fiches proposées
       if (path === '/api/smart-agent/kortex/import-url'  && method === 'POST') return handleKortexImportUrl(request, env);
       if (path === '/api/smart-agent/kortex/import-file' && method === 'POST') return handleKortexImportFile(request, env);
+      // SA-14.4 — ingestion gros volume : /batch AVANT le job nu (plus spécifique)
+      if (path === '/api/smart-agent/kortex/ingest/plan'      && method === 'POST') return handleIngestPlan(request, env);
+      if (path === '/api/smart-agent/kortex/ingest/plan-file' && method === 'POST') return handleIngestPlanFile(request, env);
+      const saIngestBatch = path.match(/^\/api\/smart-agent\/kortex\/ingest\/([A-Za-z0-9-]+)\/batch\/(\d{1,3})$/);
+      if (saIngestBatch && method === 'POST') return handleIngestBatch(request, env, saIngestBatch[1], saIngestBatch[2]);
+      const saIngestJob = path.match(/^\/api\/smart-agent\/kortex\/ingest\/([A-Za-z0-9-]+)$/);
+      if (saIngestJob && method === 'GET')    return handleIngestStatus(request, env, saIngestJob[1]);
+      if (saIngestJob && method === 'DELETE') return handleIngestDelete(request, env, saIngestJob[1]);
       if (path === '/api/smart-agent/kortex/search'      && method === 'GET')  return handleKortexSearch(request, env);
       if (path === '/api/smart-agent/kortex/reindex'     && method === 'POST') return handleKortexReindex(request, env);
       if (path === '/api/smart-agent/agents'             && method === 'GET')  return handleAgentsList(request, env);
