@@ -3394,12 +3394,27 @@ async function renderTestimonials(panel) {
 let _budgetRefreshTimer = null;
 
 const _BUDGET_TOOL_LABELS = {
-  'ghostwriter'  : 'Ghost Writer',
-  'brainstorming': 'Brainstorming',
-  'living-layer' : 'Living Layer',
-  'smart-qr'     : 'Smart QR',
-  'ai-generate'  : 'Génération texte',
+  'ghostwriter'        : 'Ghost Writer',
+  'brainstorming'      : 'Brainstorming',
+  'living-layer'       : 'Living Layer',
+  'smart-qr'           : 'Smart QR',
+  'smartqr-concierge'  : 'QR Concierge',
+  'ai-generate'        : 'Génération texte',
+  'smart-agent'        : 'Smart Agent',
+  'smart-agent-embed'  : 'Smart Agent · indexation',
+  'smart-agent-rerank' : 'Smart Agent · reclassement',
+  'keynapse'           : 'Keynapse',
+  'keynapse-stt'       : 'Keynapse · dictée',
+  'kora'               : 'Kora',
+  'kora-stt'           : 'Kora · dictée',
+  'llm-router'         : 'Routeur IA',
+  'sentinel'           : 'Sentinel',
+  'desk'               : 'desK',
 };
+function _fmtDate(d) {
+  try { return new Date(d + 'T00:00:00Z').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }); }
+  catch (_) { return d || '—'; }
+}
 function _budgetToolLabel(t) { return _BUDGET_TOOL_LABELS[t] || (t || '—'); }
 function _fmtNeurons(n) { return Math.round(Number(n) || 0).toLocaleString('fr-FR'); }
 function _fmtEur(n)     { return (Number(n) || 0).toFixed(2).replace('.', ',') + ' €'; }
@@ -3438,9 +3453,12 @@ async function renderBudget(panel) {
 
     <p style="color:var(--text-muted);font-size:13px;margin:0 0 18px;max-width:760px">
       Compteur maison des appels au moteur IA interne (${esc(modelShort)}).
-      Le chiffre en <strong style="color:var(--text)">neurones</strong> est fiable&nbsp;;
-      le chiffre en <strong style="color:var(--text)">€ est une estimation</strong> à caler sur ta 1<sup>re</sup> facture Cloudflare.
-      Les générations via ta propre clé (Claude/Gemini) sont facturées ailleurs et ne sont pas comptées ici.
+      La référence est le <strong style="color:var(--text)">cycle de facturation Cloudflare</strong>
+      (du ${state.pricing?.cycle_anchor_day ?? 18} au ${(state.pricing?.cycle_anchor_day ?? 18) - 1} du mois suivant) —
+      pas le mois calendaire. Le chiffre en <strong style="color:var(--text)">neurones</strong> est fiable&nbsp;;
+      le chiffre en <strong style="color:var(--text)">€ reste une estimation</strong>, à recaler sur chaque facture
+      via le bloc « Calage » plus bas. Les générations via ta propre clé (Claude/Gemini) sont facturées
+      ailleurs et ne sont pas comptées ici.
     </p>
 
     <div id="budget-banner"></div>
@@ -3498,6 +3516,35 @@ async function renderBudget(panel) {
         <button class="btn btn-primary btn-sm" id="budget-save" style="align-self:flex-start">Enregistrer le réglage</button>
       </div>
     </div>
+
+    <!-- ── CALAGE SUR FACTURE RÉELLE ───────────────────────────── -->
+    <div class="stat-card" style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
+        ${_budgetSvg('<path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9h4"/><path d="M10 6h8M10 10h8M10 14h4"/>')} Calage sur facture Cloudflare
+      </div>
+      <p style="font-size:12px;color:var(--text-muted);margin:0;line-height:1.5">
+        Le compteur ne peut pas deviner exactement comment Cloudflare applique l'enveloppe offerte.
+        Saisis la période et la quantité de la ligne <strong style="color:var(--text)">« Regular Twitch Neurons »</strong>
+        de ta facture&nbsp;: le compteur en déduit son facteur correctif et devient juste pour la suite.
+      </p>
+      <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:130px">
+          <label class="form-label" for="budget-inv-start">Début de période</label>
+          <input type="date" id="budget-inv-start" class="form-input" value="${esc(state.calibration?.invoice_start || '')}">
+        </div>
+        <div class="form-group" style="flex:1;min-width:130px">
+          <label class="form-label" for="budget-inv-end">Fin de période</label>
+          <input type="date" id="budget-inv-end" class="form-input" value="${esc(state.calibration?.invoice_end || '')}">
+        </div>
+        <div class="form-group" style="flex:1;min-width:150px">
+          <label class="form-label" for="budget-inv-neurons">Neurones facturés</label>
+          <input type="number" id="budget-inv-neurons" class="form-input" min="0" step="1"
+                 placeholder="ex. 38250" value="${state.calibration?.invoice_neurons ?? ''}">
+        </div>
+        <button class="btn btn-primary btn-sm" id="budget-calibrate" style="margin-bottom:11px">Caler</button>
+      </div>
+      <div id="budget-calib-note" style="font-size:11px;color:var(--text-muted);line-height:1.5"></div>
+    </div>
   `;
 
   _paintBudget(panel, state);
@@ -3533,6 +3580,33 @@ async function renderBudget(panel) {
     }
   });
 
+  panel.querySelector('#budget-calibrate')?.addEventListener('click', async (e) => {
+    const start   = panel.querySelector('#budget-inv-start')?.value;
+    const end     = panel.querySelector('#budget-inv-end')?.value;
+    const neurons = Number(panel.querySelector('#budget-inv-neurons')?.value);
+    if (!start || !end || !(neurons >= 0)) {
+      toast('Période et neurones facturés requis', 'error');
+      return;
+    }
+    e.target.disabled = true; e.target.textContent = '…';
+    try {
+      const res = await api('/api/admin/ai-budget/calibrate', 'POST', { start, end, neurons });
+      const r   = res.calibration_result || {};
+      toast('Compteur calé sur ta facture ✓');
+      renderBudget(panel);
+      // Note affichée APRÈS le re-render (renderBudget recrée le nœud).
+      const note = panel.querySelector('#budget-calib-note');
+      if (note) {
+        note.innerHTML = `Sur ${r.period_days} jours&nbsp;: ${_fmtNeurons(r.counted_neurons)} neurones comptés,
+          estimation avant calage ${_fmtNeurons(r.estimate_before)} → facturé ${_fmtNeurons(r.invoiced)}.
+          <strong style="color:var(--text)">Facteur retenu : ×${r.factor}</strong>.`;
+      }
+    } catch (err) {
+      toast(err.message, 'error');
+      e.target.disabled = false; e.target.textContent = 'Caler';
+    }
+  });
+
   // ── Auto-refresh du compteur (read-only), s'auto-coupe hors onglet ─
   _budgetRefreshTimer = setInterval(async () => {
     const p = document.getElementById('tab-mesures');
@@ -3551,6 +3625,7 @@ function _paintBudget(panel, state) {
   const c = state.control || {};
   const today = state.today || {};
   const month = state.month || {};
+  const cyc   = state.cycle || {};
 
   // ── Bannière d'état ──
   const banner = panel.querySelector('#budget-banner');
@@ -3568,13 +3643,13 @@ function _paintBudget(panel, state) {
       bg = 'rgba(99,102,241,0.10)'; border = 'var(--border)'; color = 'var(--gold)';
       icon = _budgetSvg('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>', 18);
       title = `Proche du plafond (${c.pct}%)`;
-      sub = `Estimation du mois : ${_fmtEur(month.eur_est)} sur un plafond de ${_fmtEur(c.threshold_eur)}.`;
+      sub = `Estimation du cycle en cours : ${_fmtEur(cyc.eur_est)} sur un plafond de ${_fmtEur(c.threshold_eur)}.`;
     } else {
       bg = 'rgba(76,175,128,0.08)'; border = 'rgba(76,175,128,0.26)'; color = 'var(--success)';
       icon = _budgetSvg('<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>', 18);
       title = 'IA active';
       sub = c.auto_on
-        ? `Coupure automatique armée à ${_fmtEur(c.threshold_eur)}/mois.`
+        ? `Coupure automatique armée à ${_fmtEur(c.threshold_eur)} par cycle de facturation.`
         : 'Coupure automatique désactivée.';
     }
     banner.innerHTML = `
@@ -3590,66 +3665,79 @@ function _paintBudget(panel, state) {
   // ── Compteur (stats + barres + détail par outil) ──
   const meter = panel.querySelector('#budget-meter');
   if (meter) {
-    const freePct  = today.free_used_pct || 0;
-    const freeColor = freePct >= 100 ? 'var(--danger)' : freePct >= 80 ? 'var(--gold)' : 'var(--success)';
-    const thrPct   = c.pct || 0;
-    const thrColor = thrPct >= 100 ? 'var(--danger)' : thrPct >= 80 ? 'var(--gold)' : 'var(--success)';
-    const byTool   = today.by_tool || [];
+    // Jauge de l'enveloppe : mesurée sur le CYCLE (pot commun), pas sur
+    // le jour. L'ancienne jauge quotidienne restait scotchée à 100 % en
+    // rouge en permanence — dépasser 10 000 neurones un jour donné n'est
+    // pas une anomalie, c'est le fonctionnement normal.
+    const freePct   = cyc.free_used_pct || 0;
+    const freeColor = freePct >= 100 ? 'var(--gold)' : 'var(--success)';
+    const thrPct    = c.pct || 0;
+    const thrColor  = thrPct >= 100 ? 'var(--danger)' : thrPct >= 80 ? 'var(--gold)' : 'var(--success)';
+    const byTool    = cyc.by_tool || [];
+    const calib     = state.calibration || {};
+    const tz        = today.tz || {};
 
     meter.innerHTML = `
       <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
         <div class="stat-card">
-          <div class="stat-label">Aujourd'hui · neurones</div>
+          <div class="stat-label">Cycle en cours · neurones</div>
+          <div class="stat-value" style="font-size:26px">${_fmtNeurons(cyc.neurons)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">
+            ${cyc.calls || 0} appel${(cyc.calls || 0) > 1 ? 's' : ''} · ${_fmtDate(cyc.start)} → ${_fmtDate(cyc.end)}
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Cycle en cours · € estimés</div>
+          <div class="stat-value" style="font-size:26px;color:${(cyc.eur_est || 0) > 0 ? 'var(--gold)' : 'var(--success)'}">${_fmtEur(cyc.eur_est)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">
+            ${_fmtNeurons(cyc.overage_neurons)} neurones au-delà de l'enveloppe
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Jour UTC · neurones</div>
           <div class="stat-value" style="font-size:26px">${_fmtNeurons(today.neurons)}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">${today.calls || 0} appel${(today.calls || 0) > 1 ? 's' : ''}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">
+            ${today.calls || 0} appel${(today.calls || 0) > 1 ? 's' : ''} · bascule à ${esc(tz.reset_local || '00:00')} chez toi
+          </div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Aujourd'hui · € estimés</div>
-          <div class="stat-value" style="font-size:26px;color:${(today.eur_est || 0) > 0 ? 'var(--gold)' : 'var(--success)'}">${_fmtEur(today.eur_est)}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">au-delà de l'enveloppe offerte</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Ce mois · neurones</div>
+          <div class="stat-label">Mois calendaire · neurones</div>
           <div class="stat-value" style="font-size:26px">${_fmtNeurons(month.neurons)}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">${month.calls || 0} appel${(month.calls || 0) > 1 ? 's' : ''} · ${esc(month.prefix || '')}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Ce mois · € estimés</div>
-          <div class="stat-value" style="font-size:26px;color:${(month.eur_est || 0) > 0 ? 'var(--gold)' : 'var(--success)'}">${_fmtEur(month.eur_est)}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">facturé par Cloudflare</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">${esc(month.prefix || '')} · hors facturation</div>
         </div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:26px">
         <div class="stat-card">
           <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
-            <span class="stat-label" style="margin:0">Enveloppe offerte du jour</span>
+            <span class="stat-label" style="margin:0">Enveloppe offerte du cycle</span>
             <span style="font-size:12px;font-weight:700;color:${freeColor}">${freePct}%</span>
           </div>
           ${_budgetBar(freePct, freeColor)}
           <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
-            ${_fmtNeurons(today.neurons)} / ${_fmtNeurons(today.free_per_day)} neurones gratuits par jour
+            ${_fmtNeurons(cyc.neurons)} / ${_fmtNeurons(cyc.free_pool)} neurones offerts
+            (${cyc.days_elapsed || 0} j écoulés sur ${cyc.days_total || 0} × ${_fmtNeurons(state.pricing?.free_neurons_per_day)}/j)
           </div>
         </div>
         <div class="stat-card">
           <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
-            <span class="stat-label" style="margin:0">Plafond mensuel</span>
+            <span class="stat-label" style="margin:0">Plafond du cycle</span>
             <span style="font-size:12px;font-weight:700;color:${thrColor}">${thrPct}%</span>
           </div>
           ${_budgetBar(thrPct, thrColor)}
           <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
-            ${_fmtEur(month.eur_est)} estimés / ${_fmtEur(c.threshold_eur)} de plafond
+            ${_fmtEur(cyc.eur_est)} estimés / ${_fmtEur(c.threshold_eur)} de plafond
           </div>
         </div>
       </div>
 
-      <h3 style="font-size:13px;font-weight:700;letter-spacing:-0.02em;margin:0 0 12px">Détail du jour par outil</h3>
+      <h3 style="font-size:13px;font-weight:700;letter-spacing:-0.02em;margin:0 0 12px">Détail du cycle par outil</h3>
       ${byTool.length === 0
-        ? '<div class="empty-state" style="padding:32px"><p style="font-size:13px">Aucun appel IA aujourd\'hui.</p></div>'
+        ? '<div class="empty-state" style="padding:32px"><p style="font-size:13px">Aucun appel IA sur ce cycle.</p></div>'
         : `<table class="data-table">
-            <thead><tr><th>Outil</th><th>Appels</th><th>Neurones</th><th>Part du jour</th></tr></thead>
+            <thead><tr><th>Outil</th><th>Appels</th><th>Neurones</th><th>Part du cycle</th></tr></thead>
             <tbody>${byTool.map(r => {
-              const part = today.neurons > 0 ? Math.round((r.neurons / today.neurons) * 100) : 0;
+              const part = cyc.neurons > 0 ? Math.round((r.neurons / cyc.neurons) * 100) : 0;
               return `<tr>
                 <td style="font-weight:600">${esc(_budgetToolLabel(r.tool))}</td>
                 <td style="color:var(--text-muted)">${r.calls || 0}</td>
@@ -3659,8 +3747,13 @@ function _paintBudget(panel, state) {
             }).join('')}</tbody>
           </table>`}
       <p style="font-size:11px;color:var(--text-muted);margin:14px 0 24px;line-height:1.5">
-        Barème indicatif : ${state.pricing?.usd_per_1k_neurons} $ / 1 000 neurones au-delà de
-        ${_fmtNeurons(state.pricing?.free_neurons_per_day)} offerts/jour, converti en € au taux ${state.pricing?.usd_to_eur}.
+        Barème : ${state.pricing?.usd_per_1k_neurons} $ / 1 000 neurones au-delà de
+        ${_fmtNeurons(state.pricing?.free_neurons_per_day)} offerts par jour, mutualisés sur le cycle,
+        converti en € au taux ${state.pricing?.usd_to_eur}.
+        ${calib.invoice_neurons != null
+          ? `Calé sur la facture du ${_fmtDate(calib.invoice_start)} au ${_fmtDate(calib.invoice_end)}
+             (${_fmtNeurons(calib.invoice_neurons)} neurones facturés) — facteur ×${(Number(calib.factor) || 1).toFixed(2)}.`
+          : `<strong style="color:var(--gold)">Jamais calé sur une facture réelle</strong> — l'estimation peut dériver.`}
       </p>`;
   }
 

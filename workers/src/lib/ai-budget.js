@@ -37,22 +37,136 @@ import { json } from './auth.js';
 import { KS_AI_MODEL } from './ai-model.js';
 
 // ── Barème neurones (neurones pour 1 000 000 tokens) ────────────────
-// Source : grille Cloudflare Workers AI mai 2026. Keystone ne tourne que
-// sur Mistral Small 3.1 ; on garde un fallback prudent au cas où le
-// modèle changerait sans mise à jour de cette table.
+// Source : grille Cloudflare Workers AI, revérifiée le 22/07/2026 sur
+// developers.cloudflare.com/workers-ai/platform/pricing. Le barème
+// Mistral est CONFIRMÉ exact (0,351 $/M in · 0,555 $/M out).
+// Les 3 autres entrées comblent l'angle mort trouvé le 22/07 : Smart
+// Agent (embeddings + reranker) et Keynapse appelaient env.AI.run SANS
+// jamais appeler recordUsage — leur conso était invisible au compteur.
 const NEURON_RATES = {
   '@cf/mistralai/mistral-small-3.1-24b-instruct': { in: 31876, out: 50488 },
+  '@cf/baai/bge-m3'            : { in:  1075, out: 0 },   // embeddings
+  '@cf/baai/bge-reranker-base' : { in:   283, out: 0 },   // reranker
 };
 const DEFAULT_RATE = { in: 35000, out: 50000 };
+
+// ── Barème audio (neurones par MINUTE d'audio, pas par token) ───────
+// Whisper ne se facture pas au token. L'ancien code comptait la
+// TRANSCRIPTION comme des tokens de sortie au barème Mistral — un
+// chiffre qui ne voulait rien dire (≈ 50 000 neurones/M au lieu de
+// ~47/minute). On mesure désormais la durée réelle de l'audio.
+const AUDIO_NEURON_RATES = {
+  '@cf/openai/whisper-large-v3-turbo': 46.63,
+  '@cf/openai/whisper'               : 41.14,
+};
+const DEFAULT_AUDIO_RATE = 46.63;
+
+/** Un modèle facturé à la minute d'audio plutôt qu'au token ? */
+export function isAudioModel(model) {
+  return Object.prototype.hasOwnProperty.call(AUDIO_NEURON_RATES, model);
+}
+
+/**
+ * Durée d'audio (secondes) déduite d'une réponse Whisper Workers AI.
+ * Les variantes renvoient soit `segments[]`, soit `words[]`, avec des
+ * bornes temporelles. Aucune borne exploitable → 0 : on préfère ne RIEN
+ * compter plutôt qu'inventer une durée (c'est exactement l'erreur que
+ * faisait l'ancien 'kora-stt', qui métrait la transcription au barème
+ * texte de Mistral).
+ */
+export function audioSecondsFrom(res) {
+  const segs = Array.isArray(res?.segments) ? res.segments : null;
+  if (segs?.length) {
+    const end = Number(segs[segs.length - 1]?.end);
+    if (end > 0) return end;
+  }
+  const words = Array.isArray(res?.words) ? res.words : null;
+  if (words?.length) {
+    const end = Number(words[words.length - 1]?.end);
+    if (end > 0) return end;
+  }
+  return 0;
+}
 
 // ── Tarification Workers Paid ───────────────────────────────────────
 const FREE_NEURONS_PER_DAY = 10000;    // inclus / jour, puis facturé
 const USD_PER_1K_NEURONS   = 0.011;    // au-delà de l'enveloppe gratuite
 const USD_TO_EUR           = 0.92;     // taux indicatif (estimation €)
 
+// ── Cycle de facturation Cloudflare ─────────────────────────────────
+// CORRECTION 22/07/2026, calée sur la 1re VRAIE facture (IN 71971984,
+// période 18/06 → 17/07/2026, ligne « Regular Twitch Neurons ») :
+//
+//   · Cloudflare facture par CYCLE D'ABONNEMENT, pas par mois
+//     calendaire. Sur la facture : « Workers Paid · 18 juil. 2026 –
+//     17 août 2026 » → le cycle court du 18 au 17. Agréger sur
+//     `2026-07` comparait donc à la mauvaise fenêtre.
+//
+//   · L'enveloppe offerte se comporte comme un POT COMMUN sur la
+//     période, PAS comme un plafond journalier remis à zéro. La doc
+//     dit « 10 000 neurones/jour, reset 00:00 UTC » — mais la facture
+//     dit autre chose, et c'est la facture qui paie :
+//
+//       neurones comptés  23/06 → 17/07 ....... 296 714
+//       ancien calcul (clip par jour) ......... 119 819 de dépassement
+//       facturé RÉELLEMENT par Cloudflare ......  38 250
+//       pot commun (296 714 − 25 j × 10 000) ...  46 714  ← à 4 %
+//
+//     L'ancien modèle jetait l'enveloppe inutilisée des jours creux
+//     (7 neurones le 13/07, 114 le 14/07) et surestimait d'un facteur
+//     ~3. Le pot commun colle. On garde malgré tout un FACTEUR DE
+//     CALAGE réglable (cf. setCalibration) : un seul point de mesure
+//     ne fait pas une loi, et chaque nouvelle facture doit pouvoir
+//     réajuster le compteur sans redéploiement.
+const CF_CYCLE_ANCHOR_DAY = 18;        // le cycle démarre le 18 de chaque mois
+
+/**
+ * Cycle de facturation Cloudflare COURANT (en UTC, comme la facture).
+ * @returns {{start:string, end:string, days_total:number, days_elapsed:number}}
+ */
+function _cfCycle(now = new Date()) {
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const d = now.getUTCDate();
+  // Avant le 18 → on est encore dans le cycle ouvert le 18 du mois précédent.
+  const start = (d >= CF_CYCLE_ANCHOR_DAY)
+    ? new Date(Date.UTC(y, m, CF_CYCLE_ANCHOR_DAY))
+    : new Date(Date.UTC(y, m - 1, CF_CYCLE_ANCHOR_DAY));
+  // Fin = veille du 18 suivant.
+  const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, CF_CYCLE_ANCHOR_DAY - 1));
+  const DAY = 86400000;
+  const todayUtc = new Date(Date.UTC(y, m, d));
+  return {
+    start       : start.toISOString().slice(0, 10),
+    end         : end.toISOString().slice(0, 10),
+    days_total  : Math.round((end - start) / DAY) + 1,
+    days_elapsed: Math.round((todayUtc - start) / DAY) + 1,
+  };
+}
+
 // ── Utilitaires ─────────────────────────────────────────────────────
+// ⚠️ Le « jour » du compteur est un jour UTC — c'est le seul qui compte
+// pour Cloudflare (les quotas Workers AI se remettent à zéro à 00:00
+// UTC). Mais Stéphane vit à Paris : en été (UTC+2) le compteur ne
+// bascule qu'à 02 h du matin. D'où le retour « l'enveloppe du jour ne
+// se remet pas à jour » à 00 h 51 heure de Paris — le compteur avait
+// raison, c'est l'étiquette « Aujourd'hui » qui mentait. On expose
+// désormais le décalage explicitement (cf. getBudgetState.today.tz).
 function _utcDay()   { return new Date().toISOString().slice(0, 10); }       // YYYY-MM-DD
 function _utcMonth() { return new Date().toISOString().slice(0, 7); }        // YYYY-MM
+
+/** Heure de reset du jour UTC, exprimée dans le fuseau de l'utilisateur. */
+function _resetLabelParis(now = new Date()) {
+  // Décalage Paris ↔ UTC au moment T (gère été/hiver sans table en dur).
+  const parisHour = Number(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Paris', hour: '2-digit', hour12: false,
+  }).format(now));
+  const utcHour   = now.getUTCHours();
+  let offset = parisHour - utcHour;
+  if (offset < -12) offset += 24;
+  if (offset >  12) offset -= 24;
+  return { offset_h: offset, reset_local: `${String((24 + offset) % 24).padStart(2, '0')}:00` };
+}
 
 /** Estimation grossière tokens depuis une chaîne (~4 chars/token). */
 export function estimateTokens(text) {
@@ -105,6 +219,18 @@ async function ensureBudgetSchema(env) {
   await env.DB.prepare(
     'INSERT OR IGNORE INTO ai_budget_control (id, throttle_on, auto_on, threshold_eur) VALUES (1, 0, 1, 10)'
   ).run().catch(() => {});
+  // Calage sur facture réelle (ajouté 22/07/2026) — ALTER idempotent :
+  // sur une base déjà créée, CREATE TABLE IF NOT EXISTS ne rajoute
+  // pas les colonnes. On tente, on ignore le « duplicate column ».
+  for (const col of [
+    'calib_factor REAL NOT NULL DEFAULT 1',
+    'invoice_neurons REAL',
+    'invoice_start TEXT',
+    'invoice_end TEXT',
+    'invoice_at TEXT',
+  ]) {
+    await env.DB.prepare(`ALTER TABLE ai_budget_control ADD COLUMN ${col}`).run().catch(() => {});
+  }
   _schemaReady = true;
 }
 
@@ -114,22 +240,46 @@ async function _readControl(env) {
   const now = Date.now();
   if (_ctlCache.row && now - _ctlCache.at < 20000) return _ctlCache.row;
   const row = await env.DB
-    .prepare('SELECT throttle_on, auto_on, threshold_eur, throttle_reason, throttled_at FROM ai_budget_control WHERE id = 1')
+    .prepare(`SELECT throttle_on, auto_on, threshold_eur, throttle_reason, throttled_at,
+                     calib_factor, invoice_neurons, invoice_start, invoice_end, invoice_at
+                FROM ai_budget_control WHERE id = 1`)
     .first()
     .catch(() => null);
   const safe = row || { throttle_on: 0, auto_on: 1, threshold_eur: 10, throttle_reason: null, throttled_at: null };
+  if (!(Number(safe.calib_factor) > 0)) safe.calib_factor = 1;
   _ctlCache = { at: now, row: safe };
   return safe;
 }
 function _invalidateCtlCache() { _ctlCache = { at: 0, row: null }; }
 
-// ── € de dépassement du mois en cours ───────────────────────────────
-async function _monthOverageEur(env) {
-  const rows = (await env.DB.prepare(
-    'SELECT day, SUM(neurons) AS neurons FROM ai_neuron_ledger WHERE day LIKE ? GROUP BY day'
-  ).bind(_utcMonth() + '%').all().catch(() => ({ results: [] }))).results || [];
-  const overage = rows.reduce((s, r) => s + Math.max(0, (r.neurons || 0) - FREE_NEURONS_PER_DAY), 0);
-  return _neuronsToEur(overage);
+// ── Neurones consommés sur une fenêtre [start, end] (jours UTC) ──────
+async function _neuronsOver(env, start, end) {
+  const row = await env.DB.prepare(
+    'SELECT SUM(neurons) AS neurons, SUM(calls) AS calls FROM ai_neuron_ledger WHERE day >= ? AND day <= ?'
+  ).bind(start, end).first().catch(() => null);
+  return { neurons: row?.neurons || 0, calls: row?.calls || 0 };
+}
+
+/**
+ * Dépassement facturable estimé sur le cycle Cloudflare en cours.
+ * Modèle POT COMMUN (cf. bloc « Cycle de facturation » plus haut) :
+ * l'enveloppe offerte est mutualisée sur les jours écoulés du cycle,
+ * pas remise à zéro chaque nuit.
+ */
+async function _cycleOverage(env, ctl) {
+  const cycle = _cfCycle();
+  const { neurons, calls } = await _neuronsOver(env, cycle.start, _utcDay());
+  const freePool = cycle.days_elapsed * FREE_NEURONS_PER_DAY;
+  const raw      = Math.max(0, neurons - freePool);
+  const calib    = Number(ctl?.calib_factor) > 0 ? Number(ctl.calib_factor) : 1;
+  const overage  = raw * calib;
+  return { cycle, neurons, calls, freePool, raw, calib, overage, eur: _neuronsToEur(overage) };
+}
+
+/** € de dépassement du cycle en cours (garde-fou auto-bridage). */
+async function _cycleOverageEur(env) {
+  const ctl = await _readControl(env);
+  return (await _cycleOverage(env, ctl)).eur;
 }
 
 // ── Auto-bridage : ARME et LIBÈRE (débounce mémoire : au plus 1×/min
@@ -156,12 +306,12 @@ async function _maybeAutoThrottle(env) {
   const ctl = await _readControl(env);
   if (!ctl.throttle_on) {
     if (!ctl.auto_on) return;
-    const eur = await _monthOverageEur(env);
+    const eur = await _cycleOverageEur(env);
     if (eur >= (ctl.threshold_eur || 0)) await setThrottle(env, true, 'auto');
     return;
   }
   if (ctl.throttle_reason !== 'auto') return;   // coupure manuelle : jamais auto-levée
-  const eur = await _monthOverageEur(env);
+  const eur = await _cycleOverageEur(env);
   if (eur < (ctl.threshold_eur || 0)) await setThrottle(env, false, null);
 }
 
@@ -194,7 +344,17 @@ export async function recordUsage(env, tool, opts = {}) {
     if (!inTok  && opts.inText)  inTok  = estimateTokens(opts.inText);
     if (!outTok && opts.outText) outTok = estimateTokens(opts.outText);
 
-    const neurons = neuronsFor(model, inTok, outTok);
+    // Audio (Whisper) : facturé à la minute, jamais au token. On ignore
+    // les tokens estimés depuis la transcription, ils n'ont aucun sens ici.
+    let neurons;
+    if (isAudioModel(model)) {
+      const secs = Number(opts.audioSeconds) || 0;
+      if (secs <= 0) return;                 // durée inconnue → on ne devine pas
+      inTok = 0; outTok = 0;
+      neurons = (secs / 60) * (AUDIO_NEURON_RATES[model] || DEFAULT_AUDIO_RATE);
+    } else {
+      neurons = neuronsFor(model, inTok, outTok);
+    }
     if (neurons <= 0) return;
 
     await env.DB.prepare(`
@@ -310,6 +470,7 @@ export async function getBudgetState(env) {
   await ensureBudgetSchema(env);
   const today      = _utcDay();
   const monthLike  = _utcMonth() + '%';
+  const ctl        = await _readControl(env);
 
   const todayRows = (await env.DB.prepare(
     'SELECT tool, neurons, calls FROM ai_neuron_ledger WHERE day = ? ORDER BY neurons DESC'
@@ -324,31 +485,50 @@ export async function getBudgetState(env) {
   const monthNeurons = monthRows.reduce((s, r) => s + (r.neurons || 0), 0);
   const monthCalls   = monthRows.reduce((s, r) => s + (r.calls   || 0), 0);
 
-  const todayOverage = Math.max(0, todayNeurons - FREE_NEURONS_PER_DAY);
-  const monthOverage = monthRows.reduce((s, r) => s + Math.max(0, (r.neurons || 0) - FREE_NEURONS_PER_DAY), 0);
-  const monthEur     = _neuronsToEur(monthOverage);
-  const todayEur     = _neuronsToEur(todayOverage);
+  // ── Référence de facturation : le CYCLE Cloudflare (18 → 17) ──────
+  const cyc = await _cycleOverage(env, ctl);
+  const cycleRows = (await env.DB.prepare(
+    'SELECT tool, SUM(neurons) AS neurons, SUM(calls) AS calls FROM ai_neuron_ledger WHERE day >= ? AND day <= ? GROUP BY tool ORDER BY neurons DESC'
+  ).bind(cyc.cycle.start, today).all().catch(() => ({ results: [] }))).results || [];
 
-  const ctl = await _readControl(env);
-  const pct = (ctl.threshold_eur > 0) ? (monthEur / ctl.threshold_eur) : 0;
+  const pct = (ctl.threshold_eur > 0) ? (cyc.eur / ctl.threshold_eur) : 0;
+  const tz  = _resetLabelParis();
 
   return {
+    // Le jour UTC reste exposé (utile pour le détail par outil), mais il
+    // n'est plus la référence de facturation. `tz` dit franchement à
+    // quelle heure locale il bascule — sans ça l'écran ment entre
+    // minuit et 02 h heure de Paris.
     today: {
       day            : today,
+      is_utc         : true,
+      tz             : { offset_h: tz.offset_h, reset_local: tz.reset_local },
       neurons        : Math.round(todayNeurons),
       calls          : todayCalls,
       free_per_day   : FREE_NEURONS_PER_DAY,
-      free_used_pct  : Math.min(100, Math.round((todayNeurons / FREE_NEURONS_PER_DAY) * 100)),
-      overage_neurons: Math.round(todayOverage),
-      eur_est        : todayEur,
       by_tool        : todayRows.map(r => ({ tool: r.tool, neurons: Math.round(r.neurons || 0), calls: r.calls || 0 })),
     },
+    // ★ Bloc de référence : c'est CE que Cloudflare facture.
+    cycle: {
+      start          : cyc.cycle.start,
+      end            : cyc.cycle.end,
+      days_total     : cyc.cycle.days_total,
+      days_elapsed   : cyc.cycle.days_elapsed,
+      neurons        : Math.round(cyc.neurons),
+      calls          : cyc.calls,
+      free_pool      : cyc.freePool,
+      free_used_pct  : Math.min(100, Math.round((cyc.neurons / Math.max(1, cyc.freePool)) * 100)),
+      overage_neurons: Math.round(cyc.overage),
+      overage_raw    : Math.round(cyc.raw),
+      eur_est        : cyc.eur,
+      by_tool        : cycleRows.map(r => ({ tool: r.tool, neurons: Math.round(r.neurons || 0), calls: r.calls || 0 })),
+    },
+    // Conservé pour l'historique, explicitement marqué « hors facturation ».
     month: {
       prefix         : _utcMonth(),
       neurons        : Math.round(monthNeurons),
       calls          : monthCalls,
-      overage_neurons: Math.round(monthOverage),
-      eur_est        : monthEur,
+      billing_ref    : false,
     },
     control: {
       throttle_on   : !!ctl.throttle_on,
@@ -359,12 +539,67 @@ export async function getBudgetState(env) {
       pct           : Math.round(pct * 100),
       near_threshold: pct >= 0.8 && !ctl.throttle_on,
     },
+    // Calage sur la dernière facture réelle saisie par l'admin.
+    calibration: {
+      factor         : cyc.calib,
+      invoice_neurons: ctl.invoice_neurons ?? null,
+      invoice_start  : ctl.invoice_start   || null,
+      invoice_end    : ctl.invoice_end     || null,
+      invoice_at     : ctl.invoice_at      || null,
+    },
     pricing: {
       free_neurons_per_day: FREE_NEURONS_PER_DAY,
       usd_per_1k_neurons  : USD_PER_1K_NEURONS,
       usd_to_eur          : USD_TO_EUR,
       model               : KS_AI_MODEL,
+      cycle_anchor_day    : CF_CYCLE_ANCHOR_DAY,
     },
     generated_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Cale le compteur sur une VRAIE facture Cloudflare.
+ * L'admin saisit la période et le nombre de neurones réellement
+ * facturés (ligne « Regular Twitch Neurons ») ; on recalcule ce que le
+ * compteur AURAIT annoncé sur cette même fenêtre et on en déduit le
+ * facteur correctif. Un seul point de mesure ne fait pas une loi —
+ * mais chaque facture suivante réaffine sans redéploiement.
+ * @returns {object} état complet + le détail du calage
+ */
+export async function setCalibration(env, { start, end, neurons } = {}) {
+  await ensureBudgetSchema(env);
+  const s = String(start || '').slice(0, 10);
+  const e = String(end   || '').slice(0, 10);
+  const realNeurons = Number(neurons);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || !/^\d{4}-\d{2}-\d{2}$/.test(e) || !(realNeurons >= 0)) {
+    throw new Error('Période (start/end au format AAAA-MM-JJ) et neurones facturés requis.');
+  }
+
+  const { neurons: counted } = await _neuronsOver(env, s, e);
+  const days     = Math.round((Date.parse(e + 'T00:00:00Z') - Date.parse(s + 'T00:00:00Z')) / 86400000) + 1;
+  const estimate = Math.max(0, counted - days * FREE_NEURONS_PER_DAY);
+  // Estimation nulle → aucun facteur déductible : on retombe à 1 plutôt
+  // que de diviser par zéro et de figer un compteur aberrant.
+  const factor   = estimate > 0 ? Math.max(0.05, Math.min(20, realNeurons / estimate)) : 1;
+
+  await env.DB.prepare(`
+    UPDATE ai_budget_control
+       SET calib_factor = ?, invoice_neurons = ?, invoice_start = ?, invoice_end = ?,
+           invoice_at = ?, updated_at = datetime('now')
+     WHERE id = 1
+  `).bind(factor, realNeurons, s, e, new Date().toISOString()).run().catch(() => {});
+  _invalidateCtlCache();
+
+  const state = await getBudgetState(env);
+  return {
+    ...state,
+    calibration_result: {
+      period_days     : days,
+      counted_neurons : Math.round(counted),
+      estimate_before : Math.round(estimate),
+      invoiced        : realNeurons,
+      factor          : Math.round(factor * 1000) / 1000,
+    },
   };
 }

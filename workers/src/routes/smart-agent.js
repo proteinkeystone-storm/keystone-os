@@ -56,7 +56,7 @@ import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from
 import { requireJWT }                              from '../lib/jwt.js';
 import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } from '../lib/ai-credits.js';
-import { budgetGuard }                            from '../lib/ai-budget.js';
+import { budgetGuard, recordUsage }               from '../lib/ai-budget.js';
 import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-router.js';
 import { streamLLM }                               from '../lib/llm-stream.js';
 
@@ -102,6 +102,14 @@ function _vectorReady(env) {
 async function _embed(env, texts) {
   if (!texts.length) return [];
   const res = await env.AI.run(EMBED_MODEL, { text: texts });
+  // Compteur budget IA — angle mort corrigé le 22/07/2026 : l'indexation
+  // Kortex tournait hors compteur depuis toujours (barème bge-m3, très
+  // bas, mais un ré-index complet en fait beaucoup d'un coup).
+  await recordUsage(env, 'smart-agent-embed', {
+    model : EMBED_MODEL,
+    usage : res?.usage,
+    inText: texts.join(' '),
+  });
   const data = res?.data;
   if (!Array.isArray(data) || data.length !== texts.length) {
     throw new Error('Réponse embeddings inattendue');
@@ -1769,7 +1777,13 @@ async function _agentLLM(env, { engine, apiKey, system, messages, max_tokens, te
   const params = { messages: msgs, max_tokens, stream: false };
   if (typeof temperature === 'number') params.temperature = temperature;
   const res = await env.AI.run(KS_AI_MODEL, params);
-  return (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+  const out = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+  await recordUsage(env, 'smart-agent', {
+    usage  : res?.usage,
+    inText : msgs.map(m => m.content || '').join('\n'),
+    outText: out,
+  });
+  return out;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1858,6 +1872,11 @@ export async function streamMistralReply(env, { system, messages, max_tokens, te
       if (chunk) { full += chunk; cb(chunk); }
     }
   }
+  // Le flux SSE ne porte pas d'objet `usage` → estimation depuis le texte.
+  await recordUsage(env, 'smart-agent', {
+    inText : msgs.map(m => m.content || '').join('\n'),
+    outText: full,
+  });
   return full;
 }
 
@@ -2195,6 +2214,11 @@ export async function _rerank(env, query, hits) {
     const out = await env.AI.run(RERANK_MODEL, {
       query: String(query || '').slice(0, CHAT_MAX_LEN),
       contexts,
+    });
+    await recordUsage(env, 'smart-agent-rerank', {
+      model : RERANK_MODEL,
+      usage : out?.usage,
+      inText: String(query || '') + contexts.map(c => c.text).join(' '),
     });
     return applyRerank(hits, out?.response);
   } catch (_) { return hits; }

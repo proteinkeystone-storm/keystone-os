@@ -24,7 +24,7 @@
 import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
-import { budgetGuard, recordUsage } from '../lib/ai-budget.js';
+import { budgetGuard, recordUsage, audioSecondsFrom } from '../lib/ai-budget.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 
 /* ── Plafonds (historique + catalogue compacts = prompt caching ami) ── */
@@ -789,7 +789,7 @@ export async function _koraTranscribe(env, ct, buf) {
     return { status: 400, error: 'Audio attendu (Content-Type audio/…)' };
   if (!buf || buf.byteLength === 0) return { status: 400, error: 'Enregistrement vide' };
   if (buf.byteLength > MAX_STT_BYTES) return { status: 413, error: 'Enregistrement trop lourd (max ~60 s)' };
-  let text = '';
+  let text = '', secs = 0;
   try {
     const res = await env.AI.run(WHISPER_MODEL, {
       audio: _koraB64(buf),        // turbo attend du base64 (pas des octets)
@@ -797,11 +797,12 @@ export async function _koraTranscribe(env, ct, buf) {
       task: 'transcribe',          // jamais 'translate' (sinon sortie anglaise)
     });
     text = String(res?.text ?? res?.transcription ?? '').trim();
+    secs = audioSecondsFrom(res);
   } catch (e) {
     console.error('[kora] stt échec :', e?.message || e);
     return { status: 502, error: 'Transcription indisponible pour le moment — réessaie.' };
   }
-  return { status: 200, text };
+  return { status: 200, text, audioSeconds: secs };
 }
 
 /* ═══ POST /api/kora/stt — transcription talkie-walkie (V-1) ═══
@@ -829,9 +830,15 @@ export async function handleKoraStt(request, env) {
   const r   = await _koraTranscribe(env, ct, buf);
   if (r.status !== 200) return err(r.error, r.status, origin);
 
-  /* métrage seul (pas de crédit) : visibilité au ledger sous 'kora-stt' ;
-     l'audio n'est pas du texte, on impute la sortie (le transcript) */
-  await recordUsage(env, 'kora-stt', { outText: r.text }).catch(() => {});
+  /* métrage seul (pas de crédit) : visibilité au ledger sous 'kora-stt'.
+     CORRIGÉ 22/07/2026 — on imputait le TRANSCRIPT en tokens de sortie au
+     barème Mistral (~50 000 neurones/M), alors que Whisper se facture à la
+     minute d'audio (~47 neurones/minute). Le chiffre était sans rapport
+     avec la réalité. On mesure la durée réelle, ou rien. */
+  await recordUsage(env, 'kora-stt', {
+    model       : WHISPER_MODEL,
+    audioSeconds: r.audioSeconds,
+  }).catch(() => {});
 
   return json({ ok: true, text: r.text }, 200, origin);
 }

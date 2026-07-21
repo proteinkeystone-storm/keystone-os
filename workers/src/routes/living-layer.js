@@ -86,6 +86,14 @@ export async function handleLivingLayerGreeting(request, env) {
     return _json({ phrase: fallback, moment, generated_at: new Date().toISOString(), throttled: true }, 200, origin);
   }
 
+  // Mode IA OPT-IN (22/07/2026), même règle que /board. Cet endpoint V1
+  // n'est plus appelé par le front (remplacé par /board) mais il reste
+  // routé : sans ce garde, c'est une route qui brûle des neurones sur
+  // simple POST. Absent = OFF.
+  if (body.aiMode !== true) {
+    return _json({ phrase: fallback, moment, generated_at: new Date().toISOString(), ai: false }, 200, origin);
+  }
+
   const systemPrompt = [
     'Tu es Living Layer, la couche IA chaleureuse de Keystone OS.',
     'Tu écris UNE phrase courte (max 14 mots) affichée sous "Bonjour, ' + firstName + '".',

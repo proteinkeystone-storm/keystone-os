@@ -24,7 +24,7 @@ import { requireJWT } from '../lib/jwt.js';
 // Sprint 6 (voix) — mêmes briques IA que Smart Agent : crédit DORMANT par
 // licence (flag enforce_ai_credits_v1) + garde-fou budget global + modèle.
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
-import { budgetGuard } from '../lib/ai-budget.js';
+import { budgetGuard, recordUsage, audioSecondsFrom } from '../lib/ai-budget.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 // Sprint 9 (push) — notifications de rappels même application fermée.
 import { sendPush } from '../lib/webpush.js';
@@ -625,6 +625,13 @@ async function _extractVoicePlan(env, gate, transcript) {
       stream: false,
     });
     const raw = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+    // Compteur budget IA (angle mort corrigé le 22/07/2026 : Keynapse
+    // consommait des neurones sans jamais apparaître au compteur).
+    await recordUsage(env, 'keynapse', {
+      usage  : res?.usage,
+      inText : VOICE_EXTRACT_PROMPT + transcript.slice(0, 6000),
+      outText: raw,
+    });
     const plan = _parseVoicePlan(raw);
     if (!plan.tasks.length && !plan.reminders.length) await _knRefundCredit(env, ticket);
     return plan;
@@ -675,6 +682,11 @@ export async function handleVoiceUpload(request, env, bubbleId) {
   try {
     const res = await env.AI.run(WHISPER_MODEL, { audio: [...new Uint8Array(buf)] });
     transcript = String(res?.text ?? res?.transcription ?? '').trim();
+    // Whisper se facture à la MINUTE D'AUDIO, pas au token.
+    await recordUsage(env, 'keynapse-stt', {
+      model       : WHISPER_MODEL,
+      audioSeconds: audioSecondsFrom(res),
+    });
   } catch (_) {
     await _knRefundCredit(env, ticket);
     return _finish('', null, { note: 'Transcription indisponible pour le moment — l’audio est conservé.' });

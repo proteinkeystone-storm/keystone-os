@@ -1161,13 +1161,72 @@ async function _buildAiPhraseLlama(env, systemPrompt, userPrompt) {
   return _parseAiPhrase(rawText);
 }
 
+// ══════════════════════════════════════════════════════════════════
+// Cache des phrases IA (22/07/2026) — LE poste de dépense n°1
+// ──────────────────────────────────────────────────────────────────
+// Constat sur le grand livre D1 : Living Layer pesait 290 522 neurones
+// sur 296 714 consommés entre le 23/06 et le 17/07, soit 98 % de TOUTE
+// la conso IA de Keystone — 17 337 appels Workers AI pour une phrase
+// d'ambiance. Cause : le front tourne toutes les 7 s (LIVING_ROTATE_MS)
+// sur un cycle à 3 temps → un appel IA toutes les 21 s d'onglet ouvert.
+//
+// Fix : on découple la ROTATION VISUELLE (inchangée, 7 s) de la
+// GÉNÉRATION (1 appel / COOLDOWN / tenant). Entre deux générations, on
+// puise dans un petit anneau de phrases déjà produites — l'écran reste
+// aussi vivant, la facture non. ~170 appels/h → ~6.
+//
+// Cache API (edge, gratuit) plutôt que D1 : zéro écriture facturée, et
+// un miss n'est jamais grave (au pire on régénère). Clé cloisonnée PAR
+// TENANT — les prompts portent le prénom et les signaux métier, jamais
+// de fuite d'un compte à l'autre.
+const LIVING_AI_COOLDOWN_MS = 10 * 60 * 1000;   // 1 génération / 10 min / tenant
+const LIVING_AI_RING_TTL_S  = 60 * 60;          // l'anneau survit 1 h
+const LIVING_AI_RING_MAX    = 4;                // variantes conservées
+
+function _livingAiCacheKey(tenantKey) {
+  // Hôte fictif : jamais résolu, sert uniquement d'index dans le cache edge.
+  return new Request(`https://living-ai-cache.keystone.internal/${encodeURIComponent(tenantKey || 'anon')}`);
+}
+
+async function _livingAiRingRead(tenantKey) {
+  try {
+    const hit = await caches.default.match(_livingAiCacheKey(tenantKey));
+    if (!hit) return [];
+    const ring = await hit.json();
+    return Array.isArray(ring) ? ring : [];
+  } catch (e) { return []; }
+}
+
+async function _livingAiRingWrite(tenantKey, ring) {
+  try {
+    await caches.default.put(_livingAiCacheKey(tenantKey), new Response(JSON.stringify(ring), {
+      headers: {
+        'content-type' : 'application/json',
+        'cache-control': `max-age=${LIVING_AI_RING_TTL_S}`,
+      },
+    }));
+  } catch (e) { /* cache indisponible → on régénérera, sans casse */ }
+}
+
 // ── Génère une phrase mode IA ─────────────────────────────────────
 // Dispatch : Claude Haiku si clé BYOK présente (qualité premium), sinon
-// Llama 3.1 8B. Si Claude échoue → fallback transparent Llama. Échec
+// Mistral (Workers AI). Si Claude échoue → fallback transparent. Échec
 // total → null (le caller bascule sur le Calculateur).
-async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0, apiKey = null, engine = null) {
+async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0, apiKey = null, engine = null, tenantKey = null) {
   const prompts = _buildAiPrompts(sensors, firstName, variantIndex);
   if (!prompts) return null;  // aucun signal exploitable
+
+  // 1. L'anneau tient-il déjà une phrase assez fraîche ? Si la dernière
+  //    génération date de moins de COOLDOWN, on sert une variante sans
+  //    dépenser un seul neurone. `variantIndex` fait tourner le choix →
+  //    l'utilisateur ne voit pas deux fois la même phrase d'affilée.
+  const ring  = await _livingAiRingRead(tenantKey);
+  const fresh = ring.filter(e => e && e.text && (Date.now() - (e.at || 0)) < LIVING_AI_RING_TTL_S * 1000);
+  const newest = fresh.reduce((m, e) => Math.max(m, e.at || 0), 0);
+  if (fresh.length && (Date.now() - newest) < LIVING_AI_COOLDOWN_MS) {
+    const pick = fresh[variantIndex % fresh.length];
+    return { text: pick.text, topic: pick.topic || prompts.topic, cached: true };
+  }
 
   let text = null;
   // BYOK généralisé (flag ON) : n'importe quel moteur du client via callLLM.
@@ -1181,7 +1240,15 @@ async function _buildAiPhrase(env, sensors, firstName, variantIndex = 0, apiKey 
   if (!text) {
     text = await _buildAiPhraseLlama(env, prompts.systemPrompt, prompts.userPrompt);
   }
-  return text ? { text, topic: prompts.topic } : null;
+  if (!text) return null;
+
+  // 2. Génération réussie → on l'ajoute à l'anneau (borné) pour les
+  //    ~10 min qui viennent. `fresh` (pas `ring`) : on ne réanime pas
+  //    des phrases périmées au passage.
+  const next = [{ text, topic: prompts.topic, at: Date.now() }, ...fresh].slice(0, LIVING_AI_RING_MAX);
+  await _livingAiRingWrite(tenantKey, next);
+
+  return { text, topic: prompts.topic };
 }
 
 // BYOK généralisé (Phase 2) : phrase IA sur le moteur du client via callLLM.
@@ -1261,6 +1328,14 @@ export async function handleLivingBoard(request, env) {
   // Moteur actif (BYOK généralisé Phase 2) — envoyé par le front (engines.js).
   // Flag OFF ⇒ ignoré (le dispatch retombe sur Claude-si-clé / Llama).
   const engine        = (typeof body.engine === 'string' && body.engine) ? body.engine : null;
+  // Mode IA : OPT-IN STRICT (22/07/2026). Le client doit le réclamer
+  // explicitement (`aiMode:true`), sinon aucun neurone n'est dépensé et
+  // on sert le Calculateur. Garde-fou côté SERVEUR et pas seulement côté
+  // front : Keystone est une PWA, un service worker au cache figé peut
+  // continuer à demander `preferMode:'ai'` pendant des jours après le
+  // déploiement. Le front d'avant cette date n'envoie pas le champ →
+  // absent = OFF, exactement le comportement voulu.
+  const aiAllowed     = body.aiMode === true;
 
   // JWT optionnel — si présent, on identifie la licence (audience + sensors personnels)
   let claims = null;
@@ -1411,7 +1486,8 @@ export async function handleLivingBoard(request, env) {
 
   // Si preferMode demande explicitement un mode, on tente celui-là
   if (preferMode === 'ai') {
-    const ai = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey, engine);
+    if (!aiAllowed) return calcResponse();     // opt-in absent → 0 neurone
+    const ai = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey, engine, padTenant);
     if (ai) {
       return json({ mode: 'ai', text: ai.text, topic: ai.topic, icon: 'sparkles', ttl: 120, metrics }, 200, origin);
     }
@@ -1441,7 +1517,9 @@ export async function handleLivingBoard(request, env) {
   // 2. Pas de preferMode → cycle par défaut au boot
   // Premier appel : on commence par le mode IA si signaux disponibles, sinon Calculateur.
   // (Le frontend gère la rotation 8-12s en envoyant preferMode aux appels suivants.)
-  const ai = await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey, engine);
+  const ai = aiAllowed
+    ? await _buildAiPhrase(env, sensors, firstName, variantIndex, apiKey, engine, padTenant)
+    : null;
   if (ai) {
     return json({ mode: 'ai', text: ai.text, topic: ai.topic, icon: 'sparkles', ttl: 120, metrics }, 200, origin);
   }

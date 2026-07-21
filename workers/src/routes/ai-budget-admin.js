@@ -5,13 +5,14 @@
 // neurones Workers AI et le pilotage du bridage. La logique vit dans
 // lib/ai-budget.js ; ici on ne fait que l'auth + le câblage HTTP.
 //
-//   GET  /api/admin/ai-budget            → état complet (jour/mois/€/seuil)
+//   GET  /api/admin/ai-budget            → état complet (cycle/jour/€/seuil)
 //   POST /api/admin/ai-budget/throttle   → { on:bool } bridage manuel
 //   POST /api/admin/ai-budget/threshold  → { eur?, auto? } seuil + auto-bridage
+//   POST /api/admin/ai-budget/calibrate  → { start, end, neurons } calage facture
 // ══════════════════════════════════════════════════════════════════
 
 import { requireAdmin, err, json, parseBody, getAllowedOrigin } from '../lib/auth.js';
-import { getBudgetState, setManualThrottle, setBudgetControl } from '../lib/ai-budget.js';
+import { getBudgetState, setManualThrottle, setBudgetControl, setCalibration } from '../lib/ai-budget.js';
 
 /** GET — état complet du compteur (lecture seule). */
 export async function handleAiBudgetGet(request, env) {
@@ -53,5 +54,23 @@ export async function handleAiBudgetThreshold(request, env) {
     return json(state, 200, origin);
   } catch (e) {
     return err('Erreur seuil budget IA : ' + e.message, 500, origin);
+  }
+}
+
+/** POST — cale le compteur sur une vraie facture Cloudflare.
+ *  Body : { start: 'AAAA-MM-JJ', end: 'AAAA-MM-JJ', neurons: number }. */
+export async function handleAiBudgetCalibrate(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
+  try {
+    const body  = await parseBody(request);
+    const state = await setCalibration(env, {
+      start  : body.start,
+      end    : body.end,
+      neurons: body.neurons,
+    });
+    return json(state, 200, origin);
+  } catch (e) {
+    return err('Erreur calage facture : ' + e.message, 400, origin);
   }
 }

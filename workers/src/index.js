@@ -49,7 +49,7 @@ import { handleBrainstormingAgentRespond, handleBrainstormingSynthesize, handleB
 import { handleFetchSource } from './routes/content-source.js';
 import { handleAiGenerate }                                              from './routes/ai-generate.js';
 // Budget IA — compteur neurones Workers AI + bridage (2026-05-29)
-import { handleAiBudgetGet, handleAiBudgetThrottle, handleAiBudgetThreshold } from './routes/ai-budget-admin.js';
+import { handleAiBudgetGet, handleAiBudgetThrottle, handleAiBudgetThreshold, handleAiBudgetCalibrate } from './routes/ai-budget-admin.js';
 import { handleLivingLayerGreeting }                                     from './routes/living-layer.js';
 // Living Layer V2 — Ordinateur de bord (2026-05-28)
 import { handleLivingBoard, handleLivingFeedback }                       from './routes/living-layer-board.js';
@@ -938,6 +938,7 @@ export default {
       if (path === '/api/admin/ai-budget'           && method === 'GET')  return handleAiBudgetGet(request, env);
       if (path === '/api/admin/ai-budget/throttle'  && method === 'POST') return handleAiBudgetThrottle(request, env);
       if (path === '/api/admin/ai-budget/threshold' && method === 'POST') return handleAiBudgetThreshold(request, env);
+      if (path === '/api/admin/ai-budget/calibrate' && method === 'POST') return handleAiBudgetCalibrate(request, env);
 
       // ── PADs ─────────────────────────────────────────────────
       if (path === '/api/pads'               && method === 'GET')    return handleListPads(request, env);

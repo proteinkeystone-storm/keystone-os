@@ -33,6 +33,7 @@
 
 import { KS_AI_MODEL } from './ai-model.js';
 import { decrypt }     from './crypto.js';
+import { recordUsage } from './ai-budget.js';
 
 // Modèles par défaut (extensible — ne JAMAIS hardcoder côté frontend).
 // L'appelant peut override via `opts.model`.
@@ -221,6 +222,17 @@ async function _runMistral(env, { system, messages, max_tokens }) {
   const usage = out?.usage
     ? { input_tokens: out.usage.prompt_tokens ?? null, output_tokens: out.usage.completion_tokens ?? null }
     : null;
+
+  // Compteur budget IA — angle mort corrigé le 22/07/2026. Ce chemin est
+  // le repli Workers AI du routeur (donc facturé par Cloudflare) et il
+  // n'était compté nulle part. Les chemins VENDOR juste au-dessus, eux,
+  // restent volontairement hors compteur : ils sont facturés par le
+  // fournisseur du client (BYOK), pas en neurones.
+  await recordUsage(env, 'llm-router', {
+    usage  : out?.usage,
+    inText : aiMessages.map(m => m.content || '').join('\n'),
+    outText: text,
+  });
 
   return {
     text,

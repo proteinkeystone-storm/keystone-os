@@ -231,6 +231,17 @@ function _downscalePhoto(dataUrl, maxPx = 256, quality = 0.82) {
 })();
 // Living Layer (2026-05-24)
 const LS_LIVING_ON    = 'ks_living_layer_on';
+// Mode IA de la barre — OPT-IN, ÉTEINT PAR DÉFAUT (22/07/2026).
+// Pourquoi : c'était 98 % de toute la conso IA de Keystone (1 appel
+// Workers AI toutes les 21 s d'onglet ouvert) pour de la décoration —
+// et c'est la SEULE partie de Living Layer qui peut dire une bêtise.
+// Le Calculateur, lui, est vrai par construction (il lit les compteurs)
+// et c'est déjà ce que Kora consomme (ll.whats_new → preferMode
+// 'calculator'). Absent = OFF. Comme LS_LIVING_ON, cette clé est
+// VOLONTAIREMENT hors PREFS_KEYS : préférence par-appareil, sinon
+// _hydrate() la réécrase à chaque reload (cf. cloud-vault.js).
+const LS_LIVING_AI    = 'ks_living_ai_on';
+function _livingAiOn() { return localStorage.getItem(LS_LIVING_AI) === '1'; }
 const LS_LIVING_CACHE = 'ks_living_cache';
 // Living Layer sur les pads : baseline « déjà vu » par device (pad id →
 // dernière valeur de capteur vue). Sert à décider du halo « nouveauté ».
@@ -4253,6 +4264,7 @@ function _renderSettingsBody() {
     const oledReduce      = localStorage.getItem('ks_reduce_motion')   === '1';
     // V2 : ON par défaut. Off uniquement si l'utilisateur l'a explicitement désactivé.
     const livingOn        = localStorage.getItem(LS_LIVING_ON) !== '0';
+    const livingAiOn      = _livingAiOn();
     const previewHTML     = savedPhoto
         ? `<img src="${savedPhoto}" alt="Photo">`
         : `<span class="sp-user-photo-preview-empty">👤</span>`;
@@ -4389,7 +4401,15 @@ function _renderSettingsBody() {
                         <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
                     </label>
                 </div>
-                <div class="sp-user-hint">Affiche une phrase rotative sous "Bonjour, ${(savedName || 'toi').replace(/[<>&"']/g, '')}" qui passe entre 3 modes : ${uiIcon('bar-chart', 13)} statistiques certifiées, ${uiIcon('sparkles', 13)} phrases IA contextuelles, et ${uiIcon('megaphone', 13)} annonces. Rotation toutes les 7 secondes (la phrase s'écrit en direct). Activé par défaut.</div>
+                <div class="sp-user-hint">Affiche une phrase rotative sous "Bonjour, ${(savedName || 'toi').replace(/[<>&"']/g, '')}" : ${uiIcon('bar-chart', 13)} statistiques certifiées et ${uiIcon('megaphone', 13)} annonces, plus les alertes en cas d'incident. Rotation toutes les 7 secondes (la phrase s'écrit en direct). Activé par défaut.</div>
+                <div class="sp-user-row sp-row-toggle">
+                    <label class="sp-user-label" for="living-ai-toggle">Phrases IA contextuelles</label>
+                    <label class="sp-toggle-wrap">
+                        <input type="checkbox" id="living-ai-toggle" ${livingAiOn ? 'checked' : ''}>
+                        <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
+                    </label>
+                </div>
+                <div class="sp-user-hint">Ajoute ${uiIcon('sparkles', 13)} un troisième mode où l'IA rédige la phrase à partir de vos signaux du moment. Plus vivant, mais l'IA improvise&nbsp;: les statistiques certifiées, elles, ne se trompent jamais. Désactivé par défaut.</div>
             </div>`,
         },
         {
@@ -4677,6 +4697,17 @@ function _renderSettingsBody() {
     // ── Crédits IA — remplit la jauge (Chantier B · Sprint 4) ────
     _fillCreditsGauge(body.querySelector('#ks-credits-gauge'));
 
+    // ── Mode IA de Living Layer (opt-in, 22/07/2026) ─────────────
+    // Le cycle est relu à chaque rotation → un simple reset suffit,
+    // pas besoin de redémarrer l'intervalle.
+    body.querySelector('#living-ai-toggle')?.addEventListener('change', e => {
+        localStorage.setItem(LS_LIVING_AI, e.target.checked ? '1' : '0');
+        localStorage.removeItem(LS_LIVING_CACHE);
+        _livingCycleStep = 0;
+        _livingVariant   = 0;
+        if (localStorage.getItem(LS_LIVING_ON) !== '0') _renderLivingLayer();
+    });
+
     // ── Living Layer toggle (2026-05-24, V2 2026-05-28) ──────────
     body.querySelector('#living-on-toggle')?.addEventListener('change', e => {
         const on = e.target.checked;
@@ -4894,6 +4925,8 @@ function _openSettings()  {
     // « se remettre seul » à ON. On le réaligne à chaque ouverture.
     const _llToggle = document.getElementById('living-on-toggle');
     if (_llToggle) _llToggle.checked = localStorage.getItem(LS_LIVING_ON) !== '0';
+    const _llAiToggle = document.getElementById('living-ai-toggle');
+    if (_llAiToggle) _llAiToggle.checked = _livingAiOn();
 }
 
 /** Ouvre les Settings et déplie un accordéon spécifique (ex: 'acc-api') */
@@ -5259,7 +5292,13 @@ let _livingUrgentLock        = false; // true si un Pilotable URGENT (≥80) mon
 // variantIndex fait varier le contenu de chaque mode pour ne pas répéter
 // le même sujet. Le Pilotable n'apparaît que s'il y en a un actif côté
 // serveur (sinon fallback Calculateur).
-const LIVING_CYCLE     = ['calculator', 'ai', 'pilotable'];
+// Le cycle est DYNAMIQUE : 'ai' n'entre dans la rotation que si le mode
+// IA a été explicitement activé. Par défaut la barre alterne Calculateur
+// et Pilotable — deux modes à 0 neurone. L'alerte collante, elle, court-
+// circuite le cycle quoi qu'il arrive (elle ne coûte rien non plus).
+const LIVING_CYCLE_BASE = ['calculator', 'pilotable'];
+const LIVING_CYCLE_AI   = ['calculator', 'ai', 'pilotable'];
+function _livingCycle() { return _livingAiOn() ? LIVING_CYCLE_AI : LIVING_CYCLE_BASE; }
 const LIVING_ROTATE_MS = 7000;   // 7s entre chaque rotation (frappe ~1,5-2s + lecture)
 
 function _escapeLivingText(s) {
@@ -5961,7 +6000,10 @@ async function _renderLivingLayer(preferMode = null, preferTopic = null) {
     const headers = { 'Content-Type': 'application/json' };
     if (jwt) headers['Authorization'] = 'Bearer ' + jwt;
 
-    const payload = { firstName, clientSensors, preferMode, variantIndex: _livingVariant };
+    // aiMode : consentement EXPLICITE au mode IA. Le worker refuse de
+    // dépenser un neurone sans lui (garde-fou côté serveur : une PWA
+    // au cache figé peut encore demander preferMode:'ai').
+    const payload = { firstName, clientSensors, preferMode, variantIndex: _livingVariant, aiMode: _livingAiOn() };
     if (preferTopic) payload.preferTopic = preferTopic;
     // BYOK : moteur ACTIF + sa clé (selon le sélecteur, plus seulement Anthropic).
     // {} si aucune clé ; le flag BYOK_ROUTING tranche côté worker.
@@ -6026,9 +6068,10 @@ function _startLivingRotation() {
             return;
         }
         // Rotation normale : avance le cycle + incrémente le variant (variété)
-        _livingCycleStep = (_livingCycleStep + 1) % LIVING_CYCLE.length;
+        const cycle = _livingCycle();
+        _livingCycleStep = (_livingCycleStep + 1) % cycle.length;
         _livingVariant++;
-        _renderLivingLayer(LIVING_CYCLE[_livingCycleStep]);
+        _renderLivingLayer(cycle[_livingCycleStep]);
     }, LIVING_ROTATE_MS);
 }
 
