@@ -265,6 +265,62 @@ async function _send(text) {
   }
 }
 
+/* ═══ Placeholder animé — fait défiler des exemples de capacités ═══
+   Découverte : le champ vide montre, à ~2,8 s d'intervalle avec fondu, de
+   VRAIES demandes ancrées sur le catalogue. EN PAUSE dès qu'on cible le champ,
+   qu'on tape, pendant l'enregistrement, ou fenêtre fermée. Respecte
+   prefers-reduced-motion (une seule phrase, pas de défilement). */
+const GHOST_EXAMPLES = [
+  'combien de scans cette semaine ?',
+  'qui je dois relancer ?',
+  'quoi de neuf aujourd’hui ?',
+  'prépare-moi un post sur la réouverture',
+  'qu’est-ce qui part cette semaine sur mes réseaux ?',
+  'mon site est-il toujours en ligne ?',
+  'qu’est-ce que j’ai noté sur le salon de juin ?',
+  'où en est le bouclage de ma revue ?',
+  'lance un brainstorming sur une offre d’été',
+  'réécris-moi ce texte en plus court',
+  'le lien public de ma charte graphique ?',
+  'combien de réponses à mon formulaire hier ?',
+  'où j’en suis avec Camille Leroy ?',
+  'qu’est-ce que mon agent ne sait pas répondre ?',
+  'fais-moi un article LinkedIn sur nos nouveautés',
+];
+const GHOST_STATIC = 'Demande-moi ce que tu veux…';
+let _ghost = null, _ghostIdx = 0, _ghostTimer = 0;
+
+function _ghostExample() { return '« ' + GHOST_EXAMPLES[_ghostIdx] + ' »'; }
+/* aligne le fantôme sur l'état du champ (vide/rempli, ciblé ou non) */
+function _ghostSync() {
+  if (!_ghost || !_input) return;
+  if (_input.value) { _ghost.classList.add('is-off'); return; }
+  _ghost.classList.remove('is-off'); _ghost.style.opacity = '';
+  _ghost.textContent = (document.activeElement === _input) ? GHOST_STATIC : _ghostExample();
+}
+function _setupGhost(bar, panel) {
+  _ghost = bar.querySelector('.kora-ghost');
+  if (!_ghost) return;
+  _ghost.textContent = _ghostExample();
+  _input.addEventListener('focus', _ghostSync);
+  _input.addEventListener('blur', _ghostSync);
+  _input.addEventListener('input', _ghostSync);
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;   // pas de défilement
+  _ghostTimer = setInterval(() => {
+    if (document.activeElement === _input || _input.value
+        || bar.classList.contains('kora-rec')
+        || !panel.classList.contains('kora-open')) return;              // en pause
+    _ghostIdx = (_ghostIdx + 1) % GHOST_EXAMPLES.length;
+    _ghost.style.opacity = '0';                                         // fondu sortie
+    setTimeout(() => {
+      if (document.activeElement !== _input && !_input.value) {
+        _ghost.textContent = _ghostExample();
+        _ghost.style.opacity = '';                                     // fondu entrée
+      }
+    }, 300);
+  }, 2800);
+}
+
 /* ═══ Init — appelé par kora.js après création de la fenêtre ═══ */
 export function initKoraLoop(panel) {
   if (!panel || panel.querySelector('.kora-inputbar')) return;
@@ -274,10 +330,13 @@ export function initKoraLoop(panel) {
      maintient le bouton voix (kora-voice.js ajoute .kora-rec/.kora-cancel).
      Le bouton voix lui-même est injecté par kora-voice (dépend du support
      micro) à droite de « Envoyer ». */
+  /* pas de placeholder natif : la ligne « fantôme » (.kora-ghost) fait
+     défiler des exemples de ce que Kora sait faire (découverte). L'aria-label
+     porte l'accessibilité. */
   bar.innerHTML = `
     <div class="kora-field">
-      <input class="kora-input" type="text" maxlength="1000"
-             placeholder="Demande-moi — « prépare-moi un post sur… »" aria-label="Parler à Kora">
+      <input class="kora-input" type="text" maxlength="1000" aria-label="Parler à Kora">
+      <div class="kora-ghost" aria-hidden="true"></div>
       <div class="kora-recstrip" aria-hidden="true">
         <span class="kora-rs-dot"></span>
         <span class="kora-rs-timer">0:00</span>
@@ -294,10 +353,13 @@ export function initKoraLoop(panel) {
      micro est dispo — sinon barre en mode écrit seul, sans bouton */
   _voice().then(vm => { if (vm && vm.attachVoiceBar) vm.attachVoiceBar(bar); });
 
+  _setupGhost(bar, panel);
+
   const go = () => {
     const t = (_input.value || '').trim();
     if (!t) return;
     _input.value = '';
+    _ghostSync();                 // valeur vidée par programme : pas d'event 'input'
     _send(t);
   };
   _sendBtn.addEventListener('click', go);

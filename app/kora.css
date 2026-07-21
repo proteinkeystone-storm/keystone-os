@@ -202,6 +202,18 @@ html.light-mode .kora-newconv, html.light-mode .kora-voicetoggle{
    d'enregistrement ; glisser vers la gauche = annuler. ── */
 .kora-field{ flex:1 1 auto; min-width:0; position:relative; }
 .kora-field .kora-input{ flex:none; display:block; width:100%; }
+/* placeholder animé : exemples de capacités qui défilent (découverte).
+   Posé PAR-DESSUS le champ vide, pointer-events none (le clic va au champ). */
+.kora-ghost{
+  position:absolute; inset:0; padding:10px 13px; pointer-events:none;
+  color:rgba(232,233,245,.34); font-size:13px; letter-spacing:-.01em;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  opacity:1; transition:opacity .3s ease;
+}
+.kora-ghost.is-off{ opacity:0; }                          /* champ rempli → masqué */
+.kora-inputbar.kora-rec .kora-ghost{ opacity:0; }         /* pendant l'enregistrement */
+html.light-mode .kora-ghost{ color:rgba(17,24,39,.4); }
+@media (prefers-reduced-motion:reduce){ .kora-ghost{ transition:none; } }
 .kora-recstrip{
   position:absolute; inset:0; display:none; align-items:center; gap:9px;
   padding:0 12px; border-radius:10px;
