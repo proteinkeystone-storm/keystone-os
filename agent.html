@@ -1552,7 +1552,8 @@
       // Molette : sur une souris classique il n'y a QUE deltaY → on le convertit.
       el.addEventListener('wheel', (e) => {
         if (el.scrollWidth - el.clientWidth < 4) return;
-        const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;   // trackpad / Magic Mouse : geste DÉJÀ horizontal → on ne touche à rien (inertie native gardée)
+        const d = e.deltaY;
         if (!d) return;
         const max = el.scrollWidth - el.clientWidth;
         if ((d < 0 && el.scrollLeft <= 0) || (d > 0 && el.scrollLeft >= max - 1)) return;  // en butée : on rend la main à la page
