@@ -42,7 +42,10 @@
         proposals: props, checked: new Set([0, 1]), added: 7 }],
     ['Lot vide (page de garde, sommaire) — on passe, sans drame',
       { job, idx: 5, phase: 'review', busy: false, error: null, adding: false,
-        proposals: [], checked: new Set(), added: 7 }],
+        proposals: [], checked: new Set(), added: 7, saturated: false }],
+    ['Lot saturé — le contenu perdu se DIT (SA-14.6)',
+      { job, idx: 6, phase: 'review', busy: false, error: null, adding: false,
+        proposals: props, checked: new Set([0, 1, 2]), added: 12, saturated: true }],
   ];
 
   document.getElementById('out').innerHTML = CAS.map(([titre, st]) =>

@@ -61,7 +61,7 @@ import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-
 import { streamLLM }                               from '../lib/llm-stream.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-14.5';
+const SA_ENGINE_VERSION = 'SA-14.6';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -915,6 +915,18 @@ export async function handleKortexUnitDelete(request, env, unitId) {
 // Les propositions ne sont PAS sauvegardées : le client les relit, les
 // ajuste et les ajoute une à une (validation humaine = doctrine).
 // ═══════════════════════════════════════════════════════════════
+// SA-14.6 — plafond de fiches par appel d'extraction. Était 12, hérité du
+// coffre boutique. Le dogfood du 21/07 (KORA_BRIEF.md, 3 lots) l'a saturé
+// 3 fois sur 3 : au-delà de la 12e fiche, le contenu disparaissait EN
+// SILENCE alors que le crédit était débité. Le vrai goulot du gros volume
+// n'était pas le découpage, c'était ce plafond.
+const EXTRACT_MAX_UNITS = 25;
+// Budget de génération correspondant (était 3000, calibré pour 12 fiches).
+// 25 fiches en JSON ≈ 4 000 tokens ; la marge évite de couper le tableau —
+// et si ça arrive quand même, salvageJsonObjects sauve les fiches complètes
+// au lieu de rendre le lot vide.
+const EXTRACT_MAX_TOKENS = 6000;
+
 const EXTRACT_SYSTEM_PROMPT = `Tu es l'extracteur de connaissances de Keystone. On te donne un texte brut (notes, email, documentation, transcription). Tu en extrais des fiches de savoir typées, en français.
 
 Types autorisés et gabarits (champs du "body") :
@@ -930,7 +942,7 @@ RÈGLES STRICTES :
 1. N'extrais QUE ce qui est réellement dans le texte. Aucune invention, aucun enrichissement extérieur.
 2. Chaque fiche est autonome et compréhensible seule.
 3. "title" : court et descriptif (max 12 mots).
-4. Maximum 12 fiches. Qualité avant quantité.
+4. Maximum ${EXTRACT_MAX_UNITS} fiches. Qualité avant quantité : n'en produis pas pour faire du nombre, mais n'en omets aucune qui porte un vrai savoir.
 5. Si le texte contient des noms de personnes privées, remplace-les par leur rôle (« le client », « le visiteur »).
 6. "relevance" : note de 1 à 10 l'utilité de la fiche pour un agent qui doit RÉPONDRE À DES QUESTIONS.
    - 8 à 10 : savoir réutilisable et autonome (une procédure, une règle, une réponse à une vraie question).
@@ -954,7 +966,7 @@ export async function handleKortexExtract(request, env) {
   const r = await _aiExtract(env, gate, EXTRACT_SYSTEM_PROMPT, `TEXTE À ANALYSER :\n\n${text}`, _byokFromBody(b));
   if (!r.ok) return json({ error: r.error, code: r.code, quota: r.quota }, r.status, origin);
   if (!r.proposals.length) return json({ proposals: [], note: 'Aucune fiche exploitable extraite de ce texte.' }, 200, origin);
-  return json({ proposals: r.proposals, model: KS_AI_MODEL, credits: r.creditPayload }, 200, origin);
+  return json({ proposals: r.proposals, saturated: !!r.saturated, model: KS_AI_MODEL, credits: r.creditPayload }, 200, origin);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1061,7 +1073,7 @@ async function _extractFromImport(env, gate, origin, rawText, sourceRef, byok = 
   if (!r.proposals.length) {
     return json({ proposals: [], truncated, source_ref: sourceRef, note: 'Aucune fiche exploitable extraite de ce contenu.' }, 200, origin);
   }
-  return json({ proposals: r.proposals, truncated, source_ref: sourceRef,
+  return json({ proposals: r.proposals, truncated, source_ref: sourceRef, saturated: !!r.saturated,
     model: KS_AI_MODEL, credits: r.creditPayload }, 200, origin);
 }
 
@@ -1419,7 +1431,7 @@ export async function handleIngestBatch(request, env, jobId, idxRaw) {
 
   return json({
     job_id: jobId, index: idx, breadcrumb: batch.breadcrumb, total: jr[0].total,
-    proposals: r.proposals, source_ref: jr[0].source_ref,
+    proposals: r.proposals, source_ref: jr[0].source_ref, saturated: !!r.saturated,
     model: KS_AI_MODEL, credits: r.creditPayload,
   }, 200, origin);
 }
@@ -1629,11 +1641,16 @@ async function _aiExtract(env, gate, systemPrompt, userContent, byok = null) {
       engine: byok?.engine, apiKey: byok?.apiKey,
       system: systemPrompt,
       messages: [{ role: 'user', content: userContent }],
-      max_tokens: 3000,
+      max_tokens: EXTRACT_MAX_TOKENS,
     });
     const proposals = _parseProposals(raw);
     if (!proposals.length) { await refund(); return { ok: true, proposals: [], creditPayload: null }; }
-    return { ok: true, proposals, creditPayload: credit?.payload || null };
+    // SA-14.6 — le plafond atteint SIGNIFIE probablement que le texte avait
+    // plus à donner. On le DIT, au lieu de laisser croire que tout a été
+    // extrait : perdre du savoir en silence est le pire des scénarios pour
+    // un client qui construit un coffre de référence.
+    const saturated = proposals.length >= EXTRACT_MAX_UNITS;
+    return { ok: true, proposals, saturated, creditPayload: credit?.payload || null };
   } catch (e) {
     await refund();
     return { ok: false, status: 502, error: `Extraction impossible : ${e.message || 'erreur IA'}` };
@@ -4328,21 +4345,56 @@ export function clampRelevance(v, dflt = 5) {
   return Math.min(10, Math.max(1, Math.round(n)));
 }
 
+// SA-14.6 — RÉCUPÈRE les objets complets d'un tableau JSON TRONQUÉ.
+// Le cas : la génération atteint max_tokens en plein milieu du tableau →
+// il n'y a plus de « ] » final, JSON.parse échoue, et l'ancien code rendait
+// [] — le lot entier était perdu ALORS QUE le crédit avait été débité.
+// On balaie les accolades en tenant compte des chaînes et des échappements
+// (une accolade DANS un texte de fiche ne doit pas compter), et on garde
+// tout objet de premier niveau qui se referme. Pur → testé.
+export function salvageJsonObjects(s) {
+  const out = [];
+  let depth = 0, startIdx = -1, inStr = false, esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; continue; }
+    if (c === '{') { if (depth === 0) startIdx = i; depth++; continue; }
+    if (c === '}') {
+      depth--;
+      if (depth === 0 && startIdx !== -1) {
+        try { out.push(JSON.parse(s.slice(startIdx, i + 1))); } catch (_) { /* objet illisible : ignoré */ }
+        startIdx = -1;
+      }
+      if (depth < 0) depth = 0;   // accolade orpheline : on repart proprement
+    }
+  }
+  return out;
+}
+
 // Parse tolérant : retire les fences ```json, isole le tableau, valide
 // chaque proposition via validateUnit (les invalides sont écartées).
-function _parseProposals(raw) {
+function _parseProposals(raw, max = EXTRACT_MAX_UNITS) {
   let s = raw.replace(/```json/gi, '').replace(/```/g, '').trim();
   const start = s.indexOf('[');
-  const end   = s.lastIndexOf(']');
-  if (start === -1 || end === -1 || end <= start) return [];
-  s = s.slice(start, end + 1);
+  if (start === -1) return [];
+  const end = s.lastIndexOf(']');
+  s = s.slice(start, end > start ? end + 1 : undefined);
 
-  let arr;
-  try { arr = JSON.parse(s); } catch (_) { return []; }
-  if (!Array.isArray(arr)) return [];
+  let arr = null;
+  try { arr = JSON.parse(s); } catch (_) { /* tronqué ou bruité → récupération */ }
+  // Tableau non fermé (génération coupée) ou JSON bruité : on sauve ce qui
+  // est complet plutôt que de tout jeter.
+  if (!Array.isArray(arr)) arr = salvageJsonObjects(s);
+  if (!arr.length) return [];
 
   const out = [];
-  for (const p of arr.slice(0, 12)) {
+  for (const p of arr.slice(0, max)) {
     if (!p || typeof p !== 'object') continue;
     const v = validateUnit(p.type, p.title, p.body);
     if (v.ok) out.push({ type: p.type, title: String(p.title).trim(), body: v.body,

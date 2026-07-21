@@ -2928,6 +2928,9 @@ async function _exCall(call) {
         _ex.checked   = new Set(_ex.proposals.map((_, i) => i));
         if (!_ex.proposals.length) _ex.error = res.note || 'Aucune fiche exploitable extraite.';
         else if (res.truncated) _toast('Document long : seul le début a été analysé.', 'ok');
+        // SA-14.6 — plafond atteint : le texte avait probablement plus à donner.
+        // On le dit plutôt que de laisser croire que tout a été extrait.
+        else if (res.saturated) _toast(`Texte dense : ${_ex.proposals.length} fiches extraites (maximum). Découpez-le pour n'en rien perdre.`, 'ok');
     } catch (e) {
         _ex.error = (e.data?.code === 'AI_CREDITS_EXHAUSTED')
             ? 'Crédits IA épuisés ce mois — rachetez un pack ou attendez le 1er du mois.'
@@ -2985,11 +2988,11 @@ const FILE_ONESHOT_MAX    = 400 * 1024;         // au-delà, découpage en lots
 const IG_JOB_KEY          = 'sa_ingest_job';    // reprise (hors PREFS_KEYS : jamais synchronisé)
 
 const _ig = { job: null, idx: 0, phase: null, busy: false, adding: false, error: null,
-    proposals: [], checked: new Set(), added: 0, skipped: 0, resumable: null };
+    proposals: [], checked: new Set(), added: 0, skipped: 0, resumable: null, saturated: false };
 
 function _igReset() {
     Object.assign(_ig, { job: null, idx: 0, phase: null, busy: false, adding: false,
-        error: null, proposals: [], checked: new Set(), added: 0, skipped: 0, resumable: null });
+        error: null, proposals: [], checked: new Set(), added: 0, skipped: 0, resumable: null, saturated: false });
     try { localStorage.removeItem(IG_JOB_KEY); } catch (_) {}
 }
 
@@ -3060,13 +3063,14 @@ async function _igRunBatch() {
         { method: 'POST', body: { ...byokRequestFields() } }));
     if (!out) return;
     _ig.proposals = out.proposals || [];
+    _ig.saturated = !!out.saturated;
     _ig.checked = new Set(_ig.proposals.map((_, i) => i));
     b.status = 'done';
     _renderOverlay();
 }
 
 function _igNext() {
-    _ig.proposals = []; _ig.checked = new Set(); _ig.error = null;
+    _ig.proposals = []; _ig.checked = new Set(); _ig.error = null; _ig.saturated = false;
     _ig.idx++;
     if (_ig.idx >= (_ig.job?.total || 0)) return _igFinish();
     _igRunBatch();
@@ -3184,6 +3188,7 @@ function _igRenderReview() {
     }).join('');
     return `
       ${head}
+      ${_ig.saturated ? `<p class="sa-field-hint sa-ig-warn">${icon('alert-triangle', 13)} Lot très dense : ${_ig.proposals.length} fiches extraites, c'est le maximum par lot. Une partie du contenu de ce lot peut manquer.</p>` : ''}
       ${_ig.proposals.length
         ? `<div class="sa-ex-props">${props}</div>`
         : `<p class="sa-field-hint">Aucune fiche exploitable dans ce lot (page de garde, sommaire…). Passez au suivant.</p>`}

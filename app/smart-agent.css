@@ -802,6 +802,19 @@
 .sa-ig-facts li > .ws-icon { flex: none; margin-top: 2px; }
 .sa-ig-facts li > span:not(.ws-icon) { flex: 1; min-width: 0; }
 .sa-ig-facts li strong { color: var(--text); }
+/* SA-14.6 — lot saturé : le contenu perdu se DIT, il ne se devine pas. */
+.sa-ig-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  margin: 0 0 10px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--gold) 32%, transparent);
+  background: color-mix(in srgb, var(--gold) 7%, transparent);
+}
+.sa-ig-warn > .ws-icon { flex: none; margin-top: 1px; color: var(--gold); }
+
 .sa-ig-head { margin-bottom: 12px; }
 .sa-ig-bar {
   height: 4px;

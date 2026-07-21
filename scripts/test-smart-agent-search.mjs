@@ -13,7 +13,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions,
   splitGapReply, pickFallback, groundedFromSignals, sweepGroundThreshold,
   needsRerank, applyRerank, _rerank, clampRelevance, needsExpansion, _expandQuery,
-  splitMarkdownBatches, buildBatchPrompt, gapOutcome,
+  splitMarkdownBatches, buildBatchPrompt, gapOutcome, salvageJsonObjects,
   validateImportUrl, htmlToText, clampExtractText, importFileKindOf, stripRepeatedFollowup,
   gapMergeTarget, attachGapCounts, sanitizePublicUrl, validateCards,
   detectSocialIntent, pickSocialReply }
@@ -82,6 +82,42 @@ console.log('── parseProposals ──');
   check('JSON cassé → []', parseProposals('pas du json [').length === 0);
   check('texte autour du tableau toléré',
     parseProposals('Voici : [{"type":"fact","title":"T","body":{"statement":"S"}}] Fin.').length === 1);
+}
+
+console.log('── SA-14.6 — salvageJsonObjects (un lot tronqué n\'est plus perdu) ──');
+{
+  check('tableau complet → tous les objets',
+    salvageJsonObjects('[{"a":1},{"b":2}]').length === 2);
+  check('tableau TRONQUÉ en plein objet → les complets sont sauvés',
+    salvageJsonObjects('[{"a":1},{"b":2},{"c":').length === 2);
+  check('accolade DANS une chaîne ne compte pas (titre « le { du JSON »)',
+    JSON.stringify(salvageJsonObjects('[{"t":"le { du JSON"},{"u":2}]')) === '[{"t":"le { du JSON"},{"u":2}]');
+  check('guillemet échappé dans une chaîne',
+    salvageJsonObjects('[{"t":"il dit \\"bonjour\\""},{"u":1}]').length === 2);
+  check('objets imbriqués comptés comme UN objet de premier niveau',
+    salvageJsonObjects('[{"body":{"steps":["a","b"]}},{"x":1}]').length === 2);
+  check('objet illisible ignoré, les voisins survivent',
+    salvageJsonObjects('[{"a":1},{bad},{"b":2}]').length === 2);
+  check('rien d\'exploitable → []',
+    salvageJsonObjects('').length === 0 && salvageJsonObjects('texte sans objet').length === 0);
+}
+
+console.log('── SA-14.6 — parseProposals : plafond 25 + tolérance à la troncature ──');
+{
+  const fiche = (i) => `{"type":"fact","title":"Fiche ${i}","relevance":5,"body":{"statement":"S${i}"}}`;
+  {
+    // Génération coupée par max_tokens : plus de « ] » final. Avant SA-14.6,
+    // le lot entier était perdu ALORS QUE le crédit avait été débité.
+    const tronque = '[' + [1, 2, 3].map(fiche).join(',') + ',{"type":"fact","title":"coupée en pl';
+    check('tableau non fermé → les fiches complètes sont récupérées',
+      parseProposals(tronque).length === 3);
+  }
+  check('plafond porté à 25 (était 12)',
+    parseProposals('[' + Array.from({ length: 40 }, (_, i) => fiche(i)).join(',') + ']').length === 25);
+  check('fences + tableau complet : comportement inchangé',
+    parseProposals('```json\n[' + fiche(1) + ']\n```').length === 1);
+  check('vrai JSON cassé → [] (on ne fabrique rien)',
+    parseProposals('pas du json [').length === 0);
 }
 
 console.log('── SA-14.2 — clampRelevance (jamais bloquant) ──');
