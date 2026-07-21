@@ -58,6 +58,24 @@ const KORTEX_TYPES = [
     { id: 'definition', icon: 'edit',         label: 'Définition',         desc: 'Un terme du métier expliqué dans vos mots.' },
 ];
 
+/* SA-14.2 — pertinence estimée d'une proposition d'extraction, en 3 paliers.
+   Le badge n'apparaît QUE s'il discrimine vraiment (au moins deux notes
+   différentes dans le lot) : peindre « Moyen » sur douze fiches identiques
+   n'aide personne et ajoute du bruit. Le chemin « interview » n'ayant pas
+   de note, il n'affiche donc jamais de badge. AUCUN filtrage automatique :
+   tout reste proposé, l'expert décide de tout. */
+const REL_TIERS = [
+    { min: 8, cls: 'is-high', label: 'Fort' },
+    { min: 5, cls: 'is-mid',  label: 'Moyen' },
+    { min: 0, cls: 'is-low',  label: 'Faible' },
+];
+export function _relBadge(p, list) {   // exportée pour le harnais _design-lab/sa-relevance-harness.html
+    const notes = (list || []).map(x => x.relevance).filter(n => typeof n === 'number');
+    if (notes.length < 2 || new Set(notes).size < 2) return '';
+    const t = REL_TIERS.find(x => (typeof p.relevance === 'number' ? p.relevance : 5) >= x.min);
+    return `<span class="sa-prop-rel ${t.cls}" title="Utilité estimée pour répondre aux questions — vous restez seul juge">${t.label}</span>`;
+}
+
 const FIELD_TEMPLATES = {
     fact: [
         { k: 'statement', label: 'Le fait',                                kind: 'textarea', req: true,  ph: 'Ex. : Le musée ferme à 18h00, dernière entrée 17h15.' },
@@ -1633,6 +1651,7 @@ function _interviewHTML() {
             <span class="sa-prop-type">${icon(t.icon, 13)} ${t.label}</span>
             <span class="sa-prop-txt"><strong>${_esc(p.title)}</strong>
               <span>${_esc(Object.values(p.body).map(v => Array.isArray(v) ? v.join(' · ') : v).join(' — ')).slice(0, 140)}</span></span>
+            ${_relBadge(p, _iv.proposals)}
           </label>`;
         }).join('');
         return `
@@ -2738,7 +2757,7 @@ function _renderOverlay() {
         inner = `<div class="sa-ex-busy">${icon('sparkles', 22)}<p>Analyse du texte en cours…<br><small>L'IA propose des fiches — rien n'est ajouté sans votre relecture.</small></p></div>`;
     } else if (_ex.proposals.length) {
         inner = `
-      <p class="sa-ex-lead">${_ex.proposals.length} fiche${_ex.proposals.length > 1 ? 's' : ''} proposée${_ex.proposals.length > 1 ? 's' : ''} — décochez ce qui ne vous convient pas.
+      <p class="sa-ex-lead">${_ex.proposals.length} fiche${_ex.proposals.length > 1 ? 's' : ''} proposée${_ex.proposals.length > 1 ? 's' : ''}${_relBadge(_ex.proposals[0], _ex.proposals) ? ', les plus utiles d\'abord' : ''} — décochez ce qui ne vous convient pas.
       Tout est ajouté <strong>en brouillon</strong> : vous validez ensuite chaque fiche.</p>
       <div class="sa-ex-props">
         ${_ex.proposals.map((p, i) => {
@@ -2751,6 +2770,7 @@ function _renderOverlay() {
               <strong>${_esc(p.title)}</strong>
               <span>${_esc(Object.values(p.body).map(v => Array.isArray(v) ? v.join(' · ') : v).join(' — ').slice(0, 140))}</span>
             </span>
+            ${_relBadge(p, _ex.proposals)}
           </label>`;
         }).join('')}
       </div>

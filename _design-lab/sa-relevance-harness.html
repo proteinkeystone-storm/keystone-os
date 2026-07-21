@@ -1,0 +1,59 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SA-14.2 — badge de pertinence (harnais)</title>
+<!-- Harnais isolé : rend le VRAI markup de l'écran de validation des
+     propositions avec le VRAI _relBadge et le VRAI smart-agent.css.
+     Sert à trancher le visuel sans passer par un import IA réel. -->
+<link rel="stylesheet" href="../app/style.css">
+<link rel="stylesheet" href="../app/smart-agent.css">
+<style>
+  body { padding: 28px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg, #0b0f1a); }
+  h2 { color: var(--text); font-size: 13px; font-weight: 900; letter-spacing: -0.02em; margin: 26px 0 10px; }
+  .lab-note { color: var(--tx3); font-size: 11.5px; margin: 0 0 10px; }
+  .lab-case { max-width: 640px; }
+</style>
+<div class="lab-case" id="out"></div>
+<script type="module">
+  import { _relBadge } from '../app/smart-agent.js';
+
+  const TYPE = { icon: 'check', label: 'Fait' };
+  const tick = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>';
+
+  const row = (p, list, on) => `
+    <label class="sa-prop ${on ? 'is-on' : ''}">
+      <span class="sa-prop-check">${on ? tick : ''}</span>
+      <span class="sa-prop-type">${tick} ${TYPE.label}</span>
+      <span class="sa-prop-txt">
+        <strong>${p.title}</strong>
+        <span>${p.extrait}</span>
+      </span>
+      ${_relBadge(p, list)}
+    </label>`;
+
+  const CAS = [
+    {
+      titre: 'Gros import — le badge discrimine (cas visé)',
+      note: 'Trié décroissant côté worker. Aucun filtrage : tout reste proposé.',
+      props: [
+        { title: 'Procédure de remboursement hors délai', relevance: 9, extrait: 'Vérifier le ticket — Contrôler le délai légal — Établir l\'avoir' },
+        { title: 'Peut-on payer en plusieurs fois ?', relevance: 8, extrait: 'Oui, en 3 fois sans frais dès 150 €.' },
+        { title: 'Horaires de la boutique', relevance: 6, extrait: 'Du lundi au samedi, 9h-19h.' },
+        { title: 'Sommaire du document', relevance: 2, extrait: 'Page 1 : introduction — Page 4 : conditions' },
+      ],
+    },
+    {
+      titre: 'Chemin interview — aucune note → aucun badge',
+      note: 'Peindre « Moyen » sur tout n\'aiderait personne : le badge s\'efface.',
+      props: [
+        { title: 'Règle sur les retours', relevance: 5, extrait: 'Toujours vérifier la date d\'achat.' },
+        { title: 'Cas vécu — client mécontent', relevance: 5, extrait: 'Situation — action — résultat' },
+      ],
+    },
+  ];
+
+  document.getElementById('out').innerHTML = CAS.map(c => `
+    <h2>${c.titre}</h2>
+    <p class="lab-note">${c.note}</p>
+    <div class="sa-ex-props">${c.props.map((p, i) => row(p, c.props, i < 2)).join('')}</div>
+  `).join('');
+</script>

@@ -12,7 +12,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   lastAgentQuestion, isAffirmation, validateFolderName, validateVaultName,
   validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions,
   splitGapReply, pickFallback, groundedFromSignals, sweepGroundThreshold,
-  needsRerank, applyRerank, _rerank,
+  needsRerank, applyRerank, _rerank, clampRelevance,
   validateImportUrl, htmlToText, clampExtractText, importFileKindOf, stripRepeatedFollowup,
   gapMergeTarget, attachGapCounts, sanitizePublicUrl, validateCards,
   detectSocialIntent, pickSocialReply }
@@ -81,6 +81,49 @@ console.log('── parseProposals ──');
   check('JSON cassé → []', parseProposals('pas du json [').length === 0);
   check('texte autour du tableau toléré',
     parseProposals('Voici : [{"type":"fact","title":"T","body":{"statement":"S"}}] Fin.').length === 1);
+}
+
+console.log('── SA-14.2 — clampRelevance (jamais bloquant) ──');
+{
+  check('note valide conservée', clampRelevance(8) === 8 && clampRelevance(1) === 1 && clampRelevance(10) === 10);
+  check('absente / nulle → 5 (défaut « moyen »)',
+    clampRelevance(undefined) === 5 && clampRelevance(null) === 5);
+  check('hors bornes ramenée dans [1,10]', clampRelevance(42) === 10 && clampRelevance(-3) === 1 && clampRelevance(0) === 1);
+  check('décimale arrondie', clampRelevance(7.4) === 7 && clampRelevance(7.6) === 8);
+  check('string numérique tolérée ("9" arrive souvent du JSON du modèle)', clampRelevance('9') === 9);
+  check('texte / objet → défaut (jamais NaN)',
+    clampRelevance('haut') === 5 && clampRelevance({}) === 5 && clampRelevance(NaN) === 5);
+  check('défaut paramétrable', clampRelevance(undefined, 3) === 3);
+}
+
+console.log('── SA-14.2 — parseProposals : note attachée, tri, rien d\'écarté ──');
+{
+  const raw = JSON.stringify([
+    { type: 'fact', title: 'Sommaire du document', relevance: 2, body: { statement: 'Page 1 : intro' } },
+    { type: 'qa',   title: 'Peut-on payer en plusieurs fois ?', relevance: 9, body: { question: 'Q ?', answer: 'Oui' } },
+    { type: 'rule', title: 'Règle sans note', body: { rule: 'Toujours vérifier' } },
+  ]);
+  const props = parseProposals(raw);
+  check('les 3 fiches sont conservées (aucun filtrage automatique)', props.length === 3);
+  check('triées par pertinence décroissante',
+    props.map(p => p.relevance).join() === '9,5,2');
+  check('note manquante → 5, la fiche reste valide',
+    props[1].title === 'Règle sans note' && props[1].relevance === 5);
+  check('relevance N\'ENTRE PAS dans le body (jamais stockée en base)',
+    props.every(p => !('relevance' in p.body)));
+  check('note aberrante clampée sans rejeter la fiche',
+    parseProposals(JSON.stringify([{ type: 'fact', title: 'T', relevance: 99, body: { statement: 'S' } }]))[0].relevance === 10);
+  {
+    // Chemin « interview » : le prompt ne demande pas de note → tout à 5 →
+    // le tri stable doit laisser l'ordre du modèle strictement intact.
+    const sansNote = parseProposals(JSON.stringify([
+      { type: 'fact', title: 'A', body: { statement: 's' } },
+      { type: 'fact', title: 'B', body: { statement: 's' } },
+      { type: 'fact', title: 'C', body: { statement: 's' } },
+    ]));
+    check('sans note nulle part → ordre du modèle inchangé (tri stable)',
+      sansNote.map(p => p.title).join('') === 'ABC');
+  }
 }
 
 console.log('── normQuestion (dédoublonnage des trous) ──');

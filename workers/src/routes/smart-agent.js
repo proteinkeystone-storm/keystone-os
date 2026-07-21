@@ -61,7 +61,7 @@ import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-
 import { streamLLM }                               from '../lib/llm-stream.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-14.1';
+const SA_ENGINE_VERSION = 'SA-14.2';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -899,8 +899,13 @@ RÈGLES STRICTES :
 3. "title" : court et descriptif (max 12 mots).
 4. Maximum 12 fiches. Qualité avant quantité.
 5. Si le texte contient des noms de personnes privées, remplace-les par leur rôle (« le client », « le visiteur »).
-6. Réponds UNIQUEMENT avec un tableau JSON valide, sans texte autour :
-[{"type":"...","title":"...","body":{...}}, ...]`;
+6. "relevance" : note de 1 à 10 l'utilité de la fiche pour un agent qui doit RÉPONDRE À DES QUESTIONS.
+   - 8 à 10 : savoir réutilisable et autonome (une procédure, une règle, une réponse à une vraie question).
+   - 5 à 7 : utile mais partiel, contextuel ou redondant.
+   - 1 à 4 : sommaire, en-tête, mention de page, formule de politesse, hors-sujet.
+   Sois honnête et discriminant : si tout se vaut, la note ne sert à rien.
+7. Réponds UNIQUEMENT avec un tableau JSON valide, sans texte autour :
+[{"type":"...","title":"...","relevance":8,"body":{...}}, ...]`;
 
 export async function handleKortexExtract(request, env) {
   const origin = getAllowedOrigin(env, request);
@@ -3857,6 +3862,17 @@ export async function handleGoldenReplay(request, env, agentId) {
   return json({ total: golden.length, passed, score, results: out }, 200, origin);
 }
 
+// SA-14.2 — note de pertinence d'une proposition d'extraction. TOLÉRANT :
+// une fiche parfaitement valide ne doit JAMAIS être écartée parce que le
+// modèle a oublié la note ou l'a mal formée → défaut 5 (« moyen »), clamp
+// dans [1,10]. Métadonnée de TRI uniquement : transitoire, jamais stockée
+// en base (elle ne fait pas partie du gabarit validateUnit). Pure → testée.
+export function clampRelevance(v, dflt = 5) {
+  const n = typeof v === 'string' ? Number(v.trim()) : v;
+  if (typeof n !== 'number' || !Number.isFinite(n)) return dflt;
+  return Math.min(10, Math.max(1, Math.round(n)));
+}
+
 // Parse tolérant : retire les fences ```json, isole le tableau, valide
 // chaque proposition via validateUnit (les invalides sont écartées).
 function _parseProposals(raw) {
@@ -3874,9 +3890,15 @@ function _parseProposals(raw) {
   for (const p of arr.slice(0, 12)) {
     if (!p || typeof p !== 'object') continue;
     const v = validateUnit(p.type, p.title, p.body);
-    if (v.ok) out.push({ type: p.type, title: String(p.title).trim(), body: v.body });
+    if (v.ok) out.push({ type: p.type, title: String(p.title).trim(), body: v.body,
+                         relevance: clampRelevance(p.relevance) });
   }
-  return out;
+  // SA-14.2 — les plus utiles en tête, pour que la relecture humaine
+  // commence par ce qui compte sur un gros import. AUCUN filtrage : tout
+  // reste proposé, l'humain décide de tout. Tri STABLE (V8) → à note
+  // égale, l'ordre du modèle est conservé (chemin interview : toutes les
+  // fiches à 5 par défaut ⇒ ordre strictement inchangé).
+  return out.sort((a, b) => b.relevance - a.relevance);
 }
 
 // ═══════════════════════════════════════════════════════════════
