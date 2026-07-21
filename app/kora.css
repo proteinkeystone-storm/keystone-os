@@ -120,7 +120,13 @@ body[data-kora-state="besoin"]    { --kora-1:#f0b04c; --kora-2:#f0291a; }
 }
 .kora-head{ padding:22px 24px 0; flex:0 0 auto; position:relative; }
 .kora-title{ font-weight:900; font-size:13px; letter-spacing:.30em; color:rgba(232,233,245,.85); }
-.kora-sub{ font-size:12px; color:rgba(232,233,245,.5); margin-top:3px; letter-spacing:-.01em; }
+.kora-sub{
+  font-size:12px; color:rgba(232,233,245,.5); margin-top:3px; letter-spacing:-.01em;
+  /* ne jamais courir sous les boutons de l'en-tête (réserve leur largeur) */
+  max-width:calc(100% - 84px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+/* au repos, la signature K.O.R.A est plus petite (elle est longue) et posée */
+body[data-kora-state="repos"] .kora-sub{ font-size:10.5px; letter-spacing:.015em; color:rgba(232,233,245,.42); }
 
 /* ── Outils d'en-tête (nouvelle conversation + toggle voix) ──
    Conteneur flex en haut à droite ; pictogrammes du registre (icon(),

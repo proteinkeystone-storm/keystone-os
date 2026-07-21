@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kora — harnais en-tête (nouvelle conversation + voix)</title>
+<!-- charge la VRAIE feuille de style pour vérifier le rendu réel -->
+<link rel="stylesheet" href="../app/kora.css">
+<style>
+  html,body{ margin:0; height:100%; background:#0a0c1c; }
+  body[data-kora-state]{}
+  /* on force le panneau ouvert (sinon display:none) */
+  .kora-panel{ display:flex !important; opacity:1 !important; transform:none !important; }
+  /* faux dashboard DERRIÈRE (pour vérifier que le fond ne transparaît plus) */
+  .fake-dash{ position:fixed; inset:0; z-index:1; padding:70px 20px; color:#fff; }
+  .fake-dash h1{ font-size:34px; font-weight:900; margin:0 0 8px; }
+  .fake-dash .card{ margin:16px 0; padding:20px; border:1px solid rgba(255,255,255,.12); border-radius:14px; background:rgba(255,255,255,.04); }
+  .fake-dash h2{ font-size:22px; margin:0; }
+</style>
+</head>
+<body data-kora-state="repos">
+<div class="fake-dash">
+  <h1>Bonjour, Storm</h1>
+  <div>4 sites surveillés par Sentinel — tous en ligne.</div>
+  <div class="card"><h2>Smart Dynamic QR</h2><div>QR codes dynamiques &amp; stats souveraines</div></div>
+  <div class="card"><h2>Brief Prod</h2><div>Brief print/digital infaillible</div></div>
+  <div class="card"><h2>Brainstorming</h2><div>Débats d'idées</div></div>
+</div>
+<div class="kora-panel kora-open kora-in">
+  <div class="kora-head">
+    <div class="kora-title">K O R A</div>
+    <div class="kora-sub">Keystone Omnichannel Reasoning Assistant</div>
+    <div class="kora-headtools">
+      <!-- edit-3 (nouvelle conversation) -->
+      <button class="kora-newconv" title="Nouvelle conversation" aria-label="Nouvelle conversation">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      </button>
+      <!-- volume-2 (voix ON) -->
+      <button class="kora-voicetoggle kora-voice-on" title="Voix activée" aria-label="Voix">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="kora-log">
+    <div class="kora-line kora-on kora-user">Salut, tu fais quoi ?</div>
+    <div class="kora-line kora-on">Salut ! Je peux te lire tes séances, tes posts, tes réseaux, tes QR codes et leurs scans…</div>
+    <div class="kora-line kora-on kora-user">Combien de posts cette semaine ?</div>
+    <div class="kora-line kora-on">Tu as 3 posts programmés cette semaine.</div>
+  </div>
+  <div class="kora-inputbar">
+    <input class="kora-input" type="text" placeholder="Demande-moi — « prépare-moi un post sur… »">
+    <button class="kora-send" title="Envoyer">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </button>
+  </div>
+</div>
+</body></html>

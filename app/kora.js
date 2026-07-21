@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const KORA_CSS_V = '17';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
+const KORA_CSS_V = '18';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
 
 /* ── Shader (verbatim harnais kora-galet-morph.html) ── */
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -138,7 +138,8 @@ const STATES = {
   besoin:    { n:11.4, ratio:2.57, speed:0.32, bloom:0.7,  plasma:0.34, comet:0, level:0, weave:0,   knock:1, dim:1.05, A:B_A, B:B_B, C:B_C, white:0.20, breathe:0.30, lay:[0.9,0.55,0.35] },
 };
 const SUBTITLES = {
-  repos: 'prête', ecoute: 'à l’écoute…', reflexion: 'je réfléchis…',
+  /* au repos = la signature K.O.R.A (identité) ; en action = ce qu'elle fait */
+  repos: 'Keystone Omnichannel Reasoning Assistant', ecoute: 'à l’écoute…', reflexion: 'je réfléchis…',
   travail: 'je travaille…', besoin: 'besoin de toi',
 };
 
