@@ -227,6 +227,13 @@ async function _beginRecording() {
 
   koraOpen();
   koraState('ecoute');
+  /* Latence masquée (brief §3.2, patron SA-9.2) : on chauffe la VOIX dès le
+     MAINTIEN — le modèle Piper + phonémiseur + kernels ONNX se chargent
+     PENDANT que tu parles et que le STT tourne, plus dans le chemin critique
+     du 1er son. Ici (hold confirmé ≥150 ms), pas au pointerdown (un simple
+     tap ne doit pas déclencher le téléchargement du modèle 60 Mo). No-op si
+     la voix est coupée. */
+  koraWarmVoice();
   try { mr.start(); }
   catch (_) { _teardownRec(); koraState('repos'); koraSay('Enregistrement impossible sur cet appareil — écris-moi.'); return; }
   _startLevelLoop();
