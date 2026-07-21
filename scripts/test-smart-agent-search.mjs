@@ -12,6 +12,7 @@ import { ftsMatchQuery, rrfFuse, validateUnit, parseProposals,
   lastAgentQuestion, isAffirmation, validateFolderName, validateVaultName,
   validatePublicSlug, publicAgentMeta, validatePublicLinkPatch, goldenVerdict, parseQuestions,
   splitGapReply, pickFallback, groundedFromSignals, sweepGroundThreshold,
+  needsRerank, applyRerank, _rerank,
   validateImportUrl, htmlToText, clampExtractText, importFileKindOf, stripRepeatedFollowup,
   gapMergeTarget, attachGapCounts, sanitizePublicUrl, validateCards,
   detectSocialIntent, pickSocialReply }
@@ -689,6 +690,85 @@ console.log('── SA-14.0 — sweepGroundThreshold (optimum connu à l\'avance
   {
     const sw = sweepGroundThreshold([s('answer', 0.50)], { from: 0.40, to: 0.44, step: 0.02 });
     check('bornes/pas personnalisables', sw.candidates.length === 3 && sw.candidates[1].threshold === 0.42);
+  }
+}
+
+console.log('── SA-14.1 — needsRerank (on ne paie que l\'ambiguïté) ──');
+{
+  const h = (...v) => v.map(x => ({ vecScore: x }));
+  check('une seule fiche → rien à réordonner',
+    needsRerank(h(0.42)) === false);
+  check('deux têtes au coude à coude (0.71 / 0.69) → rerank',
+    needsRerank(h(0.71, 0.69, 0.30)) === true);
+  check('écart net entre les deux têtes (0.80 / 0.55) → PAS de rerank',
+    needsRerank(h(0.80, 0.55, 0.20)) === false);
+  check('meilleur score dans la zone du seuil (0.44 vs 0.42) → rerank (la « falaise »)',
+    needsRerank(h(0.44, 0.20)) === true);
+  check('juste sous la zone (0.36) et écart net → PAS de rerank',
+    needsRerank(h(0.36, 0.10)) === false);
+  check('mode lexical seul (aucun vecScore) → abstention (sinon on paierait TOUTES les requêtes)',
+    needsRerank([{ lexRank: 1, vecScore: null }, { lexRank: 2, vecScore: null }]) === false);
+  check('un seul score sémantique sur deux fiches → abstention',
+    needsRerank([{ vecScore: 0.9 }, { vecScore: null }]) === false);
+  check('vide / non-tableau → false',
+    needsRerank([]) === false && needsRerank(null) === false);
+  check('marge et seuil paramétrables',
+    needsRerank(h(0.80, 0.55), 0.42, 0.30) === true);
+}
+
+console.log('── SA-14.1 — applyRerank (réordonne SANS jamais dégrader) ──');
+{
+  const hits = [
+    { row: { id: 'a' }, vecScore: 0.44, lexRank: 1, score: 0.9 },
+    { row: { id: 'b' }, vecScore: 0.43, lexRank: null, score: 0.8 },
+    { row: { id: 'c' }, vecScore: 0.42, lexRank: 2, score: 0.7 },
+  ];
+  const ids = (l) => l.map(x => x.row.id).join('');
+  {
+    const out = applyRerank(hits, [{ id: 0, score: 0.10 }, { id: 1, score: 0.95 }, { id: 2, score: 0.50 }]);
+    check('réordonné par score de reranking', ids(out) === 'bca');
+    check('rerankScore attaché (observabilité)', out[0].rerankScore === 0.95);
+    check('vecScore / lexRank / score RRF INTACTS (le grounding ne bouge pas)',
+      out[0].vecScore === 0.43 && out[0].lexRank === null && out[0].score === 0.8);
+    check('aucune fiche perdue', out.length === 3);
+  }
+  {
+    const out = applyRerank(hits, [{ id: 2, score: 0.9 }, { id: 0, score: 0.8 }]);
+    check('fiche non jugée → reléguée en fin, jamais écartée',
+      ids(out) === 'cab' && out[2].rerankScore === null);
+  }
+  check('réponse vide → ordre RRF intact', ids(applyRerank(hits, [])) === 'abc');
+  check('réponse absente / non-tableau → ordre RRF intact',
+    ids(applyRerank(hits, undefined)) === 'abc' && ids(applyRerank(hits, 'nope')) === 'abc');
+  check('indices hors bornes ignorés → moins de 2 scores → ordre intact',
+    ids(applyRerank(hits, [{ id: 9, score: 1 }, { id: -1, score: 1 }, { id: 0, score: 1 }])) === 'abc');
+  check('scores non numériques ignorés',
+    ids(applyRerank(hits, [{ id: 0, score: 'haut' }, { id: 1, score: null }, { id: 2, score: 0.9 }])) === 'abc');
+  check('égalité de score → l\'ordre RRF tranche (déterminisme)',
+    ids(applyRerank(hits, [{ id: 2, score: 0.5 }, { id: 1, score: 0.5 }, { id: 0, score: 0.5 }])) === 'abc');
+  check('hits vides → []', applyRerank([], [{ id: 0, score: 1 }]).length === 0);
+}
+
+console.log('── SA-14.1 — _rerank (best-effort : une panne ne casse jamais le chat) ──');
+{
+  const hits = [
+    { row: { id: 'a', title: 'A', body_text: 'x' }, vecScore: 0.44 },
+    { row: { id: 'b', title: 'B', body_text: 'y' }, vecScore: 0.43 },
+  ];
+  const ids = (l) => l.map(x => x.row.id).join('');
+  check('modèle en échec → ordre d\'origine, sans jeter',
+    ids(await _rerank({ AI: { run: async () => { throw new Error('503'); } } }, 'q', hits)) === 'ab');
+  check('binding AI absent → ordre d\'origine',
+    ids(await _rerank({}, 'q', hits)) === 'ab' && ids(await _rerank(null, 'q', hits)) === 'ab');
+  check('réponse illisible → ordre d\'origine',
+    ids(await _rerank({ AI: { run: async () => ({ oups: true }) } }, 'q', hits)) === 'ab');
+  {
+    let seen = null;
+    const out = await _rerank({ AI: { run: async (_m, input) => { seen = input; return { response: [{ id: 1, score: 0.9 }, { id: 0, score: 0.1 }] }; } } }, 'quels horaires ?', hits);
+    check('succès → réordonné', ids(out) === 'ba');
+    check('contexte envoyé = titre + corps, un par fiche',
+      seen.contexts.length === 2 && seen.contexts[0].text === 'A\nx');
+    check('la requête est transmise telle quelle', seen.query === 'quels horaires ?');
   }
 }
 

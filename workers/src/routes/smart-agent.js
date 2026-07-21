@@ -61,7 +61,7 @@ import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-
 import { streamLLM }                               from '../lib/llm-stream.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
-const SA_ENGINE_VERSION = 'SA-14.0';
+const SA_ENGINE_VERSION = 'SA-14.1';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -1469,7 +1469,91 @@ async function _retrieve(env, tenant, q, { topk = SEARCH_TOPK, vaultIds = [], fo
         vecScore: vecScores.has(f.id) ? Math.round(vecScores.get(f.id) * 10000) / 10000 : null,
       }));
   }
+  // ── SA-14.1 — reranking CIBLÉ (voir needsRerank/_rerank plus bas). Un
+  //    seul point de câblage → chat interne, chat public et recherche du pad
+  //    en profitent tous. N'altère JAMAIS vecScore/lexRank : la décision
+  //    d'ancrage (isGrounded, insensible à l'ordre) reste strictement celle
+  //    d'avant — seul l'ORDRE de ce qui est injecté au prompt change.
+  if (needsRerank(hits)) hits = await _rerank(env, q, hits);
   return { semantic, hits, degraded };
+}
+
+// ── SA-14.1 — reranking ciblé sur les cas ambigus ─────────────────
+// L'audit du 16/07 a identifié la zone fragile : plusieurs fiches à score
+// voisin autour du seuil, où l'ordre RRF (fusion de rangs, pas de sens)
+// joue à pile ou face sur ce qui est cité. Un reranker croisé (query ×
+// passage) tranche bien mieux — mais il coûte un appel, donc on ne le
+// paie QUE dans cette zone, jamais sur les requêtes déjà bien tranchées.
+const RERANK_MODEL    = '@cf/baai/bge-reranker-base';  // même famille que bge-m3 (EMBED_MODEL)
+const AMBIGUITY_MARGIN = 0.05;   // largeur de la zone « trop serré pour trancher »
+const RERANK_CTX_MAX   = 1200;   // caractères de fiche envoyés au reranker
+
+// Vrai UNIQUEMENT si l'ordre est réellement incertain : au moins 2 fiches
+// scorées sémantiquement ET (le meilleur score frôle le seuil d'ancrage,
+// OU les deux meilleurs sont au coude à coude). Sans couche sémantique
+// exploitable (mode lexical seul / panne Vectorize) on s'abstient : on n'a
+// aucune mesure d'ambiguïté, ce serait payer un appel sur TOUTES les
+// requêtes. Pur → testé.
+export function needsRerank(hits, minVec = GROUND_MIN_VEC, margin = AMBIGUITY_MARGIN) {
+  const list = Array.isArray(hits) ? hits : [];
+  if (list.length < 2) return false;
+  const vecs = list.map(h => h?.vecScore)
+    .filter(v => typeof v === 'number' && Number.isFinite(v))
+    .sort((a, b) => b - a);
+  if (vecs.length < 2) return false;
+  const nearThreshold = Math.abs(vecs[0] - minVec) <= margin;  // la « falaise »
+  const tightPack     = (vecs[0] - vecs[1]) < margin;          // deux têtes ex æquo
+  return nearThreshold || tightPack;
+}
+
+// Applique un classement de reranker à des hits. Pur → testé.
+// `ranked` = tableau { id: index dans la requête, score } (schéma officiel
+// @cf/baai/bge-reranker-base). TOLÉRANT : toute réponse inexploitable
+// (vide, indices hors bornes, scores non numériques, moins de 2 entrées
+// valides) rend l'ordre RRF d'origine INCHANGÉ — le reranking ne peut
+// jamais dégrader, seulement améliorer.
+export function applyRerank(hits, ranked) {
+  const list = Array.isArray(hits) ? hits : [];
+  if (!Array.isArray(ranked)) return list;
+  const scores = new Map();
+  for (const r of ranked) {
+    const i = Number(r?.id);
+    if (!Number.isInteger(i) || i < 0 || i >= list.length) continue;
+    if (typeof r?.score !== 'number' || !Number.isFinite(r.score)) continue;
+    if (!scores.has(i)) scores.set(i, Math.round(r.score * 10000) / 10000);
+  }
+  if (scores.size < 2) return list;
+  // Les fiches non scorées par le reranker gardent leur rang relatif et
+  // passent DERRIÈRE celles qu'il a jugées (jamais écartées : le grounding
+  // et les citations continuent de voir toutes les fiches récupérées).
+  return list
+    .map((h, i) => ({ ...h, rerankScore: scores.has(i) ? scores.get(i) : null, _rrf: i }))
+    .sort((a, b) => {
+      if (a.rerankScore === null && b.rerankScore === null) return a._rrf - b._rrf;
+      if (a.rerankScore === null) return 1;
+      if (b.rerankScore === null) return -1;
+      return b.rerankScore - a.rerankScore || a._rrf - b._rrf;
+    })
+    .map(({ _rrf, ...h }) => h);
+}
+
+// BEST-EFFORT, comme l'échec Vectorize plus haut : toute panne du reranker
+// (binding absent, modèle indisponible, réponse illisible) rend l'ordre
+// d'origine sans bruit. Le chat ne doit JAMAIS tomber pour un raffinement.
+// Exportée UNIQUEMENT pour que le repli silencieux soit prouvé par un test
+// (env.AI mocké en échec) — le repli est le point critique de ce sprint.
+export async function _rerank(env, query, hits) {
+  if (!env?.AI || typeof env.AI.run !== 'function') return hits;
+  try {
+    const contexts = hits.map(h => ({
+      text: `${h.row?.title || ''}\n${String(h.row?.body_text || '').slice(0, RERANK_CTX_MAX)}`.trim() || '—',
+    }));
+    const out = await env.AI.run(RERANK_MODEL, {
+      query: String(query || '').slice(0, CHAT_MAX_LEN),
+      contexts,
+    });
+    return applyRerank(hits, out?.response);
+  } catch (_) { return hits; }
 }
 
 // ═══════════════════════════════════════════════════════════════════
