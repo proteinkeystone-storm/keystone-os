@@ -30,38 +30,14 @@ export const KSTORE_CATEGORIES = [
 // Toutes réelles : bouton d'achat actif, référencées par leur id
 // NOMEN-K (lien avec pads-data.js / flow Stripe).
 export const KSTORE_MOCK_APPS = [
-    // ── Immobilier (KS_IMM) ───────────────────────────────────
-    // ── O-IMM-001 (Notices VEFA) et O-IMM-009 (Contrat VEFA) retirés
-    //    du K-Store le 2026-05-22 : remplacés par VEFA Studio (O-IMM-010)
-    //    qui fusionne les deux livrables en un seul outil. Les anciens
-    //    pads restent dans pads-data.js pour les utilisateurs qui les
-    //    ont déjà achetés, et VEFA Studio migre leurs brouillons.
-    {
-        id: 'O-IMM-010',
-        category: 'KS_IMM',
-        title: 'VEFA Studio',
-        punchline: 'Notice + Contrat — un seul lot, deux livrables',
-        shortDesc: 'Hero à onglets · saisie Programme partagée · auto-calculs HT/TTC',
-        price: 49,
-        icon: 'vefa',
-        ai_optimized: 'Claude',
-        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
-        copyright: '© 2026-2027 Protein Studio',
-        real: true,
-    },
-    {
-        id: 'O-IMM-002',
-        category: 'KS_IMM',
-        title: 'Annonces Immo',
-        punchline: '6 portails en une saisie',
-        shortDesc: 'SeLoger · LeBonCoin · Bien\'ici · Logic-Immo · Figaro Immo',
-        price: 29,
-        icon: 'multiportails',
-        ai_optimized: 'ChatGPT',
-        ai_compatible: ['Claude', 'GPT 5', 'Mistral', 'Gemini'],
-        copyright: '© 2026-2027 Protein Studio',
-        real: true,
-    },
+    // ── VEFA DÉPOSÉ le 2026-07-16 (PR #12 chore/remove-vefa) ──────
+    //    Les cartes K-Store O-IMM-010 (VEFA Studio) et O-IMM-002
+    //    (Annonces Immo) ont été retirées ici le 2026-07-23 : leur
+    //    catégorie KS_IMM n'existe plus dans KSTORE_CATEGORIES, elles
+    //    flottaient donc « hors catégorie » dans la grille tout en
+    //    pointant vers des apps front déjà supprimées (vefa-studio.js /
+    //    annonces-immo.js). Les pads O-IMM-* restent published:false
+    //    dans pads-data.js (dormants, invisibles). Ne pas ressusciter.
 
     // ── Communication (KS_COM) + Productivité (KS_PRD) ────────
     // Le rangement réel suit le champ `category` de chaque app (pas l'ordre).
@@ -183,6 +159,66 @@ export const KSTORE_MOCK_APPS = [
         icon: 'sentinel',
         ai_optimized: 'Mistral',
         ai_compatible: ['Mistral', 'Gemini', 'Claude'],
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
+    // ── Apps présentes dans CATALOG_DATA (D1) mais qui manquaient ici ──
+    // Ajoutées le 2026-07-23 : sans entrée mock, leur catégorie legacy D1
+    // (COM/SECURITE) était jetée par _ksNormalizeD1 → elles flottaient
+    // « hors catégorie » dans la grille. Le mock impose la taxonomie KS_ ;
+    // titre/longDesc/visuels restent fournis par D1 (prioritaire).
+    {
+        id: 'O-BRD-001',
+        category: 'KS_CREER',
+        title: 'Key Brand',
+        punchline: 'Votre charte graphique vivante',
+        shortDesc: 'Interactive, à jour, partageable d\'un lien · multi-chartes · ZÉRO IA',
+        price: 49,
+        icon: 'keybrand',
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
+    {
+        id: 'O-DSK-001',
+        category: 'KS_ORGANISER',
+        title: 'desK',
+        punchline: 'Le chemin de fer vivant de votre revue',
+        shortDesc: 'Qui livre quoi, quand · casier, relances, digestion e-mail · pré-impression',
+        price: 49,
+        icon: 'desk',
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
+    {
+        id: 'O-NET-001',
+        category: 'KS_INTERAGIR',
+        title: 'networK',
+        punchline: 'Votre réseau relationnel vivant',
+        shortDesc: 'Contacts en carte mentale · journal, relances, anniversaires · anti-CRM',
+        price: 49,
+        icon: 'network',
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
+    {
+        id: 'O-BOK-001',
+        category: 'KS_DIFFUSER',
+        title: 'booK',
+        punchline: 'Vos flipbooks en un fichier qui s\'ouvre partout',
+        shortDesc: 'Export HTML autoporté · bibliothèque · partage lien/QR · sans serveur',
+        price: 49,
+        icon: 'book',
+        copyright: '© 2026-2027 Protein Studio',
+        real: true,
+    },
+    {
+        id: 'O-SEC-001',
+        category: 'KS_DIFFUSER',
+        title: 'Missive',
+        punchline: 'Transmettez un secret qui se lit une fois',
+        shortDesc: 'Usage unique scellé NFC/QR · chiffrement E2E · serveur aveugle',
+        price: 49,
+        icon: 'sceau',
         copyright: '© 2026-2027 Protein Studio',
         real: true,
     },

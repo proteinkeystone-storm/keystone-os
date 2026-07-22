@@ -5312,7 +5312,7 @@ function _escapeLivingText(s) {
 // engagement/impression significatif malgré la rotation 10s.
 let _livingLastShown = null;  // { topic, ts }
 const LIVING_PAD_TOPIC = {
-    'O-IMM-002': 'annonces',
+    // O-IMM-002 (Annonces Immo) retiré — VEFA déposé (cf. kstore-mock-catalog.js).
     'A-COM-001': 'smartqr',
     'A-COM-002': 'kodex',
     'A-COM-003': 'brainstorming',
