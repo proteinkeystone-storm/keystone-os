@@ -2174,10 +2174,56 @@ function __keystonePostHero(){
   }
 })();
 
-/* ── Plans (section 6), data-driven — quotas réels Ghost Writer + exclusivités MAX ── */
+/* ── Plans (section 6), data-driven ──────────────────────────────────
+   DEUX grilles cohabitent le temps de la bascule (HANDOFF_PRICING_REFONTE).
+
+   · PLANS     = l'ancienne (Starter/Pro/Max). AFFICHÉE PAR DÉFAUT, parce
+                 que c'est encore elle que Stripe facture réellement.
+   · PLANS_V2  = la nouvelle (gratuit + à la carte + OS complet).
+
+   Pourquoi ne pas simplement remplacer : cette page est publique et un
+   `git push` la met en ligne. Afficher 19 € pendant que Stripe prélève
+   49 € serait une promesse fausse. La nouvelle grille n'apparaît donc
+   que sur demande explicite — pour la relire avant de basculer :
+
+       https://protein-keystone.com/?pricing=v2
+
+   Au sprint P6 : PLANS et ce commutateur disparaissent, PLANS_V2 reste. */
 (function(){
   const g=document.getElementById('plansGrid'); if(!g) return;
   const chk='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+
+  const V2 = (function(){
+    try {
+      if (new URLSearchParams(location.search).get('pricing') === 'v2') return true;
+      return localStorage.getItem('ks_pricing_v2') === '1';
+    } catch(_) { return false; }
+  })();
+
+  const PLANS_V2=[
+    {name:"Gratuit", tag:"", price:"0€", cta:"Commencer gratuitement", primary:false,
+      href:"./app.html", feats:[
+      "Missive — transmettre un secret qui s'autodétruit",
+      "booK — vos flipbooks en un fichier qui s'ouvre partout",
+      "Keynapse — vos idées en bulles vivantes",
+      "Sans carte bancaire, sans limite de durée",
+      "Hébergement Europe · RGPD"]},
+    {name:"À la carte", tag:"Populaire", price:"dès 19€", cta:"Voir les applications", primary:true,
+      href:"./app.html", feats:[
+      "L'application de votre choix — 19€, 49€ ou 99€ selon l'outil",
+      "Conversations IA incluses, sans configuration",
+      "Ou branchez votre propre clé (Claude, GPT, Mistral…)",
+      "Ajoutez une application quand vous en avez besoin",
+      "Sans engagement · résiliable à tout moment"]},
+    {name:"OS complet", tag:"", price:"129€", cta:"Choisir l'OS complet", primary:false,
+      href:"#os", feats:[
+      "Les 14 applications, nouveautés comprises",
+      "Elles se parlent entre elles — c'est tout l'intérêt",
+      "3 000 conversations IA par mois",
+      "Support prioritaire",
+      "2 mois offerts en paiement annuel"]}
+  ];
+
   const PLANS=[
     {name:"Starter", tag:"", price:"49€", cta:"Choisir Starter", primary:false,
       href:"https://buy.stripe.com/bJe7sL6Nz5GocYR1SQf7i00", feats:[
@@ -2189,7 +2235,35 @@ function __keystonePostHero(){
       href:"https://buy.stripe.com/28E7sL3BnecUaQJfJGf7i04", feats:[
       "Toutes les applications (+ nouveautés incluses)","15 utilisateurs · 3 appareils chacun","5 000 crédits IA inclus / mois","BYOK multi-moteur (votre clé)","Export PDF premium","Support prioritaire dédié"]}
   ];
-  g.innerHTML=PLANS.map(p=>'<div class="plan'+(p.primary?' plan--pro':'')+' reveal"><span class="plan-tag">'+p.tag+'</span><h3>'+p.name+'</h3><div class="price">'+p.price+'<small> /mois</small></div><ul>'+p.feats.map(f=>'<li>'+chk+f+'</li>').join('')+'</ul><a class="btn '+(p.primary?'btn-primary':'btn-ghost')+'" href="'+p.href+'" target="_top">'+p.cta+'</a></div>').join('');
+  const LISTE = V2 ? PLANS_V2 : PLANS;
+  g.innerHTML=LISTE.map(p=>'<div class="plan'+(p.primary?' plan--pro':'')+' reveal"><span class="plan-tag">'+p.tag+'</span><h3>'+p.name+'</h3><div class="price">'+p.price+'<small> /mois</small></div><ul>'+p.feats.map(f=>'<li>'+chk+f+'</li>').join('')+'</ul><a class="btn '+(p.primary?'btn-primary':'btn-ghost')+'" href="'+p.href+'" target="_top">'+p.cta+'</a></div>').join('');
+
+  /* Nouvelle grille : « Choisir l'OS complet » ouvre directement la page
+     de paiement. Le serveur choisit le tarif — la page ne connaît aucun
+     montant ni identifiant de prix, elle nomme seulement l'offre. */
+  if (V2) {
+    const btn = g.querySelector('a[href="#os"]');
+    if (btn) btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const initial = btn.textContent;
+      btn.textContent = 'Ouverture du paiement…';
+      btn.style.pointerEvents = 'none';
+      try {
+        const r = await fetch('https://keystone-os-api.keystone-os.workers.dev/api/stripe/checkout', {
+          method : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body   : JSON.stringify({ app: 'OS', interval: 'month' }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (d && d.url) { location.href = d.url; return; }
+        throw new Error((d && d.error) || 'indisponible');
+      } catch (_) {
+        btn.textContent = initial;
+        btn.style.pointerEvents = '';
+        alert("Le paiement est momentanément indisponible. Réessayez dans un instant.");
+      }
+    });
+  }
 })();
 
 /* ── Compteurs animés (les chiffres montent) ── */
