@@ -48,9 +48,12 @@ if (!KEY) {
   process.exit(1);
 }
 const IS_LIVE = KEY.startsWith('sk_live_');
-if (IS_LIVE && !(LIVE_OK && APPLY)) {
-  console.error(`\n${red('Clé LIVE détectée.')} Ce script refuse d'écrire en production`);
-  console.error(`sans ${bold('--apply --live')} explicites. Commencez en mode TEST.\n`);
+// On refuse d'ÉCRIRE en production sans les deux options explicites — mais
+// on autorise la SIMULATION, qui ne fait que lire. La bloquer était une
+// erreur : c'est précisément ce qu'on veut inspecter avant d'écrire.
+if (IS_LIVE && APPLY && !LIVE_OK) {
+  console.error(`\n${red('Clé LIVE détectée.')} Écrire en production exige ${bold('--apply --live')},`);
+  console.error(`les deux ensemble. Relancez sans ${bold('--apply')} pour une simulation.\n`);
   process.exit(1);
 }
 
