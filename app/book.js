@@ -54,6 +54,7 @@ const IS_STANDALONE = (() => {
 let _root = null, _ed = null, _dirty = false;
 let _previewTimer = null, _busy = false;
 let _awayDays = 0;                // jours écoulés depuis la dernière ouverture du pad
+let _shelfGen = 0;                // n° de passe de rendu de l'étagère (anti-doublon, cf. _renderShelf)
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -225,13 +226,20 @@ function _onBack() {
 
 // ── Étagère (bibliothèque) ──────────────────────────────────────
 async function _renderShelf() {
+  // Jeton de passe : l'étagère se rend en DEUX temps (on repeint dès que le
+  // stockage persistant a répondu, car le bandeau dépend de storageState()).
+  // Deux passes peuvent donc se chevaucher autour de l'await ci-dessous, et
+  // le hero comme le bandeau s'AJOUTENT (insertAdjacentHTML) au lieu de
+  // remplacer — d'où un doublon à l'écran. La passe la plus récente gagne :
+  // toute passe dépassée abandonne après l'await.
+  const gen = ++_shelfGen;
   const main = _root.querySelector('[data-slot="main"]');
   main.classList.remove('bk-main-read');
   _root.classList.remove('bk-reading');
   main.innerHTML = `<div class="bk-shelf"><div class="bk-shelf-grid" data-slot="grid"></div></div>`;
   let list = [];
   try { list = await _libAll(); } catch (_) {}
-  if (!_root || _ed) return;                     // fermé / parti en édition entre-temps
+  if (!_root || _ed || gen !== _shelfGen) return;  // fermé / en édition / passe dépassée
   list.sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
   const grid = main.querySelector('[data-slot="grid"]');
   if (!grid) return;
@@ -270,6 +278,14 @@ async function _renderShelf() {
       <span>Nouveau flipbook</span>
     </button>
     ${cards}`;
+
+  // Ceinture ET bretelles. Le jeton de passe ci-dessus suffit en théorie,
+  // mais le doublon observé en prod n'a PAS pu être reproduit en local (il
+  // dépend de l'ordre d'arrivée entre IndexedDB et la réponse du stockage
+  // persistant, qui varie d'une machine à l'autre). On rend donc aussi les
+  // deux insertions idempotentes : repeindre ne peut plus empiler, quel que
+  // soit le minutage ou un futur troisième appelant.
+  main.querySelectorAll('.bk-guard, .bk-hero').forEach(n => n.remove());
 
   // Bandeau de sauvegarde — au-dessus de l'étagère, non masquable : il
   // disparaît quand il n'a plus lieu d'être, c'est-à-dire quand tout est
