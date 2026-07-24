@@ -16,6 +16,10 @@ import { loadFromCloud, saveToCloud, isCloudReady, installAutoSync } from './clo
 // Garde-fou anti-session-coincée (incident 2026-06-14) : déconnexion propre
 // + détection « connecté mais vide ». Side-effect : expose window.ksCleanLogout.
 import { ksCleanLogout, ksWhoami } from './lib/session-guard.js';
+// Stockage persistant : sort l'origine des purges automatiques du
+// navigateur (couperet 7 jours de WebKit, pression disque). Protège la
+// bibliothèque booK, les brouillons Data Fabric et le vault local.
+import { ensurePersistence }       from './lib/storage-guard.js';
 import { getLicenceStatus }        from './licence.js';
 import { icon }                    from './lib/ui-icons.js';
 // Sprint GW-1 — Ghost Writer (service réécriture transversal).
@@ -182,6 +186,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     //    déclenchera un saveToCloud debouncé. Bug racine résolu : avant,
     //    seule la modif de clé API uploadait quoi que ce soit.
     installAutoSync();
+
+    // 0-bis. Stockage persistant, au plus tôt et sans await : tout ce que
+    //    l'OS garde en local (bibliothèque booK, brouillons, vault) est
+    //    sinon récupérable par le navigateur sans préavis — WebKit efface
+    //    après 7 jours sans visite du domaine. Ne doit jamais bloquer le
+    //    boot : Firefox peut ouvrir une invite, on ne l'attend pas.
+    ensurePersistence().catch(() => {});
 
     // 1. Vault local en premier — restore préférences depuis localStorage
     loadVault();
