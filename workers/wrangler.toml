@@ -123,7 +123,7 @@ BYOK_ROUTING = "off"
 # exige une app payante. Ne PAS allumer avant que Stripe soit refait
 # (P4) : sinon un prix affiché ne correspondrait plus au prélèvement.
 # Lu par lib/pricing-grid.js → isPricingV2(env).
-PRICING_V2 = "off"
+PRICING_V2 = "on"
 
 # ── desK DK-4 — adresse de dépôt e-mail (DESK_BRIEF §5.2) ─────
 # Le worker expose un handler email() (digestion 3 étages + bac).

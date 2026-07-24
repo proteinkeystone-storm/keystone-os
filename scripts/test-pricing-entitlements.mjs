@@ -60,8 +60,9 @@ eq(ANNUAL_MONTHS_BILLED, 10, 'annuel facturé 10 mois');
 eq(PACKS.map(p => p.price), [9, 39], 'les 2 packs restent à 9 € et 39 €');
 sameSet(PUBLIC_SURFACE_APPS, ['O-AGT-001', 'A-COM-001'], 'surfaces publiques = Smart Agent + Smart QR');
 
-console.log('\n\x1b[1m▶ Suite 2 — zéro régression sur le legacy (flag OFF)\x1b[0m');
-eq(isPricingV2(), false, 'PRICING_V2 est OFF par défaut');
+console.log('\n\x1b[1m▶ Suite 2 — zéro régression sur le legacy\x1b[0m');
+// Basculé en P6 (2026-07-25) : le nouveau modèle est le défaut.
+eq(isPricingV2(), true, 'PRICING_V2 est ON par défaut (bascule P6)');
 eq(resolveEntitlements({ isAdmin: true, ownedAssets: ['A-COM-005'] }), null, 'ADMIN ouvre tout');
 eq(resolveEntitlements({ plan: 'MAX', ownedAssets: ['A-COM-005'] }), null, 'plan MAX (legacy) ouvre tout');
 eq(resolveEntitlements({ plan: 'STARTER', ownedAssets: null }), null, 'sac null = sentinelle historique → tout');

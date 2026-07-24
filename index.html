@@ -2175,7 +2175,7 @@ function __keystonePostHero(){
 })();
 
 /* ── Plans (section 6), data-driven ──────────────────────────────────
-   DEUX grilles cohabitent le temps de la bascule (HANDOFF_PRICING_REFONTE).
+   Grille unique depuis la bascule P6 (2026-07-25).
 
    · PLANS     = l'ancienne (Starter/Pro/Max). AFFICHÉE PAR DÉFAUT, parce
                  que c'est encore elle que Stripe facture réellement.
@@ -2192,13 +2192,6 @@ function __keystonePostHero(){
 (function(){
   const g=document.getElementById('plansGrid'); if(!g) return;
   const chk='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
-
-  const V2 = (function(){
-    try {
-      if (new URLSearchParams(location.search).get('pricing') === 'v2') return true;
-      return localStorage.getItem('ks_pricing_v2') === '1';
-    } catch(_) { return false; }
-  })();
 
   const PLANS_V2=[
     {name:"Gratuit", tag:"", price:"0€", cta:"Commencer gratuitement", primary:false,
@@ -2224,24 +2217,13 @@ function __keystonePostHero(){
       "2 mois offerts en paiement annuel"]}
   ];
 
-  const PLANS=[
-    {name:"Starter", tag:"", price:"49€", cta:"Choisir Starter", primary:false,
-      href:"https://buy.stripe.com/bJe7sL6Nz5GocYR1SQf7i00", feats:[
-      "3 applications au choix","1 utilisateur · 3 appareils","200 crédits IA inclus / mois","Connexion à vos IA (Claude, GPT, Mistral…)","Export PDF premium","Hébergement Europe · RGPD"]},
-    {name:"Pro", tag:"Populaire", price:"99€", cta:"Choisir Pro", primary:true,
-      href:"https://buy.stripe.com/dRm5kD3BnfgY2kd1SQf7i03", feats:[
-      "5 applications au choix","5 utilisateurs · 3 appareils chacun","1 000 crédits IA inclus / mois","Connexion à vos IA (Claude, GPT, Mistral…)","Export PDF premium","Éligible applications sur-mesure"]},
-    {name:"Max", tag:"", price:"249€", cta:"Choisir Max", primary:false,
-      href:"https://buy.stripe.com/28E7sL3BnecUaQJfJGf7i04", feats:[
-      "Toutes les applications (+ nouveautés incluses)","15 utilisateurs · 3 appareils chacun","5 000 crédits IA inclus / mois","BYOK multi-moteur (votre clé)","Export PDF premium","Support prioritaire dédié"]}
-  ];
-  const LISTE = V2 ? PLANS_V2 : PLANS;
+  const LISTE = PLANS_V2;
   g.innerHTML=LISTE.map(p=>'<div class="plan'+(p.primary?' plan--pro':'')+' reveal"><span class="plan-tag">'+p.tag+'</span><h3>'+p.name+'</h3><div class="price">'+p.price+'<small> /mois</small></div><ul>'+p.feats.map(f=>'<li>'+chk+f+'</li>').join('')+'</ul><a class="btn '+(p.primary?'btn-primary':'btn-ghost')+'" href="'+p.href+'" target="_top">'+p.cta+'</a></div>').join('');
 
   /* Nouvelle grille : « Choisir l'OS complet » ouvre directement la page
      de paiement. Le serveur choisit le tarif — la page ne connaît aucun
      montant ni identifiant de prix, elle nomme seulement l'offre. */
-  if (V2) {
+  {
     const btn = g.querySelector('a[href="#os"]');
     if (btn) btn.addEventListener('click', async (e) => {
       e.preventDefault();

@@ -944,71 +944,9 @@ const KS_PLANS_V2 = [
     },
 ];
 
-// Source de vérité dupliquée depuis index.html (section #plans).
-// À mettre à jour conjointement si la grille tarifaire évolue.
-const KS_PLANS_LEGACY = [
-    {
-        id: 'STARTER',
-        name: 'Start',
-        price: 49,
-        color: '#63b3ed',
-        stripeUrl: 'https://buy.stripe.com/bJe7sL6Nz5GocYR1SQf7i00',
-        desc: `Pour les professionnels qui veulent exploiter l'IA au quotidien, dès aujourd'hui.`,
-        features: [
-            { text: '3 applications au choix' },
-            { text: '1 utilisateur (3 appareils)' },
-            { html: '<strong>200 conversations</strong> incluses / mois' },
-            { text: 'Connexion API à vos IA (Claude, GPT, Mistral…)' },
-            { text: 'Export PDF premium' },
-            { text: 'Installable mobile & tablette' },
-            { text: 'Applications sur-mesure', disabled: true },
-            { text: 'Support prioritaire',  disabled: true },
-        ],
-    },
-    {
-        id: 'PRO',
-        name: 'Pro',
-        price: 99,                                  // 79 -> 99 (test pricing 2026-06-02)
-        color: 'var(--gold)',
-        recommended: true,
-        // Payment Link Stripe 99 €/mois (récurrent mensuel), créé 2026-06-02.
-        stripeUrl: 'https://buy.stripe.com/dRm5kD3BnfgY2kd1SQf7i03',
-        desc: `Pour les équipes et cabinets qui veulent déployer l'IA à grande échelle avec précision.`,
-        features: [
-            { text: '5 applications au choix' },
-            { text: '5 utilisateurs (3 appareils chacun)' },
-            { html: '<strong>1 000 conversations</strong> incluses / mois' },
-            { text: 'Connexion API à vos IA (Claude, GPT, Mistral…)' },
-            { text: 'Export PDF premium' },
-            { text: 'Installable mobile & tablette' },
-            { html: '<strong>Éligible Applications sur-mesure</strong> <span class="ks-plan-feature-note">(sur devis)</span>' },
-            { text: 'Support prioritaire', disabled: true },
-        ],
-    },
-    {
-        id: 'MAX',
-        name: 'Max',
-        price: 249,                                 // 149 -> 249 (test pricing 2026-06-02)
-        color: '#c084fc',
-        // Payment Link Stripe 249 €/mois (récurrent mensuel), créé 2026-06-02.
-        stripeUrl: 'https://buy.stripe.com/28E7sL3BnecUaQJfJGf7i04',
-        desc: `Pour les structures qui exigent l'accès total, le déploiement illimité et un support dédié.`,
-        features: [
-            { html: '<strong>Toutes les applications</strong>' },
-            { text: '15 utilisateurs (3 appareils chacun)' },
-            { html: '<strong>5 000 conversations</strong> incluses / mois' },
-            { text: 'Connexion API à vos IA (Claude, GPT, Mistral…)' },
-            { text: 'Export PDF premium' },
-            { text: 'Installable mobile & tablette' },
-            { html: '<strong>Éligible Applications sur-mesure</strong> <span class="ks-plan-feature-note">(sur devis)</span>' },
-            { html: '<strong>Support prioritaire dédié</strong>' },
-        ],
-    },
-];
-
-// Le jeu réellement affiché. Fonction (et non constante) : le flag se
-// lit à chaque rendu, on peut donc basculer sans recharger la page.
-function _ksPlans() { return isPricingV2() ? KS_PLANS_V2 : KS_PLANS_LEGACY; }
+// Une seule grille depuis la bascule P6 (2026-07-25) : les paliers
+// Start/Pro/Max sont morts, leurs produits Stripe archivés.
+function _ksPlans() { return KS_PLANS_V2; }
 
 // État courant de la vue Key-Store plein écran.
 // _ksFilter : { kind: 'all' | 'cat' | 'sub' | 'plans' | 'detail', id: string|null }
@@ -2080,10 +2018,9 @@ function _renderKStorePlans() {
                         if (plan.buyApp) {
                             return `<button class="ks-plan-cta" data-buy-plan="${plan.buyApp}" style="width:100%">Choisir ${plan.name}</button>`;
                         }
-                        if (!plan.stripeUrl) {
-                            return `<button class="ks-plan-cta" data-goto-catalogue="1" style="width:100%">Voir les applications</button>`;
-                        }
-                        return `<a class="ks-plan-cta" href="${plan.stripeUrl}" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">Choisir ${plan.name}</a>`;
+                        // Reste : le gratuit et « à la carte » — dans les deux
+                        // cas l'application se choisit dans le catalogue.
+                        return `<button class="ks-plan-cta" data-goto-catalogue="1" style="width:100%">Voir les applications</button>`;
                     })()}
                     <p class="ks-plan-note">Sans engagement · Résiliable à tout moment</p>
                 </div>`;

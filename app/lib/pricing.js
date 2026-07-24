@@ -45,7 +45,13 @@
 // ── Feature flag ───────────────────────────────────────────────
 // OFF par défaut. Override local pour tester sans rien déployer :
 //   localStorage.setItem('ks_pricing_v2', '1')
-const PRICING_V2_DEFAULT = false;
+// BASCULÉ le 2026-07-25 (sprint P6), une fois réunies les conditions :
+// les 24 tarifs existent en RÉEL chez Stripe, le worker tourne sur la
+// clé live, le webhook réel est signé, et le serveur vérifie enfin la
+// possession (lib/app-access.js). Avant cela, allumer aurait affiché
+// des prix que le paiement ne savait pas honorer.
+// Repli d'urgence, sans redéploiement : localStorage.ks_pricing_v2='0'.
+const PRICING_V2_DEFAULT = true;
 const LS_PRICING_V2      = 'ks_pricing_v2';
 
 export function isPricingV2() {
