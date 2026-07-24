@@ -95,6 +95,8 @@ import { handleListPublic as handleMsgListPublic,
          handleRevoke     as handleMsgRevoke,
          handleRepublish  as handleMsgRepublish }                       from './routes/messages.js';
 import { json, err, corsOk, requireAdmin, getAllowedOrigin }           from './lib/auth.js';
+import { requireJWT }                                                  from './lib/jwt.js';
+import { appForPath, checkAppAccess }                                  from './lib/app-access.js';
 import { runBackup, handleBackupRun, handleBackupList, handleBackupObject, handleBackupRestore } from './routes/backup.js';
 import { runSelfCheck, handleOpsHealthGet, handleOpsHealthRunNow } from './routes/ops-health.js';
 // ── Sprint S1 (Auth v2 — multi-email pour plan MAX) ─────────
@@ -221,6 +223,33 @@ export default {
       // le monitoring « juste marche » (OPS-2 · filet worker-mort externe).
       if (method === 'HEAD' && path.endsWith('/health')) {
         return new Response(null, { status: 200, headers: { 'Access-Control-Allow-Origin': origin } });
+      }
+
+      // ── PORTE DE POSSESSION (lib/app-access.js) ──────────────────
+      // Jusqu'ici, « cette licence a-t-elle cette application ? » ne se
+      // décidait QUE dans le navigateur — donc pas du tout. Une seule
+      // porte ici, avant tout aiguillage vers une route d'application.
+      //
+      // Ne s'applique QUE si la requête porte un jeton : sans lui, on
+      // laisse la route décider (401 si elle est privée, service normal
+      // si elle est publique). C'est ce qui préserve les surfaces
+      // publiques — QR scanné, agent public, formulaire Key Form
+      // rempli par un visiteur : les clients DU client n'ont pas de
+      // licence et ne doivent jamais en avoir besoin.
+      if (method !== 'OPTIONS' && request.headers.get('Authorization')) {
+        const cible = appForPath(path);
+        if (cible) {
+          const claims = await requireJWT(request, env);   // null si absent/invalide
+          if (claims) {
+            const { allowed } = await checkAppAccess(env, { path, claims });
+            if (!allowed) {
+              return err(
+                "Cette application n'est pas incluse dans votre licence.",
+                403, origin,
+              );
+            }
+          }
+        }
       }
 
       // ── Key Brand (Pad O-BRD-001 · KB-0) — charte graphique vivante ──
