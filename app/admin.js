@@ -6,6 +6,7 @@
 
 import { renderArtifactResult } from './artifact-renderer.js';
 import { KSTORE_CATEGORIES, KSTORE_PROMOS } from './kstore-mock-catalog.js';
+import { TIER, TIERS, appsForTier, OS_ENTITLEMENT } from './lib/pricing.js';
 import { VEFA_CLAUSES_V1 }      from './lib/doc-templates/vefa-clauses-seed.js';
 import { VEFA_CLAUSES_V2 }      from './lib/doc-templates/vefa-clauses-seed-v2.js';
 import { VEFA_CONTRAT_CLAUSES_V1 } from './lib/doc-templates/vefa-contrat-clauses-seed.js';
@@ -454,6 +455,15 @@ function _normalizeLicenceRow(l) {
 }
 
 async function renderLicences(panel) {
+  // P1 — le sélecteur d'apps affiche les VRAIS titres : on précharge le
+  // catalogue si l'onglet Contenu n'a pas encore tourné. Best-effort :
+  // en cas d'échec, _appTitle() retombe proprement sur l'id.
+  if (!catalogData) {
+    try {
+      const res = await api('/api/admin/catalog?tenantId=default');
+      if (res?.catalog) catalogData = res.catalog;
+    } catch (_) { /* titres = ids, non bloquant */ }
+  }
   try {
     // S5.4 — tente d'abord l'endpoint enrichi (S5.3), fallback legacy.
     let licences = [];
@@ -628,13 +638,10 @@ function showCreateLicenceModal(panel) {
         <input type="text" class="form-input" id="m-owner" placeholder="Nom ou email">
       </div>
       <div class="form-group">
-        <label class="form-label">Plan</label>
+        <label class="form-label">Plan <span style="font-weight:400;text-transform:none">(technique — pilote le nb d'appareils)</span></label>
         <select class="form-select" id="m-plan"><option>STARTER</option><option>PRO</option><option>MAX</option></select>
       </div>
-      <div class="form-group form-full">
-        <label class="form-label">Assets autorisés <span style="font-weight:400;text-transform:none">(optionnel — virgules)</span></label>
-        <input type="text" class="form-input" id="m-assets" placeholder="O-IMM-002, O-IMM-010, A-COM-001, …">
-      </div>
+      ${_appPickerHTML('m', null)}
       <div class="form-group">
         <label class="form-label">Expiration <span style="font-weight:400;text-transform:none">(optionnel)</span></label>
         <input type="date" class="form-input" id="m-expires">
@@ -644,6 +651,7 @@ function showCreateLicenceModal(panel) {
   `<button class="btn btn-secondary" id="m-cancel">Annuler</button>
    <button class="btn btn-primary"   id="m-confirm">Créer la licence</button>`);
 
+  _wireAppPicker('m');
   document.getElementById('btn-gen-key').addEventListener('click', () => {
     document.getElementById('m-key').value = generateKey();
   });
@@ -655,14 +663,14 @@ async function submitCreateLicence(panel) {
   const key      = document.getElementById('m-key').value.trim().toUpperCase();
   const owner    = document.getElementById('m-owner').value.trim();
   const plan     = document.getElementById('m-plan').value;
-  const rawAssets = document.getElementById('m-assets').value.trim();
+  const assets   = _readAppPicker('m');
   const expires  = document.getElementById('m-expires').value || undefined;
   const errEl    = document.getElementById('m-error');
   const btn      = document.getElementById('m-confirm');
   errEl.textContent = '';
   if (!key || !owner) { errEl.textContent = 'Clé et propriétaire requis.'; return; }
   const body = { key, plan, owner };
-  if (rawAssets) body.ownedAssets = rawAssets.split(',').map(s => s.trim()).filter(Boolean);
+  if (assets) body.ownedAssets = assets;
   if (expires)   body.expiresAt   = expires;
   btn.disabled = true; btn.textContent = '…';
   try {
@@ -671,6 +679,88 @@ async function submitCreateLicence(panel) {
   } catch (err) {
     errEl.textContent = err.message; btn.disabled = false; btn.textContent = 'Créer la licence';
   }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Sélecteur d'applications possédées (Sprint P1 — entitlement per-app)
+// ──────────────────────────────────────────────────────────────────
+// Le champ « IDs séparés par des virgules » était intenable dès qu'on
+// vend app par app. Ici : cases à cocher groupées par palier tarifaire,
+// alimentées par lib/pricing.js (source de vérité unique).
+//
+// L'ACCÈS a TROIS états, rendus EXPLICITES — c'est volontaire :
+//   · 'os'     → sac = ['OS']  : tout le catalogue
+//   · 'apps'   → sac = [ids…]  : uniquement les apps cochées
+//   · 'legacy' → sac = null    : sentinelle historique « non défini »
+// Sans ce 3ᵉ état, « aucune case cochée » serait ambigu (rien possédé ?
+// ou tout, comme le null d'aujourd'hui ?). On ne devine pas.
+// ══════════════════════════════════════════════════════════════════
+function _appTitle(id) {
+  const t = (catalogData?.tools || []).find(x => x.id === id);
+  return t?.title || id;
+}
+
+function _accessModeFor(assets) {
+  const list = Array.isArray(assets)
+    ? assets
+    : (typeof assets === 'string' && assets.trim() ? assets.split(',').map(s => s.trim()).filter(Boolean) : null);
+  if (list === null)                     return { mode: 'legacy', ids: [] };
+  if (list.includes(OS_ENTITLEMENT))     return { mode: 'os',     ids: [] };
+  return { mode: 'apps', ids: list };
+}
+
+function _appPickerHTML(p, assets) {
+  const { mode, ids } = _accessModeFor(assets);
+  const groups = [TIER.FREE, TIER.ESSENTIEL, TIER.PRO, TIER.DEPLOIEMENT].map(tierId => {
+    const tier  = TIERS[tierId];
+    const apps  = appsForTier(tierId);
+    if (!apps.length) return '';
+    const price = tier.price ? `${tier.price} €/mois` : 'gratuit';
+    return `
+      <div style="margin-top:12px">
+        <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">
+          ${esc(tier.label)} · ${esc(price)}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px 14px">
+          ${apps.map(id => `
+            <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer">
+              <input type="checkbox" data-app-pick="${p}" value="${esc(id)}" ${ids.includes(id) ? 'checked' : ''}>
+              <span>${esc(_appTitle(id))}</span>
+            </label>`).join('')}
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="form-group form-full">
+      <label class="form-label">Accès</label>
+      <select class="form-select" id="${p}-access">
+        <option value="os"     ${mode === 'os'     ? 'selected' : ''}>OS complet — toutes les applications</option>
+        <option value="apps"   ${mode === 'apps'   ? 'selected' : ''}>Applications sélectionnées</option>
+        <option value="legacy" ${mode === 'legacy' ? 'selected' : ''}>Non défini (hérite du plan — historique)</option>
+      </select>
+    </div>
+    <div class="form-group form-full" id="${p}-apps-wrap" style="${mode === 'apps' ? '' : 'display:none'}">
+      <label class="form-label">Applications possédées</label>
+      ${groups}
+    </div>`;
+}
+
+function _wireAppPicker(p) {
+  const sel  = document.getElementById(`${p}-access`);
+  const wrap = document.getElementById(`${p}-apps-wrap`);
+  if (!sel || !wrap) return;
+  sel.addEventListener('change', () => {
+    wrap.style.display = sel.value === 'apps' ? '' : 'none';
+  });
+}
+
+/** @returns {?string[]} null = legacy · ['OS'] = tout · [ids] = sélection */
+function _readAppPicker(p) {
+  const mode = document.getElementById(`${p}-access`)?.value || 'legacy';
+  if (mode === 'legacy') return null;
+  if (mode === 'os')     return [OS_ENTITLEMENT];
+  return [...document.querySelectorAll(`input[data-app-pick="${p}"]:checked`)].map(el => el.value);
 }
 
 function showEditLicenceModal(key, owner, plan, assets, panel) {
@@ -685,30 +775,27 @@ function showEditLicenceModal(key, owner, plan, assets, panel) {
         <input type="text" class="form-input" id="e-owner" value="${esc(owner)}">
       </div>
       <div class="form-group">
-        <label class="form-label">Plan</label>
+        <label class="form-label">Plan <span style="font-weight:400;text-transform:none">(technique — pilote le nb d'appareils)</span></label>
         <select class="form-select" id="e-plan">
           ${['STARTER','PRO','MAX'].map(p => `<option ${plan===p?'selected':''}>${p}</option>`).join('')}
         </select>
       </div>
-      <div class="form-group form-full">
-        <label class="form-label">Outils autorisés <span style="font-weight:400;text-transform:none">(IDs séparés par des virgules — vide = TOUS les outils)</span></label>
-        <input type="text" class="form-input" id="e-assets" value="${esc(assets || '')}" placeholder="O-IMM-002, A-COM-001, O-SOC-001, …">
-      </div>
+      ${_appPickerHTML('e', assets)}
     </div>
     <p class="form-error" id="e-error"></p>`,
   `<button class="btn btn-secondary" id="e-cancel">Annuler</button>
    <button class="btn btn-primary"   id="e-confirm">Mettre à jour</button>`);
+  _wireAppPicker('e');
   document.getElementById('e-cancel').addEventListener('click', closeModal);
   document.getElementById('e-confirm').addEventListener('click', async () => {
     const newOwner  = document.getElementById('e-owner').value.trim();
     const newPlan   = document.getElementById('e-plan').value;
-    const rawAssets = document.getElementById('e-assets').value.trim();
     const errEl     = document.getElementById('e-error');
     const btn       = document.getElementById('e-confirm');
     if (!newOwner) { errEl.textContent = 'Propriétaire requis.'; return; }
-    // On renvoie TOUJOURS la liste (pré-remplie) → corrige le bug d'effacement
-    // de l'upsert. Champ vidé volontairement = null = tous les outils.
-    const ownedAssets = rawAssets ? rawAssets.split(',').map(s => s.trim()).filter(Boolean) : null;
+    // On renvoie TOUJOURS le sac (pré-rempli) → corrige le bug d'effacement
+    // de l'upsert. « Non défini » = null = sentinelle historique.
+    const ownedAssets = _readAppPicker('e');
     btn.disabled = true; btn.textContent = '…';
     try {
       await api('/api/licence/activate', 'POST', { key, plan: newPlan, owner: newOwner, ownedAssets });

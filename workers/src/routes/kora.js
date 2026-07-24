@@ -25,7 +25,8 @@ import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage, audioSecondsFrom } from '../lib/ai-budget.js';
-import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
+import { isEnforceEnabled, consumeCredits, refundCredits,
+         costForAudioSeconds } from '../lib/ai-credits.js';
 
 /* ── Plafonds (historique + catalogue compacts = prompt caching ami) ── */
 const MAX_MESSAGES    = 16;     // tours conservés (le client résume au-delà)
@@ -830,7 +831,7 @@ export async function handleKoraStt(request, env) {
   const r   = await _koraTranscribe(env, ct, buf);
   if (r.status !== 200) return err(r.error, r.status, origin);
 
-  /* métrage seul (pas de crédit) : visibilité au ledger sous 'kora-stt'.
+  /* métrage neurones : visibilité au ledger sous 'kora-stt'.
      CORRIGÉ 22/07/2026 — on imputait le TRANSCRIPT en tokens de sortie au
      barème Mistral (~50 000 neurones/M), alors que Whisper se facture à la
      minute d'audio (~47 neurones/minute). Le chiffre était sans rapport
@@ -839,6 +840,31 @@ export async function handleKoraStt(request, env) {
     model       : WHISPER_MODEL,
     audioSeconds: r.audioSeconds,
   }).catch(() => {});
+
+  /* ── P2 · la voix consomme des conversations ────────────────────
+     C'était l'angle mort : la transcription ne débitait RIEN. On facture
+     1 conversation par minute d'audio entamée (costForAudioSeconds), au
+     plus près du barème Cloudflare.
+     Le débit a lieu APRÈS la transcription : la durée réelle n'est
+     connue qu'une fois Whisper passé. Si le portefeuille est épuisé, on
+     refuse de RENDRE le transcript (429) et consumeCredits annule son
+     propre bump — le client n'est pas débité pour rien.
+     Dormant : sans le flag enforce_ai_credits_v1 sur la licence, ce bloc
+     ne s'exécute pas et le comportement reste celui d'aujourd'hui. */
+  if (await isEnforceEnabled(env, claims.sub)) {
+    const credit = await consumeCredits(env, {
+      bucketKey: claims.sub,
+      plan     : claims.plan,
+      tool     : 'kora_stt',
+      cost     : costForAudioSeconds(r.audioSeconds),
+    });
+    if (!credit.ok) {
+      return json({
+        error: 'Enveloppe de conversations épuisée pour ce mois.',
+        credits: credit.payload,
+      }, 429, origin);
+    }
+  }
 
   return json({ ok: true, text: r.text }, 200, origin);
 }

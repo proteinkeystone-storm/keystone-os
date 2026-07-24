@@ -3098,7 +3098,7 @@ function _humanizeEngineError(err, triedEngines) {
   const triedMulti = (triedEngines || []).length > 1;
   if (/credit|quota|429|insufficient|balance|billing/i.test(msg)) {
     return tried
-      ? `Quotas/crédits épuisés sur tous les moteurs essayés (${tried}). Rechargez un compte ou réessayez plus tard.`
+      ? `Quotas/conversations épuisés sur tous les moteurs essayés (${tried}). Rechargez un compte ou réessayez plus tard.`
       : msg;
   }
   if (/401|403|expired|invalid.+key|unauthor/i.test(msg)) {

@@ -8,7 +8,7 @@
    Route exposée (Sprint 1) :
      GET /api/ai-credits/quota
        Auth : JWT licence requise.
-       Réponse 200 : { plan, month, unit:'crédits', includedQuota,
+       Réponse 200 : { plan, month, unit:'conversations', includedQuota,
          used, packBalance, remaining, unlimited, breakdown, enforced }
        Lecture seule — aucun débit. Le frontend (Sprint 4) l'appelle
        pour afficher la jauge de crédits + la double jauge par outil.
@@ -23,6 +23,8 @@ import {
   readPackBalance,
   isEnforceEnabled,
   creditsPayload,
+  resolveQuota,
+  resolveLicenceByHmac,
 } from '../lib/ai-credits.js';
 
 export async function handleAiCreditsQuota(request, env) {
@@ -43,7 +45,12 @@ export async function handleAiCreditsQuota(request, env) {
   const breakdown = await readMonthBreakdown(env, bucketKey);
   const enforced  = await isEnforceEnabled(env, bucketKey);
 
-  const payload = creditsPayload(claims.plan, used, balance, breakdown);
+  // P2 — le quota suit le SAC D'APPS de la licence (flag PRICING_V2).
+  // Le JWT ne porte pas owned_assets : on relit la licence. Flag OFF ⇒
+  // resolveQuota retombe sur le plan et cette lecture ne change rien.
+  const { ownedAssets } = await resolveLicenceByHmac(env, bucketKey);
+  const quota   = resolveQuota(env, claims.plan, ownedAssets);
+  const payload = creditsPayload(claims.plan, used, balance, breakdown, quota);
   // `enforced` : le flag dormant est-il actif sur cette licence ? Le
   // frontend s'en sert pour n'afficher la jauge/alarme que là où
   // l'enforcement est réellement branché (sinon : illimité, on masque).

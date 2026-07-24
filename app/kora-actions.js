@@ -982,7 +982,7 @@ export const KORA_ACTIONS = [
   {
     id: 'bs.start_session', pad: 'brainstorming', mode: 'write',
     label: 'Lancer un brainstorming avec un brief',
-    desc: "Lance une séance de brainstorming sur un sujet — le comité débat aussitôt (la séance consomme ses crédits IA). Répond à « lance un brainstorming sur… ».",
+    desc: "Lance une séance de brainstorming sur un sujet — le comité débat aussitôt (la séance consomme des conversations). Répond à « lance un brainstorming sur… ».",
     target: '#wr-input',
     params: [{ name: 'brief', type: 'string', required: true, desc: 'le sujet à faire débattre' }],
     run: async (args = {}) => {

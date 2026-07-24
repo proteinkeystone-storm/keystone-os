@@ -50,7 +50,13 @@
    coffre-fort financier).
    ═══════════════════════════════════════════════════════════════ */
 
+import { isPricingV2, quotaForEntitlements } from './pricing-grid.js';
+
 // ── Grille des quotas INCLUS par plan, PAR MOIS ──────────────────
+// ⚠️ LEGACY (Sprint P2). Cette grille suit les ANCIENS paliers
+// START/PRO/MAX, morts avec la refonte pricing. Elle reste la source
+// tant que PRICING_V2 est OFF — cf. resolveQuota() plus bas, qui
+// arbitre entre ce chemin et le quota par SAC D'APPS.
 // Source de vérité unique (le frontend la lit via /api/ai-credits/quota,
 // rien de hardcodé côté client). null = illimité (ADMIN).
 // Volontairement GÉNÉREUX : le coût IA réel = des centimes (cf
@@ -69,6 +75,16 @@ function quotaForPlan(plan) {
              // éventuels restent honorés via le solde persistant).
 }
 
+// ── P2 · Point UNIQUE de résolution du quota ─────────────────────
+// PRICING_V2 ON  → le quota vient du SAC D'APPS de la licence
+//                  (une app Essentiel = 300, une Pro = 1 000, OS = 3 000).
+// PRICING_V2 OFF → quota par plan, comportement actuel à l'identique.
+// Tout le module passe par ici : aucun autre endroit ne décide du quota.
+function resolveQuota(env, plan, ownedAssets) {
+  if (isPricingV2(env)) return quotaForEntitlements({ plan, ownedAssets });
+  return quotaForPlan(plan);
+}
+
 // ── Barème : combien de crédits coûte une action de chaque outil ─
 // GW = 1 (1 réécriture = 3 variantes). Brainstorming = 1 PAR APPEL
 // (décision Stéphane 2026-06-02 « au compteur, par round ») : chaque
@@ -84,10 +100,33 @@ const COST = {
   livinglayer:   0,
   smartagent:    1,   // Sprint SA-1 : 1 extraction coller-texte = 1 crédit
                       // (le chat ancré du SA-3 réutilisera le même outil).
+  // ── Voix (Sprint P2) ────────────────────────────────────────────
+  // Transcription Whisper. Le coût RÉEL se facture à la MINUTE d'audio
+  // (46,63 neurones/min), pas à l'appel — d'où costForAudioSeconds()
+  // ci-dessous, que les routes passent en override. Ces valeurs ne
+  // servent que de repli si la durée est introuvable.
+  kora_stt:        1,
+  keynapse_voice:  1,
 };
 function costFor(tool) {
   const c = COST[String(tool || '').toLowerCase()];
   return Number.isInteger(c) ? c : 1;
+}
+
+// ── Coût d'une transcription, proportionnel à la durée ────────────
+// 1 conversation par minute d'audio ENTAMÉE (minimum 1). Colle au mode
+// de facturation Cloudflare (Whisper = neurones/minute) et protège
+// mécaniquement contre l'audio très long, sans pénaliser un mémo court.
+//
+// ⚠️ PÉRIMÈTRE RÉEL DE LA VOIX (vérifié 2026-07-23) : seuls Kora (mode
+// talkie-walkie) et Keynapse (mémos) transcrivent CÔTÉ SERVEUR. Smart
+// Agent — y compris son agent PUBLIC — utilise les API du NAVIGATEUR
+// (SpeechRecognition) et Piper en WASM local : coût Cloudflare NUL.
+// La surface publique ne génère donc aucun coût voix à couvrir.
+function costForAudioSeconds(seconds) {
+  const s = Number(seconds);
+  if (!Number.isFinite(s) || s <= 0) return 1;
+  return Math.max(1, Math.ceil(s / 60));
 }
 
 // Mois UTC « YYYY-MM ». UTC côté serveur (comme _todayUtc de
@@ -192,6 +231,33 @@ async function resolvePlanByHmac(env, lookupHmac) {
   }
 }
 
+// ── P2 · Licence complète (plan + SAC D'APPS) par lookup_hmac ─────
+// Même usage que resolvePlanByHmac (Concierge public : le visiteur n'a
+// pas de JWT, on résout le PROPRIÉTAIRE du QR), mais rapporte en plus
+// `owned_assets` — indispensable pour calculer le quota per-app.
+// Tout échec → { plan:null, ownedAssets:null } = accès total legacy,
+// jamais un blocage accidentel.
+async function resolveLicenceByHmac(env, lookupHmac) {
+  if (!lookupHmac) return { plan: null, ownedAssets: null };
+  try {
+    const row = await env.DB
+      .prepare('SELECT plan, owned_assets FROM licences WHERE lookup_hmac = ? LIMIT 1')
+      .bind(lookupHmac)
+      .first();
+    if (!row) return { plan: null, ownedAssets: null };
+    let assets = null;
+    if (row.owned_assets) {
+      try {
+        const parsed = JSON.parse(row.owned_assets);
+        if (Array.isArray(parsed)) assets = parsed;
+      } catch (_) { /* JSON cassé → null = legacy */ }
+    }
+    return { plan: row.plan || null, ownedAssets: assets };
+  } catch (_) {
+    return { plan: null, ownedAssets: null };
+  }
+}
+
 // ── Bump / revert atomiques du compteur mensuel (par outil) ───────
 async function _bump(env, bucketKey, tool, n) {
   await env.DB.prepare(`
@@ -220,13 +286,19 @@ async function _drawPacks(env, bucketKey, n) {
 }
 
 // ── Payload exposé au frontend (forme unique pour /quota et /consume)
-function creditsPayload(plan, monthUsed, packBalance, breakdown) {
-  const quota = quotaForPlan(plan);            // null = illimité
+// `quotaOverride` (P2) : quota déjà résolu par le sac d'apps. Absent ⇒
+// on retombe sur le quota par plan (chemin legacy, flag OFF).
+function creditsPayload(plan, monthUsed, packBalance, breakdown, quotaOverride) {
+  const quota = quotaOverride !== undefined ? quotaOverride : quotaForPlan(plan);
   const includedRemaining = quota === null ? null : Math.max(0, quota - monthUsed);
   return {
     plan:        (plan || 'UNKNOWN').toUpperCase(),
     month:       currentMonthUtc(),
-    unit:        'crédits',                     // jamais « neurones »
+    // P2 — « conversations » côté client : le mot que l'utilisateur
+    // comprend. Jamais « neurones » (interne), et on quitte « crédits »
+    // (jargon de jeton). Le nom des CHAMPS ne bouge pas : le front en
+    // dépend, et P2 ne doit rien casser.
+    unit:        'conversations',
     includedQuota: quota,                       // null = illimité
     used:        monthUsed,                     // consommé ce mois (tous outils)
     packBalance: packBalance || 0,              // crédits de packs restants
@@ -252,20 +324,36 @@ function creditsPayload(plan, monthUsed, packBalance, breakdown) {
 // IMPORTANT : ne fait AUCUN check de flag — c'est au caller de décider
 // d'appeler (isEnforceEnabled) ou de retomber en legacy.
 // ═══════════════════════════════════════════════════════════════
-async function consumeCredits(env, { bucketKey, plan, tool }) {
+async function consumeCredits(env, { bucketKey, plan, tool, ownedAssets, cost: costOverride }) {
   await ensureAiCreditsSchema(env);
-  const cost = costFor(tool);
+  // P2 — `cost` explicite (transcription facturée à la durée). Sinon barème.
+  const cost = Number.isInteger(costOverride) && costOverride >= 0 ? costOverride : costFor(tool);
   const t    = String(tool || 'unknown').toLowerCase();
+
+  // P2 — le quota vient du SAC D'APPS quand PRICING_V2 est ON ; sinon
+  // du plan (legacy). Un seul point de résolution pour tout le module.
+  //
+  // Le sac est résolu ICI plutôt que dans chacun des 13 appelants :
+  // `bucketKey` EST le lookup_hmac de la licence, on a donc tout ce
+  // qu'il faut. Les routes n'ont rien à changer, et on ne paie la
+  // requête D1 supplémentaire que si le flag est ON.
+  //   ownedAssets absent    → on résout (comportement par défaut)
+  //   ownedAssets fourni    → on fait confiance à l'appelant (évite un
+  //                           second aller-retour quand il l'a déjà lu)
+  let bag = ownedAssets;
+  if (bag === undefined && isPricingV2(env)) {
+    ({ ownedAssets: bag } = await resolveLicenceByHmac(env, bucketKey));
+  }
+  const quota = resolveQuota(env, plan, bag);
 
   // Action gratuite (Living Layer, Smart QR) → rien à débiter.
   if (cost === 0) {
     const used = await readMonthUsed(env, bucketKey);
     const bal  = await readPackBalance(env, bucketKey);
     const brk  = await readMonthBreakdown(env, bucketKey);
-    return { ok: true, free: true, cost: 0, payload: creditsPayload(plan, used, bal, brk) };
+    return { ok: true, free: true, cost: 0, payload: creditsPayload(plan, used, bal, brk, quota) };
   }
 
-  const quota = quotaForPlan(plan);            // null = ADMIN illimité
   const packBalance = await readPackBalance(env, bucketKey);
 
   // Pre-bump atomique AVANT toute décision (anti-race multi-device /
@@ -276,7 +364,7 @@ async function consumeCredits(env, { bucketKey, plan, tool }) {
   // ADMIN : illimité. On a tracké, on ne bloque jamais.
   if (quota === null) {
     const brk = await readMonthBreakdown(env, bucketKey);
-    return { ok: true, cost, payload: creditsPayload(plan, usedAfter, packBalance, brk) };
+    return { ok: true, cost, payload: creditsPayload(plan, usedAfter, packBalance, brk, quota) };
   }
 
   // Plafond du mois = inclus + packs. Dépassé → refus + revert.
@@ -287,7 +375,7 @@ async function consumeCredits(env, { bucketKey, plan, tool }) {
     // payload reflète l'état clampé (used ramené sous le plafond)
     return {
       ok: false, blocked: true, cost,
-      payload: creditsPayload(plan, Math.min(usedAfter - cost, ceiling), packBalance, brk),
+      payload: creditsPayload(plan, Math.min(usedAfter - cost, ceiling), packBalance, brk, quota),
     };
   }
 
@@ -300,7 +388,7 @@ async function consumeCredits(env, { bucketKey, plan, tool }) {
   return {
     ok: true, cost,
     packsDrawn: packsConsumed,   // pour un refund exact si l'appelant échoue après coup
-    payload: creditsPayload(plan, usedAfter, Math.max(0, packBalance - packsConsumed), brk),
+    payload: creditsPayload(plan, usedAfter, Math.max(0, packBalance - packsConsumed), brk, quota),
   };
 }
 
@@ -344,7 +432,10 @@ async function addPackCredits(env, bucketKey, amount) {
 
 export {
   quotaForPlan,
+  resolveQuota,
+  resolveLicenceByHmac,
   costFor,
+  costForAudioSeconds,
   COST,
   currentMonthUtc,
   ensureAiCreditsSchema,

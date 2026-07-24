@@ -35,7 +35,7 @@ const DOC_SECTIONS = [
     body: `<p>Chaque outil a sa propre notice : le bouton <strong>« ? »</strong> en haut à droite ouvre une fiche claire — à quoi il sert, comment s'en servir pas à pas, et les questions fréquentes. C'est le réflexe à avoir quand vous découvrez un outil.</p>`,
   },
   {
-    title: 'Vos crédits IA',
+    title: 'Vos conversations',
     body: `<p>Les fonctions d'intelligence artificielle puisent dans un <strong>compteur mensuel</strong> inclus dans votre abonnement. Il se remet à zéro le 1<sup>er</sup> de chaque mois. Vous suivez votre consommation dans la section <strong>« Crédits IA »</strong> de ces réglages ; si besoin, un pack ponctuel peut être ajouté.</p>
     <p>Beaucoup d'actions sont <strong>gratuites</strong> : lecture vocale, dictée, navigation, et tout ce qui ne fait pas appel à l'IA.</p>`,
   },

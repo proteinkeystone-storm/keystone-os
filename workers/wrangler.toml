@@ -116,6 +116,15 @@ KS_ALLOWED_ORIGIN = "https://protein-keystone.com,https://www.protein-keystone.c
 # Lu par lib/llm-router.js → byokRoutingEnabled(env).
 BYOK_ROUTING = "off"
 
+# ── PRICING_V2 — refonte tarifaire per-app (HANDOFF_PRICING_REFONTE) ──
+# OFF par défaut : le compteur de conversations garde EXACTEMENT le
+# comportement legacy (quota par plan STARTER/PRO/MAX). Allumé, le quota
+# suit le SAC D'APPS de la licence (owned_assets) et la dictée Keynapse
+# exige une app payante. Ne PAS allumer avant que Stripe soit refait
+# (P4) : sinon un prix affiché ne correspondrait plus au prélèvement.
+# Lu par lib/pricing-grid.js → isPricingV2(env).
+PRICING_V2 = "off"
+
 # ── desK DK-4 — adresse de dépôt e-mail (DESK_BRIEF §5.2) ─────
 # Le worker expose un handler email() (digestion 3 étages + bac).
 # ACTIVATION (quand le domaine porteur est tranché — il doit être une

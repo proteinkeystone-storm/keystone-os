@@ -23,7 +23,8 @@ import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from
 import { requireJWT } from '../lib/jwt.js';
 // Sprint 6 (voix) — mêmes briques IA que Smart Agent : crédit DORMANT par
 // licence (flag enforce_ai_credits_v1) + garde-fou budget global + modèle.
-import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
+import { isEnforceEnabled, consumeCredits, refundCredits, resolveLicenceByHmac } from '../lib/ai-credits.js';
+import { isPricingV2, hasPaidApp } from '../lib/pricing-grid.js';
 import { budgetGuard, recordUsage, audioSecondsFrom } from '../lib/ai-budget.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 // Sprint 9 (push) — notifications de rappels même application fermée.
@@ -556,6 +557,8 @@ async function _knConsumeCredit(env, gate) {
   const sub = gate.claims?.sub;
   try {
     if (sub && await isEnforceEnabled(env, sub)) {
+      // P2 — le quota suit le SAC D'APPS quand PRICING_V2 est ON.
+      // consumeCredits résout le sac lui-même depuis bucketKey.
       const credit = await consumeCredits(env, { bucketKey: sub, plan: gate.claims.plan, tool: 'keynapse' });
       if (!credit.ok && credit.blocked) return { blocked: true, payload: credit.payload, sub };
       return { credit, sub };
@@ -672,6 +675,24 @@ export async function handleVoiceUpload(request, env, bubbleId) {
     const media = await env.DB.prepare(`SELECT ${AUDIO_COLS} FROM kn_media WHERE id = ? AND tenant_id = ?`).bind(id, t).first();
     return json({ ok: true, media, transcript: transcript || '', proposals: proposals || { tasks: [], reminders: [] }, ...(extra || {}) }, 200, origin);
   };
+
+  // 1 bis) P2 — la dictée exige une app PAYANTE.
+  // Le cœur de Keynapse (bulles, zones, liens, rappels) n'utilise aucune
+  // IA et reste gratuit. La dictée, elle, appelle Whisper PUIS Mistral :
+  // 2 appels IA par mémo. Décision Stéphane (2026-07-23) : « Gratuit,
+  // cœur seul » → une licence 100 % gratuite ne déclenche aucun coût.
+  // On respecte la promesse de la route : l'audio est DÉJÀ en R2 et reste
+  // écoutable ; seule la transcription est refusée, avec un message clair.
+  // Dormant tant que PRICING_V2 est OFF.
+  if (isPricingV2(env) && gate.claims?.sub) {
+    const { plan, ownedAssets } = await resolveLicenceByHmac(env, gate.claims.sub);
+    if (!hasPaidApp({ plan: plan || gate.claims.plan, ownedAssets })) {
+      return _finish('', null, {
+        note: 'Le mémo est enregistré. La transcription automatique demande une application payante — Keynapse reste gratuit pour vos bulles.',
+        code: 'AI_REQUIRES_PAID_APP',
+      });
+    }
+  }
 
   // 2) Transcription Whisper (1 crédit métré, refund si échec).
   const ticket = await _knConsumeCredit(env, gate);

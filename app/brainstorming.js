@@ -583,7 +583,7 @@ function _showBriefCoach(panel, input) {
   const div = document.createElement('div');
   div.className = 'wr-brief-coach';
   div.innerHTML = `
-    <div class="wr-brief-coach-txt">${icon('sparkles', 14)} Un brief précis = un débat qui vaut ses crédits. Ajoutez en un clic :</div>
+    <div class="wr-brief-coach-txt">${icon('sparkles', 14)} Un brief précis = un débat qui vaut ses conversations. Ajoutez en un clic :</div>
     <div class="wr-brief-coach-chips">
       <button type="button" data-add=" Pour [qui : cible précise].">+ Pour qui</button>
       <button type="button" data-add=" Objectif : [vendre / se différencier / lancer…].">+ Objectif</button>

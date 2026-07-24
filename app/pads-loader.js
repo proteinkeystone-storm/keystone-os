@@ -6,6 +6,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { PADS_DATA, CATALOG_DATA } from './pads-data.js';
+import { resolveEntitlements }     from './lib/pricing.js';
 
 export const CF_API = 'https://keystone-os-api.keystone-os.workers.dev';
 
@@ -239,6 +240,12 @@ const LS_LIFETIME = 'ks_lifetime_purchases';
  * null   → tout owned (ADMIN, démo Enterprise, ou clé jamais activée)
  * []     → abonnement révoqué / aucun outil
  * [...]  → liste des IDs sous abonnement
+ *
+ * Sprint P1 — le sac d'apps (`owned_assets`) devient la SOURCE d'accès :
+ * la résolution finale est déléguée à resolveEntitlements() (lib/pricing.js),
+ * qui honore en plus la sentinelle 'OS' (= OS complet) et, sous le flag
+ * PRICING_V2, ouvre toujours les apps gratuites. Flag OFF = comportement
+ * actuel à l'identique.
  */
 export function getOwnedIds() {
     // Plan MAX et ADMIN = accès TOTAL à toutes les apps du catalogue (comme la
@@ -248,7 +255,9 @@ export function getOwnedIds() {
     if (isAdminUser() || isMaxPlan()) return null;
     const raw = localStorage.getItem(LS_OWNED);
     if (raw === null) return null;
-    try { return JSON.parse(raw); } catch { return null; }
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch { return null; }
+    return resolveEntitlements({ ownedAssets: parsed });
 }
 
 export function setOwnedIds(ids) {
