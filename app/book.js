@@ -22,6 +22,7 @@ import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 import { buildStandaloneHTML, newEdition, BK_FORMAT } from './lib/book-export.js';
+import { ensurePersistence, storageState, formatUsage } from './lib/storage-guard.js';
 
 const WORKSPACE_META = { id: 'O-BOK-001', name: 'booK' };
 
@@ -35,8 +36,24 @@ const MAX_PAGE_W   = IS_COARSE ? 1200 : 1600;
 const SOFT_CAP_MO  = 20;          // plafond doux : avertissement au-delà
 const TINT_PRESETS = ['#C9A227', '#2A9D8F', '#E76F51', '#4A6FA5', '#8A5CF6', '#20242B'];
 
+// Repère de passage — PAR APPAREIL, donc volontairement hors PREFS_KEYS
+// (le Cloud Vault ne doit pas le synchroniser : une absence se mesure sur
+// CE navigateur, c'est lui qui tient le couperet). Sert à durcir le ton du
+// bandeau au retour d'une longue absence : WebKit efface le stockage écrit
+// par script après 7 jours d'usage de Safari sans visite du domaine.
+const BK_LAST_SEEN = 'bk_last_seen';
+const AWAY_DAYS    = 4;           // seuil « longue absence » — sous le couperet des 7 j
+
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+            || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_STANDALONE = (() => {
+  try { return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; }
+  catch (_) { return false; }
+})();
+
 let _root = null, _ed = null, _dirty = false;
 let _previewTimer = null, _busy = false;
+let _awayDays = 0;                // jours écoulés depuis la dernière ouverture du pad
 
 function _esc(s) {
   return String(s == null ? '' : s)
@@ -70,6 +87,42 @@ function _tx(mode, fn) {
 const _libAll = () => _tx('readonly',  st => st.getAll());
 const _libPut = ed => _tx('readwrite', st => st.put(ed));
 const _libDel = id => _tx('readwrite', st => st.delete(id));
+
+// ── État de sauvegarde ──────────────────────────────────────────
+// La bibliothèque vit dans le navigateur de CET appareil : le fichier
+// autonome téléchargé est la seule sauvegarde réelle (BOOK_BRIEF,
+// invariant n°1 — le fichier est sa propre source). On trace donc, par
+// édition, s'il est sorti et s'il l'est resté à jour :
+//   downloadedAt  — ISO du dernier téléchargement (absent = jamais)
+//   downloadedRev — valeur de `updated` à ce moment-là
+// Ces deux champs ne partent PAS dans le fichier exporté : le manifeste
+// embarqué est une liste blanche explicite (book-export.js, `meta`).
+//   'never' jamais téléchargé · 'stale' modifié depuis · 'ok' à jour
+function _backupState(ed) {
+  if (!ed || !ed.downloadedAt)            return 'never';
+  if (ed.downloadedRev !== ed.updated)    return 'stale';
+  return 'ok';
+}
+
+async function _markDownloaded(ed) {
+  ed.downloadedAt  = new Date().toISOString();
+  ed.downloadedRev = ed.updated;
+  // L'appelant garantit que `ed` est aligné sur l'enregistrement rangé
+  // (depuis l'éditeur, _download enregistre AVANT de sortir le fichier).
+  try { await _libPut(JSON.parse(JSON.stringify(ed))); } catch (_) {}
+}
+
+// Dernière ouverture du pad, en jours. Lu une fois à l'ouverture, avant
+// d'être écrasé — au retour, il dit depuis quand la bibliothèque dormait.
+function _readAway() {
+  try {
+    const t = parseInt(localStorage.getItem(BK_LAST_SEEN) || '0', 10);
+    return t ? Math.floor((Date.now() - t) / 86400000) : 0;
+  } catch (_) { return 0; }
+}
+function _markSeen() {
+  try { localStorage.setItem(BK_LAST_SEEN, String(Date.now())); } catch (_) {}
+}
 
 // ── Ouverture / fermeture du workspace ──────────────────────────
 export function openBook(opts = {}) {
@@ -125,6 +178,15 @@ export function openBook(opts = {}) {
     _touch();
   });
   document.addEventListener('keydown', _onKey);
+
+  // Filet anti-effacement (cf. lib/storage-guard.js) : on relève l'absence
+  // AVANT de la réécrire, et on redemande le stockage persistant. Sans
+  // await — l'invite Firefox ne doit pas retarder l'étagère, qui se
+  // re-rendra d'elle-même une fois la réponse connue.
+  _awayDays = _readAway();
+  _markSeen();
+  ensurePersistence().then(() => { if (_root && !_ed) _renderShelf(); }).catch(() => {});
+
   _renderShelf();
 
   // Réception inter-pads (ex. desK DK-6 : « Créer l'édition numérique ») :
@@ -178,17 +240,24 @@ async function _renderShelf() {
     const coverSrc = ed.cover?.src || (ed.pages && ed.pages[0] && ed.pages[0].src);
     const cover = coverSrc ? `<img src="${coverSrc}" alt="" loading="lazy">` : `<span class="bk-cover-empty">${icon('book', 34)}</span>`;
     const date = ed.updated ? new Date(ed.updated).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    const bs = _backupState(ed);
+    const flag = bs === 'never'
+      ? `<span class="bk-flag bk-flag-warn">${icon('alert-triangle', 12)} Jamais téléchargé</span>`
+      : bs === 'stale'
+        ? `<span class="bk-flag bk-flag-warn">${icon('alert-triangle', 12)} Modifié depuis la sauvegarde</span>`
+        : `<span class="bk-flag bk-flag-ok">${icon('check', 12)} Fichier sauvegardé</span>`;
     return `
-      <article class="bk-card" data-id="${_esc(ed.id)}">
+      <article class="bk-card" data-id="${_esc(ed.id)}" data-backup="${bs}">
         <button class="bk-card-cover" data-act="read" title="Feuilleter">${cover}</button>
         <div class="bk-card-body">
           <div class="bk-card-title">${_esc(ed.title || 'Sans titre')}</div>
           <div class="bk-card-meta">${(ed.pages || []).length} page${(ed.pages || []).length > 1 ? 's' : ''}${ed.sizeMo ? ' · ' + ed.sizeMo + ' Mo' : ''}${date ? ' · ' + date : ''}</div>
+          ${flag}
         </div>
         <div class="bk-card-actions">
           <button data-act="read" title="Feuilleter" aria-label="Feuilleter">${icon('eye', 17)}</button>
           <button data-act="edit" title="Modifier" aria-label="Modifier">${icon('edit-3', 17)}</button>
-          <button data-act="export" title="Télécharger le fichier autonome" aria-label="Télécharger">${icon('download', 17)}</button>
+          <button data-act="export" class="bk-act-save" title="Télécharger le fichier autonome" aria-label="Télécharger le fichier autonome">${icon('download', 17)}</button>
           <button data-act="dup" title="Dupliquer" aria-label="Dupliquer">${icon('copy', 17)}</button>
           <button data-act="del" class="bk-danger" title="Supprimer" aria-label="Supprimer">${icon('trash-2', 17)}</button>
         </div>
@@ -201,6 +270,19 @@ async function _renderShelf() {
       <span>Nouveau flipbook</span>
     </button>
     ${cards}`;
+
+  // Bandeau de sauvegarde — au-dessus de l'étagère, non masquable : il
+  // disparaît quand il n'a plus lieu d'être, c'est-à-dire quand tout est
+  // sorti en fichier. Un bandeau de sécurité qu'on peut faire taire ne
+  // protège que du bandeau.
+  const guard = _guardBannerHTML(list);
+  if (guard) {
+    grid.insertAdjacentHTML('beforebegin', guard);
+    const box = main.querySelector('.bk-guard');
+    box?.querySelector('[data-act="save-all"]')?.addEventListener('click', () => {
+      _downloadAll(list.filter(ed => _backupState(ed) !== 'ok'));
+    });
+  }
 
   if (!list.length) {
     grid.insertAdjacentHTML('beforebegin', `
@@ -226,11 +308,79 @@ async function _renderShelf() {
       await _libPut(copy); _renderShelf(); _toast('Flipbook dupliqué');
     }
     if (btn.dataset.act === 'del') {
-      _confirm(`Supprimer « ${ed.title || 'Sans titre'} » ?`, 'Le flipbook sera retiré de votre bibliothèque. Les fichiers déjà téléchargés, eux, restent valables pour toujours.', 'Supprimer', async () => {
+      // La conséquence dépend de ce qui est sorti en fichier : sans
+      // téléchargement, « supprimer » veut dire détruire le seul exemplaire.
+      const bs = _backupState(ed);
+      const why = bs === 'ok'
+        ? 'Le flipbook sera retiré de votre bibliothèque. Les fichiers déjà téléchargés, eux, restent valables pour toujours.'
+        : bs === 'stale'
+          ? 'Attention : les modifications faites depuis le dernier téléchargement n\'existent que dans ce navigateur. Elles seront perdues.'
+          : 'Attention : ce flipbook n\'a jamais été téléchargé. Il n\'existe que dans ce navigateur — sa suppression est définitive.';
+      _confirm(`Supprimer « ${ed.title || 'Sans titre'} » ?`, why, 'Supprimer', async () => {
         await _libDel(ed.id); _renderShelf(); _toast('Flipbook supprimé');
       });
     }
   });
+}
+
+const _plur = (n, mot) => `${n} ${mot}${n > 1 ? 's' : ''}`;
+
+// Bandeau de sauvegarde de l'étagère. Rendu à partir de trois signaux :
+// combien d'éditions ne sont pas sorties en fichier, depuis combien de
+// temps le pad dormait, et si le navigateur a accordé le stockage durable.
+function _guardBannerHTML(list) {
+  const risky = list.filter(ed => _backupState(ed) !== 'ok');
+  if (!risky.length) return '';
+  const never = risky.filter(ed => _backupState(ed) === 'never').length;
+  const st    = storageState();          // null tant que le boot n'a pas répondu
+
+  const title = never === risky.length
+    ? `${_plur(never, 'flipbook')} n'${never > 1 ? 'ont' : 'a'} jamais été téléchargé${never > 1 ? 's' : ''}`
+    : `${_plur(risky.length, 'flipbook')} ${risky.length > 1 ? 'ne sont' : 'n\'est'} pas sauvegardé${risky.length > 1 ? 's' : ''} à jour`;
+
+  const lines = [
+    `La bibliothèque vit dans le navigateur de <strong>cet appareil</strong>. Le fichier autonome téléchargé est la seule sauvegarde qui survive à un nettoyage des données du site, à un manque d'espace — ou à une longue absence.`,
+  ];
+  if (_awayDays >= AWAY_DAYS) {
+    lines.unshift(`Vous n'aviez pas ouvert booK depuis ${_plur(_awayDays, 'jour')}. Au-delà d'une semaine sans visite, Safari efface le stockage des sites qu'on ne consulte plus.`);
+  }
+  if (st && st.supported && !st.persisted) {
+    lines.push(IS_IOS && !IS_STANDALONE
+      ? `Ce navigateur n'a pas accordé le stockage durable à Keystone. Sur iPhone et iPad, <strong>Partager → Sur l'écran d'accueil</strong> le rend durable.`
+      : `Ce navigateur n'a pas accordé le stockage durable à Keystone.`);
+  }
+
+  return `
+    <div class="bk-guard" role="status">
+      <span class="bk-guard-ico">${icon('alert-triangle', 20)}</span>
+      <div class="bk-guard-txt">
+        <div class="bk-guard-title">${title}</div>
+        ${lines.map(l => `<p>${l}</p>`).join('')}
+      </div>
+      <button class="bk-btn bk-btn-primary bk-guard-cta" data-act="save-all">
+        ${icon('download', 16)} ${risky.length > 1 ? 'Tout télécharger' : 'Télécharger'}
+      </button>
+    </div>`;
+}
+
+// Sortie en rafale. Espacée volontairement : les navigateurs étranglent les
+// téléchargements successifs, et Chrome demande une autorisation « plusieurs
+// fichiers » qu'un envoi trop serré fait passer pour un abus.
+async function _downloadAll(list) {
+  if (_busy || !list.length) return;
+  _busy = true;
+  let n = 0;
+  try {
+    for (const ed of list) {
+      await _download(ed, { silent: true });
+      n++;
+      await new Promise(r => setTimeout(r, 350));
+    }
+  } finally {
+    _busy = false;
+  }
+  _toast(n > 1 ? `${n} fichiers téléchargés — rangez-les comme des originaux` : 'Fichier téléchargé');
+  if (_root && !_ed) _renderShelf();
 }
 
 // ── Lecture plein pad (l'aperçu EST l'export) ───────────────────
@@ -305,10 +455,11 @@ function _openEditor(ed) {
           <h3><span class="bk-step">3</span> Publier</h3>
           <div class="bk-size" data-slot="size"></div>
           <div class="bk-actions">
-            <button class="bk-btn bk-btn-primary" data-act="save">${icon('save', 16)} Enregistrer dans la bibliothèque</button>
-            <button class="bk-btn" data-act="export">${icon('download', 16)} Télécharger le fichier autonome</button>
+            <button class="bk-btn bk-btn-primary" data-act="export">${icon('download', 16)} Télécharger le fichier autonome</button>
+            <button class="bk-btn" data-act="save">${icon('save', 16)} Enregistrer dans la bibliothèque seulement</button>
           </div>
-          <p class="bk-note">Le fichier téléchargé s'ouvre d'un double-clic, partout, pour toujours — et peut être ré-importé ici pour le modifier.</p>
+          <p class="bk-note">Le fichier téléchargé s'ouvre d'un double-clic, partout, pour toujours — et se ré-importe ici pour être modifié. Le télécharger enregistre aussi votre flipbook dans la bibliothèque.</p>
+          <p class="bk-note bk-note-warn">${icon('alert-triangle', 14)}<span class="bk-note-warn-txt"><strong>La bibliothèque n'est pas une sauvegarde&nbsp;:</strong> elle vit dans le navigateur de cet appareil, qui peut l'effacer après une longue absence, un nettoyage des données du site ou un manque d'espace. Le fichier, lui, ne dépend de personne.</span></p>
         </section>
       </div>
       <div class="bk-preview">
@@ -356,8 +507,8 @@ function _openEditor(ed) {
   drop.addEventListener('dragleave', () => drop.classList.remove('over'));
   drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); _addFiles([...e.dataTransfer.files]); });
   // Actions
-  main.querySelector('[data-act="save"]').addEventListener('click', _save);
-  main.querySelector('[data-act="export"]').addEventListener('click', () => _download(_ed));
+  main.querySelector('[data-act="save"]').addEventListener('click', () => _save());
+  main.querySelector('[data-act="export"]').addEventListener('click', () => _download(_ed, { fromEditor: true }));
   main.querySelector('[data-act="refresh"]').addEventListener('click', () => _refreshPreview(true));
   // Rail de pages
   main.querySelector('[data-slot="pages"]').addEventListener('click', e => {
@@ -503,21 +654,30 @@ function _canvasToURI(canvas) {
 }
 
 // ── Enregistrer / exporter / ré-importer ────────────────────────
-async function _save() {
-  if (!_ed.pages.length) { _toast('Ajoutez au moins une page avant d\'enregistrer', true); return; }
+async function _save({ silent = false } = {}) {
+  if (!_ed.pages.length) { _toast('Ajoutez au moins une page avant d\'enregistrer', true); return false; }
   _ed.updated = new Date().toISOString();
   _ed.sizeMo = _estimateMo(_ed);
   try {
     await _libPut(JSON.parse(JSON.stringify(_ed)));
     _dirty = false;
-    _toast('Enregistré dans votre bibliothèque');
+    if (!silent) _toast('Enregistré dans votre bibliothèque');
+    return true;
   } catch (err) {
-    _toast('Enregistrement impossible (espace disque ?)', true);
+    const st = storageState();
+    _toast(st && st.quota && st.ratio > 0.9
+      ? `Enregistrement impossible : le stockage du navigateur est plein (${formatUsage(st)}). Téléchargez puis retirez d'anciens flipbooks.`
+      : 'Enregistrement impossible (espace disque ?)', true);
+    return false;
   }
 }
 
-function _download(ed) {
+async function _download(ed, { fromEditor = false, silent = false } = {}) {
   if (!ed.pages?.length) { _toast('Ce flipbook n\'a pas encore de pages', true); return; }
+  // Depuis l'éditeur, télécharger vaut enregistrer : sinon le fichier sorti
+  // ne correspondrait pas à ce que l'étagère conserve, et le repère
+  // « sauvegardé » mentirait dès la première modification non enregistrée.
+  if (fromEditor && !(await _save({ silent: true }))) return;
   const html = buildStandaloneHTML(ed);
   const slug = (ed.title || 'flipbook').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'flipbook';
@@ -527,7 +687,11 @@ function _download(ed) {
   a.download = slug + '.html';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  _toast('Fichier autonome téléchargé — il s\'ouvre partout, pour toujours');
+  await _markDownloaded(ed);
+  if (!silent) _toast('Fichier autonome téléchargé — il s\'ouvre partout, pour toujours');
+  // Rafraîchir les repères de l'étagère, et SEULEMENT si elle est à
+  // l'écran : un re-render pendant la lecture éjecterait du flipbook.
+  if (!silent && _root && _root.querySelector('.bk-shelf')) _renderShelf();
 }
 
 async function _onReimportFile(e) {
@@ -557,6 +721,11 @@ async function _onReimportFile(e) {
       pages: srcs.map((s, i) => ({ src: s, alt: meta.pages?.[i]?.alt || '' })),
     };
     ed.sizeMo = _estimateMo(ed);
+    // Ré-importer, c'est arriver AVEC le fichier en main : par construction
+    // cette édition est sauvegardée. On pose le repère pour ne pas réclamer
+    // un téléchargement dont l'utilisateur vient de fournir la preuve.
+    ed.downloadedAt  = new Date().toISOString();
+    ed.downloadedRev = ed.updated;
     await _libPut(ed);
     _ed = null; _dirty = false;
     _renderShelf();

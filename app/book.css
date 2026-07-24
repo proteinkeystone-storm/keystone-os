@@ -12,6 +12,25 @@
 .bk-hero-ico { color: var(--bk-tint); opacity: .9; margin-bottom: 14px; }
 .bk-hero h2 { font-weight: 900; letter-spacing: -0.02em; font-size: 26px; margin-bottom: 10px; }
 .bk-hero p { opacity: .68; font-size: 15px; line-height: 1.55; }
+/* ── Bandeau de sauvegarde ─────────────────────────────────────── */
+.bk-guard {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 15px 17px; margin-bottom: 22px; border-radius: var(--ws-radius-lg, 20px);
+  background: var(--warn-soft, rgba(251, 191, 36, .12));
+  border: 1px solid rgba(251, 191, 36, .3);
+}
+.bk-guard-ico { color: var(--warn, #fbbf24); flex-shrink: 0; margin-top: 1px; }
+.bk-guard-txt { flex: 1; min-width: 0; }
+.bk-guard-title { font-weight: 900; letter-spacing: -.02em; font-size: 15px; margin-bottom: 5px; }
+.bk-guard-txt p { font-size: 13px; line-height: 1.55; opacity: .78; }
+.bk-guard-txt p + p { margin-top: 6px; }
+.bk-guard-txt strong { font-weight: 700; opacity: 1; }
+.bk-guard-cta { flex-shrink: 0; align-self: center; }
+@media (max-width: 620px) {
+  .bk-guard { flex-wrap: wrap; }
+  .bk-guard-cta { width: 100%; }
+}
+
 .bk-shelf-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 20px; align-items: start;
@@ -32,6 +51,20 @@ html.light-mode .bk-card { background: rgba(0, 0, 0, .035); border-color: rgba(0
 .bk-card-body { padding: 12px 14px 8px; }
 .bk-card-title { font-weight: 900; letter-spacing: -0.02em; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bk-card-meta { font-size: 12px; opacity: .55; margin-top: 2px; }
+/* ── Repère de sauvegarde (carte) ──────────────────────────────── */
+.bk-flag {
+  display: inline-flex; align-items: center; gap: 5px; margin-top: 7px;
+  font-size: 11px; font-weight: 700; letter-spacing: -.01em;
+  padding: 3px 8px 3px 6px; border-radius: 999px; line-height: 1.4;
+}
+.bk-flag svg { flex-shrink: 0; }
+.bk-flag-warn { color: var(--warn, #fbbf24); background: var(--warn-soft, rgba(251, 191, 36, .12)); border: 1px solid rgba(251, 191, 36, .25); }
+.bk-flag-ok   { color: var(--green, #22c55e); background: var(--green-soft, rgba(34, 197, 94, .1)); border: 1px solid rgba(34, 197, 94, .2); }
+/* Le liseré ambre ne s'allume que sur ce qui n'existe nulle part ailleurs :
+   une édition modifiée depuis sa sauvegarde garde son pastille, sans le halo. */
+.bk-card[data-backup="never"] { border-color: rgba(251, 191, 36, .3); }
+.bk-card[data-backup="never"] .bk-act-save { opacity: 1; color: var(--warn, #fbbf24); }
+
 .bk-card-actions { display: flex; gap: 2px; padding: 4px 10px 10px; }
 .bk-card-actions button {
   background: none; border: none; cursor: pointer; color: inherit; opacity: .6;
@@ -146,6 +179,21 @@ html.light-mode .bk-card { background: rgba(0, 0, 0, .035); border-color: rgba(0
 .bk-warn { color: #e6a23c; display: inline-flex; align-items: center; gap: 4px; }
 .bk-actions { display: flex; flex-direction: column; gap: 9px; }
 .bk-note { font-size: 12px; opacity: .55; margin-top: 10px; line-height: 1.5; }
+/* Avertissement de sauvegarde : lisible sans crier — l'ambre porte le
+   sens, l'opacité reste plus haute que celle d'une note ordinaire. */
+.bk-note-warn {
+  opacity: .9; color: var(--warn, #fbbf24);
+  background: var(--warn-soft, rgba(251, 191, 36, .12));
+  border: 1px solid rgba(251, 191, 36, .22); border-radius: 10px;
+  padding: 9px 11px; display: flex; gap: 8px; align-items: flex-start;
+}
+/* Le texte est enveloppé dans un <span> dédié : sans ça, le <strong> et les
+   nœuds texte deviendraient des items flex et se mettraient en colonnes.
+   La cible du picto est .ws-icon — icon() rend un <span> enveloppe, pas un
+   <svg> nu, et un sélecteur `> svg` ne l'atteindrait jamais. */
+.bk-note-warn > .ws-icon { flex-shrink: 0; margin-top: 2px; }
+.bk-note-warn-txt { flex: 1; min-width: 0; }
+.bk-note-warn strong { font-weight: 800; }
 
 .bk-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
