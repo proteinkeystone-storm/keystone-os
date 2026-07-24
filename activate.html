@@ -1690,6 +1690,9 @@ function detectEmailType(email) {
    ═══════════════════════════════════════════ */
 const KEYSTONE_API = 'https://keystone-os-api.keystone-os.workers.dev';
 let _activePlan  = 'Start';
+// Sac d'applications de la licence (modèle per-app). null = pas de sac
+// explicite → on retombe sur l'ancien fonctionnement par palier.
+let _ownedAssets = null;
 let _deviceLimit = 3;
 
 /**
@@ -1764,6 +1767,14 @@ async function activateLicence() {
     }
 
     // ── Succès : on stocke le JWT et le plan, JAMAIS la clé en clair ──
+    // Le SAC D'APPLICATIONS renvoyé par le serveur fait foi (modèle per-app).
+    // Il était ignoré jusqu'ici : une licence achetée pour UNE application
+    // ouvrait tout le catalogue, parce que l'absence de `ks_owned_assets`
+    // signifie « tout possédé » côté Dashboard. Une liste vide n'a pas de
+    // sens (une licence ouvre au moins une app) → traitée comme absente.
+    _ownedAssets = (Array.isArray(data.ownedAssets) && data.ownedAssets.length)
+      ? data.ownedAssets
+      : null;
     _activePlan  = (data.plan || 'STARTER');
     _deviceLimit = detectEmailType(email) === 'personal' ? 3 : 99;
 
@@ -1901,11 +1912,30 @@ function _toolsForPlan() {
 }
 
 function buildToolsGrid() {
-  const quota = TOOL_QUOTA[_activePlan] || 3;
   const grid  = document.getElementById('ob-tools-grid');
   const label = document.getElementById('ob-quota-label');
-  const tools = _toolsForPlan();
   label.style.color = '';
+
+  // ── Sac explicite : ce qui a été ACHETÉ, rien d'autre ────────────
+  // Priorité absolue sur le palier. Sans ce cas, une licence achetée
+  // pour une seule application affichait « Sélectionnez vos 5 outils »
+  // (le quota du plan technique) et en offrait quatre en cadeau.
+  if (Array.isArray(_ownedAssets) && _ownedAssets.length) {
+    const owned = ALL_TOOLS.filter(t => _ownedAssets.includes(t.id));
+    _selectedTools = new Set(owned.map(t => t.id));
+    label.textContent = owned.length === 1
+      ? `Votre licence ouvre ${owned[0]?.name || 'cette application'}. Vous pourrez en ajouter d'autres depuis le Key-Store.`
+      : `Votre licence ouvre ces ${owned.length} applications. Vous pourrez en ajouter d'autres depuis le Key-Store.`;
+    grid.innerHTML = owned.map(tool => `
+      <div class="ob-tool selected" data-id="${tool.id}" aria-disabled="true" style="cursor:default;opacity:1">
+        <div class="ob-tool-check">✓</div>
+        <div class="ob-tool-name">${tool.name}</div>
+      </div>`).join('');
+    return;   // aucun clic à câbler : la sélection n'est pas négociable
+  }
+
+  const quota = TOOL_QUOTA[_activePlan] || 3;
+  const tools = _toolsForPlan();
   // MAX et ADMIN = accès complet : tous les outils inclus, aucun cap.
   const _fullAccess = (_activePlan === 'Admin' || _activePlan === 'Max');
   if (_fullAccess) {
@@ -1974,8 +2004,20 @@ function launchApp() {
     if (!localStorage.getItem('ks_demo_started_at')) {
       localStorage.setItem('ks_demo_started_at', new Date().toISOString());
     }
+  } else if (Array.isArray(_ownedAssets) && _ownedAssets.length) {
+    // ── Modèle per-app : le sac du serveur fait foi ────────────────
+    // On l'ÉCRIT (au lieu de l'effacer). C'était le trou : effacer
+    // `ks_owned_assets` signifie « tout possédé » pour le Dashboard —
+    // une licence payée pour une application ouvrait donc les 14.
+    localStorage.setItem('ks_owned_assets', JSON.stringify(_ownedAssets));
+    selectedIds = [..._ownedAssets];
+    localStorage.removeItem('ks_is_demo');
+    localStorage.removeItem('ks_demo_started_at');
+    localStorage.removeItem('ks_demo_last_switch');
   } else {
-    // Plans payants : nettoie un éventuel reliquat Demo pour repartir clean
+    // Licence SANS sac explicite (legacy : palier, accès total) — on
+    // conserve l'ancien comportement, sinon on retirerait un accès
+    // existant à un client déjà en place.
     localStorage.removeItem('ks_owned_assets');
     localStorage.removeItem('ks_is_demo');
     localStorage.removeItem('ks_demo_started_at');
