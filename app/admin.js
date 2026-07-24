@@ -6,7 +6,7 @@
 
 import { renderArtifactResult } from './artifact-renderer.js';
 import { KSTORE_CATEGORIES, KSTORE_PROMOS } from './kstore-mock-catalog.js';
-import { TIER, TIERS, appsForTier, OS_ENTITLEMENT } from './lib/pricing.js';
+import { TIER, TIERS, appsForTier, OS_ENTITLEMENT, tierForApp, priceForApp } from './lib/pricing.js';
 import { VEFA_CLAUSES_V1 }      from './lib/doc-templates/vefa-clauses-seed.js';
 import { VEFA_CLAUSES_V2 }      from './lib/doc-templates/vefa-clauses-seed-v2.js';
 import { VEFA_CONTRAT_CLAUSES_V1 } from './lib/doc-templates/vefa-contrat-clauses-seed.js';
@@ -695,6 +695,24 @@ async function submitCreateLicence(panel) {
 // Sans ce 3ᵉ état, « aucune case cochée » serait ambigu (rien possédé ?
 // ou tout, comme le null d'aujourd'hui ?). On ne devine pas.
 // ══════════════════════════════════════════════════════════════════
+// ── Tarif d'une application (P5) ────────────────────────────────
+// LECTURE SEULE, et c'est voulu. Les colonnes « Plan » (STARTER/PRO/
+// MAX) et « Lifetime » ont disparu : les paliers sont morts avec la
+// refonte, et la vente à vie a été abandonnée.
+// « Prix » était éditable mais ne pilotait RIEN — Stripe seul décide de
+// ce qui est prélevé. Un champ modifiable ici laissait croire l'inverse.
+// La vérité vient donc de lib/pricing.js, et les montants réels vivent
+// dans Stripe (cf. npm run stripe:plan).
+function _tarifCellHTML(appId) {
+  const t = tierForApp(appId);
+  if (!t) return '<span style="color:var(--text-muted);font-size:12px">—</span>';
+  if (t === TIER.FREE) {
+    return '<span style="font-size:12px;color:#34d399">Gratuit</span>';
+  }
+  return `<span style="font-size:12px"><strong>${priceForApp(appId)} €</strong>`
+       + `<span style="color:var(--text-muted)">/mois · ${esc(TIERS[t].label)}</span></span>`;
+}
+
 function _appTitle(id) {
   const t = (catalogData?.tools || []).find(x => x.id === id);
   return t?.title || id;
@@ -2022,7 +2040,7 @@ async function renderCatalog(panel) {
       </div>
       <table class="data-table">
         <thead><tr>
-          <th>ID</th><th>Titre</th><th>Plan</th><th>Prix</th><th>Lifetime</th>
+          <th>ID</th><th>Titre</th><th>Tarif</th>
           <th>Publié</th><th>Nouveau</th><th style="text-align:center">Fiche Key-Store</th>
         </tr></thead>
         <tbody id="catalog-tbody"></tbody>
@@ -2049,15 +2067,7 @@ async function renderCatalog(panel) {
         <td><input data-idx="${idx}" data-field="title" type="text" class="form-input" value="${esc(item.title||'')}"
                    style="padding:5px 9px;font-size:13px;background:transparent;border-color:transparent;width:200px"
                    onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='transparent'">${isRetired ? `<div style="font-size:10.5px;color:#f59e0b;margin-top:3px;white-space:nowrap">↳ retiré · remplacé par ${esc(replTitle)}</div>` : ''}</td>
-        <td><select data-idx="${idx}" data-field="plan" class="form-select" style="padding:4px 8px;font-size:12px;width:auto">
-          ${['STARTER','PRO','MAX'].map(p=>`<option ${item.plan===p?'selected':''}>${p}</option>`).join('')}
-        </select></td>
-        <td><input data-idx="${idx}" data-field="price" type="number" class="form-input" value="${item.price??''}"
-                   style="padding:5px 9px;font-size:13px;background:transparent;border-color:transparent;width:70px"
-                   onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='transparent'"></td>
-        <td><input data-idx="${idx}" data-field="lifetimePrice" type="number" class="form-input" value="${item.lifetimePrice??''}"
-                   style="padding:5px 9px;font-size:13px;background:transparent;border-color:transparent;width:70px"
-                   onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='transparent'"></td>
+        <td>${_tarifCellHTML(item.id)}</td>
         <td><label class="toggle-switch"><input data-idx="${idx}" data-field="published" type="checkbox" ${item.published?'checked':''}>
           <span class="toggle-slider"></span></label></td>
         <td><label class="toggle-switch"><input data-idx="${idx}" data-field="isNew" type="checkbox" ${item.isNew?'checked':''}>
@@ -2510,15 +2520,7 @@ async function importMissingFromStatic(panel) {
           <td><input data-idx="${idx}" data-field="title" type="text" class="form-input" value="${esc(item.title||'')}"
                      style="padding:5px 9px;font-size:13px;background:transparent;border-color:transparent;width:200px"
                      onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='transparent'"></td>
-          <td><select data-idx="${idx}" data-field="plan" class="form-select" style="padding:4px 8px;font-size:12px;width:auto">
-            ${['STARTER','PRO','MAX'].map(p=>`<option ${item.plan===p?'selected':''}>${p}</option>`).join('')}
-          </select></td>
-          <td><input data-idx="${idx}" data-field="price" type="number" class="form-input" value="${item.price??''}"
-                     style="padding:5px 9px;font-size:13px;background:transparent;border-color:transparent;width:70px"
-                     onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='transparent'"></td>
-          <td><input data-idx="${idx}" data-field="lifetimePrice" type="number" class="form-input" value="${item.lifetimePrice??''}"
-                     style="padding:5px 9px;font-size:13px;background:transparent;border-color:transparent;width:70px"
-                     onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='transparent'"></td>
+          <td>${_tarifCellHTML(item.id)}</td>
           <td><label class="toggle-switch"><input data-idx="${idx}" data-field="published" type="checkbox" ${item.published?'checked':''}>
             <span class="toggle-slider"></span></label></td>
           <td><label class="toggle-switch"><input data-idx="${idx}" data-field="isNew" type="checkbox" ${item.isNew?'checked':''}>

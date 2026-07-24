@@ -180,8 +180,21 @@ async function _resolveSubscriptionTarget(env, subscriptionId) {
   return { app: null, plan: null };
 }
 
-/** Retrouve la licence d'un client Stripe (customer id, puis e-mail). */
-async function _findLicenceForCustomer(env, { customerId, customerEmail }) {
+/**
+ * Retrouve la licence d'un acheteur.
+ * Ordre de fiabilité : `client_reference_id` (posé par notre propre page
+ * de paiement, cf. routes/stripe-checkout.js) — c'est l'identifiant EXACT
+ * de la licence, il ne se devine pas — puis le client Stripe, puis
+ * l'e-mail. Sans le premier, un client qui paie avec une autre adresse
+ * recevrait une seconde clé au lieu d'enrichir son sac.
+ */
+async function _findLicenceForCustomer(env, { clientRef, customerId, customerEmail }) {
+  if (clientRef) {
+    const r = await env.DB
+      .prepare('SELECT lookup_hmac FROM licences WHERE lookup_hmac = ? OR key = ? LIMIT 1')
+      .bind(clientRef, clientRef).first();
+    if (r?.lookup_hmac) return r.lookup_hmac;
+  }
   if (customerId) {
     const r = await env.DB
       .prepare('SELECT lookup_hmac FROM licences WHERE stripe_customer_id = ? LIMIT 1')
@@ -291,7 +304,11 @@ async function _handleCheckoutCompleted(env, event) {
     // Le client a-t-il DÉJÀ une licence ? Alors on l'enrichit — on ne
     // lui envoie pas une deuxième clé : une personne, une licence, un
     // sac qui s'agrandit.
-    const known = await _findLicenceForCustomer(env, { customerId, customerEmail });
+    const known = await _findLicenceForCustomer(env, {
+      clientRef: session.client_reference_id,
+      customerId,
+      customerEmail,
+    });
     if (known) {
       const bag = await _readOwnedAssets(env, known);
       // bag === null : sentinelle legacy « tout ouvert » (MAX/ADMIN) —

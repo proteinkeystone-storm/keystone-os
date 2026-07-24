@@ -4,6 +4,8 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { getPad, getOwnedIds, setOwnedIds, getLifetimeIds, isFrigoMode, getCatalogEntry, getCatalog, CF_API, isAdminUser } from './pads-loader.js';
+import { isPricingV2, isFreeApp } from './lib/pricing.js';
+import { openCheckout }           from './lib/checkout.js';
 import { renderArtifactResult, COMP_ICONS } from './artifact-renderer.js';
 import { ApiHandler } from './api-handler.js';
 import { ENGINES, VISIBLE_ENGINES, byokRequestFields, engineIdForLabel } from './lib/engines.js';
@@ -1340,6 +1342,32 @@ function _activateKStoreItem(id, btn) {
             },
         });
         return;
+    }
+
+    // ── P5 · une application payante s'ACHÈTE ──────────────────
+    // En beta, « Obtenir » ajoutait simplement l'outil au tableau de
+    // bord. Sous le nouveau modèle, une application payante qu'on ne
+    // possède pas encore ouvre la page de paiement Stripe. Les
+    // applications gratuites, elles, restent en accès direct.
+    // Flag OFF ⇒ ce bloc ne s'exécute pas : comportement beta intact.
+    if (isPricingV2() && !isFreeApp(id)) {
+        const ownedNow = getOwnedIds();
+        const dejaAcquis = ownedNow === null || ownedNow.includes(id);
+        if (!dejaAcquis) {
+            const libelle = btn.textContent;
+            btn.classList.add('ks-item-btn--loading');
+            btn.disabled = true;
+            btn.innerHTML = `<span class="ks-spinner"></span>`;
+            openCheckout(id).catch(e => {
+                // openCheckout redirige en cas de succès : si on arrive
+                // ici, c'est un échec — on rend le bouton à l'utilisateur.
+                btn.classList.remove('ks-item-btn--loading');
+                btn.disabled = false;
+                btn.textContent = libelle;
+                _toast(e.message || 'Paiement indisponible', 'error');
+            });
+            return;
+        }
     }
 
     // 1. Loading visual

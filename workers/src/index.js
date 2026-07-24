@@ -27,6 +27,7 @@ import { handleActivateV2, handleMe, handleRefresh }                   from './r
 import { handleVaultLoad, handleVaultSave, handleVaultHealth, handleVaultDelete } from './routes/vault-user.js';
 import { handleBillingPortal }                                          from './routes/billing.js';
 import { handleStripeWebhook }                                         from './routes/stripe-webhook.js';
+import { handleStripeCheckout }                                        from './routes/stripe-checkout.js';
 import { handleRegister, handleApprove, handleLogin,
          handleRevoke as handleDeviceRevoke, handleList as handleDeviceList } from './routes/device.js';
 import { handleExport, handlePurgeTenant }                             from './routes/admin.js';
@@ -604,6 +605,11 @@ export default {
 
       // ── Stripe webhook (Sprint 5 — auto-delivery clés) ────
       if (path === '/api/stripe/webhook'      && method === 'POST') return handleStripeWebhook(request, env);
+      // P5 — ouvre une page de paiement pour UNE application (option B).
+      // Volontairement accessible sans JWT : on vend aussi aux visiteurs.
+      if (path === '/api/stripe/checkout'     && (method === 'POST' || method === 'OPTIONS')) {
+        return handleStripeCheckout(request, env);
+      }
 
       // ── Devices ─────────────────────────────────────────────
       if (path === '/api/device/register'  && method === 'POST') return handleRegister(request, env);
