@@ -237,12 +237,17 @@ export function resolveEntitlements({ isAdmin = false, plan = '', ownedAssets = 
     if (!Array.isArray(ownedAssets)) return null;
     if (ownedAssets.includes(OS_ENTITLEMENT)) return null;
 
-    // Sac explicite. En V2, les apps gratuites sont TOUJOURS ouvertes :
-    // c'est la porte d'entrée du modèle (elles ne coûtent rien et font
-    // l'acquisition). Gaté par le flag car ça élargit l'accès des
-    // licences existantes — donc ce n'est pas neutre.
-    if (!isPricingV2()) return ownedAssets;
-
+    // Sac explicite → on y ajoute TOUJOURS les applications gratuites.
+    //
+    // Ce n'était fait que sous PRICING_V2 au départ, par prudence (« ça
+    // élargit l'accès »). C'était une erreur, révélée dès que le sac du
+    // serveur est devenu la référence : les gratuites n'y figurent pas,
+    // le réalignement au démarrage les effaçait donc, et un client qui
+    // les réinstallait les reperdait au rechargement suivant.
+    //
+    // Gratuit veut dire gratuit — indépendamment de l'interrupteur, et
+    // sans que personne ait à les « acheter ». Élargir l'accès à des
+    // applications qui ne coûtent rien n'a aucun revers.
     const out = new Set(ownedAssets);
     freeAppIds().forEach(id => out.add(id));
     return [...out];

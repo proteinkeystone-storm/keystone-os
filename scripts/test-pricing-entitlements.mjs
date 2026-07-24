@@ -66,11 +66,25 @@ eq(resolveEntitlements({ isAdmin: true, ownedAssets: ['A-COM-005'] }), null, 'AD
 eq(resolveEntitlements({ plan: 'MAX', ownedAssets: ['A-COM-005'] }), null, 'plan MAX (legacy) ouvre tout');
 eq(resolveEntitlements({ plan: 'STARTER', ownedAssets: null }), null, 'sac null = sentinelle historique → tout');
 eq(resolveEntitlements({ plan: 'PRO' }), null, 'sac absent → tout');
-eq(resolveEntitlements({ plan: 'STARTER', ownedAssets: [] }), [], 'sac vide = révoqué, rien ouvert');
-eq(
+// Les applications GRATUITES sont ajoutées à tout sac explicite, quel que
+// soit l'état du flag. Ce n'était pas le cas au départ (c'était gaté par
+// PRICING_V2) : dès que le sac du serveur est devenu la référence, le
+// réalignement au démarrage effaçait les gratuites, et un client qui les
+// réinstallait les reperdait au rechargement. Gratuit = gratuit.
+sameSet(
+  resolveEntitlements({ plan: 'STARTER', ownedAssets: [] }),
+  freeAppIds(),
+  'sac vide (résilié) : les gratuites restent — c\'est la porte de retour',
+);
+sameSet(
   resolveEntitlements({ plan: 'STARTER', ownedAssets: ['A-COM-005', 'O-DSK-001'] }),
-  ['A-COM-005', 'O-DSK-001'],
-  'flag OFF : le sac est renvoyé tel quel (aucune app ajoutée)',
+  ['A-COM-005', 'O-DSK-001', ...freeAppIds()],
+  'flag OFF : le sac payé + les gratuites',
+);
+// L'essentiel : une app PAYANTE non achetée n'entre jamais dans le sac.
+truthy(
+  !resolveEntitlements({ plan: 'STARTER', ownedAssets: ['A-COM-005'] }).includes('O-DSK-001'),
+  'une app payante non achetée reste fermée',
 );
 
 console.log('\n\x1b[1m▶ Suite 3 — DoD : une licence n\'ouvre QUE ses apps\x1b[0m');
