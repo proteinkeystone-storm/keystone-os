@@ -165,3 +165,48 @@ function _simulateLocal(key) {
 
     return { valid: false, error: 'Format invalide — attendu : XXXX-XXXX-XXXX-XXXX' };
 }
+
+// ═══════════════════════════════════════════════════════════════
+// RESYNC — le serveur fait foi sur ce que la licence ouvre
+// ─────────────────────────────────────────────────────────────
+// La liste locale (`ks_owned_assets`) ne faisait que GROSSIR : chaque
+// « Obtenir » y ajoutait une application, et rien ne la confrontait
+// jamais au serveur. Conséquence observée en test réel : des outils
+// obtenus avant un correctif restaient acquis pour toujours, et
+// pouvaient même être réinstallés après suppression.
+//
+// On réaligne donc au démarrage sur le sac de la licence :
+//   tableau → on écrit exactement ce tableau (ni plus, ni moins) ;
+//   null    → accès total (legacy) : on retire la clé locale ;
+//   échec   → on ne touche à RIEN (hors ligne ≠ perte de droits).
+//
+// ⚠️ Cela reste une barrière de CONFORT, pas une sécurité : la
+// vérification vit dans le navigateur. Seul un contrôle côté serveur,
+// route par route, empêchera vraiment d'ouvrir une app non acquise.
+export async function syncOwnedAssetsFromServer() {
+    let jwt = '';
+    try { jwt = localStorage.getItem('ks_jwt') || ''; } catch (_) { return null; }
+    if (!jwt) return null;
+
+    const url = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+        ? '/api/licence/me'
+        : `${CF_WORKER}/api/licence/me`;
+
+    let data;
+    try {
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${jwt}` } });
+        if (!res.ok) return null;                 // 401/500 → on ne dégrade rien
+        data = await res.json();
+    } catch (_) { return null; }                  // hors ligne → on garde l'existant
+
+    const bag = data?.licence?.owned_assets;
+    if (Array.isArray(bag)) {
+        setOwnedIds(bag);
+        return bag;
+    }
+    if (bag === null) {
+        setOwnedIds(null);                        // retire la clé = accès total
+        return null;
+    }
+    return null;                                  // champ absent (worker ancien)
+}

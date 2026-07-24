@@ -20,7 +20,7 @@ import { ksCleanLogout, ksWhoami } from './lib/session-guard.js';
 // navigateur (couperet 7 jours de WebKit, pression disque). Protège la
 // bibliothèque booK, les brouillons Data Fabric et le vault local.
 import { ensurePersistence }       from './lib/storage-guard.js';
-import { getLicenceStatus }        from './licence.js';
+import { getLicenceStatus, syncOwnedAssetsFromServer } from './licence.js';
 import { icon }                    from './lib/ui-icons.js';
 // Sprint GW-1 — Ghost Writer (service réécriture transversal).
 // Hook global Cmd+Shift+G + Modal Master, behind flag ks_ghostwriter (OFF par défaut).
@@ -193,6 +193,18 @@ window.addEventListener('DOMContentLoaded', async () => {
     //    après 7 jours sans visite du domaine. Ne doit jamais bloquer le
     //    boot : Firefox peut ouvrir une invite, on ne l'attend pas.
     ensurePersistence().catch(() => {});
+
+    // 0-ter. Réalignement des applications possédées sur le SERVEUR.
+    //    La liste locale ne faisait que grossir : chaque « Obtenir » y
+    //    ajoutait une app et rien ne la confrontait jamais à la licence.
+    //    Des outils obtenus avant un correctif restaient donc acquis, et
+    //    se réinstallaient même après suppression. Sans await : hors
+    //    ligne ou serveur muet, on garde l'existant plutôt que de
+    //    retirer des droits à tort. Le dashboard se redessine si le sac
+    //    a changé.
+    syncOwnedAssetsFromServer()
+        .then(bag => { if (bag !== undefined) renderDashboard(); })
+        .catch(() => {});
 
     // 1. Vault local en premier — restore préférences depuis localStorage
     loadVault();

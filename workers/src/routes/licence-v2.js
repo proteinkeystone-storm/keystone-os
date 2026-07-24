@@ -241,6 +241,17 @@ export async function handleLicenceMe(request, env) {
       devices_max:   auth.licence.devices_max ?? _devicesMaxForPlan(auth.licence.plan),
       is_active:     auth.licence.is_active === 1,
       expires_at:    auth.licence.expires_at || null,
+      // Le SAC D'APPLICATIONS — ce que la licence ouvre RÉELLEMENT.
+      // Exposé pour que le front puisse se resynchroniser au démarrage :
+      // sans lui, la liste locale ne faisait que grossir et gardait des
+      // applications jamais payées. null = accès total (legacy).
+      owned_assets: (() => {
+        if (!auth.licence.owned_assets) return null;
+        try {
+          const p = JSON.parse(auth.licence.owned_assets);
+          return Array.isArray(p) ? p : null;
+        } catch (_) { return null; }
+      })(),
     },
     members: emailRows.map(_rowToMember),
     my_role: myRole,
