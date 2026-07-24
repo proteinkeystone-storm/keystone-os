@@ -924,10 +924,10 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
     </article>
     <article class="tn" id="tn-A-COM-004">
       <h3 class="tn-title">Key Form</h3>
-      <p class="tn-tldr">Key Form construit des formulaires intelligents partageables par URL. 16 types de champs, logique conditionnelle, mail Resend, RGPD natif. Parité Typeform Pro à votre sauce.</p>
+      <p class="tn-tldr">Key Form construit des formulaires intelligents partageables par URL. 17 types de champs, logique conditionnelle, mail Resend, RGPD natif. Parité Typeform Pro à votre sauce.</p>
       <h4 class="tn-h">Comment ça marche</h4>
       <ol class="tn-steps">
-        <li>Structure : ajoutez vos sections et vos champs (16 types, du texte simple à la signature manuscrite)</li>
+        <li>Structure : ajoutez vos sections et vos champs (17 types, du texte simple à la signature manuscrite)</li>
         <li>Apparence : choisissez vos couleurs (10 palettes dégradés webgradients) et votre logo</li>
         <li>Livraison : définissez l'URL courte, vos destinataires mail et la durée de conservation (30 à 365 jours)</li>
         <li>Publication : vérifiez le récap et publiez à keystone.app/f/{votre-slug}</li>
@@ -1058,7 +1058,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       <h4 class="tn-h">Comment ça marche</h4>
       <ol class="tn-steps">
         <li>Créer une missive : collez le secret, choisissez le nombre d'essais et l'expiration, puis « Sceller ». Tout est chiffré sur votre appareil — le serveur ne voit jamais le contenu en clair.</li>
-        <li>Deux éléments à transmettre, par deux canaux différents : le lien (ou le QR / la puce NFC) d'un côté, et le code de déverrouillage de l'autre. Le code n'est affiché qu'une fois et n'est pas récupérable — notez-le ou copiez-le avant de fermer.</li>
+        <li>Deux éléments à transmettre, par deux canaux différents : le lien (ou le QR / la puce NFC) d'un côté, et le code de déverrouillage de l'autre. Deux formats de code au choix : « Sécurité maximale » (long, à copier-coller) ou « Facile à dicter » (3 mots + un nombre, parfait au téléphone). Le code n'est affiché qu'une fois et n'est pas récupérable — notez-le ou copiez-le avant de fermer.</li>
         <li>Lecture unique : le destinataire ouvre le lien, saisit le code, lit le message — puis la missive se referme. Vous êtes averti quand elle a été ouverte (dans la barre d'ambiance du tableau de bord).</li>
         <li>Autodestruction : après le nombre d'essais choisi (3 par défaut, ou 1 pour un usage strict), la missive meurt — plus personne ne peut l'ouvrir, même avec le bon code. Si une missive meurt sur des essais ratés sans avoir été lue, une alerte « possible interception » s'affiche.</li>
         <li>Jetons réutilisables : créez un objet physique (puce NFC ou QR) que vous écrivez une seule fois, puis rechargez avec un nouveau secret autant de fois que vous voulez — sans jamais retoucher l'objet.</li>
@@ -1069,6 +1069,8 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
         <details><summary>Est-ce vraiment sécurisé ? Pouvez-vous lire mes secrets ?</summary><div class="tn-a">Non, nous ne pouvons pas les lire. Le secret est chiffré de bout en bout sur votre appareil avec une clé dérivée du code de déverrouillage, que nous ne voyons jamais. Nos serveurs ne stockent que du contenu chiffré, illisible sans le code. La seule limite honnête : cette page web est servie par notre serveur, donc une sécurité de niveau « secret d'État » supposerait de ne pas nous faire confiance pour le code de la page — pour tout usage courant (mots de passe, codes, infos sensibles), c'est solide.</div></details>
         <details><summary>Que se passe-t-il si je perds le code de déverrouillage ?</summary><div class="tn-a">Le secret est définitivement perdu. C'est le prix de la confidentialité réelle : personne, pas même nous, ne peut le récupérer. Transmettez le code au destinataire dès la création, par un canal différent du lien.</div></details>
         <details><summary>Par quel canal transmettre le code ?</summary><div class="tn-a">Par un canal différent de celui du lien, et de préférence pas par SMS seul (vulnérable au détournement de carte SIM). De vive voix, par un autre messager, ou en personne : l'idée est qu'une seule interception ne donne jamais à la fois le lien et le code.</div></details>
+        <details><summary>Que peut-on envoyer par Missive — et qu'est-ce qu'il vaut mieux éviter ?</summary><div class="tn-a">Missive est faite pour les secrets opérationnels : mots de passe, codes d'accès, coordonnées bancaires à saisir, clés API, instructions confidentielles ponctuelles. À l'inverse, évitez d'y faire passer SEUL tout ce qui pourrait devoir être prouvé plus tard : engagement contractuel, échange RH sensible, instruction qui engage votre responsabilité. Une missive détruite ne peut pas servir de preuve — c'est voulu. Pour ces sujets, doublez par un canal archivé (email). Règle simple à adopter en équipe : « Missive = transmettre un secret, jamais archiver une décision. Tout ce qui a valeur de preuve passe aussi par l'email. »</div></details>
+        <details><summary>Missive est-elle compatible RGPD ? Que noter dans mon registre des traitements ?</summary><div class="tn-a">Oui — et plutôt deux fois qu'une : la minimisation et la limitation de conservation que le RGPD recommande sont ici garanties par construction (contenu chiffré illisible par l'éditeur, autodestruction, traces techniques purgées sous 24 h). Si vous tenez un registre des traitements, vous pouvez y recopier ceci : « Transmission ponctuelle d'informations sensibles via messagerie éphémère chiffrée de bout en bout (Missive, Keystone OS). Contenu illisible par l'éditeur ; autodestruction après lecture unique, expiration ou épuisement des essais ; métadonnées techniques purgées sous 24 heures. Ce canal n'est pas utilisé pour des données soumises à une obligation légale de conservation. » Une donnée déjà autodétruite ne peut plus être fournie lors d'une demande d'accès : c'est conforme, du moment que c'est documenté et que le canal n'est pas utilisé pour ce qui doit être conservé.</div></details>
         <details><summary>« Lu une fois » : et si quelqu'un filme l'écran ?</summary><div class="tn-a">On garantit qu'on ne peut plus accéder au message par ce lien après lecture — pas qu'il n'a pas été capturé pendant qu'il s'affichait. Missive protège contre l'interception du lien, pas contre un destinataire qui photographie son propre écran. C'est de l'éphémère sécurisé, pas de l'anti-capture.</div></details>
         <details><summary>Missive consomme-t-elle des crédits IA ?</summary><div class="tn-a">Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro crédit consommé, jamais.</div></details>
       </div>
@@ -1534,6 +1536,22 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "Par un canal différent de celui du lien, et de préférence pas par SMS seul (vulnérable au détournement de carte SIM). De vive voix, par un autre messager, ou en personne : l'idée est qu'une seule interception ne donne jamais à la fois le lien et le code."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Que peut-on envoyer par Missive — et qu'est-ce qu'il vaut mieux éviter ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Missive est faite pour les secrets opérationnels : mots de passe, codes d'accès, coordonnées bancaires à saisir, clés API, instructions confidentielles ponctuelles. À l'inverse, évitez d'y faire passer SEUL tout ce qui pourrait devoir être prouvé plus tard : engagement contractuel, échange RH sensible, instruction qui engage votre responsabilité. Une missive détruite ne peut pas servir de preuve — c'est voulu. Pour ces sujets, doublez par un canal archivé (email). Règle simple à adopter en équipe : « Missive = transmettre un secret, jamais archiver une décision. Tout ce qui a valeur de preuve passe aussi par l'email. »"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Missive est-elle compatible RGPD ? Que noter dans mon registre des traitements ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui — et plutôt deux fois qu'une : la minimisation et la limitation de conservation que le RGPD recommande sont ici garanties par construction (contenu chiffré illisible par l'éditeur, autodestruction, traces techniques purgées sous 24 h). Si vous tenez un registre des traitements, vous pouvez y recopier ceci : « Transmission ponctuelle d'informations sensibles via messagerie éphémère chiffrée de bout en bout (Missive, Keystone OS). Contenu illisible par l'éditeur ; autodestruction après lecture unique, expiration ou épuisement des essais ; métadonnées techniques purgées sous 24 heures. Ce canal n'est pas utilisé pour des données soumises à une obligation légale de conservation. » Une donnée déjà autodétruite ne peut plus être fournie lors d'une demande d'accès : c'est conforme, du moment que c'est documenté et que le canal n'est pas utilisé pour ce qui doit être conservé."
       }
     },
     {
