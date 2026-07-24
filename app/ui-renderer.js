@@ -885,9 +885,68 @@ let _ksPanelReady = false;
 let _ksSearch     = '';
 let _ksDebounce   = null;
 
+// ── Offres du Key-Store ─────────────────────────────────────────
+// DEUX jeux cohabitent le temps de la bascule, comme sur la landing :
+//   · KS_PLANS_LEGACY — Start/Pro/Max. Encore affiché tant que
+//     PRICING_V2 est OFF, parce que c'est ce que Stripe facture.
+//   · KS_PLANS_V2     — gratuit + à la carte + OS complet.
+// Supprimer les anciens AVANT la bascule afficherait des tarifs que
+// le paiement ne sait pas encore honorer. Au sprint P6 : on retire
+// KS_PLANS_LEGACY et ce commutateur.
+const KS_PLANS_V2 = [
+    {
+        id: 'FREE',
+        name: 'Gratuit',
+        price: 0,
+        color: '#34d399',
+        desc: `Trois applications complètes, sans carte bancaire et sans limite de durée.`,
+        features: [
+            { html: '<strong>Missive</strong> — un secret qui se lit une fois' },
+            { html: '<strong>booK</strong> — vos flipbooks en un seul fichier' },
+            { html: '<strong>Keynapse</strong> — vos idées en bulles vivantes' },
+            { text: 'Hébergement Europe · RGPD' },
+            { text: 'Conversations IA incluses', disabled: true },
+            { text: 'Support prioritaire', disabled: true },
+        ],
+    },
+    {
+        id: 'ALACARTE',
+        name: 'À la carte',
+        price: 19,
+        priceNote: 'à partir de',
+        color: 'var(--gold)',
+        recommended: true,
+        desc: `Vous ne payez que les applications dont vous vous servez.`,
+        features: [
+            { html: "L'application de votre choix — <strong>19, 49 ou 99 €</strong>" },
+            { text: 'Conversations IA incluses, sans rien configurer' },
+            { text: 'Ou votre propre clé (Claude, GPT, Mistral…)' },
+            { text: 'Ajoutez-en une quand le besoin arrive' },
+            { text: 'Sans engagement · résiliable à tout moment' },
+            { text: 'Support prioritaire', disabled: true },
+        ],
+    },
+    {
+        id: 'OS',
+        name: 'OS complet',
+        price: 129,
+        color: '#c084fc',
+        buyApp: 'OS',                      // ← ouvre le paiement directement
+        desc: `Les 14 applications, et surtout : elles se parlent entre elles.`,
+        features: [
+            { html: '<strong>Les 14 applications</strong>, nouveautés comprises' },
+            { text: 'Elles communiquent — c\'est tout l\'intérêt' },
+            { html: '<strong>3 000 conversations</strong> incluses / mois' },
+            { text: 'Ou votre propre clé (Claude, GPT, Mistral…)' },
+            { html: '<strong>2 mois offerts</strong> en paiement annuel' },
+            { html: '<strong>Support prioritaire</strong>' },
+        ],
+    },
+];
+
 // Source de vérité dupliquée depuis index.html (section #plans).
 // À mettre à jour conjointement si la grille tarifaire évolue.
-const KS_PLANS = [
+const KS_PLANS_LEGACY = [
     {
         id: 'STARTER',
         name: 'Start',
@@ -946,6 +1005,10 @@ const KS_PLANS = [
         ],
     },
 ];
+
+// Le jeu réellement affiché. Fonction (et non constante) : le flag se
+// lit à chaque rendu, on peut donc basculer sans recharger la page.
+function _ksPlans() { return isPricingV2() ? KS_PLANS_V2 : KS_PLANS_LEGACY; }
 
 // État courant de la vue Key-Store plein écran.
 // _ksFilter : { kind: 'all' | 'cat' | 'sub' | 'plans' | 'detail', id: string|null }
@@ -1278,6 +1341,27 @@ function _buildKStorePanel() {
         // Retour depuis la fiche détail
         if (e.target.closest('#ksfs-detail-back')) {
             _backFromKStoreDetail();
+            return;
+        }
+
+        // Offres (nouveau modèle) : acheter l'OS, ou aller au catalogue.
+        const buyPlan = e.target.closest('[data-buy-plan]');
+        if (buyPlan && !buyPlan.disabled) {
+            e.stopPropagation();
+            const libelle = buyPlan.textContent;
+            buyPlan.disabled = true;
+            buyPlan.textContent = 'Ouverture du paiement…';
+            openCheckout(buyPlan.dataset.buyPlan).catch(err => {
+                buyPlan.disabled = false;
+                buyPlan.textContent = libelle;
+                _toast(err.message || 'Paiement indisponible', 'error');
+            });
+            return;
+        }
+        if (e.target.closest('[data-goto-catalogue]')) {
+            e.stopPropagation();
+            _ksFilter = { kind: 'all', id: null };
+            _renderKStoreItems();
             return;
         }
 
@@ -1968,9 +2052,10 @@ function _renderKStorePlans() {
             Engagement mensuel, sans frais cachés. Changez de plan à tout moment.
         </div>
         <div class="ks-plans-grid">
-            ${KS_PLANS.map(plan => {
+            ${_ksPlans().map(plan => {
                 const isActive = currentPlan === plan.id
-                              || (plan.id === 'MAX' && ownedIds === null);
+                              || (plan.id === 'MAX' && ownedIds === null)
+                              || (plan.id === 'OS'  && ownedIds === null);
                 return `
                 <div class="ks-plan-card${plan.recommended ? ' ks-plan-card--recommended' : ''}${isActive ? ' ks-plan-card--active' : ''}"
                      style="--plan-color:${plan.color}">
@@ -1978,16 +2063,28 @@ function _renderKStorePlans() {
                     ${isActive        ? '<div class="ks-plan-badge ks-plan-badge--active">VOTRE PLAN</div>' : ''}
                     <div class="ks-plan-name">${plan.name.toUpperCase()}</div>
                     <div class="ks-plan-price">
+                        ${plan.priceNote ? `<span class="ks-plan-per">${plan.priceNote} </span>` : ''}
                         <span class="ks-plan-currency">€</span>${plan.price}<span class="ks-plan-per">/mois</span>
                     </div>
                     <p class="ks-plan-desc">${plan.desc}</p>
                     <ul class="ks-plan-list">
                         ${plan.features.map(renderFeature).join('')}
                     </ul>
-                    ${isActive
-                        ? `<button class="ks-plan-cta" disabled style="opacity:.7;cursor:default">Votre plan actuel ✓</button>`
-                        : `<a class="ks-plan-cta" href="${plan.stripeUrl}" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">Choisir ${plan.name}</a>`
-                    }
+                    ${(() => {
+                        if (isActive) {
+                            return `<button class="ks-plan-cta" disabled style="opacity:.7;cursor:default">Votre offre actuelle ✓</button>`;
+                        }
+                        // Nouveau modèle : l'OS s'achète via le paiement serveur
+                        // (aucun montant côté client) ; « à la carte » et le
+                        // gratuit renvoient au catalogue, où l'app se choisit.
+                        if (plan.buyApp) {
+                            return `<button class="ks-plan-cta" data-buy-plan="${plan.buyApp}" style="width:100%">Choisir ${plan.name}</button>`;
+                        }
+                        if (!plan.stripeUrl) {
+                            return `<button class="ks-plan-cta" data-goto-catalogue="1" style="width:100%">Voir les applications</button>`;
+                        }
+                        return `<a class="ks-plan-cta" href="${plan.stripeUrl}" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">Choisir ${plan.name}</a>`;
+                    })()}
                     <p class="ks-plan-note">Sans engagement · Résiliable à tout moment</p>
                 </div>`;
             }).join('')}
