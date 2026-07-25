@@ -4223,6 +4223,136 @@ async function _fillCreditsGauge(el) {
         + '</div>';
 }
 
+/* ── Recharge automatique — l'écran de réglages (Sprint P3) ────────
+   Jusqu'ici, armer la recharge exigeait la console du navigateur :
+   inutilisable par un client, et par personne en vrai. Cet écran est
+   le parcours officiel des routes /api/ai-credits/auto-reload.
+
+   La MACHINE À ÉTATS suit strictement ce que le serveur autorise :
+     · pas de carte  → consentement (texte DU SERVEUR, jamais recopié
+       ici — on horodate sa version, cf. routes/auto-reload.js) puis
+       session Stripe mode:'setup', qui n'encaisse RIEN ;
+     · carte en place → réglages (seuil, pack, plafond) + interrupteur.
+       Le serveur refuse enabled=true sans carte+consentement (409),
+       l'UI ne peut donc pas promettre une protection inopérante ;
+     · en pause → la cause, dite avec les bons mots (une carte refusée
+       n'est PAS un plafond atteint, ni un 3DS exigé), et « Réactiver ».
+
+   Choix du pack en BOUTONS, pas en <select> : la charte impose du flat
+   sur les selects et deux options ne justifient pas un menu. */
+async function _fillAutoReload(el) {
+    if (!el) return;
+    const jwt = (() => { try { return localStorage.getItem('ks_jwt'); } catch (_) { return null; } })();
+    if (!jwt) { el.innerHTML = ''; return; }
+
+    let s = null;
+    try {
+        const res = await fetch(`${CF_API}/api/ai-credits/auto-reload`, { headers: { 'Authorization': `Bearer ${jwt}` } });
+        if (res.ok) s = await res.json();
+    } catch (_) { /* réseau : on n'encombre pas les réglages */ }
+    if (!s) { el.innerHTML = ''; return; }
+
+    const post = async (chemin, corps) => {
+        const res = await fetch(`${CF_API}/api/ai-credits/auto-reload${chemin}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${jwt}` },
+            body: JSON.stringify(corps || {}),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(d.error || 'Réglage refusé.');
+        return d;
+    };
+
+    const bordure = 'border:1px solid var(--bd, rgba(127,127,127,.25));border-radius:10px';
+    const titre = '<div style="font-weight:800;font-size:.85rem;margin-bottom:6px">Recharge automatique</div>';
+
+    // ── En pause : la cause d'abord, la sortie ensuite ────────────
+    if (s.paused) {
+        const CAUSES = {
+            cap_reached: 'Plafond mensuel atteint — les recharges reprendront le 1er du mois, ou relève ton plafond.',
+            payment_failed: 'Le dernier prélèvement a été refusé. Mets ta carte à jour, puis réactive.',
+            authentication_required: 'Ta banque exige une confirmation impossible en ton absence — ta carte n\'est pas en cause. Réenregistre-la pour réactiver.',
+            no_payment_method: 'Aucune carte enregistrée.',
+        };
+        el.innerHTML = `<div style="${bordure};padding:12px">${titre}`
+            + `<div style="color:var(--danger,#e0533d);font-size:.8rem;font-weight:600">En pause · ${CAUSES[s.pausedReason] || s.pausedReason || 'cause inconnue'}</div>`
+            + `<button id="arl-resume" class="api-key-save-btn" style="margin-top:10px;width:100%">Réactiver la recharge</button></div>`;
+        el.querySelector('#arl-resume')?.addEventListener('click', async (e) => {
+            e.target.disabled = true;
+            try { await post('/resume'); _fillAutoReload(el); }
+            catch (err2) { e.target.disabled = false; e.target.textContent = err2.message; }
+        });
+        return;
+    }
+
+    // ── Pas de carte : consentement + enregistrement (zéro débit) ──
+    if (!s.cardOnFile) {
+        el.innerHTML = `<div style="${bordure};padding:12px">${titre}`
+            + '<div class="sp-user-hint" style="margin:0 0 8px">Quand il te reste peu de conversations, un pack est rechargé automatiquement — dans la limite d\'un plafond mensuel que tu fixes. Rien n\'est prélevé aujourd\'hui : cette étape enregistre seulement ta carte.</div>'
+            + `<div style="font-size:.75rem;color:var(--text-muted);border-left:2px solid var(--gold,#c9b48a);padding-left:8px;margin-bottom:10px">${s.consent?.text || ''}</div>`
+            + '<button id="arl-setup" class="api-key-save-btn" style="width:100%">Accepter et enregistrer ma carte</button>'
+            + '<div id="arl-msg" class="sp-user-hint" style="min-height:14px;margin-top:6px"></div></div>';
+        el.querySelector('#arl-setup')?.addEventListener('click', async (e) => {
+            e.target.disabled = true; e.target.textContent = 'Ouverture de l\'enregistrement…';
+            try {
+                const d = await post('/setup', { consentVersion: s.consent?.version });
+                if (d.url) { location.href = d.url; return; }
+                throw new Error('Réponse sans lien.');
+            } catch (err2) {
+                e.target.disabled = false; e.target.textContent = 'Accepter et enregistrer ma carte';
+                const m = el.querySelector('#arl-msg'); if (m) m.textContent = err2.message;
+            }
+        });
+        return;
+    }
+
+    // ── Carte en place : réglages + interrupteur ──────────────────
+    const packBtn = (id, libelle) =>
+        `<button type="button" data-pack="${id}" style="flex:1;padding:8px 6px;border-radius:8px;font-size:.78rem;font-weight:700;cursor:pointer;`
+        + (s.pack === id
+            ? 'border:1px solid var(--gold,#c9b48a);color:var(--gold,#c9b48a);background:transparent'
+            : 'border:1px solid var(--bd,rgba(127,127,127,.25));color:var(--text-muted);background:transparent')
+        + `">${libelle}</button>`;
+
+    el.innerHTML = `<div style="${bordure};padding:12px">${titre}`
+        + `<div class="sp-user-hint" style="margin:0 0 10px">${s.enabled
+            ? `Active — recharge dès que tu passes sous ${s.threshold} conversations. Dépensé ce mois : ${s.spentEur.toFixed(2).replace('.', ',')} € sur ${s.capEur} €.`
+            : 'Carte enregistrée. La recharge est prête — il ne reste qu\'à l\'activer.'}</div>`
+        + `<div style="display:flex;gap:8px;margin-bottom:10px">${packBtn('ks_pack_1000', 'Pack 1 000 · 9 €')}${packBtn('ks_pack_5000', 'Pack 5 000 · 39 €')}</div>`
+        + '<div style="display:flex;gap:8px;margin-bottom:10px">'
+        + `<label style="flex:1;font-size:.72rem;color:var(--text-muted)">Recharger sous<input id="arl-threshold" type="number" min="5" max="2000" value="${s.threshold}" class="sp-user-input" style="width:100%;margin-top:3px"></label>`
+        + `<label style="flex:1;font-size:.72rem;color:var(--text-muted)">Plafond €/mois<input id="arl-cap" type="number" min="${s.packPriceEur}" max="500" value="${s.capEur}" class="sp-user-input" style="width:100%;margin-top:3px"></label>`
+        + '</div>'
+        + `<button id="arl-save" class="api-key-save-btn" style="width:100%">${s.enabled ? 'Enregistrer les réglages' : 'Activer la recharge automatique'}</button>`
+        + (s.enabled ? '<button id="arl-off" style="margin-top:8px;width:100%;background:transparent;border:1px solid var(--bd,rgba(127,127,127,.25));border-radius:8px;color:var(--text-muted);padding:8px;font-size:.78rem;cursor:pointer">Désactiver</button>' : '')
+        + '<div id="arl-msg" class="sp-user-hint" style="min-height:14px;margin-top:6px"></div></div>';
+
+    let packChoisi = s.pack;
+    el.querySelectorAll('[data-pack]').forEach(b => b.addEventListener('click', () => {
+        packChoisi = b.getAttribute('data-pack');
+        el.querySelectorAll('[data-pack]').forEach(x => {
+            const actif = x.getAttribute('data-pack') === packChoisi;
+            x.style.border = actif ? '1px solid var(--gold,#c9b48a)' : '1px solid var(--bd,rgba(127,127,127,.25))';
+            x.style.color  = actif ? 'var(--gold,#c9b48a)' : 'var(--text-muted)';
+        });
+    }));
+
+    const sauver = async (enabled) => {
+        const msg = el.querySelector('#arl-msg');
+        try {
+            await post('', {
+                enabled,
+                pack: packChoisi,
+                threshold: Number(el.querySelector('#arl-threshold')?.value),
+                capEur: Number(el.querySelector('#arl-cap')?.value),
+            });
+            _fillAutoReload(el);
+        } catch (err2) { if (msg) msg.textContent = err2.message; }
+    };
+    el.querySelector('#arl-save')?.addEventListener('click', () => sauver(true));
+    el.querySelector('#arl-off')?.addEventListener('click', () => sauver(false));
+}
+
 function _renderSettingsBody() {
     const body = document.getElementById('sp-body');
     if (!body) return;
@@ -4424,6 +4554,7 @@ function _renderSettingsBody() {
             content: `<div class="sp-user-form">
                 <div id="ks-credits-gauge" class="sp-user-hint">Chargement…</div>
                 <div class="sp-user-hint">Tes conversations alimentent Ghost Writer, le Brainstorming et le Concierge public. Elles se rechargent le 1er de chaque mois. Au-delà, tu peux ajouter un pack de conversations.</div>
+                <div id="ks-auto-reload" style="margin-top:14px"></div>
             </div>`,
         },
         {
@@ -4702,6 +4833,8 @@ function _renderSettingsBody() {
 
     // ── Crédits IA — remplit la jauge (Chantier B · Sprint 4) ────
     _fillCreditsGauge(body.querySelector('#ks-credits-gauge'));
+    // ── Recharge automatique (P3) — même section, sous la jauge ──
+    _fillAutoReload(body.querySelector('#ks-auto-reload'));
 
     // ── Mode IA de Living Layer (opt-in, 22/07/2026) ─────────────
     // Le cycle est relu à chaque rotation → un simple reset suffit,
