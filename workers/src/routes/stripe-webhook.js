@@ -26,7 +26,7 @@ import { needsCreditWall }                  from '../lib/app-mode.js';
 import {
   resolveAppFromPrice, resolveLegacyPlanFromPrice, resolvePackConversations,
   addEntitlement, removeEntitlement, technicalPlanFor, livemodeFlag,
-  packConversationsForRefund,
+  packConversationsForRefund, modeMatchesLicence,
 } from '../lib/stripe-catalog.js';
 
 const PRICE_LOOKUP_TO_PLAN = {
@@ -136,12 +136,19 @@ async function _markProcessed(env, eventId, type) {
 }
 
 // ── Stripe API helper (REST) ──────────────────────────────────
-async function _stripeGET(env, path) {
+// `key` optionnelle : les handlers la choisissent selon l'univers de
+// l'événement (un objet de test n'existe QUE derrière la clé de test).
+async function _stripeGET(env, path, key = null) {
   const res = await fetch(`https://api.stripe.com/v1${path}`, {
-    headers: { 'Authorization': `Bearer ${env.KS_STRIPE_SECRET}` },
+    headers: { 'Authorization': `Bearer ${key || env.KS_STRIPE_SECRET}` },
   });
   if (!res.ok) throw new Error(`Stripe ${path}: HTTP ${res.status}`);
   return res.json();
+}
+
+/** Clé API assortie à l'univers de l'événement. */
+function _apiKeyFor(env, event) {
+  return event?.livemode === false ? env.KS_STRIPE_SECRET_TEST : env.KS_STRIPE_SECRET;
 }
 
 // Centimes → plan. Fallback quand le price n'a pas de lookup_key (cas des
@@ -151,15 +158,15 @@ async function _stripeGET(env, path) {
 const PRICE_AMOUNT_TO_PLAN = { 4900: 'STARTER', 9900: 'PRO', 24900: 'MAX' };
 
 // Récupère le plan d'une subscription : d'abord par lookup_key, sinon par montant.
-async function _resolvePlanFromSubscription(env, subscriptionId) {
-  const sub = await _stripeGET(env, `/subscriptions/${subscriptionId}`);
+async function _resolvePlanFromSubscription(env, subscriptionId, key = null) {
+  const sub = await _stripeGET(env, `/subscriptions/${subscriptionId}`, key);
   const item = sub?.items?.data?.[0];
   const price = item?.price;
   if (!price) return null;
 
   // 1) Voie normale : lookup_key du price (ks_starter / ks_pro / ks_max).
   const lookup = price.lookup_key
-    || (await _stripeGET(env, `/prices/${price.id}`))?.lookup_key;
+    || (await _stripeGET(env, `/prices/${price.id}`, key))?.lookup_key;
   if (lookup && PRICE_LOOKUP_TO_PLAN[lookup]) {
     return PRICE_LOOKUP_TO_PLAN[lookup];
   }
@@ -182,8 +189,8 @@ async function _resolvePlanFromSubscription(env, subscriptionId) {
  * Les deux à null = price inconnu : on n'accorde RIEN et on journalise.
  * On ne devine JAMAIS depuis le montant côté app (cinq apps à 19 €).
  */
-async function _resolveSubscriptionTarget(env, subscriptionId) {
-  const sub   = await _stripeGET(env, `/subscriptions/${subscriptionId}`);
+async function _resolveSubscriptionTarget(env, subscriptionId, key = null) {
+  const sub   = await _stripeGET(env, `/subscriptions/${subscriptionId}`, key);
   const item  = sub?.items?.data?.[0];
   let   price = item?.price;
   if (!price) return { app: null, plan: null };
@@ -191,7 +198,7 @@ async function _resolveSubscriptionTarget(env, subscriptionId) {
   // L'objet price imbriqué peut être partiel : on le recharge si les
   // deux voies de résolution (metadata + lookup_key) sont muettes.
   if (!price.metadata?.ks_app && !price.lookup_key) {
-    try { price = await _stripeGET(env, `/prices/${price.id}`) || price; } catch (_) {}
+    try { price = await _stripeGET(env, `/prices/${price.id}`, key) || price; } catch (_) {}
   }
 
   // Metadata portée par le PRODUIT plutôt que le prix (cas courant :
@@ -199,7 +206,7 @@ async function _resolveSubscriptionTarget(env, subscriptionId) {
   let product = null;
   if (!price.metadata?.ks_app && price.product) {
     const pid = typeof price.product === 'string' ? price.product : price.product?.id;
-    if (pid) { try { product = await _stripeGET(env, `/products/${pid}`); } catch (_) {} }
+    if (pid) { try { product = await _stripeGET(env, `/products/${pid}`, key); } catch (_) {} }
   }
 
   const app = resolveAppFromPrice(price, product);
@@ -222,22 +229,27 @@ async function _resolveSubscriptionTarget(env, subscriptionId) {
  * l'e-mail. Sans le premier, un client qui paie avec une autre adresse
  * recevrait une seconde clé au lieu d'enrichir son sac.
  */
-async function _findLicenceForCustomer(env, { clientRef, customerId, customerEmail }) {
+// `testMode` (quarantaine 26/07) : la résolution par e-mail est le chemin
+// DANGEREUX — c'est lui qui permettrait à un checkout de test d'enrichir
+// la licence réelle portant la même adresse. Le filtre est donc en SQL :
+// un événement de test ne PEUT résoudre qu'une licence livemode = 0.
+async function _findLicenceForCustomer(env, { clientRef, customerId, customerEmail, testMode = false }) {
+  const modeSql = testMode ? 'livemode = 0' : '(livemode IS NULL OR livemode != 0)';
   if (clientRef) {
     const r = await env.DB
-      .prepare('SELECT lookup_hmac FROM licences WHERE lookup_hmac = ? OR key = ? LIMIT 1')
+      .prepare(`SELECT lookup_hmac FROM licences WHERE (lookup_hmac = ? OR key = ?) AND ${modeSql} LIMIT 1`)
       .bind(clientRef, clientRef).first();
     if (r?.lookup_hmac) return r.lookup_hmac;
   }
   if (customerId) {
     const r = await env.DB
-      .prepare('SELECT lookup_hmac FROM licences WHERE stripe_customer_id = ? LIMIT 1')
+      .prepare(`SELECT lookup_hmac FROM licences WHERE stripe_customer_id = ? AND ${modeSql} LIMIT 1`)
       .bind(customerId).first();
     if (r?.lookup_hmac) return r.lookup_hmac;
   }
   if (customerEmail) {
     const r = await env.DB
-      .prepare('SELECT lookup_hmac FROM licences WHERE customer_email = ? LIMIT 1')
+      .prepare(`SELECT lookup_hmac FROM licences WHERE customer_email = ? AND ${modeSql} LIMIT 1`)
       .bind(customerEmail).first();
     if (r?.lookup_hmac) return r.lookup_hmac;
   }
@@ -263,7 +275,7 @@ async function _handlePackPurchase(env, session) {
   //    distincts (9 € / 39 €), aucune ambiguïté — contrairement aux apps.
   let lookup = null;
   try {
-    const li = await _stripeGET(env, `/checkout/sessions/${session.id}/line_items?limit=1`);
+    const li = await _stripeGET(env, `/checkout/sessions/${session.id}/line_items?limit=1`, _apiKeyFor(env, session));
     lookup   = li?.data?.[0]?.price?.lookup_key || null;
   } catch (_) { /* repli montant ci-dessous */ }
   const credits = resolvePackConversations({ lookupKey: lookup, amountTotal: session.amount_total });
@@ -274,21 +286,24 @@ async function _handlePackPurchase(env, session) {
 
   // 2) Retrouver la licence du payeur : client_reference_id (si la boutique
   //    l'a passé), sinon stripe_customer_id, sinon customer_email.
+  // Quarantaine (26/07) : même filtre d'univers que _findLicenceForCustomer —
+  // un pack payé en carte de TEST ne créditera jamais une licence réelle.
+  const modeSql = session.livemode === false ? 'livemode = 0' : '(livemode IS NULL OR livemode != 0)';
   let lic = null;
   const ref = session.client_reference_id;
   if (ref) {
     lic = await env.DB
-      .prepare('SELECT lookup_hmac FROM licences WHERE lookup_hmac = ? OR key = ? LIMIT 1')
+      .prepare(`SELECT lookup_hmac FROM licences WHERE (lookup_hmac = ? OR key = ?) AND ${modeSql} LIMIT 1`)
       .bind(ref, ref).first();
   }
   if (!lic && customerId) {
     lic = await env.DB
-      .prepare('SELECT lookup_hmac FROM licences WHERE stripe_customer_id = ? LIMIT 1')
+      .prepare(`SELECT lookup_hmac FROM licences WHERE stripe_customer_id = ? AND ${modeSql} LIMIT 1`)
       .bind(customerId).first();
   }
   if (!lic && customerEmail) {
     lic = await env.DB
-      .prepare('SELECT lookup_hmac FROM licences WHERE customer_email = ? LIMIT 1')
+      .prepare(`SELECT lookup_hmac FROM licences WHERE customer_email = ? AND ${modeSql} LIMIT 1`)
       .bind(customerEmail).first();
   }
   if (!lic?.lookup_hmac) {
@@ -361,6 +376,16 @@ async function _handleChargeRefunded(env, event) {
     return;
   }
 
+  // Quarantaine : la licence résolue doit appartenir au même univers que
+  // l'événement (le chemin journal peut précéder le filtre SQL).
+  try {
+    const lm = await env.DB.prepare('SELECT livemode FROM licences WHERE lookup_hmac = ? LIMIT 1').bind(hmac).first();
+    if (lm && !modeMatchesLicence(event, lm.livemode)) {
+      console.error('[Stripe refund] univers discordant (event/licence) — reprise refusée', charge.id, hmac.slice(0, 8));
+      return;
+    }
+  } catch (_) { /* colonne absente = tout est réel, la garde n'a pas d'objet */ }
+
   const repris = await removePackCredits(env, hmac, credits);
   console.log(`[Stripe refund] ${source} : ${repris}/${credits} conversations reprises sur ${hmac.slice(0, 8)}… (charge ${charge.id})`);
 }
@@ -385,7 +410,7 @@ async function _handleAutoReloadSetupCompleted(env, session) {
   }
   let pm = null, customer = session.customer || null;
   try {
-    const intent = await _stripeGET(env, `/setup_intents/${encodeURIComponent(si)}`);
+    const intent = await _stripeGET(env, `/setup_intents/${encodeURIComponent(si)}`, _apiKeyFor(env, session));
     pm = intent?.payment_method || null;
     customer = intent?.customer || customer;
   } catch (e) {
@@ -394,14 +419,27 @@ async function _handleAutoReloadSetupCompleted(env, session) {
   }
   if (!pm) { console.error('[P3 setup] aucun moyen de paiement sur', si); return; }
 
+  // Quarantaine : une carte de TEST ne se rattache qu'à une licence de
+  // test — sinon le balayage tenterait un débit live sur un pm de test.
+  try {
+    const lm = await env.DB.prepare('SELECT livemode FROM licences WHERE lookup_hmac = ? LIMIT 1').bind(hmac).first();
+    if (lm && !modeMatchesLicence(session, lm.livemode)) {
+      console.error('[P3 setup] univers discordant (session/licence) — carte NON rattachée', session.id, hmac.slice(0, 8));
+      return;
+    }
+  } catch (_) { /* colonne absente = tout est réel */ }
+  // `livemode` tamponné sur la config : c'est LUI qui décidera de la clé
+  // API du balayage (un débit de test ne part jamais sur la clé live).
+  const cfgLive = session.livemode === false ? 0 : 1;
+
   // Le webhook peut être le PREMIER à toucher cette table (si le client
   // n'a jamais ouvert ses réglages) : sans ça, l'INSERT lèverait.
   await ensureAutoReloadSchema(env);
   await env.DB.prepare(`
-    INSERT INTO ai_auto_reload (lookup_hmac, stripe_customer, payment_method, updated_at)
-    VALUES (?, ?, ?, datetime('now'))
+    INSERT INTO ai_auto_reload (lookup_hmac, stripe_customer, payment_method, livemode, updated_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
     ON CONFLICT(lookup_hmac) DO UPDATE SET
-      stripe_customer = ?, payment_method = ?,
+      stripe_customer = ?, payment_method = ?, livemode = ?,
       -- Une carte fraîche lève une pause « carte refusée » : le client
       -- vient précisément de corriger la cause.
       paused_at = CASE WHEN paused_reason IN ('payment_failed','authentication_required','no_payment_method')
@@ -409,7 +447,7 @@ async function _handleAutoReloadSetupCompleted(env, session) {
       paused_reason = CASE WHEN paused_reason IN ('payment_failed','authentication_required','no_payment_method')
                        THEN NULL ELSE paused_reason END,
       updated_at = datetime('now')
-  `).bind(hmac, customer, pm, customer, pm).run();
+  `).bind(hmac, customer, pm, cfgLive, customer, pm, cfgLive).run();
   console.log('[P3 setup] carte enregistrée pour la licence', hmac);
 }
 
@@ -442,7 +480,7 @@ async function _handleCheckoutCompleted(env, event) {
   if (existing) return;
 
   await _ensureP4Schema(env);
-  const target = await _resolveSubscriptionTarget(env, subId);
+  const target = await _resolveSubscriptionTarget(env, subId, _apiKeyFor(env, session));
 
   // ── P4 · achat d'UNE application (ou de l'OS) ──────────────────
   // Le chemin s'ouvre uniquement si le price porte `ks_app` : les
@@ -461,6 +499,7 @@ async function _handleCheckoutCompleted(env, event) {
       clientRef: session.client_reference_id,
       customerId,
       customerEmail,
+      testMode: session.livemode === false,
     });
     if (known) {
       const bag = await _readOwnedAssets(env, known);
@@ -635,7 +674,7 @@ async function _handleSubscriptionUpdated(env, event) {
     .prepare('SELECT lookup_hmac, app_id FROM licence_subscriptions WHERE subscription_id = ? LIMIT 1')
     .bind(sub.id).first();
   if (map) {
-    const { app } = await _resolveSubscriptionTarget(env, sub.id);
+    const { app } = await _resolveSubscriptionTarget(env, sub.id, _apiKeyFor(env, sub));
     if (app && app !== map.app_id) {
       const bag = await _readOwnedAssets(env, map.lookup_hmac);
       if (Array.isArray(bag)) {
@@ -657,7 +696,7 @@ async function _handleSubscriptionUpdated(env, event) {
   }
 
   // Legacy : changement de plan sur un abonnement d'avant.
-  const newPlan = await _resolvePlanFromSubscription(env, sub.id);
+  const newPlan = await _resolvePlanFromSubscription(env, sub.id, _apiKeyFor(env, sub));
   if (newPlan) {
     await env.DB.prepare(`
       UPDATE licences SET plan = ?, is_active = 1
@@ -680,8 +719,23 @@ export async function handleStripeWebhook(request, env) {
 
   const rawBody = await request.text();
   const sig     = request.headers.get('Stripe-Signature') || '';
-  const event   = await verifyStripeWebhook(rawBody, sig, env.KS_STRIPE_WEBHOOK_SECRET);
+  // Banc d'essai (26/07) : la signature est essayée avec le secret LIVE
+  // d'abord, puis avec le secret TEST s'il est configuré. Un même worker
+  // sert donc les deux univers — la quarantaine `modeMatchesLicence`
+  // garantit qu'un événement de test ne touche que des licences de test.
+  let event = await verifyStripeWebhook(rawBody, sig, env.KS_STRIPE_WEBHOOK_SECRET);
+  if (!event && env.KS_STRIPE_WEBHOOK_SECRET_TEST) {
+    event = await verifyStripeWebhook(rawBody, sig, env.KS_STRIPE_WEBHOOK_SECRET_TEST);
+  }
   if (!event) return err('Signature invalide', 400, origin);
+
+  // Un événement de test sans clé API de test : on ne peut RIEN résoudre
+  // chez Stripe (subscriptions, line items…). On l'avale en 200 — le
+  // laisser en erreur ferait retenter Stripe en boucle pour rien.
+  if (event.livemode === false && !env.KS_STRIPE_SECRET_TEST) {
+    console.log('[Stripe webhook] événement de test ignoré (KS_STRIPE_SECRET_TEST absent)', event.id);
+    return json({ received: true, ignored: 'test_key_missing' }, 200, origin);
+  }
 
   // Idempotence
   if (await _alreadyProcessed(env, event.id)) {

@@ -57,7 +57,7 @@ import { sendEmail } from '../lib/email-resend.js';
 // à moitié traités.
 const MAX_PAR_TICK = 10;
 
-async function _stripePost(env, path, body, idempotencyKey) {
+async function _stripePost(env, path, body, idempotencyKey, key = null) {
   const enc = (o, p = '') => Object.entries(o)
     .filter(([, v]) => v !== undefined && v !== null)
     .map(([k, v]) => {
@@ -69,7 +69,7 @@ async function _stripePost(env, path, body, idempotencyKey) {
   const res = await fetch(`https://api.stripe.com/v1${path}`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${env.KS_STRIPE_SECRET}`,
+      Authorization: `Bearer ${key || env.KS_STRIPE_SECRET}`,
       'Content-Type': 'application/x-www-form-urlencoded',
       ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
     },
@@ -139,6 +139,18 @@ export async function runAutoReloadSweep(env, { now = Date.now(), simulate = fal
     bilan.examinees++;
     const hmac = cfg.lookup_hmac;
 
+    // Banc d'essai (26/07) : la config tamponnée `livemode = 0` (carte de
+    // test) débite sur la clé de TEST — jamais sur la live. Si la clé de
+    // test a disparu du worker, on SAUTE : mieux vaut une recharge de test
+    // qui ne part pas qu'un PaymentIntent live sur un pm de test.
+    const cfgIsTest = cfg.livemode === 0;
+    const stripeKey = cfgIsTest ? env.KS_STRIPE_SECRET_TEST : env.KS_STRIPE_SECRET;
+    if (cfgIsTest && !stripeKey && !simulate) {
+      bilan.ignorees++;
+      bilan.details.push(`${hmac.slice(0, 8)} : config de test mais KS_STRIPE_SECRET_TEST absent`);
+      continue;
+    }
+
     const restant = await _remainingFor(env, hmac);
     const verdict = shouldReload(cfg, restant, now);
 
@@ -191,7 +203,7 @@ export async function runAutoReloadSweep(env, { now = Date.now(), simulate = fal
       'metadata[ks_licence]': hmac,
       'metadata[ks_pack]': verdict.packLookup,
       'metadata[ks_purpose]': 'auto_reload',
-    }, cle);
+    }, cle, stripeKey);
 
     const pi = r.data?.id || r.data?.error?.payment_intent?.id || null;
 

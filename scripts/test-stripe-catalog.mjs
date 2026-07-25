@@ -16,7 +16,7 @@ import {
   resolveAppFromPrice, resolveLegacyPlanFromPrice, resolvePackConversations,
   addEntitlement, removeEntitlement, technicalPlanFor,
   lookupKeyForApp, isValidEntitlementId, stripeCatalogPlan, livemodeFlag,
-  packConversationsForRefund,
+  packConversationsForRefund, modeMatchesLicence,
 } from '../workers/src/lib/stripe-catalog.js';
 import { APP_TIER, TIER, OS_ENTITLEMENT } from '../workers/src/lib/pricing-grid.js';
 
@@ -135,6 +135,19 @@ eq(packConversationsForRefund({ refunded: true,  amount: 9900 }), null, 'montant
 eq(packConversationsForRefund({ refunded: true,  amount: 12900 }), null, 'montant OS (129 €) → jamais de reprise');
 eq(packConversationsForRefund(null),                              null, 'charge absente → rien, pas de crash');
 eq(packConversationsForRefund({ amount: 900 }),                   null, 'refunded absent → prudence, zéro reprise');
+
+// ── Quarantaine test / live (banc d'essai Stripe, 26/07) ───────
+// La faute mortelle dans CHAQUE sens : un événement de TEST qui crédite
+// une licence RÉELLE (le trou d'où venait la licence fantôme axia), ou
+// un événement LIVE qui écrit sur une licence de test purgeable.
+eq(modeMatchesLicence({ livemode: false }, 0),    true,  'événement test → licence test : OK');
+eq(modeMatchesLicence({ livemode: false }, 1),    false, 'événement test → licence réelle : REFUS');
+eq(modeMatchesLicence({ livemode: false }, null), false, 'événement test → licence historique (NULL = réelle) : REFUS');
+eq(modeMatchesLicence({ livemode: true },  1),    true,  'événement live → licence réelle : OK');
+eq(modeMatchesLicence({ livemode: true },  null), true,  'événement live → licence historique : OK (rien ne change)');
+eq(modeMatchesLicence({ livemode: true },  0),    false, 'événement live → licence de test : REFUS (purgeable à tout moment)');
+eq(modeMatchesLicence({}, null),                  true,  'livemode absent = live par défaut, licence NULL : OK');
+eq(modeMatchesLicence({}, 0),                     false, 'livemode absent = live par défaut, licence test : REFUS');
 
 console.log(`\n${pass + fail} tests — \x1b[32m${pass} ok\x1b[0m, ${fail ? `\x1b[31m${fail} ko\x1b[0m` : '0 ko'}\n`);
 process.exit(fail ? 1 : 0);

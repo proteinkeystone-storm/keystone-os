@@ -230,3 +230,24 @@ export function packConversationsForRefund(charge) {
   if (!charge || charge.refunded !== true) return null;
   return resolvePackConversations({ amountTotal: charge.amount }) || null;
 }
+
+/**
+ * Un événement Stripe a-t-il le droit de toucher CETTE licence ?
+ *
+ * La règle de quarantaine du banc d'essai (26/07) : une licence
+ * `livemode = 0` vit ENTIÈREMENT dans l'univers de test (clé API test,
+ * cartes de test, événements de test) — et réciproquement.
+ *
+ * Sans elle, réaccepter les webhooks de test rouvrirait le trou d'où
+ * est née la licence fantôme axia : un checkout de PACK en mode test,
+ * résolu par e-mail, créditerait 1 000 conversations RÉELLES sur une
+ * licence réelle. Dans l'autre sens, un événement live ne doit jamais
+ * écrire sur une licence de test (qui peut être purgée à tout moment).
+ *
+ * `null`/`1` = licence réelle (NULL = antérieure à la colonne, donc
+ * réelle par définition : elle a été payée ou créée à la main).
+ */
+export function modeMatchesLicence(event, licenceLivemode) {
+  if (event?.livemode === false) return licenceLivemode === 0;
+  return licenceLivemode !== 0;
+}

@@ -106,6 +106,15 @@ export async function ensureAutoReloadSchema(env) {
     )
   `);
   await safe('CREATE INDEX IF NOT EXISTS idx_arl_hmac ON ai_auto_reload_log(lookup_hmac, created_at)');
+  // ── Banc d'essai Stripe (26/07) ────────────────────────────────
+  // `livemode` : 0 = univers de TEST (cartes/clés de test), sinon réel.
+  // Sur la config, il est posé au rattachement de la carte (webhook
+  // mode:'setup') et décide de la CLÉ API que le balayage utilise pour
+  // débiter — un débit de test ne part JAMAIS sur la clé live.
+  // L'ALTER sur licences est doublé ici car cette fonction peut tourner
+  // avant le premier événement Stripe (qui porte le même ALTER).
+  await safe('ALTER TABLE ai_auto_reload ADD COLUMN livemode INTEGER');
+  await safe('ALTER TABLE licences ADD COLUMN livemode INTEGER');
   _ready = true;
 }
 

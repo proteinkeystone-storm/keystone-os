@@ -56,7 +56,7 @@ function packLabel(lookup) {
   return `${(c / 100).toFixed(0)} € (${n.toLocaleString('fr-FR')} conversations)`;
 }
 
-async function _stripe(env, path, { method = 'GET', body, idempotencyKey } = {}) {
+async function _stripe(env, path, { method = 'GET', body, idempotencyKey, key } = {}) {
   const enc = (o, p = '') => Object.entries(o)
     .filter(([, v]) => v !== undefined && v !== null)
     .map(([k, v]) => {
@@ -68,7 +68,7 @@ async function _stripe(env, path, { method = 'GET', body, idempotencyKey } = {})
   const res = await fetch(`https://api.stripe.com/v1${path}`, {
     method,
     headers: {
-      Authorization: `Bearer ${env.KS_STRIPE_SECRET}`,
+      Authorization: `Bearer ${key || env.KS_STRIPE_SECRET}`,
       ...(body ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
       ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
     },
@@ -209,11 +209,29 @@ export async function handleAutoReloadSetup(request, env) {
   await ensureAutoReloadSchema(env);
   const cfg = await readConfig(env, claims.sub);
 
+  // Banc d'essai (26/07) : une licence `livemode = 0` vit dans l'univers
+  // de TEST — sa session de carte part sur la clé de test, ses débits
+  // aussi. Colonne absente ou NULL = licence réelle, clé live, inchangé.
+  let isTest = false;
+  try {
+    const lm = await env.DB
+      .prepare('SELECT livemode FROM licences WHERE lookup_hmac = ? LIMIT 1')
+      .bind(claims.sub).first();
+    isTest = lm?.livemode === 0;
+  } catch (_) { /* colonne pas encore née → réel */ }
+  const apiKey = isTest ? env.KS_STRIPE_SECRET_TEST : env.KS_STRIPE_SECRET;
+  if (isTest && !apiKey) {
+    return err('Licence de test mais KS_STRIPE_SECRET_TEST absent du worker', 500, origin);
+  }
+
   // Client Stripe : on réutilise celui de la licence s'il existe (un
   // client qui a déjà payé une app en a un), sinon on en crée un.
-  let customer = cfg?.stripe_customer || null;
+  // ⚠️ Jamais entre univers : un customer LIVE n'existe pas derrière la
+  // clé de test (et inversement) — sur une licence de test on repart
+  // d'un client neuf plutôt que de réutiliser un id live.
+  let customer = (!isTest && cfg?.stripe_customer) || null;
   let email = claims.email || claims.owner || null;
-  if (!customer) {
+  if (!customer && !isTest) {
     try {
       const row = await env.DB
         .prepare('SELECT stripe_customer_id, customer_email FROM licences WHERE lookup_hmac = ? LIMIT 1')
@@ -228,12 +246,14 @@ export async function handleAutoReloadSetup(request, env) {
         method: 'POST',
         body: { ...(email ? { email } : {}), metadata: { ks_licence: claims.sub } },
         idempotencyKey: `arl_cus_${claims.sub}`,
+        key: apiKey,
       });
       customer = c.id;
     }
 
     const session = await _stripe(env, '/checkout/sessions', {
       method: 'POST',
+      key: apiKey,
       body: {
         mode: 'setup',                     // ← AUCUN débit
         customer,
