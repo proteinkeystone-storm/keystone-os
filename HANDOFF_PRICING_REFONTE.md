@@ -10,7 +10,7 @@
 - **P0→P6 complets.** Grille 0/19/49/99/129 · entitlement par application · conversations · Stripe par app · paiement serveur · bascule.
 - **Stripe LIVE** : 12 produits / 24 prix créés, webhook réel signé, worker sur la clé live. Les 3 anciens plans sont archivés.
 - **Contrôle de possession CÔTÉ SERVEUR** (`workers/src/lib/app-access.js`) — c'était le vrai bloquant.
-- Dernier état : SW **v5.28.384**, worker **10ef0b27**.
+- Dernier état : SW **v5.28.388**, worker **e1f7fe5f** (le palier gratuit et la suppression du mode démo attendent un déploiement, cf. §2 du reste-à-faire).
 
 ### Reste à faire (par ordre de valeur)
 1. **Plafonner les conversations** — 🟡 **ARMÉ SUR LA LICENCE TÉMOIN (2026-07-25), pas sur les autres.**
@@ -21,11 +21,18 @@
    - ✅ **Mur observé EN RÉEL (25/07)** : `used` s'arrête à **300**, pas 301 — la 301ᵉ a été pré-bumpée puis **revertée**. Le pattern d'atomicité de `consumeCredits()` tient en prod, ce qui n'avait jamais été prouvé hors banc.
    - ✅ **Renommage « crédits » → « conversations » TERMINÉ** (`55c6549`, worker `e1f7fe5f`, SW `v5.28.386`) : les 17 messages qui s'affichent **au moment du mur** (Smart Agent, Brainstorming, Sentinel, Keynapse, Kora + toasts front) ne parlent plus de « crédits IA » et n'annoncent plus « sur le plan `${plan}` ». Section des réglages + doc = « Conversations » ; bouton admin = « Plafond ». Le message du Concierge public était déjà neutre — inchangé.
    - **Reste** : décider de l'ouverture aux autres licences ; **supprimer la ligne `ai_usage` semée** ; tester la sortie de secours « pack » (`addPackCredits`) — préalable direct à P3.
-   - 🔴 **`activate.html` annonce encore les paliers MORTS** (lignes ~1338/1357/1375) : « 200 / 1 000 / 5 000 **crédits IA** inclus / mois » sur des cartes START/PRO/MAX archivées chez Stripe. Les trois nombres sont faux sous le modèle par application (300 / 1 000 / 3 000 par sac d'apps). **Non corrigé volontairement** : ce n'est pas un problème de vocabulaire mais un reste de la grille morte, à traiter avec la refonte Landing (P5), pas par un remplacement de mots.
-   - 🔴 **`index.html` + `faq.html`** parlent de « crédits IA » dans la FAQ visible **et dans le JSON-LD**. Idem : appartient à la réécriture Landing en attente, pas à ce balayage.
-2. **Recharge automatique** (sprint P3, jamais commencé) — sans elle, un Smart Agent en mode géré qui épuise son enveloppe **s'arrête net**. Nécessite du paiement Stripe off-session + plafond client. *(« go » obtenu)*
-3. **Renommer les 2 packs « conversations »** dans Stripe — cosmétique, pas-à-pas à fournir.
-4. **Annuel vs essai 7 jours — DÉCISION EN ATTENTE.** Stéphane hésite. Aucune UI ne permet de choisir mensuel/annuel aujourd'hui (le serveur accepte déjà `interval:'year'`, testé OK) : les « 2 mois offerts » sont donc **invendables**. Argument posé : les 3 apps gratuites à vie font déjà un meilleur essai qu'une période limitée, et un essai sur app payante ferait porter le coût IA d'utilisateurs qui ne paieront jamais.
+   - ✅ **`activate.html` nettoyé** : la section « Plans & Tarifs » (Start 49 / Pro 99 / Max 249) et ses **3 Payment Links vers des prix archivés** ont été supprimées. Elle était masquée en CSS, donc invisible — mais du markup mort porteur d'URL de paiement n'a aucune raison de survivre. FAQ publique (`index.html` + `faq.html`) alignée sur « conversations », **texte visible ET JSON-LD** (les deux doivent rester identiques mot pour mot).
+
+2. **Palier gratuit LIVRABLE + mode démo SUPPRIMÉ (2026-07-25)** — commits `bcb43b6` + `72f9bd6`.
+   - **Le bug visible** : les 3 CTA de la grille renvoyaient en haut de page. Cause réelle : « Commencer gratuitement » et « Voir les applications » pointaient vers `./app.html`, dont la garde fait `location.replace('/?logout=1')` sans JWT. Un visiteur — la cible d'une page de vente — ne pouvait rien faire. Le CTA « OS complet », lui, fonctionnait (session Stripe vérifiée en prod).
+   - **`POST /api/licence/free`** (NOUVEAU, `workers/src/routes/licence-free.js`) : e-mail → licence → clé rendue dans la réponse (activation immédiate) + envoyée par e-mail. Idempotent par e-mail, 409 si l'adresse porte déjà un accès payant, 5 créations/IP/24 h.
+   - ⚠️ **`owned_assets` est un TABLEAU, jamais `NULL`.** Le sac porte les 3 identifiants gratuits, **dérivés d'`APP_TIER`**. `NULL` = sentinelle « accès TOTAL » → offrirait les 14 apps à chaque visiteur. Banc `scripts/test-licence-free.mjs` (24 tests) qui teste **les deux sens**.
+   - ⚠️ **Ne PAS inventer un plan `'FREE'`** : `_devicesMaxForPlan()` renvoie `null` = appareils **ILLIMITÉS** pour tout plan inconnu. On réutilise `technicalPlanFor()` (→ PRO, 3 appareils), la même règle que le chemin Stripe.
+   - **Mode démo retiré** : 3 modules (941 lignes), chrono du hero, modales, branches d'onboarding, `startDemo`/`fillDemo`, bypass de binding DEMO, claim `isDemo` du JWT, et le raccourci `DEMO-KEYS-TONE-2026 → ownedAssets:null` de la simulation locale. Deux pièges traités : le bypass d'auto-redirection écoutait `?demo=1` (bascule sur `?free=1`, sinon un visiteur déjà connecté ne voit jamais le formulaire), et **le CTA principal du hero pointait aussi sur `?demo=1`**.
+   - **Licence `DEMO-KEYS-TONE-2026` convertie** en gratuite (plan PRO, sac = les 3 gratuites). Elle était `plan=DEMO, owned_assets=NULL` = **accès total**, avec une clé écrite en clair dans `activate.html` — donc publiée et présente dans l'historique git. ⚠️ **Cette ligne s'est modifiée seule pendant la session** (relevée `STARTER / ["O-Keyn-001"]` en début de session, `DEMO / null` deux heures plus tard, même rowid) — origine non élucidée, à surveiller.
+3. **Recharge automatique** (sprint P3, jamais commencé) — sans elle, un Smart Agent en mode géré qui épuise son enveloppe **s'arrête net**. Nécessite du paiement Stripe off-session + plafond client. *(« go » obtenu)*
+4. **Renommer les 2 packs « conversations »** dans Stripe — cosmétique, pas-à-pas à fournir.
+5. **Annuel vs essai 7 jours — DÉCISION EN ATTENTE.** Stéphane hésite. Aucune UI ne permet de choisir mensuel/annuel aujourd'hui (le serveur accepte déjà `interval:'year'`, testé OK) : les « 2 mois offerts » sont donc **invendables**. Argument posé : les 3 apps gratuites à vie font déjà un meilleur essai qu'une période limitée, et un essai sur app payante ferait porter le coût IA d'utilisateurs qui ne paieront jamais.
 
 ### Pièges à connaître avant de toucher au code
 - **`ks_owned_assets` absent ≠ « rien » : ça veut dire « TOUT ».** Ne jamais l'effacer sur un chemin payant.
