@@ -302,6 +302,11 @@
 .kyn-cap-del:hover { color: var(--danger, #e05c5c); }
 .kyn-cap-add { width: 64px; height: 64px; border: 1px dashed var(--bd, rgba(255,255,255,.18)); border-radius: 10px; background: transparent; color: var(--tx2, rgba(248,250,252,.55)); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10px; }
 .kyn-cap-add:hover { border-color: var(--gold, #6366f1); color: var(--text, #f8fafc); }
+/* Dictée fermée (licence sans application payante) — le bouton reste
+   VISIBLE et cliquable : il explique au lieu de disparaître. Un bouton
+   qu'on retire laisse croire à un bug ; un bouton qui parle vend. */
+.kyn-cap-add--locked { opacity: .45; }
+.kyn-cap-add--locked:hover { border-color: var(--bd, rgba(255,255,255,.18)); color: var(--tx2, rgba(248,250,252,.55)); }
 /* Tuile PDF : icône document + nom tronqué (pas d'aperçu image) */
 .kyn-cap-pdf { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 5px; color: var(--tx2, rgba(248,250,252,.7)); }
 .kyn-cap-pdf svg { flex: none; }

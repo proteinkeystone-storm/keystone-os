@@ -16,6 +16,8 @@ import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 import { createConstellation }                from './lib/keynapse-engine.js';
+import { hasPaidApp }                         from './lib/pricing.js';
+import { getOwnedIds, isAdminUser }           from './pads-loader.js';
 
 const WORKSPACE_META = { id: 'O-Keyn-001', name: 'Keynapse' };
 const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
@@ -145,6 +147,20 @@ function _buildShell() {
   _updateMotionBtn();
 }
 
+// ── La dictée est-elle ouverte ? ────────────────────────────────
+// « Gratuit, cœur seul » : Keynapse ne coûte rien, sa dictée si (elle
+// appelle Whisper puis Mistral). Le serveur tranche pour de bon ; ici
+// on évite seulement à l'utilisateur d'enregistrer un mémo qui serait
+// refusé. Permissif comme le serveur : sac null (legacy) → ouvert.
+function _dicteeAutorisee() {
+  try {
+    if (isAdminUser()) return true;
+    const sac = getOwnedIds();
+    if (sac === null) return true;
+    return hasPaidApp({ ownedAssets: sac });
+  } catch (_) { return true; }
+}
+
 // ── Délégation ──────────────────────────────────────────────────
 function _onClick(e) {
   _primeAudio();   // 1er geste → débloque la sonnerie des rappels
@@ -197,6 +213,7 @@ function _onClick(e) {
     case 'kyn-draw-save':   return _drawSave();
     // Mémos vocaux (Sprint 6)
     case 'kyn-voice-add':    return _openVoiceRecorder();
+    case 'kyn-voice-locked': return _toast('La transcription automatique demande une application payante — Keynapse reste gratuit pour vos bulles.');
     case 'kyn-voice-stop':   return _stopVoiceRecorder(true);
     case 'kyn-voice-cancel': return _stopVoiceRecorder(false);
     case 'kyn-voice-del':    return _delVoice(el.dataset.id);
@@ -518,7 +535,19 @@ function _capturesSectionHTML() {
           </div>`).join('')}
         <button class="kyn-cap-add" data-act="kyn-photo-add" aria-label="Ajouter une photo">${IMAGE_ICON}<span>Photo</span></button>
         <button class="kyn-cap-add" data-act="kyn-draw-add" aria-label="Dessiner un croquis">${PENCIL_ICON}<span>Croquis</span></button>
-        <button class="kyn-cap-add" data-act="kyn-voice-add" aria-label="Enregistrer une note vocale">${icon('mic', 15) || ''}<span>Vocal</span></button>
+        ${(() => {
+          // Keynapse est GRATUITE, mais sa dictée appelle Whisper puis
+          // Mistral : deux appels IA par mémo. Décision « Gratuit, cœur
+          // seul » — le cœur (bulles, zones, liens, rappels) n'utilise
+          // aucune IA et ne coûte rien ; la dictée exige une application
+          // payante. Le serveur refuse déjà la transcription ; on le dit
+          // AVANT le clic plutôt que de laisser l'utilisateur enregistrer
+          // un mémo pour rien.
+          const ouvert = _dicteeAutorisee();
+          return ouvert
+            ? `<button class="kyn-cap-add" data-act="kyn-voice-add" aria-label="Enregistrer une note vocale">${icon('mic', 15) || ''}<span>Vocal</span></button>`
+            : `<button class="kyn-cap-add kyn-cap-add--locked" data-act="kyn-voice-locked" aria-label="La dictée demande une application payante" title="La transcription automatique demande une application payante — Keynapse reste gratuit pour vos bulles.">${icon('mic', 15) || ''}<span>Vocal</span></button>`;
+        })()}
         <button class="kyn-cap-add" data-act="kyn-pdf-add" aria-label="Ajouter un PDF">${DOC_ICON}<span>PDF</span></button>
       </div>
       ${_audiosListHTML()}

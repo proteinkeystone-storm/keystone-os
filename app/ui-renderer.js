@@ -4,7 +4,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { getPad, getOwnedIds, setOwnedIds, getLifetimeIds, isFrigoMode, getCatalogEntry, getCatalog, CF_API, isAdminUser } from './pads-loader.js';
-import { isPricingV2, isFreeApp } from './lib/pricing.js';
+import { isPricingV2, isFreeApp, priceForApp } from './lib/pricing.js';
 import { openCheckout }           from './lib/checkout.js';
 import { renderArtifactResult, COMP_ICONS } from './artifact-renderer.js';
 import { ApiHandler } from './api-handler.js';
@@ -1592,10 +1592,13 @@ function _renderAppCardSmall(app) {
     // piégé : « Actif » au K-Store mais introuvable au Dashboard. Cf. _isOnDashboard.
     const isOwnedOffGrid = isOwned && app.real && !_isOnDashboard(app.id);
 
-    // Refonte 2026-05-29 — Logique abonnement : on n'affiche plus de prix par
-    // app (le bouton n'encaisse rien, il reflète la licence). États possibles :
-    // Bientôt (coquille) · Ajouter/Réinstaller (possédé, hors grille) ·
-    // ✓ Actif (possédé ET sur le Dashboard, span non cliquable) · Obtenir (non possédé).
+    // Le prix est REVENU sur le bouton (bascule P6). Il avait été retiré en
+    // 2026-05-29 avec ce motif : « le bouton n'encaisse rien, il reflète la
+    // licence ». Ce n'est plus vrai — sous le modèle par application, ce
+    // bouton ouvre un vrai paiement. Annoncer le montant AVANT le clic est
+    // la moindre des choses ; le découvrir sur la page Stripe serait un
+    // piège. Les gratuites le disent aussi : c'est un argument, pas un
+    // détail. États : Bientôt · Ajouter/Réinstaller · ✓ Actif · Obtenir.
     let cta;
     if (!app.real) {
         cta = `<button class="ksfs-buy-btn ksfs-buy-btn--soon" data-action="soon" aria-disabled="true">Bientôt</button>`;
@@ -1605,7 +1608,11 @@ function _renderAppCardSmall(app) {
     } else if (isOwned) {
         cta = `<span class="ksfs-buy-btn ksfs-buy-btn--owned">✓ Actif</span>`;
     } else {
-        cta = `<button class="ksfs-buy-btn" data-action="obtenir" data-id="${app.id}">Obtenir</button>`;
+        const prix = priceForApp(app.id);
+        const mention = prix === null ? ''            // hors grille (app retirée)
+                      : prix === 0    ? ' · Gratuit'
+                      : ` · ${prix} €`;
+        cta = `<button class="ksfs-buy-btn" data-action="obtenir" data-id="${app.id}">Obtenir${mention}</button>`;
     }
 
     // Trois sources possibles pour l'icône, dans cet ordre :
