@@ -152,6 +152,16 @@ export const PUBLIC_SURFACE_APPS = [
 
 export const MODE = { MANAGED: 'MANAGED', BYOK: 'BYOK' };
 
+// Tranché 2026-07-25 : DÉFAUT = géré, et le mode se change à tout moment
+// depuis les réglages de l'app. Une app publique achetée fonctionne dès la
+// première seconde (un acheteur à 99 € ne découvre pas un agent muet) ; ce
+// sont le mur des conversations et le plafond de recharge qui bornent le
+// risque, pas l'absence de service. Réversible sans danger : le prix est
+// IDENTIQUE dans les deux modes, seul l'inclus diffère.
+// ⚠️ Jumeau de `workers/src/lib/app-mode.js` (source de vérité runtime —
+// c'est LUI que lisent le chat public et le Concierge).
+export const DEFAULT_MODE = MODE.MANAGED;
+
 export function isPublicSurfaceApp(id) {
     return PUBLIC_SURFACE_APPS.includes(id);
 }

@@ -99,9 +99,28 @@ export function hasPaidApp({ plan = '', ownedAssets = null } = {}) {
 export function quotaForEntitlements({ plan = '', ownedAssets = null } = {}) {
   const p = String(plan || '').toUpperCase();
   if (p === 'ADMIN') return null;                 // illimité, comme avant
-  if (p === 'MAX')   return null;                 // legacy « tout inclus »
+
+  // ⚠️ L'ORDRE de ces deux tests porte de l'argent (P7, 2026-07-25).
+  //
+  // « MAX » n'est plus un palier qu'on achète : c'est l'étiquette
+  // TECHNIQUE que `technicalPlanFor()` colle automatiquement à toute
+  // licence dont le sac contient la sentinelle 'OS'. Un client OS à
+  // 129 € naît donc MAX — et si le test `plan === 'MAX'` passe en
+  // premier, il rend `null` = **conversations ILLIMITÉES**, avant même
+  // de regarder son sac. Combiné au mode « clé en main » par défaut sur
+  // Smart Agent et le Concierge, c'était exactement le scénario « une
+  // dizaine d'agents à fond » du handoff §2, ouvert en grand sur le
+  // client le plus cher.
+  //
+  // Le sac tranche donc AVANT le plan : sentinelle 'OS' ⇒ 3 000
+  // conversations, le palier réellement vendu. Le `null` de MAX ne sert
+  // plus qu'au vrai legacy — une licence MAX SANS sac (`owned_assets`
+  // absent), dont on ne retire jamais un acquis par surprise.
+  if (Array.isArray(ownedAssets) && ownedAssets.includes(OS_ENTITLEMENT)) {
+    return TIERS[TIER.OS].conversations;
+  }
+  if (p === 'MAX')   return null;                 // legacy « tout inclus » (sac absent)
   if (ownedAssets === null || ownedAssets === undefined) return null;
   if (!Array.isArray(ownedAssets)) return null;
-  if (ownedAssets.includes(OS_ENTITLEMENT)) return TIERS[TIER.OS].conversations;
   return includedConversations(ownedAssets);
 }

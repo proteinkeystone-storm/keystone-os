@@ -42,6 +42,7 @@ import { handleHelpMediaUpload, handleHelpMediaInfo,
 import { handleListKeys, handleSaveKey, handleDeleteKey,
          handleGetKey }                                                 from './routes/vault.js';
 import { handleSaveUserKey, handleDeleteUserKey, handleListUserKeys }   from './routes/keys.js';
+import { handleGetAppMode, handleSetAppMode }                          from './routes/app-mode.js';
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
 import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './routes/ghostwriter.js';
@@ -1063,6 +1064,10 @@ export default {
         const keyDel = path.match(/^\/api\/keys\/([a-z0-9]+)$/);
         if (keyDel && method === 'DELETE') return handleDeleteUserKey(request, env, keyDel[1]);
       }
+
+      // ── Mode géré / BYOK par app publique (P7, user JWT) ──────
+      if (path === '/api/app-mode' && method === 'GET')  return handleGetAppMode(request, env);
+      if (path === '/api/app-mode' && method === 'POST') return handleSetAppMode(request, env);
 
       // ── Messagerie ───────────────────────────────────────────
       if (path === '/api/messages'                   && method === 'GET')    return handleMsgListPublic(request, env);

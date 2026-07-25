@@ -23,9 +23,7 @@
 | 2. Prix conversation > coût réel | ✅ validé P0 §9.2 (0,6-0,8 ¢ chargé < 0,8-0,9 ¢ vendu) |
 | 3. La voix débite des conversations | ✅ P2 (angle mort `/api/kora/stt` bouché) + découverte que Smart Agent public utilise `SpeechRecognition` + Piper WASM → **coût Cloudflare NUL** |
 
-**⚠️ MAIS la pièce qui permettrait d'en profiter n'existe pas** : `MODE`, `PUBLIC_SURFACE_APPS` et `isPublicSurfaceApp()` sont déclarés dans `app/lib/pricing.js` depuis P1 et **utilisés NULLE PART** (vérifié par grep le 25/07). Du code mort qui attendait ce moment. Sans sélecteur géré/BYOK par app publique, on vend Smart Agent 99 € **sans pouvoir dire qui paie l'IA** — et le scénario « une dizaine d'agents à fond » du §2 reste ouvert.
-
-**→ C'est le dernier reste STRUCTUREL du chantier.** Décision préalable qui appartient à Stéphane : le mode se choisit-il **à l'achat** (irréversible sans repasser par le support) ou **à tout moment depuis les réglages de l'app** ? Le reste (§ ci-dessous) est du confort ou de l'exécution.
+**→ Le sélecteur a été construit le 25/07 au soir : cf. Sprint P7 §6.** Décisions prises : mode **réversible à tout moment** depuis les réglages de l'app, **défaut = géré**. Le code n'est plus mort.
 
 ### Reste à faire (par ordre de valeur)
 1. **Plafonner les conversations** — 🟡 **ARMÉ SUR LA LICENCE TÉMOIN (2026-07-25), pas sur les autres.**
@@ -61,6 +59,7 @@
 - **MAX et ADMIN ouvrent tout le catalogue** côté serveur (garde-fou legacy). Une licence témoin en MAX ne teste rien → utiliser **PRO**.
 - **Stéphane ne voit pas ses propres restrictions** (il est ADMIN, son 2e compte est MAX). Tester avec une licence dédiée.
 - Le contrôle serveur est **fail-open** : panne D1 → on laisse passer. Volontaire.
+- **« MAX » n'est PAS un palier commercial, c'est une étiquette technique** posée par `technicalPlanFor()` sur tout achat OS. Tout test `plan === 'MAX'` placé AVANT la lecture du sac rend le client OS illimité (corrigé en P7 dans `quotaForEntitlements`) — la même faute peut se refaire ailleurs.
 - **Le quota affiché doit être résolu comme au débit.** Toute route qui appelle `creditsPayload()` sans passer `quotaOverride` retombe silencieusement sur l'ancien palier du **plan technique** (PRO = 1 000) au lieu du **sac d'apps**. C'était le bug de `/api/ghostwriter/quota`. Le plan technique n'est plus un palier commercial : ne jamais l'afficher au client.
 
 ---
@@ -313,6 +312,37 @@ Une licence 100 % gratuite ne déclenche donc **strictement aucun coût**, ce qu
 - **Dépend de** : tout.
 - **Risque** : élevé (moment de vérité) → fenêtre calme, rollback flag prêt.
 - **DoD** : un achat réel bout-en-bout fonctionne ; les 3 clients de septembre peuvent souscrire.
+
+### Sprint P7 — Sélecteur de mode géré / BYOK — 🟢 CODE FAIT (2026-07-25), NON DÉPLOYÉ
+
+**Les 2 décisions de Stéphane (25/07)** : le mode se change **à tout moment** depuis les réglages de l'app · **défaut = géré**. Sans danger : le prix est le MÊME dans les deux modes (99 €), seul l'inclus diffère — il n'y a rien à arbitrer, donc rien à verrouiller.
+
+**Ce que le sprint a VRAIMENT trouvé** : la plomberie BYOK des 2 surfaces publiques existait déjà et marchait (coffre de clés chiffré, `resolveEngineForTenant`, chat public et Concierge câblés, débit de conversations sauté en BYOK). Le mode n'était donc pas absent — il était **deviné** : « le drapeau global `BYOK_ROUTING` est ON *et* ce tenant a déposé une clé ». Deux défauts : c'était global au tenant (une clé basculait aussi Sentinel), et rien ne le disait au client. Le sprint ne câble pas BYOK, il **remplace l'arbitre**.
+
+**Livré :**
+- **`workers/src/lib/app-mode.js`** (NOUVEAU) — la doctrine + `decideMode()` pure · table auto-créée `tenant_app_mode` (zéro migration, patron de `routes/keys.js`) · `resolveEngineForApp()` = arbitre unique des surfaces publiques.
+- **`workers/src/routes/app-mode.js`** (NOUVEAU) — `GET/POST /api/app-mode`. Tenant tiré du JWT, jamais du body.
+- **`app/lib/app-mode-panel.js`** (NOUVEAU) — panneau « Qui paie l'IA », autonome et partagé par les deux apps (un écran qui parle d'argent ne se recopie pas). Monté dans les Réglages de Smart Agent et sous la bibliothèque de Smart QR (**seulement si le tenant a au moins un QR Concierge** — sinon la question n'a pas lieu d'être).
+- **`scripts/test-app-mode.mjs`** (NOUVEAU) — **47 tests**, dans `npm test` (+ `npm run test:app-mode`). `_design-lab/app-mode-harness.html` montre les 5 états réels.
+
+**🔴 Les deux trous trouvés et bouchés — c'est le vrai contenu du sprint :**
+
+1. **Le repli silencieux.** Le chat public et le Concierge appellent le vendor avec `fallbackOnError: true` : clé morte ⇒ le visiteur était resservi sur MON Mistral. Or le débit avait déjà été sauté en amont (`if (!useByok) consumeCredits`) → **un client BYOK à la clé expirée était servi gratuitement, indéfiniment, sans trace.** Désormais le repli marque la ligne **DÉGRADÉE** : les appels suivants repassent en géré (donc comptés), le propriétaire reçoit un e-mail (une seule fois — `markDegraded` est idempotent par `WHERE degraded_at IS NULL`). Le premier appel raté passe gratuit : on ne l'apprend qu'en appelant. La sortie de dégradation est **explicite** (re-déclarer BYOK) — ré-essayer tout seul, c'est re-tomber dans la fuite à chaque appel.
+
+2. **⚠️ Le client OS à 129 € était ILLIMITÉ.** `technicalPlanFor(['OS'])` renvoie `MAX`, et `quotaForEntitlements()` testait `plan === 'MAX'` → `null` = illimité **avant même de regarder le sac**. « MAX » n'est plus un palier qu'on achète : c'est l'étiquette technique collée à tout achat OS. Donc le client le plus cher, avec Smart Agent public en mode géré par défaut, n'avait **aucun plafond** — le scénario « une dizaine d'agents à fond » du §2, ouvert en grand. Corrigé : **le sac tranche avant le plan** (sentinelle `'OS'` ⇒ 3 000). Le `null` de MAX ne sert plus qu'au vrai legacy (MAX *sans* sac).
+
+**Le défaut « géré » n'est sûr que si le mur existe** — et `enforce_ai_credits_v1` n'était **jamais** posé à la création d'une licence, seulement à la main dans l'admin : toute licence vendue naissait à 0 = illimitée. Il s'arme désormais **au provisionnement** (`needsCreditWall()` appelé par le webhook Stripe, insertion ET mise à jour du sac), et ne redescend jamais (`CASE WHEN ? = 1 THEN 1 ELSE …`).
+
+**Constat de terrain** : aucune des 5 licences en base ne justifiait un armement manuel — la seule qui possède une app publique (`A-COM-001`) est la licence **ADMIN**, dont le quota est `null` par conception. Le risque n'existe donc qu'à partir de la **première vente réelle** de Smart Agent ou Smart QR ; c'est exactement ce que l'armement au provisionnement couvre.
+
+**⚠️ Tout ceci est INERTE en prod tant que `BYOK_ROUTING` reste `off`** (vérifié au build : `BYOK_ROUTING: "off"`, `PRICING_V2: "on"`). Conséquence assumée : le drapeau global redevient un **interrupteur de secours**, le mode est l'arbitre métier. Et l'écran ne ment pas — quand le routage est coupé, l'option « ma clé » n'est pas proposée (`byok_blocker: 'routing_disabled'`) plutôt que d'afficher une promesse que rien n'honore.
+
+**Reste :**
+- **Déployer** (worker + front, SW déjà bumpé à `v5.28.402`).
+- **Supprimer la ligne `ai_usage` semée** — la commande a été refusée par le garde-fou local, à passer à la main :
+  `npx wrangler d1 execute keystone-os --remote --command "DELETE FROM ai_usage WHERE bucket_key='fe75db11f02b9a1905c1b2eebe5d22cc890ac7462246574dc0ad70c258e1f69e' AND month='2026-07' AND tool='ghostwriter'"`
+- **Décider du flip `BYOK_ROUTING`** — c'est lui qui rend le mode BYOK réellement offert (déjà en attente depuis le chantier BYOK).
+- Jamais testé en réel : la **dégradation** (il faut une vraie clé qui meurt) et l'e-mail associé.
 
 ---
 

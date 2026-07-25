@@ -661,7 +661,21 @@ function _renderLibrary(panel) {
     body = `<div class="sdqr-qr-grid">${qrs.map(_qrCardHtml).join('')}</div>`;
   }
 
-  content.innerHTML = head + body;
+  // P7 — « Qui paie l'IA » du Concierge. Affiché SEULEMENT si le tenant a
+  // au moins un QR Concierge : un client qui n'a que des QR de redirection
+  // ne consomme aucune IA, la question n'a pas à lui être posée.
+  // Le test porte sur TOUS les QR (`_cachedQrs`), pas sur ceux que le filtre
+  // laisse voir — sinon une recherche ferait disparaître un réglage de compte.
+  const hasConcierge = _cachedQrs.some(q => q.template_id === 'concierge');
+  content.innerHTML = head + body + (hasConcierge ? '<div data-ks-mode style="max-width:760px;margin:22px auto 0"></div>' : '');
+  if (hasConcierge) {
+    const slot = content.querySelector('[data-ks-mode]');
+    import('./lib/app-mode-panel.js')
+      .then(m => m.mountModePanel(slot, 'A-COM-001', {
+        scopeNote: 'Ce choix vaut pour tous vos QR Concierge.',
+      }))
+      .catch(() => { /* la bibliothèque ne doit pas en dépendre */ });
+  }
 
   // — Bascule Grille / Tableau —
   content.querySelectorAll('[data-libview]').forEach(b => b.addEventListener('click', () => {

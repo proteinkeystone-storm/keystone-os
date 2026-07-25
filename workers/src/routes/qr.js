@@ -29,10 +29,14 @@ import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage, estimateTokens } from '../lib/ai-budget.js';
 import { isEnforceEnabled, resolvePlanByHmac, consumeCredits, quotaForPlan } from '../lib/ai-credits.js';
 import { audit } from '../lib/audit.js';
-// BYOK universel (chantier streaming) : moteur + clé du PROPRIÉTAIRE du QR,
-// résolus serveur depuis le coffre chiffré (flag BYOK_ROUTING tranche).
-import { resolveEngineForTenant } from '../lib/llm-router.js';
 import { streamLLM } from '../lib/llm-stream.js';
+// P7 — « qui paie l'IA » sur le Concierge : déclaré par le propriétaire,
+// plus deviné à la présence d'une clé (cf. lib/app-mode.js).
+import { resolveEngineForApp, degradeAndWarn } from '../lib/app-mode.js';
+
+// Identifiant catalogue de Smart Dynamic QR (le Concierge en est la
+// surface publique — c'est sous cette clé que le mode est déclaré).
+const QR_APP_ID = 'A-COM-001';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -2002,12 +2006,12 @@ export async function handleSmartQrConcierge(request, env) {
   // ── BYOK universel : moteur + clé du PROPRIÉTAIRE du QR ───────────
   // Surface PUBLIQUE (visiteur anonyme) : la clé est celle du proprio,
   // résolue serveur depuis le coffre chiffré (comme le chat public Smart
-  // Agent). resolveEngineForTenant est GATÉ par BYOK_ROUTING : flag OFF →
-  // null en 1re ligne (zéro requête DB) → concierge Mistral INCHANGÉ.
-  // Si byok ⇒ le proprio paie son vendor : on NE bride PAS sur MON budget
-  // et on NE décompte PAS ses crédits (repli Mistral plus bas si le vendor
-  // échoue — jamais casser le visiteur).
-  const byok = ownerKey ? await resolveEngineForTenant(env, ownerKey) : null;
+  // Agent). Si byok ⇒ le proprio paie son vendor : on NE bride PAS sur MON
+  // budget et on NE décompte PAS ses conversations.
+  // P7 — l'arbitre est désormais le mode DÉCLARÉ sur Smart QR, plus la
+  // simple présence d'une clé. Défaut MANAGED ⇒ null ⇒ Mistral et débit
+  // normal. BYOK_ROUTING reste le secours (OFF ⇒ null ⇒ inchangé).
+  const byok = ownerKey ? await resolveEngineForApp(env, ownerKey, QR_APP_ID) : null;
 
   // Garde-fou budget IA global (admin) — endpoint public = protège le wallet.
   // Skippé si byok (aucun neurone Workers AI consommé tant que le vendor tient).
@@ -2117,6 +2121,15 @@ export async function handleSmartQrConcierge(request, env) {
             // sinon (partiel déjà streamé) → on garde, pas de re-stream.
             viaByok = !!fullText;
           }
+        }
+
+        // P7 — le repli d'un BYOK déclaré n'est plus silencieux : la ligne
+        // passe en dégradé (⇒ les questions suivantes sont comptées comme
+        // en mode géré) et le propriétaire est prévenu une fois. Sans ça,
+        // une clé morte = Concierge servi gratuitement à ma charge, sans
+        // fin et sans trace. Celle-ci passe : on ne l'apprend qu'en appelant.
+        if (byok && !viaByok) {
+          await degradeAndWarn(env, ownerKey, QR_APP_ID, 'vendor_error');
         }
 
         // ── Repli / défaut : Mistral sur Workers AI (chemin INCHANGÉ) ──

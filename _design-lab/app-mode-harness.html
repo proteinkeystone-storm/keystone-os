@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Harnais — Qui paie l'IA (P7)</title>
+<style>
+  :root{--border:rgba(128,128,128,.25);--accent:#0a84ff;color-scheme:light dark}
+  body{font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:28px;
+    background:#fff;color:#111;letter-spacing:-.01em}
+  @media(prefers-color-scheme:dark){body{background:#0d0f13;color:#f2f4f8}}
+  h1{font-weight:900;letter-spacing:-.02em;font-size:22px;margin:0 0 4px}
+  .lede{opacity:.65;font-size:13.5px;margin:0 0 26px;max-width:70ch}
+  .case{margin:0 0 30px;max-width:780px}
+  .case > h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;opacity:.55;font-weight:700;margin:0 0 8px}
+</style>
+</head>
+<body>
+<h1>Qui paie l'IA — les cinq états</h1>
+<p class="lede">Le panneau <code>app/lib/app-mode-panel.js</code> rendu hors application, avec un
+<code>fetch</code> simulé. Sert à vérifier ce que le client LIT dans chaque situation — en particulier
+qu'aucun état ne lui promet du BYOK qui ne tourne pas.</p>
+
+<div class="case"><h2>1. Défaut — géré, aucune clé déposée</h2><div id="c1"></div></div>
+<div class="case"><h2>2. Routage BYOK globalement coupé (l'état RÉEL en prod aujourd'hui)</h2><div id="c2"></div></div>
+<div class="case"><h2>3. Clé déposée, BYOK disponible mais non choisi</h2><div id="c3"></div></div>
+<div class="case"><h2>4. BYOK actif</h2><div id="c4"></div></div>
+<div class="case"><h2>5. BYOK dégradé — la clé a lâché, on est retombé en géré</h2><div id="c5"></div></div>
+
+<script type="module">
+// ── Stubs : le panneau ne doit dépendre que de son contrat serveur ──
+localStorage.setItem('ks_jwt', 'harness');
+const STATES = {
+  c1: { app:'O-AGT-001', mode:'MANAGED', declared:'MANAGED', degraded:false,
+        byok_available:false, byok_blocker:'no_key', active_engine:null, engines_with_key:[] },
+  c2: { app:'O-AGT-001', mode:'MANAGED', declared:'MANAGED', degraded:false,
+        byok_available:false, byok_blocker:'routing_disabled', active_engine:'claude', engines_with_key:['claude'] },
+  c3: { app:'O-AGT-001', mode:'MANAGED', declared:'MANAGED', degraded:false,
+        byok_available:true, byok_blocker:null, active_engine:'claude', engines_with_key:['claude'] },
+  c4: { app:'O-AGT-001', mode:'BYOK', declared:'BYOK', degraded:false,
+        byok_available:true, byok_blocker:null, active_engine:'claude', engines_with_key:['claude'] },
+  c5: { app:'O-AGT-001', mode:'MANAGED', declared:'BYOK', degraded:true,
+        degraded_at:'2026-07-25 21:40:00', degraded_reason:'vendor_error',
+        byok_available:true, byok_blocker:null, active_engine:'claude', engines_with_key:['claude'] },
+};
+let _which = 'c1';
+window.fetch = async (url, opts) => {
+  // POST = changement de mode : on répond OK sans rien changer (harnais).
+  if (opts?.method === 'POST') return { ok:true, json: async () => ({ ok:true }) };
+  return { ok:true, json: async () => STATES[_which] };
+};
+
+// Cache-buster OBLIGATOIRE : sans lui, le navigateur ressert le module de
+// la visite précédente et on relit une version périmée en croyant tester
+// la nouvelle (piège déjà payé sur le harnais Key Brand).
+const { mountModePanel } = await import('../app/lib/app-mode-panel.js?v=' + Date.now());
+for (const id of Object.keys(STATES)) {
+  _which = id;
+  mountModePanel(document.getElementById(id), 'O-AGT-001', {
+    scopeNote: 'Ce choix vaut pour tous vos agents publiés.',
+  });
+  await new Promise(r => setTimeout(r, 30));   // laisse le fetch simulé se résoudre
+}
+</script>
+</body>
+</html>

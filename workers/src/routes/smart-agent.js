@@ -57,11 +57,16 @@ import { requireJWT }                              from '../lib/jwt.js';
 import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } from '../lib/ai-credits.js';
 import { budgetGuard, recordUsage }               from '../lib/ai-budget.js';
-import { callLLM, byokRoutingEnabled, resolveEngineForTenant } from '../lib/llm-router.js';
+import { callLLM, byokRoutingEnabled } from '../lib/llm-router.js';
+import { resolveEngineForApp, degradeAndWarn } from '../lib/app-mode.js';
 import { streamLLM }                               from '../lib/llm-stream.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
 const SA_ENGINE_VERSION = 'SA-15.4';
+
+// Identifiant catalogue de Smart Agent — c'est sous cette clé que le
+// propriétaire déclare « qui paie l'IA » (cf. lib/app-mode.js).
+const SA_APP_ID = 'O-AGT-001';
 
 // ── Gabarits des 7 types de fiches ─────────────────────────────
 // fields : ordre de validation ET d'aplat body_text. required = champ
@@ -1764,9 +1769,14 @@ function _byokFromBody(b) {
     apiKey: (typeof b?.apiKey === 'string' && b.apiKey.length > 10) ? b.apiKey : null,
   };
 }
-async function _agentLLM(env, { engine, apiKey, system, messages, max_tokens, temperature, fallbackOnError = false }) {
+// `onVendorFail` (P7) : le vendor du client a lâché et `fallbackOnError` a
+// silencieusement resservi Mistral. Sans ce signal, l'appelant croit encore
+// tourner en BYOK — donc ne débite rien : la surface publique était servie
+// gratuitement à ma charge, invisiblement (cf. lib/app-mode.js).
+async function _agentLLM(env, { engine, apiKey, system, messages, max_tokens, temperature, fallbackOnError = false, onVendorFail = null }) {
   if (_agentUseByok(env, engine, apiKey)) {
     const out = await callLLM(env, { engine, apiKey, system, messages, max_tokens, fallbackOnError });
+    if (onVendorFail && out.viaBYOK !== true) { try { await onVendorFail(); } catch (_) { /* best-effort */ } }
     return out.text || '';
   }
   const msgs = system ? [{ role: 'system', content: system }, ...messages] : messages;
@@ -1885,13 +1895,15 @@ export async function streamMistralReply(env, { system, messages, max_tokens, te
 // AVANT le 1er chunk, repli Mistral transparent ; owner ⇒ on remonte
 // l'erreur. Coupure APRÈS le 1er chunk : streamLLM rend le partiel (jamais
 // de re-stream = zéro doublon, cf. contrat llm-stream.js).
-async function _streamAgentReply(env, { engine, apiKey, system, messages, max_tokens, temperature, fallbackOnError = false, onChunk }) {
+async function _streamAgentReply(env, { engine, apiKey, system, messages, max_tokens, temperature, fallbackOnError = false, onChunk, onVendorFail = null }) {
   if (_agentUseByok(env, engine, apiKey)) {
     try {
       return await streamLLM(env, { engine, apiKey, system, messages, max_tokens, onChunk });
     } catch (e) {
       if (!fallbackOnError) throw e;   // owner : « clé X invalide » remontée
       // public : rien d'émis (throw = pré-1er-chunk) → repli Mistral.
+      // P7 — et on le DIT (sinon repli gratuit invisible, cf. _agentLLM).
+      if (onVendorFail) { try { await onVendorFail(e?.message); } catch (_) { /* best-effort */ } }
     }
   }
   return await streamMistralReply(env, { system, messages, max_tokens, temperature, onChunk });
@@ -4079,10 +4091,21 @@ export async function handlePublicAgentChat(request, env, slug) {
   }));
 
   // BYOK (D1/D6) : le chat PUBLIC tourne sur la clé du PROPRIÉTAIRE (coffre
-  // serveur per-tenant), résolue depuis SON tenant. flag OFF ⇒ null ⇒ Mistral
-  // (chat public INCHANGÉ). La clé n'est jamais exposée au visiteur.
-  const byok = await resolveEngineForTenant(env, tenant);
+  // serveur per-tenant), résolue depuis SON tenant. La clé n'est jamais
+  // exposée au visiteur.
+  // P7 — l'arbitre n'est plus « ce tenant a-t-il une clé ? » mais « a-t-il
+  // DÉCLARÉ BYOK sur Smart Agent ? ». Défaut MANAGED ⇒ null ⇒ Mistral, et la
+  // conversation est comptée. Le drapeau BYOK_ROUTING reste le secours
+  // (OFF ⇒ null en 1re ligne ⇒ chat public strictement inchangé).
+  const byok = await resolveEngineForApp(env, tenant, SA_APP_ID);
   const useByok = !!byok;
+  // Le vendor a lâché ⇒ ligne dégradée : les appels SUIVANTS repassent en
+  // géré (donc comptés) au lieu d'être resservis gratuitement sur mon
+  // Mistral. Le propriétaire est prévenu une seule fois (markDegraded est
+  // idempotent). Celui-ci passe gratuit — on ne l'apprend qu'en appelant.
+  const _onVendorFail = async (why) => {
+    await degradeAndWarn(env, tenant, SA_APP_ID, why || 'vendor_error');
+  };
   // SA-10.0 — streaming opt-in (le front l'active en SA-10.1). Absent ⇒ JSON.
   const wantStream = b?.stream === true;
   // SA-11.0 — langue de réponse : demandée par le visiteur, sinon langue native
@@ -4229,6 +4252,7 @@ export async function handlePublicAgentChat(request, env, slug) {
             system: sysMsg?.content, messages: convMsgs, max_tokens: CHAT_MAX_TOKENS,
             temperature: CHAT_TEMPERATURE,
             fallbackOnError: true, onChunk: (t) => emit.push(t),
+            onVendorFail: _onVendorFail,   // P7 — repli = dégradation, pas silence
           });
         } catch (e) {
           await _refund();
@@ -4255,6 +4279,7 @@ export async function handlePublicAgentChat(request, env, slug) {
       system: sysMsg?.content, messages: convMsgs, max_tokens: CHAT_MAX_TOKENS,
       temperature: CHAT_TEMPERATURE,
       fallbackOnError: true,
+      onVendorFail: _onVendorFail,   // P7 — repli = dégradation, pas silence
     })).trim();
     if (!raw) { await _refund(); return err('Réponse indisponible — réessayez.', 502, origin); }
 

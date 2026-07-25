@@ -648,6 +648,21 @@ function _renderMain() {
     }
     if (_cur.tab === 'tester') _scrollChatBottom();
     else main.scrollTop = 0;
+    _mountModeBlock(main);
+}
+
+// P7 — « Qui paie l'IA » : composant autonome, remonté après chaque rendu
+// (le conteneur est recréé à chaque fois). `mountModePanel` est idempotent
+// et sert son état en cache — aucun clignotement, aucun aller-retour en
+// trop. Le réglage vaut pour Smart Agent ENTIER, pas pour l'agent affiché.
+function _mountModeBlock(main) {
+    const slot = main?.querySelector('[data-ks-mode]');
+    if (!slot) return;
+    import('./lib/app-mode-panel.js')
+        .then(m => m.mountModePanel(slot, 'O-AGT-001', {
+            scopeNote: 'Ce choix vaut pour tous vos agents publiés.',
+        }))
+        .catch(() => { /* le reste de l'écran ne doit pas en dépendre */ });
 }
 
 // SA-8.3 — re-render SANS perdre la position de lecture. _renderMain remet
@@ -1136,6 +1151,7 @@ function _publishHTML() {
           <input class="sa-input" type="date" data-pub="expire" value="${_escAttr(exp)}"></label>
         <button class="sa-btn is-primary" data-act="pub-save" ${p.busy ? 'disabled' : ''}>${icon('save', 15)} Mettre à jour</button>
       </details>
+      <div data-ks-mode></div>
     </div>`;
 }
 

@@ -21,6 +21,7 @@ import { blindIndex, hashKey }              from '../lib/kdf.js';
 import { sendEmail, tplWelcomeKey }         from '../lib/email-resend.js';
 import { addPackCredits }                   from '../lib/ai-credits.js';
 import { ensureAutoReloadSchema }           from '../lib/auto-reload.js';
+import { needsCreditWall }                  from '../lib/app-mode.js';
 
 import {
   resolveAppFromPrice, resolveLegacyPlanFromPrice, resolvePackConversations,
@@ -76,10 +77,33 @@ async function _readOwnedAssets(env, lookupHmac) {
   } catch (_) { return null; }
 }
 
+/**
+ * Écrit le sac d'apps — et arme au passage le mur des conversations
+ * quand ce sac contient une app publique (P7, `needsCreditWall`).
+ *
+ * Une app à SURFACE PUBLIQUE (Smart Agent, Concierge de Smart QR) part
+ * par défaut en mode « clé en main » : c'est MOI qui fournis l'IA, et
+ * son volume suit le trafic d'un TIERS. Le seul garde-fou est alors le
+ * plafond mensuel de conversations — s'il n'est pas armé, le défaut
+ * « clé en main » ne veut pas dire « 1 000 conversations puis recharge
+ * plafonnée », il veut dire **illimité, gratuit, à ma charge**.
+ *
+ * Or `enforce_ai_credits_v1` n'était posé QUE à la main dans l'admin :
+ * toute licence vendue naissait à 0. On l'arme donc au provisionnement,
+ * là où la décision est prise, plutôt que de compter sur un geste
+ * manuel au bon moment.
+ *
+ * On ne l'abaisse JAMAIS (voir le CASE) : retirer un plafond en silence
+ * serait la mauvaise moitié de la symétrie.
+ */
 async function _writeOwnedAssets(env, lookupHmac, bag) {
-  await env.DB.prepare(
-    "UPDATE licences SET plan = ?, owned_assets = ?, is_active = 1, updated_at = datetime('now') WHERE lookup_hmac = ?"
-  ).bind(technicalPlanFor(bag), JSON.stringify(bag), lookupHmac).run();
+  await env.DB.prepare(`
+    UPDATE licences
+       SET plan = ?, owned_assets = ?, is_active = 1,
+           enforce_ai_credits_v1 = CASE WHEN ? = 1 THEN 1 ELSE enforce_ai_credits_v1 END,
+           updated_at = datetime('now')
+     WHERE lookup_hmac = ?`
+  ).bind(technicalPlanFor(bag), JSON.stringify(bag), needsCreditWall(bag) ? 1 : 0, lookupHmac).run();
 }
 
 // URL du tunnel d'activation côté front (domaine officiel)
@@ -389,11 +413,12 @@ async function _handleCheckoutCompleted(env, event) {
       INSERT INTO licences (
         key, tenant_id, owner, plan, is_active, owned_assets, customer_email,
         stripe_customer_id, stripe_subscription_id,
-        lookup_hmac, key_hash, salt, created_at
-      ) VALUES (?, 'default', ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        lookup_hmac, key_hash, salt, enforce_ai_credits_v1, created_at
+      ) VALUES (?, 'default', ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `).bind(
       newKey, customerEmail.split('@')[0], technicalPlanFor(bag), JSON.stringify(bag),
       customerEmail, customerId, subId, newHmac, kh.hash, kh.salt,
+      needsCreditWall(bag) ? 1 : 0,   // P7 — app publique ⇒ mur armé dès la 1re seconde
     ).run();
     await env.DB.prepare(`
       INSERT OR REPLACE INTO licence_subscriptions (subscription_id, lookup_hmac, app_id, status, updated_at)
