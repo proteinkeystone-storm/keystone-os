@@ -160,7 +160,7 @@ function _quotaPlan() {
 // Affichage textuel court pour les chips UI. Tolérant aux états
 // indéterminés (null/Infinity) pour éviter d'afficher "0/null".
 function _quotaLabel() {
-    if (_quotaCache.unlimited) return '∞ / jour (ADMIN)';
+    if (_quotaCache.unlimited) return '∞ (accès illimité)';
     if (_quotaCache.fetchedAt === 0) return '—/— appels';
     const r = _quotaCache.remaining;
     const m = _quotaCache.max;
@@ -1274,6 +1274,14 @@ export function getGhostwriterQuotaMessage() { return _quotaExhaustedMessage(); 
  * Plan courant ('DEMO' | 'STARTER' | 'PRO' | 'MAX' | 'ADMIN' | null).
  */
 export function getGhostwriterPlan() { return _quotaPlan(); }
+
+/**
+ * Période réelle du compteur : 'month' = portefeuille de conversations
+ * (modèle par application), 'day' = ancien quota journalier.
+ * Les chips DOIVENT s'en servir : afficher « / jour » sur un compteur
+ * mensuel promet un reset à minuit qui n'arrivera pas.
+ */
+export function getGhostwriterQuotaPeriod() { return _quotaCache.period || 'day'; }
 
 /**
  * Force un refresh du cache quota depuis le serveur.

@@ -32,6 +32,7 @@ import {
   getGhostwriterQuotaRemaining,
   getGhostwriterQuotaMax,
   getGhostwriterPlan,
+  getGhostwriterQuotaPeriod,
 } from '../ghostwriter.js';
 
 const CSS_INJECTED_FLAG = '__ks_gw_inline_css_injected__';
@@ -200,8 +201,11 @@ function _quotaChip() {
   const r = getGhostwriterQuotaRemaining();
   const m = getGhostwriterQuotaMax();
   const p = getGhostwriterPlan();
-  if (r === Infinity) return '∞ / jour · ADMIN';
+  if (r === Infinity) return '∞ · accès illimité';
   if (r == null || m == null) return '';
+  // cf. _formatQuotaChip (ghostwriter-studio) : compteur mensuel ⇒ ni
+  // « aujourd'hui », ni le plan technique.
+  if (getGhostwriterQuotaPeriod() === 'month') return `${r}/${m} conversations · ce mois`;
   return `${r}/${m} aujourd'hui${p ? ` · ${p}` : ''}`;
 }
 
