@@ -641,7 +641,7 @@ function showCreateLicenceModal(panel) {
         <label class="form-label">Plan <span style="font-weight:400;text-transform:none">(technique — pilote le nb d'appareils)</span></label>
         <select class="form-select" id="m-plan"><option>STARTER</option><option>PRO</option><option>MAX</option></select>
       </div>
-      ${_appPickerHTML('m', null)}
+      ${_appPickerHTML('m', null, true)}
       <div class="form-group">
         <label class="form-label">Expiration <span style="font-weight:400;text-transform:none">(optionnel)</span></label>
         <input type="date" class="form-input" id="m-expires">
@@ -718,17 +718,23 @@ function _appTitle(id) {
   return t?.title || id;
 }
 
-function _accessModeFor(assets) {
+// `nouvelle` = licence en cours de CRÉATION. Le défaut y est
+// « Applications sélectionnées », jamais « Non défini » : ce dernier
+// vaut owned_assets = null, c'est-à-dire TOUT LE CATALOGUE OUVERT.
+// Créer un client et oublier de cocher lui offrirait les 14 applications.
+// Un défaut permissif sur un écran d'administration finit toujours par
+// être accepté sans être lu.
+function _accessModeFor(assets, nouvelle = false) {
   const list = Array.isArray(assets)
     ? assets
     : (typeof assets === 'string' && assets.trim() ? assets.split(',').map(s => s.trim()).filter(Boolean) : null);
-  if (list === null)                     return { mode: 'legacy', ids: [] };
+  if (list === null)                     return { mode: nouvelle ? 'apps' : 'legacy', ids: [] };
   if (list.includes(OS_ENTITLEMENT))     return { mode: 'os',     ids: [] };
   return { mode: 'apps', ids: list };
 }
 
-function _appPickerHTML(p, assets) {
-  const { mode, ids } = _accessModeFor(assets);
+function _appPickerHTML(p, assets, nouvelle = false) {
+  const { mode, ids } = _accessModeFor(assets, nouvelle);
   const groups = [TIER.FREE, TIER.ESSENTIEL, TIER.PRO, TIER.DEPLOIEMENT].map(tierId => {
     const tier  = TIERS[tierId];
     const apps  = appsForTier(tierId);
@@ -755,8 +761,11 @@ function _appPickerHTML(p, assets) {
       <select class="form-select" id="${p}-access">
         <option value="os"     ${mode === 'os'     ? 'selected' : ''}>OS complet — toutes les applications</option>
         <option value="apps"   ${mode === 'apps'   ? 'selected' : ''}>Applications sélectionnées</option>
-        <option value="legacy" ${mode === 'legacy' ? 'selected' : ''}>Non défini (hérite du plan — historique)</option>
+        <option value="legacy" ${mode === 'legacy' ? 'selected' : ''}>Non défini — OUVRE TOUT LE CATALOGUE</option>
       </select>
+      <div id="${p}-access-warn" style="display:${mode === 'legacy' ? 'block' : 'none'};margin-top:7px;padding:8px 10px;border-radius:8px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);color:#f59e0b;font-size:12px;line-height:1.5">
+        Cette licence ouvrira <strong>les 14 applications</strong>. À ne garder que pour les licences historiques et les comptes internes.
+      </div>
     </div>
     <div class="form-group form-full" id="${p}-apps-wrap" style="${mode === 'apps' ? '' : 'display:none'}">
       <label class="form-label">Applications possédées</label>
@@ -768,8 +777,10 @@ function _wireAppPicker(p) {
   const sel  = document.getElementById(`${p}-access`);
   const wrap = document.getElementById(`${p}-apps-wrap`);
   if (!sel || !wrap) return;
+  const warn = document.getElementById(`${p}-access-warn`);
   sel.addEventListener('change', () => {
     wrap.style.display = sel.value === 'apps' ? '' : 'none';
+    if (warn) warn.style.display = sel.value === 'legacy' ? 'block' : 'none';
   });
 }
 
