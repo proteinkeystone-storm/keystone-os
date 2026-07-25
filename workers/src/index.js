@@ -47,6 +47,10 @@ import { handleProxyLLM }                                               from './
 import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './routes/ghostwriter.js';
 import { handleKoraChat, handleKoraStt }                                from './routes/kora.js';
 import { handleAiCreditsQuota }                                         from './routes/ai-credits.js';
+import {
+  handleAutoReloadGet, handleAutoReloadSave,
+  handleAutoReloadSetup, handleAutoReloadResume,
+}                                                                       from './routes/auto-reload.js';
 import { handleBrainstormingAgentRespond, handleBrainstormingSynthesize, handleBrainstormingPostIdeas, handleBrainstormingPickRoster } from './routes/brainstorming.js';
 import { handleFetchSource } from './routes/content-source.js';
 import { handleAiGenerate }                                              from './routes/ai-generate.js';
@@ -699,6 +703,15 @@ export default {
       if (path === '/api/ai-credits/quota' && method === 'GET') {
         return handleAiCreditsQuota(request, env);
       }
+
+      // ── Recharge automatique (Sprint P3) ──────────────────────
+      // AUCUNE de ces routes ne débite : /setup ouvre une session
+      // Stripe `mode:'setup'` qui mémorise une carte pour plus tard.
+      // Le prélèvement, lui, vient du balayage cron. Cf. lib/auto-reload.js
+      if (path === '/api/ai-credits/auto-reload' && method === 'GET')  return handleAutoReloadGet(request, env);
+      if (path === '/api/ai-credits/auto-reload' && method === 'POST') return handleAutoReloadSave(request, env);
+      if (path === '/api/ai-credits/auto-reload/setup'  && (method === 'POST' || method === 'OPTIONS')) return handleAutoReloadSetup(request, env);
+      if (path === '/api/ai-credits/auto-reload/resume' && method === 'POST') return handleAutoReloadResume(request, env);
 
       // ── AI War Room (Brainstorming V2) — Sprint 1 ─────────────
       // POST stream SSE de la réponse d'un agent du boardroom IA.

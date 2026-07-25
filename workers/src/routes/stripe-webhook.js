@@ -20,6 +20,7 @@ import { generateLicenceKey }               from '../lib/keygen.js';
 import { blindIndex, hashKey }              from '../lib/kdf.js';
 import { sendEmail, tplWelcomeKey }         from '../lib/email-resend.js';
 import { addPackCredits }                   from '../lib/ai-credits.js';
+import { ensureAutoReloadSchema }           from '../lib/auto-reload.js';
 
 import {
   resolveAppFromPrice, resolveLegacyPlanFromPrice, resolvePackConversations,
@@ -267,11 +268,66 @@ async function _handlePackPurchase(env, session) {
   console.log('[Stripe pack]', credits, 'crédits attribués à la licence', lic.lookup_hmac);
 }
 
+/* ── P3 · fin de l'enregistrement de carte (mode:'setup') ─────────
+   La session a créé un SetupIntent ; c'est lui qui porte le moyen de
+   paiement à mémoriser. On le rattache à la licence, identifiée par
+   `client_reference_id` (posé à l'ouverture de la session).
+
+   ⚠️ Sans `payment_method` en base, `shouldReload()` refuse (verrou
+   NO_CARD) : si cette étape échoue, la recharge reste inerte plutôt que
+   de tenter un débit sans carte. On ne « répare » donc rien en urgence.
+
+   On n'ACTIVE PAS la recharge ici. Enregistrer une carte n'est pas
+   demander à être prélevé : le client garde la main sur l'interrupteur. */
+async function _handleAutoReloadSetupCompleted(env, session) {
+  const hmac = session.client_reference_id || session.metadata?.ks_licence;
+  const si   = session.setup_intent;
+  if (!hmac || !si) {
+    console.error('[P3 setup] session incomplète', session.id, 'ref=', hmac, 'si=', si);
+    return;
+  }
+  let pm = null, customer = session.customer || null;
+  try {
+    const intent = await _stripeGET(env, `/setup_intents/${encodeURIComponent(si)}`);
+    pm = intent?.payment_method || null;
+    customer = intent?.customer || customer;
+  } catch (e) {
+    console.error('[P3 setup] SetupIntent illisible :', e.message);
+    return;
+  }
+  if (!pm) { console.error('[P3 setup] aucun moyen de paiement sur', si); return; }
+
+  // Le webhook peut être le PREMIER à toucher cette table (si le client
+  // n'a jamais ouvert ses réglages) : sans ça, l'INSERT lèverait.
+  await ensureAutoReloadSchema(env);
+  await env.DB.prepare(`
+    INSERT INTO ai_auto_reload (lookup_hmac, stripe_customer, payment_method, updated_at)
+    VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(lookup_hmac) DO UPDATE SET
+      stripe_customer = ?, payment_method = ?,
+      -- Une carte fraîche lève une pause « carte refusée » : le client
+      -- vient précisément de corriger la cause.
+      paused_at = CASE WHEN paused_reason IN ('payment_failed','authentication_required','no_payment_method')
+                       THEN NULL ELSE paused_at END,
+      paused_reason = CASE WHEN paused_reason IN ('payment_failed','authentication_required','no_payment_method')
+                       THEN NULL ELSE paused_reason END,
+      updated_at = datetime('now')
+  `).bind(hmac, customer, pm, customer, pm).run();
+  console.log('[P3 setup] carte enregistrée pour la licence', hmac);
+}
+
 async function _handleCheckoutCompleted(env, event) {
   const session = event.data.object;
   // Chantier B Sprint 5 — pack de crédits = paiement UNIQUE (mode 'payment').
   if (session.mode === 'payment') {
     await _handlePackPurchase(env, session);
+    return;
+  }
+  // Sprint P3 — enregistrement de carte pour la recharge auto. Aucun
+  // argent n'a bougé : la session `mode:'setup'` a seulement mémorisé un
+  // moyen de paiement, qu'on rattache ici à la licence.
+  if (session.mode === 'setup') {
+    await _handleAutoReloadSetupCompleted(env, session);
     return;
   }
   if (session.mode !== 'subscription') return; // autres modes : ignorés
