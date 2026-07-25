@@ -1331,16 +1331,16 @@ footer {
 <section id="activate">
   <div class="section-inner">
     <div class="activate-wrap">
-      <span class="eyebrow" style="display:flex;justify-content:center">Activation</span>
-      <h2 class="title-lg" style="text-align:center;margin-top:16px">Protocole d'activation.</h2>
-      <p class="body-lg" style="text-align:center;margin-top:14px">
+      <span class="eyebrow" id="act-eyebrow" style="display:flex;justify-content:center">Activation</span>
+      <h2 class="title-lg" id="act-title" style="text-align:center;margin-top:16px">Protocole d'activation.</h2>
+      <p class="body-lg" id="act-subtitle" style="text-align:center;margin-top:14px">
         Entrez votre adresse e-mail et votre clé de licence pour accéder à votre environnement Keystone.
       </p>
       <div class="activate-card">
         <div class="activate-icon">
           <svg width="24" height="24"><use href="#ico-key"/></svg>
         </div>
-        <h3 class="title-md" style="text-align:center">Accéder à Keystone OS</h3>
+        <h3 class="title-md" id="act-card-title" style="text-align:center">Accéder à Keystone OS</h3>
         <!-- UX-3.6 : vrai <form> + autocomplete="current-password" + name="password"
              pour que le Trousseau iCloud (et 1Password / Bitwarden) reconnaisse la
              clé de licence comme un mdp à sauvegarder + auto-remplir au prochain login.
@@ -1350,7 +1350,7 @@ footer {
         <form class="activate-fields" id="act-form" onsubmit="event.preventDefault(); activateLicence(); return false;">
           <input class="act-input" type="email" id="act-email" name="username"
                  placeholder="votre@email.com" autocomplete="username">
-          <div class="act-key-wrap" style="position:relative">
+          <div class="act-key-wrap" id="act-key-wrap" style="position:relative">
             <input class="act-input mono" type="password" id="act-key" name="password"
                    placeholder="XXXX-XXXX-XXXX-XXXX" maxlength="19"
                    autocomplete="current-password" spellcheck="false"
@@ -1372,12 +1372,24 @@ footer {
           </button>
         </form>
         <p class="act-status" id="act-status"></p>
-        <!-- Palier GRATUIT (0 €) — Missive · booK · Keynapse, sans durée
-             limitée. Distinct de la démo 7 jours juste en dessous : ici on
-             crée une VRAIE licence, à sac vide, qui n'expire pas. -->
+        <!-- Palier GRATUIT (0 €) — Missive · booK · Keynapse, à vie.
+             Deux présentations selon la porte d'entrée (cf. _setFreeMode) :
+             · arrivée normale → bouton secondaire sous la connexion ;
+             · arrivée par ?free=1 → il devient le bouton PRINCIPAL, le champ
+               « clé de licence » disparaît et la page parle d'inscription.
+             Sans ça, un visiteur venu de « Commencer gratuitement » lisait
+             « entrez votre clé de licence », voyait un champ XXXX-XXXX qu'il
+             ne peut pas remplir, et le gros bouton dominant était celui qui
+             allait échouer. -->
         <button type="button" class="act-demo-btn" id="act-free-btn" onclick="startFree()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
           Créer mon accès gratuit — Missive, booK et Keynapse
+        </button>
+        <!-- Échappatoire du mode gratuit : masquée par défaut, révélée par
+             _setFreeMode() pour celui qui a déjà une clé. -->
+        <button type="button" id="act-have-key" onclick="_setFreeMode(false)"
+                style="display:none;background:transparent;border:0;color:var(--text-3);font-size:.82rem;cursor:pointer;padding:10px 4px 0;width:100%;text-decoration:underline;text-underline-offset:3px">
+          J'ai déjà une clé de licence
         </button>
 <!-- [Bouton « Activer la démo — 7 jours gratuits » SUPPRIMÉ le
              2026-07-25. Le palier gratuit le remplace : 3 applications
@@ -1556,20 +1568,84 @@ document.getElementById('act-key').addEventListener('keydown', e => {
    le formulaire ; l'entrée gratuite passe désormais par startFree(),
    qui crée une VRAIE licence à l'adresse du visiteur. ] */
 
+/* ═══════════════════════════════════════════
+   MODE INSCRIPTION GRATUITE
+   ───────────────────────────────────────────
+   Une même carte sert deux intentions opposées :
+     · SE CONNECTER  — j'ai une clé, je la saisis (défaut, inchangé) ;
+     · S'INSCRIRE    — je n'ai rien, je veux le palier gratuit.
+   Les mélanger était illisible : le visiteur venu de « Commencer
+   gratuitement » lisait « entrez votre clé de licence » alors qu'il n'en
+   a pas, butait sur un champ XXXX-XXXX-XXXX-XXXX impossible à remplir,
+   et le bouton le plus visible — « Activer l'accès » — était justement
+   celui qui allait échouer.
+
+   En mode gratuit : le champ clé disparaît, « Créer mon accès » devient
+   LE bouton, la page parle d'inscription, et Entrée déclenche la bonne
+   action. Un lien discret ramène à la connexion pour qui a déjà une clé.
+═══════════════════════════════════════════ */
+const _ACT_COPY = {
+  connexion: {
+    eyebrow:  'Activation',
+    titre:    "Protocole d'activation.",
+    sousTitre:'Entrez votre adresse e-mail et votre clé de licence pour accéder à votre environnement Keystone.',
+    carte:    'Accéder à Keystone OS',
+  },
+  gratuit: {
+    eyebrow:  'Accès gratuit',
+    titre:    'Votre accès gratuit.',
+    sousTitre:'Une adresse e-mail suffit. Missive, booK et Keynapse vous sont ouverts — sans carte bancaire, sans limite de durée.',
+    carte:    'Créer mon accès',
+  },
+};
+
+function _setFreeMode(on) {
+  const c = _ACT_COPY[on ? 'gratuit' : 'connexion'];
+  const set = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+  set('act-eyebrow',    c.eyebrow);
+  set('act-title',      c.titre);
+  set('act-subtitle',   c.sousTitre);
+  set('act-card-title', c.carte);
+
+  const keyWrap = document.getElementById('act-key-wrap');
+  const submit  = document.getElementById('act-btn');
+  const free    = document.getElementById('act-free-btn');
+  const haveKey = document.getElementById('act-have-key');
+  const status  = document.getElementById('act-status');
+
+  if (keyWrap) keyWrap.style.display = on ? 'none' : '';
+  if (submit)  submit.style.display  = on ? 'none' : '';
+  if (haveKey) haveKey.style.display = on ? '' : 'none';
+  if (status)  { status.textContent = ''; status.className = 'act-status'; }
+
+  if (free) {
+    // Le bouton gratuit prend l'apparence du bouton principal (act-btn) en
+    // mode gratuit, et redevient secondaire (act-demo-btn) en connexion.
+    free.className   = on ? 'act-btn' : 'act-demo-btn';
+    free.innerHTML   = on
+      ? 'Créer mon accès <svg width="14" height="14"><use href="#ico-arrow-r"/></svg>'
+      : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Créer mon accès gratuit — Missive, booK et Keynapse';
+  }
+
+  // Entrée dans le champ e-mail : en mode gratuit, le formulaire ne doit
+  // PAS tenter une activation avec une clé vide.
+  const form = document.getElementById('act-form');
+  if (form) form.onsubmit = (e) => {
+    e.preventDefault();
+    if (on) startFree(); else activateLicence();
+    return false;
+  };
+
+  const em = document.getElementById('act-email');
+  if (em && on) em.focus();
+}
+
 addEventListener('DOMContentLoaded', () => {
   const q = new URLSearchParams(location.search);
-  // Accès gratuit depuis la landing : /activate?free=1. On ne peut pas
-  // soumettre tout seul (il nous faut son e-mail) → on l'amène au champ
-  // et on dit clairement ce qui va se passer.
-  if (q.get('free') === '1') {
-    const st = document.getElementById('act-status');
-    if (st) {
-      st.textContent = 'Entrez votre e-mail, puis « Créer mon accès gratuit ». Aucune carte bancaire.';
-      st.className   = 'act-status';
-    }
-    const em = document.getElementById('act-email');
-    if (em) em.focus();
-  }
+  // ?free=1 vient de « Commencer gratuitement » (hero + carte 0 € de la
+  // landing). ?ks_key= est prioritaire : on revient d'un achat ou d'un
+  // e-mail, la clé est là, c'est une connexion.
+  if (q.get('free') === '1' && !q.get('ks_key')) _setFreeMode(true);
 });
 
 /* ═══════════════════════════════════════════
