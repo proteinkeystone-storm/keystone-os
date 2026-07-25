@@ -51,6 +51,7 @@ import {
   handleAutoReloadGet, handleAutoReloadSave,
   handleAutoReloadSetup, handleAutoReloadResume,
 }                                                                       from './routes/auto-reload.js';
+import { runAutoReloadSweep }                                           from './routes/auto-reload-sweep.js';
 import { handleBrainstormingAgentRespond, handleBrainstormingSynthesize, handleBrainstormingPostIdeas, handleBrainstormingPickRoster } from './routes/brainstorming.js';
 import { handleFetchSource } from './routes/content-source.js';
 import { handleAiGenerate }                                              from './routes/ai-generate.js';
@@ -713,6 +714,15 @@ export default {
       if (path === '/api/ai-credits/auto-reload/setup'  && (method === 'POST' || method === 'OPTIONS')) return handleAutoReloadSetup(request, env);
       if (path === '/api/ai-credits/auto-reload/resume' && method === 'POST') return handleAutoReloadResume(request, env);
 
+      // ⚠️ Déclencheur MANUEL du balayage — ADMIN uniquement. Existe pour
+      // valider la recharge en conditions réelles sans attendre le cron.
+      // Il PRÉLÈVE réellement : mêmes 5 verrous, aucun raccourci.
+      if (path === '/api/admin/auto-reload/run-now' && method === 'POST') {
+        if (!requireAdmin(request, env)) return err('Non autorisé', 401, getAllowedOrigin(env, request));
+        const bilan = await runAutoReloadSweep(env);
+        return json(bilan, 200, getAllowedOrigin(env, request));
+      }
+
       // ── AI War Room (Brainstorming V2) — Sprint 1 ─────────────
       // POST stream SSE de la réponse d'un agent du boardroom IA.
       // Sprint 1 : seul agent_id='strategic' supporté ; les 8 autres
@@ -1156,6 +1166,20 @@ export default {
         sweepDueReminders(env)
           .then(r => console.log('[keynapse-reminders]', JSON.stringify(r)))
           .catch(e => console.warn('[keynapse-reminders] failed', e?.message || e))
+      );
+    }
+
+    // ⚠️ Recharge automatique (P3) — LE SEUL BALAYAGE QUI PRÉLÈVE DE
+    // L'ARGENT. Toutes les 5 min, hors de tout chemin utilisateur (pas de
+    // latence Stripe sur une requête d'IA, pas de mouvement d'argent à
+    // l'intérieur d'un appel annulable). N'agit que sur les licences
+    // opt-in, consenties, non en pause — cf. les 5 verrous de
+    // lib/auto-reload.js. Lot borné, idempotent par fenêtre de 10 min.
+    if (cron === '*/5 * * * *') {
+      ctx.waitUntil(
+        runAutoReloadSweep(env)
+          .then(r => console.log('[P3 auto-reload]', JSON.stringify(r)))
+          .catch(e => console.error('[P3 auto-reload] ÉCHEC', e?.message || e))
       );
     }
 
