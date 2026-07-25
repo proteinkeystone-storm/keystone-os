@@ -24,6 +24,7 @@
 
 import { handleList, handleActivate, handleRevoke, handleValidate }   from './routes/licence.js';
 import { handleActivateV2, handleMe, handleRefresh }                   from './routes/licence-public.js';
+import { handleLicenceFree }                                          from './routes/licence-free.js';
 import { handleVaultLoad, handleVaultSave, handleVaultHealth, handleVaultDelete } from './routes/vault-user.js';
 import { handleBillingPortal }                                          from './routes/billing.js';
 import { handleStripeWebhook }                                         from './routes/stripe-webhook.js';
@@ -580,6 +581,12 @@ export default {
       // ── Licences v2 (Sprint 2 — public, hashed, JWT, fingerprint) ──
       if (path === '/api/licence/v2/activate' && method === 'POST') return handleActivateV2(request, env);
       if (path === '/api/licence/v2/me'       && method === 'GET')  return handleMe(request, env);
+
+      // ── Licence GRATUITE en self-service (palier 0 €) ───────────
+      // Public par nature : on vend un palier gratuit, il faut pouvoir
+      // le prendre sans clé préalable. Crée une licence à SAC VIDE —
+      // donc les 3 apps gratuites et rien d'autre. Cf. licence-free.js.
+      if (path === '/api/licence/free' && method === 'POST') return handleLicenceFree(request, env);
 
       // ── Licence multi-email (Sprint S1 — plan MAX) ──────────────
       // Routes ADDITIVES — n'altèrent aucune route v2 existante.

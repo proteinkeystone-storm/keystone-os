@@ -1369,6 +1369,13 @@ footer {
           </button>
         </form>
         <p class="act-status" id="act-status"></p>
+        <!-- Palier GRATUIT (0 €) — Missive · booK · Keynapse, sans durée
+             limitée. Distinct de la démo 7 jours juste en dessous : ici on
+             crée une VRAIE licence, à sac vide, qui n'expire pas. -->
+        <button type="button" class="act-demo-btn" id="act-free-btn" onclick="startFree()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          Créer mon accès gratuit — Missive, booK et Keynapse
+        </button>
         <button type="button" class="act-demo-btn" onclick="startDemo()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.8L19 9l-4 3.4 1.3 5.1L12 14.8 7.7 17.5 9 12.4 5 9l5.1-1.2z"/></svg>
           Activer la démo — 7 jours gratuits
@@ -1562,8 +1569,71 @@ function startDemo() {
 // flux démo (remplit + soumet → pop-ups de configuration → dashboard démo).
 // DOMContentLoaded garantit que activateLicence() et le DOM sont prêts.
 addEventListener('DOMContentLoaded', () => {
-  if (new URLSearchParams(location.search).get('demo') === '1') startDemo();
+  const q = new URLSearchParams(location.search);
+  if (q.get('demo') === '1') startDemo();
+  // Accès gratuit depuis la landing : /activate?free=1. On ne peut pas
+  // soumettre tout seul (il nous faut son e-mail) → on l'amène au champ
+  // et on dit clairement ce qui va se passer.
+  if (q.get('free') === '1') {
+    const st = document.getElementById('act-status');
+    if (st) {
+      st.textContent = 'Entrez votre e-mail, puis « Créer mon accès gratuit ». Aucune carte bancaire.';
+      st.className   = 'act-status';
+    }
+    const em = document.getElementById('act-email');
+    if (em) em.focus();
+  }
 });
+
+/* ═══════════════════════════════════════════
+   ACCÈS GRATUIT (palier 0 €)
+   ───────────────────────────────────────────
+   Le visiteur donne son e-mail, le serveur fabrique une licence à SAC
+   VIDE (= Missive, booK, Keynapse et rien d'autre) et rend la clé ;
+   on enchaîne l'activation normale, sans lui faire attendre un e-mail.
+   La clé lui est quand même envoyée, pour revenir d'un autre appareil.
+   Ne PAS confondre avec startDemo() : la démo expire à 7 jours, pas ça.
+═══════════════════════════════════════════ */
+async function startFree() {
+  const emailEl = document.getElementById('act-email');
+  const btn     = document.getElementById('act-free-btn');
+  const status  = document.getElementById('act-status');
+  const email   = (emailEl.value || '').trim();
+
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    status.textContent = 'Entrez votre adresse e-mail pour créer votre accès gratuit.';
+    status.className   = 'act-status error';
+    emailEl.focus();
+    return;
+  }
+
+  const libelle = btn.innerHTML;
+  btn.disabled  = true;
+  btn.textContent = 'Création de votre accès…';
+  status.textContent = '';
+  status.className   = 'act-status';
+
+  try {
+    const res = await fetch(`${KEYSTONE_API}/api/licence/free`, {
+      method : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body   : JSON.stringify({ email }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.key) {
+      throw new Error(data.error || 'Création impossible pour le moment.');
+    }
+    // On tient la clé : on active tout de suite, le tunnel habituel prend
+    // le relais (fingerprint, JWT, onboarding sur les 3 apps du sac).
+    document.getElementById('act-key').value = data.key;
+    if (typeof activateLicence === 'function') activateLicence();
+  } catch (e) {
+    btn.disabled  = false;
+    btn.innerHTML = libelle;
+    status.textContent = e.message;
+    status.className   = 'act-status error';
+  }
+}
 
 // UX-3.7 — Toggle visibilité de la clé de licence (eye icon).
 // type="password" est obligatoire pour que le Trousseau iCloud reconnaisse
