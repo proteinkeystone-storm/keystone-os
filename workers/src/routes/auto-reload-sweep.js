@@ -44,7 +44,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import {
-  listArmed, shouldReload, recordCharge, pauseReload, alreadyCredited,
+  listArmed, listAllConfigs, shouldReload, recordCharge, pauseReload, alreadyCredited,
   ensureAutoReloadSchema, MIN_INTERVAL_MS, PAUSE,
 } from '../lib/auto-reload.js';
 import {
@@ -117,13 +117,23 @@ async function _prevenir(env, lookupHmac, sujet, corps) {
 /**
  * Un passage de balayage. Retourne un compte-rendu (journalisé par le
  * cron) : ce qui a été examiné, rechargé, refusé et pourquoi.
+ *
+ * SIMULATION (`simulate: true`) — même chemin de décision, ZÉRO effet :
+ * pas d'appel Stripe, pas de crédit, pas de pause, pas d'e-mail. Elle
+ * rapporte ce qu'un vrai passage FERAIT — licence, pack, montant, clé
+ * d'idempotence, ou la raison exacte du refus. Deux usages :
+ *   · valider P3 sans dépenser (le off-session reste le seul chemin
+ *     qui exige un vrai débit, une fois) ;
+ *   · répondre à « pourquoi ma recharge ne s'est pas déclenchée ? » —
+ *     c'est pour ça qu'elle examine TOUTES les configs, y compris
+ *     désarmées ou en pause, que listArmed() masquerait.
  */
-export async function runAutoReloadSweep(env, { now = Date.now() } = {}) {
-  const bilan = { examinees: 0, rechargees: 0, pausees: 0, ignorees: 0, details: [] };
-  if (!env.KS_STRIPE_SECRET) { bilan.details.push('pas de clé Stripe'); return bilan; }
+export async function runAutoReloadSweep(env, { now = Date.now(), simulate = false } = {}) {
+  const bilan = { simulate, examinees: 0, rechargees: 0, pausees: 0, ignorees: 0, details: [] };
+  if (!simulate && !env.KS_STRIPE_SECRET) { bilan.details.push('pas de clé Stripe'); return bilan; }
 
   await ensureAutoReloadSchema(env);
-  const armees = await listArmed(env);
+  const armees = simulate ? await listAllConfigs(env) : await listArmed(env);
 
   for (const cfg of armees.slice(0, MAX_PAR_TICK)) {
     bilan.examinees++;
@@ -131,6 +141,22 @@ export async function runAutoReloadSweep(env, { now = Date.now() } = {}) {
 
     const restant = await _remainingFor(env, hmac);
     const verdict = shouldReload(cfg, restant, now);
+
+    if (simulate) {
+      // Compte-rendu pur : le verdict, le restant mesuré, et ce qui
+      // partirait chez Stripe si c'était un vrai passage.
+      if (verdict.ok) {
+        bilan.rechargees++;
+        bilan.details.push(`${hmac.slice(0, 8)} : DÉBITERAIT ${verdict.amountCents}c `
+          + `(${verdict.packLookup} → +${verdict.conversations}) · restant=${restant} `
+          + `· clé=arl_${hmac.slice(0, 8)}…_${Math.floor(now / MIN_INTERVAL_MS)}`);
+      } else {
+        bilan.ignorees++;
+        bilan.details.push(`${hmac.slice(0, 8)} : ${verdict.reason} · restant=${restant}`);
+      }
+      continue;
+    }
+
     if (!verdict.ok) {
       bilan.ignorees++;
       bilan.details.push(`${hmac.slice(0, 8)} : ${verdict.reason}`);

@@ -714,12 +714,15 @@ export default {
       if (path === '/api/ai-credits/auto-reload/setup'  && (method === 'POST' || method === 'OPTIONS')) return handleAutoReloadSetup(request, env);
       if (path === '/api/ai-credits/auto-reload/resume' && method === 'POST') return handleAutoReloadResume(request, env);
 
-      // ⚠️ Déclencheur MANUEL du balayage — ADMIN uniquement. Existe pour
-      // valider la recharge en conditions réelles sans attendre le cron.
-      // Il PRÉLÈVE réellement : mêmes 5 verrous, aucun raccourci.
+      // ⚠️ Déclencheur MANUEL du balayage — ADMIN uniquement.
+      //   ?simulate=1 → répétition générale : même chemin de décision,
+      //   AUCUN débit, aucun crédit, aucune pause, aucun e-mail. Rapporte
+      //   ce qu'un vrai passage ferait, licence par licence.
+      //   Sans le paramètre → il PRÉLÈVE réellement (mêmes 5 verrous).
       if (path === '/api/admin/auto-reload/run-now' && method === 'POST') {
         if (!requireAdmin(request, env)) return err('Non autorisé', 401, getAllowedOrigin(env, request));
-        const bilan = await runAutoReloadSweep(env);
+        const simulate = new URL(request.url).searchParams.get('simulate') === '1';
+        const bilan = await runAutoReloadSweep(env, { simulate });
         return json(bilan, 200, getAllowedOrigin(env, request));
       }
 

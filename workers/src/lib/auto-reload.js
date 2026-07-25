@@ -196,6 +196,18 @@ export async function listArmed(env) {
   } catch (_) { return []; }
 }
 
+/** TOUTES les configurations — pour la SIMULATION uniquement. Un
+ *  diagnostic doit aussi expliquer pourquoi une licence désarmée ou en
+ *  pause ne se recharge pas ; listArmed() les cacherait. */
+export async function listAllConfigs(env) {
+  await ensureAutoReloadSchema(env);
+  try {
+    const { results = [] } = await env.DB
+      .prepare('SELECT * FROM ai_auto_reload ORDER BY updated_at DESC').all();
+    return results;
+  } catch (_) { return []; }
+}
+
 /**
  * Enregistre un débit RÉUSSI : incrémente le dépensé du mois, pose
  * l'horodatage anti-rafale, et journalise. Le compteur mensuel est
