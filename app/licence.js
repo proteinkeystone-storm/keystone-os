@@ -12,7 +12,7 @@
      La clé DEMO-KEYS-TONE-2026 débloque tout en mode démo.
    ═══════════════════════════════════════════════════════════════ */
 
-import { setOwnedIds } from './pads-loader.js';
+import { setOwnedIds, getOwnedIds } from './pads-loader.js';
 
 const LS_KEY   = 'ks_licence_key';
 const LS_PLAN  = 'ks_licence_plan';
@@ -202,11 +202,44 @@ export async function syncOwnedAssetsFromServer() {
     const bag = data?.licence?.owned_assets;
     if (Array.isArray(bag)) {
         setOwnedIds(bag);
+        _reconcilierSelection();
         return bag;
     }
     if (bag === null) {
         setOwnedIds(null);                        // retire la clé = accès total
+        _reconcilierSelection();
         return null;
     }
     return null;                                  // champ absent (worker ancien)
+}
+
+// ── La sélection d'onboarding doit suivre le sac ─────────────────
+// `ks_user_selection` est le sous-ensemble d'outils choisi à l'accueil ;
+// il FILTRE le tableau de bord, et le Cloud Vault le synchronise d'un
+// appareil à l'autre. D'où ce piège : en activant une nouvelle licence,
+// on hérite d'une sélection qui liste des applications qu'elle n'ouvre
+// pas — l'intersection est vide, et le tableau de bord s'affiche VIDE
+// alors que la licence fonctionne (il faut aller rechercher ses outils
+// dans le Key-Store, ce qui n'a aucun sens).
+//
+// On élague donc la sélection sur ce qui est réellement possédé. Si
+// plus rien ne subsiste, on la SUPPRIME : absente, elle veut dire
+// « tout montrer », ce qui est le bon repli — mieux vaut un tableau de
+// bord complet qu'un tableau de bord vide.
+function _reconcilierSelection() {
+    try {
+        const raw = localStorage.getItem('ks_user_selection');
+        if (!raw) return;
+        const sel = JSON.parse(raw);
+        if (!Array.isArray(sel) || !sel.length) return;
+
+        const owned = getOwnedIds();
+        if (owned === null) return;               // accès total : rien à élaguer
+
+        const garde = sel.filter(id => owned.includes(id));
+        if (garde.length === sel.length) return;  // déjà cohérent
+
+        if (garde.length) localStorage.setItem('ks_user_selection', JSON.stringify(garde));
+        else              localStorage.removeItem('ks_user_selection');
+    } catch (_) { /* jamais bloquer le boot pour un filtre d'affichage */ }
 }
