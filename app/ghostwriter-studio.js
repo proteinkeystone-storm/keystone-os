@@ -705,6 +705,17 @@ function _refreshLibrary() {
 // Un paramètre supplémentaire aurait obligé à toucher les ~20 autres
 // appels de _toast() dans ce module pour rien.
 let _toastAction = false;
+let _gotoTimer   = null;
+
+// Ferme le studio AVANT d'ouvrir les Réglages. Sans ça, le panneau
+// (z-index 601) s'ouvre derrière le workspace plein écran (9999) et le
+// clic paraît sans effet. Le brouillon est sauvegardé à la fermeture.
+function _allerAuxConversations() {
+  try { closeGhostwriterStudio(); } catch (_) { /* déjà fermé */ }
+  if (typeof window !== 'undefined' && typeof window.ksOpenConversations === 'function') {
+    window.ksOpenConversations();
+  }
+}
 function _toast(msg, isError) {
   let el = document.getElementById('gw-toast');
   if (!el) {
@@ -726,9 +737,15 @@ function _toast(msg, isError) {
     b.textContent = 'Ajouter des conversations';
     b.style.cssText = 'background:transparent;border:0;padding:0;color:inherit;font:inherit;'
       + 'font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer';
-    b.addEventListener('click', () => { nettoie(); window.ksOpenConversations(); });
+    b.addEventListener('click', () => { clearTimeout(_gotoTimer); _allerAuxConversations(); });
     el.append(b);
     _toast._timer = setTimeout(nettoie, 12000);
+    // Et on y va tout seul : le studio est en plein écran (z-index 9999),
+    // le panneau Réglages en 601 — l'ouvrir sans fermer l'outil le
+    // cacherait DERRIÈRE. Le délai laisse lire le message avant que
+    // l'écran change, sinon ça passe pour un bug.
+    clearTimeout(_gotoTimer);
+    _gotoTimer = setTimeout(_allerAuxConversations, 1600);
   } else {
     _toast._timer = setTimeout(nettoie, 3500);
   }

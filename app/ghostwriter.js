@@ -888,15 +888,28 @@ function _setStatus(el, text, kind) {
     el.className = 'gw-status' + (kind ? ` gw-${kind}` : '');
 }
 
-/* ── Message « conversations épuisées » — actionnable ──────────────
-   Il disait « Ajoutez un pack de conversations dans les Réglages » :
-   une CONSIGNE, que l'utilisateur devait exécuter lui-même en cherchant
-   la bonne section. Un message qui décrit le remède sans y mener fait
-   porter le travail à celui qui est déjà bloqué.
+/* ── Épuisement des conversations : on EMMÈNE, on n'explique pas ───
+   Trois états successifs, et les deux premiers étaient insuffisants :
+     1. « Ajoutez un pack dans les Réglages » — une consigne. Celui qui
+        est bloqué devait trouver la section lui-même.
+     2. Un bouton vers Réglages → Conversations. Il s'ouvrait bien…
+        DERRIÈRE l'outil : `.settings-panel` est en z-index 601, le
+        workspace plein écran `.ws-app` en 9999. Le clic semblait mort.
+     3. Maintenant : on FERME l'outil, puis on ouvre la section d'achat,
+        tout seul. Quand la seule issue est d'acheter, faire chercher
+        l'utilisateur n'apporte rien.
 
-   Le bouton ouvre directement Réglages → Conversations, où vivent la
-   jauge et les deux packs. `window.ksOpenConversations` est posé par
-   ui-renderer (initSettings) — un import direct créerait un cycle. */
+   Le délai laisse le temps de LIRE pourquoi on bouge — une redirection
+   instantanée donnerait l'impression d'un bug. Le bouton reste pour qui
+   veut y aller tout de suite, et sert de repli si l'ouverture échoue. */
+let _gotoTimer = null;
+function _allerAuxConversations() {
+    try { _closeModal(); } catch (_) { /* modal déjà fermé */ }
+    if (typeof window !== 'undefined' && typeof window.ksOpenConversations === 'function') {
+        window.ksOpenConversations();
+    }
+}
+
 function _setQuotaExhausted(el) {
     if (!el) return;
     el.className = 'gw-status gw-error';
@@ -909,8 +922,10 @@ function _setQuotaExhausted(el) {
         b.style.cssText = 'background:transparent;border:0;padding:0;margin-left:2px;'
             + 'color:inherit;font:inherit;font-weight:700;text-decoration:underline;'
             + 'text-underline-offset:3px;cursor:pointer';
-        b.addEventListener('click', () => window.ksOpenConversations());
+        b.addEventListener('click', () => { clearTimeout(_gotoTimer); _allerAuxConversations(); });
         el.append(b);
+        clearTimeout(_gotoTimer);
+        _gotoTimer = setTimeout(_allerAuxConversations, 1600);
     }
 }
 
