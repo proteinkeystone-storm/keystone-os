@@ -4274,6 +4274,26 @@ async function _fillAutoReload(el) {
     const bordure = 'border:1px solid var(--bd, rgba(127,127,127,.25));border-radius:10px';
     const titre = '<div style="font-weight:800;font-size:.85rem;margin-bottom:6px">Recharge automatique</div>';
 
+    // Changer de carte = rejouer la session `mode:'setup'` (zéro débit).
+    // Trouvaille du banc d'essai (26/07) : ce geste n'existait NULLE
+    // PART une fois une carte en place — l'écran de pause disait « mets
+    // ta carte à jour » sans offrir de bouton pour le faire. Un client à
+    // la carte expirée était littéralement coincé.
+    const _changerCarte = async (btn) => {
+        btn.disabled = true; const avant = btn.textContent;
+        btn.textContent = 'Ouverture de l\'enregistrement…';
+        try {
+            const d = await post('/setup', { consentVersion: s.consent?.version });
+            if (d.url) { location.href = d.url; return; }
+            throw new Error('Réponse sans lien.');
+        } catch (err2) {
+            btn.disabled = false; btn.textContent = avant;
+            const m = el.querySelector('#arl-msg'); if (m) m.textContent = err2.message;
+        }
+    };
+    const lienCarte = (id, libelle) =>
+        `<button id="${id}" style="margin-top:8px;width:100%;background:transparent;border:0;color:var(--text-muted);padding:4px;font-size:.75rem;cursor:pointer;text-decoration:underline;text-underline-offset:3px">${libelle}</button>`;
+
     // ── En pause : la cause d'abord, la sortie ensuite ────────────
     if (s.paused) {
         const CAUSES = {
@@ -4282,9 +4302,18 @@ async function _fillAutoReload(el) {
             authentication_required: 'Ta banque exige une confirmation impossible en ton absence — ta carte n\'est pas en cause. Réenregistre-la pour réactiver.',
             no_payment_method: 'Aucune carte enregistrée.',
         };
+        // Une pause « carte » (refusée, 3DS, absente) doit offrir le
+        // GESTE que sa phrase réclame — pas seulement « Réactiver »,
+        // qui referait échouer le même prélèvement sur la même carte.
+        const pauseCarte = ['payment_failed', 'authentication_required', 'no_payment_method'].includes(s.pausedReason);
         el.innerHTML = `<div style="${bordure};padding:12px">${titre}`
             + `<div style="color:var(--danger,#e0533d);font-size:.8rem;font-weight:600">En pause · ${CAUSES[s.pausedReason] || s.pausedReason || 'cause inconnue'}</div>`
-            + `<button id="arl-resume" class="api-key-save-btn" style="margin-top:10px;width:100%">Réactiver la recharge</button></div>`;
+            + (pauseCarte
+                ? '<button id="arl-recarte" class="api-key-save-btn" style="margin-top:10px;width:100%">Mettre à jour ma carte</button>'
+                  + '<button id="arl-resume" style="margin-top:8px;width:100%;background:transparent;border:0;color:var(--text-muted);padding:4px;font-size:.75rem;cursor:pointer;text-decoration:underline;text-underline-offset:3px">Réactiver sans changer de carte</button>'
+                : '<button id="arl-resume" class="api-key-save-btn" style="margin-top:10px;width:100%">Réactiver la recharge</button>')
+            + '<div id="arl-msg" class="sp-user-hint" style="min-height:14px;margin-top:6px"></div></div>';
+        el.querySelector('#arl-recarte')?.addEventListener('click', (e) => _changerCarte(e.target));
         el.querySelector('#arl-resume')?.addEventListener('click', async (e) => {
             e.target.disabled = true;
             try { await post('/resume'); _fillAutoReload(el); }
@@ -4339,8 +4368,10 @@ async function _fillAutoReload(el) {
         + `<label style="flex:1;font-size:.72rem;color:var(--text-muted)">Plafond €/mois<input id="arl-cap" type="number" min="${s.packPriceEur}" max="500" value="${s.capEur}" class="sp-user-input" style="width:100%;margin-top:3px"></label>`
         + '</div>'
         + `<button id="arl-save" class="api-key-save-btn" style="width:100%">${s.enabled ? 'Enregistrer' : 'Activer'}</button>`
+        + lienCarte('arl-recarte', 'Changer de carte')
         + (s.enabled ? '<button id="arl-off" style="margin-top:8px;width:100%;background:transparent;border:0;color:var(--text-muted);padding:4px;font-size:.75rem;cursor:pointer;text-decoration:underline;text-underline-offset:3px">Désactiver</button>' : '')
         + '<div id="arl-msg" class="sp-user-hint" style="min-height:14px;margin-top:6px"></div></div>';
+    el.querySelector('#arl-recarte')?.addEventListener('click', (e) => _changerCarte(e.target));
 
     let packChoisi = s.pack;
     el.querySelectorAll('[data-pack]').forEach(b => b.addEventListener('click', () => {
