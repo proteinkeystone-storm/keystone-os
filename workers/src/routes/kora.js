@@ -623,7 +623,7 @@ export async function handleKoraChat(request, env) {
       creditResult = await consumeCredits(env, { bucketKey: lookupHmac, plan, tool: 'kora' });
       if (!creditResult.ok && creditResult.blocked) {
         return json({
-          error: `Crédits IA épuisés ce mois sur le plan ${plan}.`,
+          error: 'Conversations épuisées ce mois.',
           code : 'AI_CREDITS_EXHAUSTED',
         }, 429, origin);
       }

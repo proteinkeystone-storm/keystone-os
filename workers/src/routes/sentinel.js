@@ -1051,7 +1051,7 @@ export async function handleSiteSuggest(request, env, id) {
   if (creditsEnforced) {
     creditResult = await consumeCredits(env, { bucketKey: lookupHmac, plan: g.plan, tool: 'sentinel' });
     if (!creditResult.ok && creditResult.blocked) {
-      return json({ error: `Crédits IA épuisés ce mois sur le plan ${g.plan}. Ajoutez un pack ou attendez le 1er du mois.`, code: 'AI_CREDITS_EXHAUSTED' }, 429, origin);
+      return json({ error: 'Conversations épuisées ce mois. Ajoutez un pack de conversations ou attendez le 1er du mois.', code: 'AI_CREDITS_EXHAUSTED' }, 429, origin);
     }
   }
 
@@ -1428,7 +1428,7 @@ export async function handleSiteGeoRun(request, env, id) {
   `).bind(id, g.tenant, businessName, city, activity, JSON.stringify(prompts)).run();
 
   const out = await _executeGeoRun(env, { id, tenant: g.tenant, site, businessName, city, activity, prompts, plan: g.plan, lookupHmac: g.claims && g.claims.sub });
-  if (out.blocked) return json({ error: `Crédits IA épuisés ce mois sur le plan ${g.plan}. Ajoutez un pack ou attendez le 1er du mois.`, code: 'AI_CREDITS_EXHAUSTED' }, 429, origin);
+  if (out.blocked) return json({ error: 'Conversations épuisées ce mois. Ajoutez un pack de conversations ou attendez le 1er du mois.', code: 'AI_CREDITS_EXHAUSTED' }, 429, origin);
   if (out.error === 'no-key') return err("La mesure de visibilité IA n'est pas activée (aucune clé moteur configurée côté serveur). Le reste de l'audit fonctionne.", 503, origin);
   if (out.error) return err(`La mesure de visibilité IA a échoué (${out.detail || 'service indisponible'}). Réessayez plus tard.`, 502, origin);
 

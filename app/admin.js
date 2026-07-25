@@ -534,11 +534,11 @@ async function renderLicences(panel) {
                 <span style="font-size:10px;color:var(--text-muted);white-space:nowrap">Coffre / e-mail</span>
               </div>
               <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
-                <label class="toggle-switch" title="Activer le compteur de crédits IA (Concierge, Ghost Writer, Brainstorming)" style="display:inline-block">
+                <label class="toggle-switch" title="Plafonner les conversations incluses de cette licence (le mur se déclenche au quota du sac d'apps)" style="display:inline-block">
                   <input type="checkbox" data-key="${esc(l.key)}" data-flag="enforce_ai_credits_v1" ${l.flag_enforce_ai_credits_v1 ? 'checked' : ''}>
                   <span class="toggle-slider"></span>
                 </label>
-                <span style="font-size:10px;color:var(--gold);white-space:nowrap">Crédits IA</span>
+                <span style="font-size:10px;color:var(--gold);white-space:nowrap">Plafond</span>
               </div>
             </div>`
           : '<span style="color:var(--text-muted)">—</span>';

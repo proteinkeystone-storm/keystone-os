@@ -697,7 +697,7 @@ export async function handleVoiceUpload(request, env, bubbleId) {
   // 2) Transcription Whisper (1 crédit métré, refund si échec).
   const ticket = await _knConsumeCredit(env, gate);
   if (ticket.blocked) {
-    return _finish('', null, { note: 'Crédits IA épuisés — l’audio est conservé, transcription indisponible.', code: 'AI_CREDITS_EXHAUSTED', quota: ticket.payload });
+    return _finish('', null, { note: 'Conversations épuisées — l’audio est conservé, transcription indisponible.', code: 'AI_CREDITS_EXHAUSTED', quota: ticket.payload });
   }
   let transcript = '';
   try {

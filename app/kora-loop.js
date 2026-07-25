@@ -147,7 +147,7 @@ async function _send(text) {
     });
     if (res.status === 429) {
       const j = await res.json().catch(() => ({}));
-      const msg = j.error || 'Tes crédits IA du mois sont épuisés.';
+      const msg = j.error || 'Tes conversations du mois sont épuisées.';
       koraSay(_esc(msg));
       if (voiceOut && vm) speech = vm.koraSpeakOneShot(msg);
       return;

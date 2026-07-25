@@ -36,7 +36,7 @@ const DOC_SECTIONS = [
   },
   {
     title: 'Vos conversations',
-    body: `<p>Les fonctions d'intelligence artificielle puisent dans un <strong>compteur mensuel</strong> inclus dans votre abonnement. Il se remet à zéro le 1<sup>er</sup> de chaque mois. Vous suivez votre consommation dans la section <strong>« Crédits IA »</strong> de ces réglages ; si besoin, un pack ponctuel peut être ajouté.</p>
+    body: `<p>Les fonctions d'intelligence artificielle puisent dans un <strong>compteur mensuel</strong> inclus dans votre abonnement. Il se remet à zéro le 1<sup>er</sup> de chaque mois. Vous suivez votre consommation dans la section <strong>« Conversations »</strong> de ces réglages ; si besoin, un pack ponctuel peut être ajouté.</p>
     <p>Beaucoup d'actions sont <strong>gratuites</strong> : lecture vocale, dictée, navigation, et tout ce qui ne fait pas appel à l'IA.</p>`,
   },
   {

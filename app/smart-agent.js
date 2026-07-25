@@ -1852,7 +1852,7 @@ async function _ivStructure() {
         if (!_iv.proposals.length) { _iv.error = 'Aucune fiche exploitable — précisez ou reformulez votre réponse.'; }
         else { _iv.phase = 'review'; }
     } catch (e) {
-        _iv.error = (e.data?.code === 'AI_CREDITS_EXHAUSTED') ? 'Crédits IA épuisés ce mois.' : e.message;
+        _iv.error = (e.data?.code === 'AI_CREDITS_EXHAUSTED') ? 'Conversations épuisées ce mois.' : e.message;
     }
     _iv.busy = false; _renderMain();
 }
@@ -1922,7 +1922,7 @@ async function _ivExplore() {
             _iv.gaps = qs; _iv.idx = 0; _iv.phase = 'ask'; _iv.answer = ''; _iv.proposals = []; _iv.checked = new Set(); _iv.error = null;
         }
     } catch (e) {
-        _toast((e.data?.code === 'AI_CREDITS_EXHAUSTED') ? 'Crédits IA épuisés ce mois.' : e.message, 'error');
+        _toast((e.data?.code === 'AI_CREDITS_EXHAUSTED') ? 'Conversations épuisées ce mois.' : e.message, 'error');
     }
     _iv.busy = false; _renderMain();
 }
@@ -2254,7 +2254,7 @@ async function _sendChat() {
         if (!res.ok) {
             let data = {}; try { data = await res.json(); } catch (_) {}
             const msg = (data.code === 'AI_CREDITS_EXHAUSTED')
-                ? 'Crédits IA épuisés ce mois — rachetez un pack ou attendez le 1er du mois.'
+                ? 'Conversations épuisées ce mois — ajoutez un pack de conversations ou attendez le 1er du mois.'
                 : `Erreur : ${data.error || ('HTTP ' + res.status)}`;
             _chat.messages.push({ role: 'agent', content: msg, citations: [], gapped: false, error: true });
             return;
@@ -2336,7 +2336,7 @@ async function _sendChatJSON(message) {
         _speak(res.reply || '');
     } catch (e) {
         const msg = (e.data?.code === 'AI_CREDITS_EXHAUSTED')
-            ? 'Crédits IA épuisés ce mois — rachetez un pack ou attendez le 1er du mois.'
+            ? 'Conversations épuisées ce mois — ajoutez un pack de conversations ou attendez le 1er du mois.'
             : `Erreur : ${e.message}`;
         _chat.messages.push({ role: 'agent', content: msg, citations: [], gapped: false, error: true });
     }
@@ -3095,7 +3095,7 @@ async function _exCall(call) {
         else if (res.saturated) _toast(`Texte dense : ${_ex.proposals.length} fiches extraites, le maximum pour ce volume. Découpez-le pour n'en rien perdre.`, 'ok');
     } catch (e) {
         _ex.error = (e.data?.code === 'AI_CREDITS_EXHAUSTED')
-            ? 'Crédits IA épuisés ce mois — rachetez un pack ou attendez le 1er du mois.'
+            ? 'Conversations épuisées ce mois — ajoutez un pack de conversations ou attendez le 1er du mois.'
             : e.message;
     }
     _ex.busy = false;
@@ -3216,7 +3216,7 @@ async function _igCall(call) {
     catch (e) {
         _ig.busy = false;
         _ig.error = (e.data?.code === 'AI_CREDITS_EXHAUSTED')
-            ? 'Crédits IA épuisés ce mois — rachetez un pack ou attendez le 1er du mois.'
+            ? 'Conversations épuisées ce mois — ajoutez un pack de conversations ou attendez le 1er du mois.'
             : (e.message || 'Erreur inattendue.');
         _renderOverlay();
         return null;

@@ -4482,7 +4482,7 @@ function _renderSettingsBody() {
             </div>`,
         },
         {
-            id: 'acc-credits', icon: ACC_ICONS.licence, title: 'Crédits IA',
+            id: 'acc-credits', icon: ACC_ICONS.licence, title: 'Conversations',
             open: false,
             content: `<div class="sp-user-form">
                 <div id="ks-credits-gauge" class="sp-user-hint">Chargement…</div>

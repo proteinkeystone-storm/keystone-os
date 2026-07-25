@@ -1934,7 +1934,7 @@ async function _aiExtract(env, gate, systemPrompt, userContent, byok = null, max
     credit = await consumeCredits(env, { bucketKey: sub, plan: gate.claims.plan, tool: 'smartagent' });
     if (!credit.ok && credit.blocked) {
       return { ok: false, status: 429, code: 'AI_CREDITS_EXHAUSTED',
-        error: 'Crédits IA épuisés ce mois. Rachetez un pack ou attendez le 1er du mois (reset).',
+        error: 'Conversations épuisées ce mois. Ajoutez un pack de conversations ou attendez le 1er du mois (reset).',
         quota: credit.payload };
     }
   }
@@ -3756,7 +3756,7 @@ export async function handleAgentChat(request, env, agentId) {
     credit = await consumeCredits(env, { bucketKey: sub, plan: gate.claims.plan, tool: 'smartagent' });
     if (!credit.ok && credit.blocked) {
       return json({
-        error: 'Crédits IA épuisés ce mois. Rachetez un pack ou attendez le 1er du mois (reset).',
+        error: 'Conversations épuisées ce mois. Ajoutez un pack de conversations ou attendez le 1er du mois (reset).',
         code : 'AI_CREDITS_EXHAUSTED',
         quota: credit.payload,
       }, 429, origin);
@@ -4802,7 +4802,7 @@ export async function handleExploreQuestions(request, env, agentId) {
   if (!useByok && sub && await isEnforceEnabled(env, sub)) {
     credit = await consumeCredits(env, { bucketKey: sub, plan: gate.claims.plan, tool: 'smartagent' });
     if (!credit.ok && credit.blocked) {
-      return json({ error: 'Crédits IA épuisés ce mois.', code: 'AI_CREDITS_EXHAUSTED', quota: credit.payload }, 429, origin);
+      return json({ error: 'Conversations épuisées ce mois.', code: 'AI_CREDITS_EXHAUSTED', quota: credit.payload }, 429, origin);
     }
   }
   const refund = async () => {

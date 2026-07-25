@@ -667,7 +667,7 @@ export async function handleBrainstormingSynthesize(request, env) {
     const credit = await consumeCredits(env, { bucketKey: claims.sub, plan: claims.plan, tool: 'brainstorming' });
     if (!credit.ok && credit.blocked) {
       return json({
-        error: 'Crédits IA épuisés ce mois. Rachetez un pack ou attendez le 1er du mois (reset).',
+        error: 'Conversations épuisées ce mois. Ajoutez un pack de conversations ou attendez le 1er du mois (reset).',
         code : 'AI_CREDITS_EXHAUSTED',
         quota: credit.payload,
       }, 429, origin);
@@ -841,7 +841,7 @@ export async function handleBrainstormingPostIdeas(request, env) {
   if (await isEnforceEnabled(env, claims.sub)) {
     const credit = await consumeCredits(env, { bucketKey: claims.sub, plan: claims.plan, tool: 'brainstorming' });
     if (!credit.ok && credit.blocked) {
-      return json({ error: 'Crédits IA épuisés ce mois.', code: 'AI_CREDITS_EXHAUSTED', quota: credit.payload }, 429, origin);
+      return json({ error: 'Conversations épuisées ce mois.', code: 'AI_CREDITS_EXHAUSTED', quota: credit.payload }, 429, origin);
     }
   }
 
@@ -1339,7 +1339,7 @@ export async function handleBrainstormingAgentRespond(request, env) {
     const credit = await consumeCredits(env, { bucketKey: claims.sub, plan: claims.plan, tool: 'brainstorming' });
     if (!credit.ok && credit.blocked) {
       return json({
-        error: 'Crédits IA épuisés ce mois. Rachetez un pack ou attendez le 1er du mois (reset).',
+        error: 'Conversations épuisées ce mois. Ajoutez un pack de conversations ou attendez le 1er du mois (reset).',
         code : 'AI_CREDITS_EXHAUSTED',
         quota: credit.payload,
       }, 429, origin);
