@@ -39,7 +39,19 @@ export async function handleActivate(request, env) {
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
   const body = await parseBody(request);
-  const { key, owner, plan = 'STARTER', ownedAssets, expiresAt, tenantId = 'default' } = body;
+  const { key, owner, plan = 'STARTER', ownedAssets, expiresAt, tenantId = 'default',
+          devicesMax, customerEmail } = body;
+
+  // `devicesMax` (P6) — le nombre d'appareils se règle DIRECTEMENT, au lieu
+  // d'être déduit du plan. Le plan mélangeait deux choses sans rapport : le
+  // nombre d'appareils ET, pour MAX, un accès total au catalogue. Régler
+  // « illimité » revenait donc à offrir les 14 applications sans le savoir.
+  //   null / absent → on laisse la colonne telle quelle (déduite du plan)
+  //   0             → illimité
+  //   n             → n appareils
+  const dMax = (devicesMax === undefined || devicesMax === null || devicesMax === '')
+    ? undefined
+    : (parseInt(devicesMax, 10) === 0 ? null : parseInt(devicesMax, 10));
 
   if (!key || typeof key !== 'string')   return err('Champ "key" requis', 400, origin);
   if (!owner || typeof owner !== 'string') return err('Champ "owner" requis', 400, origin);
@@ -64,8 +76,8 @@ export async function handleActivate(request, env) {
 
   // INSERT OR REPLACE = créer ou mettre à jour
   await env.DB.prepare(`
-    INSERT INTO licences (key, tenant_id, owner, plan, is_active, owned_assets, expires_at, lookup_hmac, key_hash, salt, updated_at)
-    VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, datetime('now'))
+    INSERT INTO licences (key, tenant_id, owner, plan, is_active, owned_assets, expires_at, lookup_hmac, key_hash, salt, devices_max, customer_email, updated_at)
+    VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(key) DO UPDATE SET
       owner        = excluded.owner,
       plan         = excluded.plan,
@@ -75,8 +87,12 @@ export async function handleActivate(request, env) {
       lookup_hmac  = excluded.lookup_hmac,
       key_hash     = excluded.key_hash,
       salt         = excluded.salt,
+      devices_max  = CASE WHEN ? THEN excluded.devices_max ELSE licences.devices_max END,
+      customer_email = COALESCE(excluded.customer_email, licences.customer_email),
       updated_at   = datetime('now')
-  `).bind(upperKey, tenantId, owner, plan, assetsJson, expiresAt || null, lookupHmac, hash, salt).run();
+  `).bind(upperKey, tenantId, owner, plan, assetsJson, expiresAt || null, lookupHmac, hash, salt,
+          dMax === undefined ? null : dMax, customerEmail || null,
+          dMax === undefined ? 0 : 1).run();
 
   const licence = await env.DB
     .prepare('SELECT * FROM licences WHERE key = ?')

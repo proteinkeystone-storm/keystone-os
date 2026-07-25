@@ -638,8 +638,16 @@ function showCreateLicenceModal(panel) {
         <input type="text" class="form-input" id="m-owner" placeholder="Nom ou email">
       </div>
       <div class="form-group">
-        <label class="form-label">Plan <span style="font-weight:400;text-transform:none">(technique — pilote le nb d'appareils)</span></label>
-        <select class="form-select" id="m-plan"><option>STARTER</option><option>PRO</option><option>MAX</option></select>
+        <label class="form-label">E-mail <span style="font-weight:400;text-transform:none">(identification — pas exigé pour se connecter)</span></label>
+        <input type="email" class="form-input" id="m-email" placeholder="client@exemple.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Appareils autorisés</label>
+        <select class="form-select" id="m-devices">
+          <option value="1">1 appareil</option>
+          <option value="3" selected>3 appareils</option>
+          <option value="0">Illimité</option>
+        </select>
       </div>
       ${_appPickerHTML('m', null, true)}
       <div class="form-group">
@@ -662,14 +670,20 @@ function showCreateLicenceModal(panel) {
 async function submitCreateLicence(panel) {
   const key      = document.getElementById('m-key').value.trim().toUpperCase();
   const owner    = document.getElementById('m-owner').value.trim();
-  const plan     = document.getElementById('m-plan').value;
-  const assets   = _readAppPicker('m');
+  // `plan` n'est plus proposé : il ne vend plus rien et MAX ouvrirait tout
+  // le catalogue. Toute licence créée à la main naît donc en PRO — palier
+  // neutre, qui n'accorde aucun accès. Le nombre d'appareils se règle à part.
+  const plan       = 'PRO';
+  const devicesMax = document.getElementById('m-devices').value;
+  const email      = document.getElementById('m-email').value.trim();
+  const assets     = _readAppPicker('m');
   const expires  = document.getElementById('m-expires').value || undefined;
   const errEl    = document.getElementById('m-error');
   const btn      = document.getElementById('m-confirm');
   errEl.textContent = '';
   if (!key || !owner) { errEl.textContent = 'Clé et propriétaire requis.'; return; }
-  const body = { key, plan, owner };
+  const body = { key, plan, owner, devicesMax };
+  if (email)  body.customerEmail = email;
   if (assets) body.ownedAssets = assets;
   if (expires)   body.expiresAt   = expires;
   btn.disabled = true; btn.textContent = '…';
@@ -829,9 +843,12 @@ function showEditLicenceModal(key, owner, plan, assets, panel) {
         <input type="text" class="form-input" id="e-owner" value="${esc(owner)}">
       </div>
       <div class="form-group">
-        <label class="form-label">Plan <span style="font-weight:400;text-transform:none">(technique — pilote le nb d'appareils)</span></label>
-        <select class="form-select" id="e-plan">
-          ${['STARTER','PRO','MAX'].map(p => `<option ${plan===p?'selected':''}>${p}</option>`).join('')}
+        <label class="form-label">Appareils autorisés</label>
+        <select class="form-select" id="e-devices">
+          <option value="">Inchangé</option>
+          <option value="1">1 appareil</option>
+          <option value="3">3 appareils</option>
+          <option value="0">Illimité</option>
         </select>
       </div>
       ${_appPickerHTML('e', assets)}
@@ -842,8 +859,13 @@ function showEditLicenceModal(key, owner, plan, assets, panel) {
   _wireAppPicker('e');
   document.getElementById('e-cancel').addEventListener('click', closeModal);
   document.getElementById('e-confirm').addEventListener('click', async () => {
-    const newOwner  = document.getElementById('e-owner').value.trim();
-    const newPlan   = document.getElementById('e-plan').value;
+    const newOwner   = document.getElementById('e-owner').value.trim();
+    const devicesMax = document.getElementById('e-devices').value;
+    // Le plan de la licence est RENVOYÉ TEL QUEL : il n'est plus modifiable
+    // ici (il ne vend plus rien, et MAX ouvrirait tout le catalogue), mais
+    // l'upsert l'écrase — ne pas le transmettre déclasserait les licences
+    // historiques MAX/ADMIN en STARTER, leur retirant leur accès.
+    const newPlan    = plan || 'PRO';
     const errEl     = document.getElementById('e-error');
     const btn       = document.getElementById('e-confirm');
     if (!newOwner) { errEl.textContent = 'Propriétaire requis.'; return; }
@@ -852,7 +874,9 @@ function showEditLicenceModal(key, owner, plan, assets, panel) {
     const ownedAssets = _readAppPicker('e');
     btn.disabled = true; btn.textContent = '…';
     try {
-      await api('/api/licence/activate', 'POST', { key, plan: newPlan, owner: newOwner, ownedAssets });
+      const corps = { key, plan: newPlan, owner: newOwner, ownedAssets };
+      if (devicesMax !== '') corps.devicesMax = devicesMax;
+      await api('/api/licence/activate', 'POST', corps);
       closeModal(); toast('Licence mise à jour ✓'); renderLicences(panel);
     } catch (err) {
       errEl.textContent = err.message; btn.disabled = false; btn.textContent = 'Mettre à jour';
