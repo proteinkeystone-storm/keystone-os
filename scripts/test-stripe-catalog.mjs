@@ -15,7 +15,7 @@
 import {
   resolveAppFromPrice, resolveLegacyPlanFromPrice, resolvePackConversations,
   addEntitlement, removeEntitlement, technicalPlanFor,
-  lookupKeyForApp, isValidEntitlementId, stripeCatalogPlan,
+  lookupKeyForApp, isValidEntitlementId, stripeCatalogPlan, livemodeFlag,
 } from '../workers/src/lib/stripe-catalog.js';
 import { APP_TIER, TIER, OS_ENTITLEMENT } from '../workers/src/lib/pricing-grid.js';
 
@@ -105,6 +105,21 @@ const allerAnnuel = plan.every(r => resolveAppFromPrice({ lookup_key: r.lookupAn
 truthy(allerAnnuel, 'idem pour les lookup_key annuels');
 eq(lookupKeyForApp('O-AGT-001'), 'ks_app_o_agt_001', 'convention de nommage stable');
 eq(lookupKeyForApp(OS_ENTITLEMENT, { annual: true }), 'ks_os_annual', 'convention OS annuel');
+
+// ── Provenance live / test ──────────────────────────────────────
+// Ce qui compte ici n'est pas « est-ce que ça marche » mais le SENS
+// dans lequel on a le droit de se tromper : une erreur vers 1 fait
+// survivre une licence de test (agaçant), une erreur vers 0 la rend
+// éligible à `DELETE FROM licences WHERE livemode = 0` — donc efface
+// un client payant. Tout ce qui n'est pas un `false` explicite de
+// Stripe doit valoir 1.
+eq(livemodeFlag({ livemode: true }),  1, 'paiement réel → 1');
+eq(livemodeFlag({ livemode: false }), 0, 'paiement de test → 0 (le seul cas jetable)');
+eq(livemodeFlag({}),                  1, 'champ absent → 1 (on ne jette pas dans le doute)');
+eq(livemodeFlag(undefined),           1, 'événement absent → 1');
+eq(livemodeFlag(null),                1, 'événement null → 1');
+eq(livemodeFlag({ livemode: 'false' }), 1, 'chaîne "false" ≠ booléen false → 1');
+eq(livemodeFlag({ livemode: 0 }),     1, 'zéro numérique ≠ booléen false → 1');
 
 console.log(`\n${pass + fail} tests — \x1b[32m${pass} ok\x1b[0m, ${fail ? `\x1b[31m${fail} ko\x1b[0m` : '0 ko'}\n`);
 process.exit(fail ? 1 : 0);

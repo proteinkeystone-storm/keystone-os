@@ -181,3 +181,29 @@ export function stripeCatalogPlan() {
   });
   return rows;
 }
+
+/**
+ * Provenance d'une licence : paiement RÉEL ou paiement de TEST ?
+ *
+ * Un endpoint webhook en mode test alimente le worker de production —
+ * choix assumé (2026-07-25), sinon on ne pourrait plus éprouver la
+ * chaîne d'achat complète avant l'ouverture commerciale. Contrepartie :
+ * chaque essai de checkout fabrique une vraie licence dans la base
+ * réelle, et il faut pouvoir la reconnaître PLUS TARD sans archéologie.
+ *
+ * Stripe pose `livemode` sur chaque événement. On le range à la
+ * création, une bonne fois, ce qui réduit le ménage à :
+ *     DELETE FROM licences WHERE livemode = 0
+ *
+ * ⚠️ Le DÉFAUT PENCHE VERS 1, volontairement. Seul un `livemode: false`
+ * explicite de Stripe marque une licence comme jetable ; tout le reste
+ * (champ absent, forme inattendue) est traité comme du réel. Se tromper
+ * dans ce sens fait survivre une licence de test — se tromper dans
+ * l'autre efface un client payant.
+ *
+ * Les licences ANTÉRIEURES à cette colonne restent à NULL, et `= 0` ne
+ * les attrape pas : le ménage ne peut pas mordre sur l'existant.
+ */
+export function livemodeFlag(event) {
+  return event?.livemode === false ? 0 : 1;
+}

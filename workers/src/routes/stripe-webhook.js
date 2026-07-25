@@ -25,7 +25,7 @@ import { needsCreditWall }                  from '../lib/app-mode.js';
 
 import {
   resolveAppFromPrice, resolveLegacyPlanFromPrice, resolvePackConversations,
-  addEntitlement, removeEntitlement, technicalPlanFor,
+  addEntitlement, removeEntitlement, technicalPlanFor, livemodeFlag,
 } from '../lib/stripe-catalog.js';
 
 const PRICE_LOOKUP_TO_PLAN = {
@@ -61,6 +61,14 @@ async function _ensureP4Schema(env) {
       'CREATE INDEX IF NOT EXISTS idx_lic_subs_hmac ON licence_subscriptions(lookup_hmac)'
     ).run();
   } catch (_) {}
+  // Provenance de la licence (cf. livemodeFlag) : 1 = paiement réel,
+  // 0 = paiement de test, NULL = créée avant cette colonne. Pas de
+  // DEFAULT : une valeur par défaut mettrait tout l'historique dans le
+  // même sac que les paiements réels, ce qui est vrai mais muet — NULL
+  // dit « on ne sait pas », et le ménage (`= 0`) ne peut pas s'y tromper.
+  try {
+    await env.DB.prepare('ALTER TABLE licences ADD COLUMN livemode INTEGER').run();
+  } catch (_) { /* colonne déjà là */ }
   _p4SchemaReady = true;
 }
 
@@ -413,12 +421,13 @@ async function _handleCheckoutCompleted(env, event) {
       INSERT INTO licences (
         key, tenant_id, owner, plan, is_active, owned_assets, customer_email,
         stripe_customer_id, stripe_subscription_id,
-        lookup_hmac, key_hash, salt, enforce_ai_credits_v1, created_at
-      ) VALUES (?, 'default', ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        lookup_hmac, key_hash, salt, enforce_ai_credits_v1, livemode, created_at
+      ) VALUES (?, 'default', ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `).bind(
       newKey, customerEmail.split('@')[0], technicalPlanFor(bag), JSON.stringify(bag),
       customerEmail, customerId, subId, newHmac, kh.hash, kh.salt,
       needsCreditWall(bag) ? 1 : 0,   // P7 — app publique ⇒ mur armé dès la 1re seconde
+      livemodeFlag(event),            // provenance : 0 = paiement de test, jetable
     ).run();
     await env.DB.prepare(`
       INSERT OR REPLACE INTO licence_subscriptions (subscription_id, lookup_hmac, app_id, status, updated_at)
@@ -466,8 +475,8 @@ async function _handleCheckoutCompleted(env, event) {
     INSERT INTO licences (
       key, tenant_id, owner, plan, is_active, owned_assets, customer_email,
       stripe_customer_id, stripe_subscription_id,
-      lookup_hmac, key_hash, salt, created_at
-    ) VALUES (?, 'default', ?, ?, 1, NULL, ?, ?, ?, ?, ?, ?, datetime('now'))
+      lookup_hmac, key_hash, salt, livemode, created_at
+    ) VALUES (?, 'default', ?, ?, 1, NULL, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `).bind(
     key,
     customerEmail.split('@')[0],
@@ -478,6 +487,7 @@ async function _handleCheckoutCompleted(env, event) {
     lookupHmac,
     hash,
     salt,
+    livemodeFlag(event),   // même provenance sur le chemin legacy
   ).run();
 
   // Envoi email
