@@ -76,10 +76,10 @@
         },
         {
           "@type": "Question",
-          "name": "La note vocale consomme-t-elle des crédits IA ?",
+          "name": "La note vocale consomme-t-elle des conversations ?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Oui : la transcription du mémo puis l'analyse qui en tire des tâches et rappels comptent comme des actions IA (au compteur de crédits). L'enregistrement audio, lui, est toujours conservé même si l'IA n'est pas disponible — vous ne perdez jamais votre mémo."
+            "text": "Oui : la transcription du mémo puis l'analyse qui en tire des tâches et rappels comptent comme des actions IA (au compteur de conversations). L'enregistrement audio, lui, est toujours conservé même si l'IA n'est pas disponible — vous ne perdez jamais votre mémo."
           }
         },
         {
@@ -151,6 +151,11 @@ h1 em{font-style:normal;background:linear-gradient(120deg,var(--accent-3),var(--
 .ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:32px}
 .btn{display:inline-flex;align-items:center;gap:8px;font-size:14.5px;font-weight:600;padding:13px 24px;border-radius:999px;transition:transform .15s,box-shadow .2s,border-color .2s,background .2s}
 .btn svg{width:18px;height:18px}
+/* Le CTA d'achat est un <button> (il déclenche un appel, il ne navigue
+   pas) : sans ce reset il hériterait de la bordure et de la police par
+   défaut du navigateur et jurerait à côté des <a class="btn">. */
+button.btn{border:0;font-family:inherit;cursor:pointer}
+button.btn[disabled]{opacity:.6;cursor:default;transform:none}
 .btn-primary{background:linear-gradient(120deg,var(--accent),var(--accent-2));color:#fff;box-shadow:0 8px 26px rgba(99,102,241,.32)}
 .btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 32px rgba(99,102,241,.42)}
 .btn-ghost{border:1px solid var(--border-strong);color:var(--text)}
@@ -216,7 +221,7 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
     <h1>Vos idées en constellation.<br><em>Reliées, vivantes, à vous.</em></h1>
     <p class="lead">Votre espace personnel de connaissances. Des bulles de notes qui respirent sur un canevas infini, regroupées en zones de couleur et reliées par des traits. Chaque bulle s'ouvre dans un panneau où vous écrivez, cochez des tâches, attachez des photos, des croquis et des mémos vocaux (que l'IA transcrit et transforme en tâches ou rappels), et posez des rappels qui vous préviennent à l'heure dite. Vos notes restent privées : rien n'est publié.</p>
     <div class="ctas">
-      <a class="btn btn-primary" href="/activate">Commencer <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+      <a class="btn btn-primary" href="/activate?free=1">Commencer gratuitement <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
       <a class="btn btn-ghost" href="/#outils">Voir tous les outils</a>
     </div>
     <p class="trust">Sans carte bancaire · vos données restent à vous, hébergées en Europe</p>
@@ -240,7 +245,7 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
     <h2 id="faq">Questions fréquentes</h2>
     <div class="faq">
       <details><summary>Où sont stockées mes notes ? Sont-elles privées ?</summary><div class="a">Tout est rangé dans votre espace Keystone (base de données et stockage de fichiers), rattaché à votre compte. Vos bulles, photos, croquis et mémos vocaux ne sont jamais publics ni partagés : Keynapse est un outil personnel.</div></details>
-      <details><summary>La note vocale consomme-t-elle des crédits IA ?</summary><div class="a">Oui : la transcription du mémo puis l'analyse qui en tire des tâches et rappels comptent comme des actions IA (au compteur de crédits). L'enregistrement audio, lui, est toujours conservé même si l'IA n'est pas disponible — vous ne perdez jamais votre mémo.</div></details>
+      <details><summary>La note vocale consomme-t-elle des conversations ?</summary><div class="a">Oui : la transcription du mémo puis l'analyse qui en tire des tâches et rappels comptent comme des actions IA (au compteur de conversations). L'enregistrement audio, lui, est toujours conservé même si l'IA n'est pas disponible — vous ne perdez jamais votre mémo.</div></details>
       <details><summary>Serai-je prévenu d'un rappel si Keynapse est fermé ?</summary><div class="a">Les notifications sont locales : elles se déclenchent quand le pad est ouvert (bandeau dans l'app + sonnerie, et notification système sur ordinateur si vous l'avez autorisée). Sur iPhone dans Safari, seul le bandeau s'affiche. Les rappels par notification même app fermée viendront plus tard.</div></details>
       <details><summary>Comment supprimer un lien, une capture ou un rappel ?</summary><div class="a">Ouvrez la bulle concernée : chaque lien, chaque vignette de capture et chaque rappel a un « × » pour le retirer. Pour supprimer une bulle entière, utilisez « Supprimer cette bulle » en bas de son panneau (avec confirmation).</div></details>
       <details><summary>L'animation des bulles me gêne (mal de mer).</summary><div class="a">Le bouton en forme d'onde, en haut à droite, fige la respiration des bulles et la souplesse des liens : la carte se stabilise, tout reste cliquable et déplaçable. Votre choix est mémorisé, et Keynapse respecte aussi le réglage « réduire les animations » de votre appareil.</div></details>
@@ -279,7 +284,7 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
   <section class="band">
     <h2>Activez Keynapse dans votre OS.</h2>
     <p>Tous vos outils métier dans un seul cockpit. Démarrez en quelques minutes.</p>
-    <a class="btn btn-primary" href="/activate">Commencer <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+    <a class="btn btn-primary" href="/activate?free=1">Commencer gratuitement <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
   </section>
 
   <footer class="foot">
@@ -303,5 +308,6 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
   </footer>
 
 </div>
+
 </body>
 </html>

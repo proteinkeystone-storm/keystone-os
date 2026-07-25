@@ -35,8 +35,8 @@
       "a": "On garantit qu'on ne peut plus accéder au message par ce lien après lecture — pas qu'il n'a pas été capturé pendant qu'il s'affichait. Missive protège contre l'interception du lien, pas contre un destinataire qui photographie son propre écran. C'est de l'éphémère sécurisé, pas de l'anti-capture."
     },
     {
-      "q": "Missive consomme-t-elle des crédits IA ?",
-      "a": "Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro crédit consommé, jamais."
+      "q": "Missive consomme-t-elle des conversations ?",
+      "a": "Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro conversation consommée, jamais."
     }
   ],
   "shortcuts": [

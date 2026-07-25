@@ -68,10 +68,10 @@
       "mainEntity": [
         {
           "@type": "Question",
-          "name": "Qu'est-ce qui consomme des crédits IA, et qu'est-ce qui est gratuit ?",
+          "name": "Qu'est-ce qui consomme des conversations, et qu'est-ce qui est gratuit ?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "La surveillance, l'audit complet et les correctifs « code à coller » sont gratuits (aucune IA). Seuls « Rédiger avec l'IA » (méta description, FAQ) et la mesure de visibilité IA (GEO) consomment des crédits — environ 1 par génération ou par mesure. Avec votre propre clé moteur (BYOK), ces actions passent hors compteur."
+            "text": "La surveillance, l'audit complet et les correctifs « code à coller » sont gratuits (aucune IA). Seuls « Rédiger avec l'IA » (méta description, FAQ) et la mesure de visibilité IA (GEO) consomment des conversations — environ 1 par génération ou par mesure. Avec votre propre clé moteur (BYOK), ces actions passent hors compteur."
           }
         },
         {
@@ -151,6 +151,11 @@ h1 em{font-style:normal;background:linear-gradient(120deg,var(--accent-3),var(--
 .ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:32px}
 .btn{display:inline-flex;align-items:center;gap:8px;font-size:14.5px;font-weight:600;padding:13px 24px;border-radius:999px;transition:transform .15s,box-shadow .2s,border-color .2s,background .2s}
 .btn svg{width:18px;height:18px}
+/* Le CTA d'achat est un <button> (il déclenche un appel, il ne navigue
+   pas) : sans ce reset il hériterait de la bordure et de la police par
+   défaut du navigateur et jurerait à côté des <a class="btn">. */
+button.btn{border:0;font-family:inherit;cursor:pointer}
+button.btn[disabled]{opacity:.6;cursor:default;transform:none}
 .btn-primary{background:linear-gradient(120deg,var(--accent),var(--accent-2));color:#fff;box-shadow:0 8px 26px rgba(99,102,241,.32)}
 .btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 32px rgba(99,102,241,.42)}
 .btn-ghost{border:1px solid var(--border-strong);color:var(--text)}
@@ -216,10 +221,10 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
     <h1>Votre site sous surveillance.<br><em>Et visible dans les IA.</em></h1>
     <p class="lead">Votre centre de contrôle d'audit web AVEC suivi dans le temps. Sentinel surveille vos sites en continu (en ligne / hors ligne, temps de réponse), les note sur un radar à plusieurs axes (disponibilité, performance, SEO, sécurité, accessibilité, présence locale, visibilité dans les IA), et livre des correctifs clé en main : les étapes exactes pour votre plateforme et le code prêt à coller. Sa fonction phare : savoir si les IA (ChatGPT, Perplexity, Gemini) citent votre établissement quand un prospect les interroge.</p>
     <div class="ctas">
-      <a class="btn btn-primary" href="/activate">Commencer <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+      <button class="btn btn-primary" type="button" data-buy="O-GEO-001">Obtenir Sentinel — 49 €/mois <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
       <a class="btn btn-ghost" href="/#outils">Voir tous les outils</a>
     </div>
-    <p class="trust">Sans carte bancaire · vos données restent à vous, hébergées en Europe</p>
+    <p class="trust">Sans engagement, résiliable à tout moment · vos données restent à vous, hébergées en Europe</p>
   </header>
 
   <section class="block" aria-labelledby="how">
@@ -239,7 +244,7 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
     <span class="eyebrow-l">Bon à savoir</span>
     <h2 id="faq">Questions fréquentes</h2>
     <div class="faq">
-      <details><summary>Qu'est-ce qui consomme des crédits IA, et qu'est-ce qui est gratuit ?</summary><div class="a">La surveillance, l'audit complet et les correctifs « code à coller » sont gratuits (aucune IA). Seuls « Rédiger avec l'IA » (méta description, FAQ) et la mesure de visibilité IA (GEO) consomment des crédits — environ 1 par génération ou par mesure. Avec votre propre clé moteur (BYOK), ces actions passent hors compteur.</div></details>
+      <details><summary>Qu'est-ce qui consomme des conversations, et qu'est-ce qui est gratuit ?</summary><div class="a">La surveillance, l'audit complet et les correctifs « code à coller » sont gratuits (aucune IA). Seuls « Rédiger avec l'IA » (méta description, FAQ) et la mesure de visibilité IA (GEO) consomment des conversations — environ 1 par génération ou par mesure. Avec votre propre clé moteur (BYOK), ces actions passent hors compteur.</div></details>
       <details><summary>Pourquoi l'axe « Visibilité IA (GEO) » n'apparaît-il pas ?</summary><div class="a">Le GEO s'active dès qu'une clé moteur est configurée côté serveur (une clé Gemini gratuite suffit pour démarrer). Tant qu'aucune clé n'est posée, l'axe et le bouton « Mesurer » restent masqués — le reste de l'audit fonctionne normalement.</div></details>
       <details><summary>Sentinel fonctionne-t-il avec Wix, WordPress et un site sur-mesure ?</summary><div class="a">Oui. Sentinel détecte la plateforme à partir du site et adapte les instructions de chaque correctif : où cliquer dans votre éditeur, ou bien le bloc de code exact à coller dans l'en-tête. C'est pensé pour un utilisateur non technique.</div></details>
       <details><summary>Pourquoi je ne vois pas le nombre de jours avant l'expiration du certificat SSL ?</summary><div class="a">Un site en HTTPS qui répond a un certificat valide à l'instant de la vérification. Le compte à rebours précis (J-14) n'est pas lisible de manière souveraine par notre sonde ; il sera ajouté via une vérification dédiée. En attendant, une chute du HTTPS est détectée par la veille.</div></details>
@@ -279,7 +284,7 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
   <section class="band">
     <h2>Activez Sentinel dans votre OS.</h2>
     <p>Tous vos outils métier dans un seul cockpit. Démarrez en quelques minutes.</p>
-    <a class="btn btn-primary" href="/activate">Commencer <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+    <button class="btn btn-primary" type="button" data-buy="O-GEO-001">Obtenir Sentinel — 49 €/mois <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
   </section>
 
   <footer class="foot">
@@ -303,5 +308,34 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
   </footer>
 
 </div>
+
+<script>
+/* Ouvre la page de paiement Stripe de l'application. La page ne connaît
+   ni montant ni identifiant de prix — elle nomme l'app, le serveur
+   choisit le tarif. Échec → le bouton revient, aucun état bloqué. */
+document.querySelectorAll('[data-buy]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var app = btn.getAttribute('data-buy');
+    var libelle = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Ouverture du paiement…';
+    fetch('https://keystone-os-api.keystone-os.workers.dev/api/stripe/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app: app, interval: 'month' })
+    })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (d) {
+        if (d && d.url) { location.href = d.url; return; }
+        throw new Error((d && d.error) || 'indisponible');
+      })
+      .catch(function () {
+        btn.disabled = false;
+        btn.innerHTML = libelle;
+        alert("Le paiement est momentanément indisponible. Réessayez dans un instant.");
+      });
+  });
+});
+</script>
 </body>
 </html>

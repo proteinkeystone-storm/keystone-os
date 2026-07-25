@@ -116,10 +116,10 @@
         },
         {
           "@type": "Question",
-          "name": "Missive consomme-t-elle des crédits IA ?",
+          "name": "Missive consomme-t-elle des conversations ?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro crédit consommé, jamais."
+            "text": "Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro conversation consommée, jamais."
           }
         }
       ]
@@ -167,6 +167,11 @@ h1 em{font-style:normal;background:linear-gradient(120deg,var(--accent-3),var(--
 .ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:32px}
 .btn{display:inline-flex;align-items:center;gap:8px;font-size:14.5px;font-weight:600;padding:13px 24px;border-radius:999px;transition:transform .15s,box-shadow .2s,border-color .2s,background .2s}
 .btn svg{width:18px;height:18px}
+/* Le CTA d'achat est un <button> (il déclenche un appel, il ne navigue
+   pas) : sans ce reset il hériterait de la bordure et de la police par
+   défaut du navigateur et jurerait à côté des <a class="btn">. */
+button.btn{border:0;font-family:inherit;cursor:pointer}
+button.btn[disabled]{opacity:.6;cursor:default;transform:none}
 .btn-primary{background:linear-gradient(120deg,var(--accent),var(--accent-2));color:#fff;box-shadow:0 8px 26px rgba(99,102,241,.32)}
 .btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 32px rgba(99,102,241,.42)}
 .btn-ghost{border:1px solid var(--border-strong);color:var(--text)}
@@ -232,7 +237,7 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
     <h1>Un secret.<br><em>Lu une seule fois, puis disparu.</em></h1>
     <p class="lead">Missive transmet un secret — mot de passe, code, information sensible — qui se lit une seule fois puis s'autodétruit. Le contenu est chiffré sur votre appareil : même nous ne pouvons pas le lire. Vous partagez un lien (ou un QR, ou une puce NFC) et, par un autre canal, un code de déverrouillage. Au-delà de quelques essais ratés, la missive meurt définitivement.</p>
     <div class="ctas">
-      <a class="btn btn-primary" href="/activate">Commencer <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+      <a class="btn btn-primary" href="/activate?free=1">Commencer gratuitement <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
       <a class="btn btn-ghost" href="/#outils">Voir tous les outils</a>
     </div>
     <p class="trust">Sans carte bancaire · vos données restent à vous, hébergées en Europe</p>
@@ -261,7 +266,7 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
       <details><summary>Que peut-on envoyer par Missive — et qu'est-ce qu'il vaut mieux éviter ?</summary><div class="a">Missive est faite pour les secrets opérationnels : mots de passe, codes d'accès, coordonnées bancaires à saisir, clés API, instructions confidentielles ponctuelles. À l'inverse, évitez d'y faire passer SEUL tout ce qui pourrait devoir être prouvé plus tard : engagement contractuel, échange RH sensible, instruction qui engage votre responsabilité. Une missive détruite ne peut pas servir de preuve — c'est voulu. Pour ces sujets, doublez par un canal archivé (email). Règle simple à adopter en équipe : « Missive = transmettre un secret, jamais archiver une décision. Tout ce qui a valeur de preuve passe aussi par l'email. »</div></details>
       <details><summary>Missive est-elle compatible RGPD ? Que noter dans mon registre des traitements ?</summary><div class="a">Oui — et plutôt deux fois qu'une : la minimisation et la limitation de conservation que le RGPD recommande sont ici garanties par construction (contenu chiffré illisible par l'éditeur, autodestruction, traces techniques purgées sous 24 h). Si vous tenez un registre des traitements, vous pouvez y recopier ceci : « Transmission ponctuelle d'informations sensibles via messagerie éphémère chiffrée de bout en bout (Missive, Keystone OS). Contenu illisible par l'éditeur ; autodestruction après lecture unique, expiration ou épuisement des essais ; métadonnées techniques purgées sous 24 heures. Ce canal n'est pas utilisé pour des données soumises à une obligation légale de conservation. » Une donnée déjà autodétruite ne peut plus être fournie lors d'une demande d'accès : c'est conforme, du moment que c'est documenté et que le canal n'est pas utilisé pour ce qui doit être conservé.</div></details>
       <details><summary>« Lu une fois » : et si quelqu'un filme l'écran ?</summary><div class="a">On garantit qu'on ne peut plus accéder au message par ce lien après lecture — pas qu'il n'a pas été capturé pendant qu'il s'affichait. Missive protège contre l'interception du lien, pas contre un destinataire qui photographie son propre écran. C'est de l'éphémère sécurisé, pas de l'anti-capture.</div></details>
-      <details><summary>Missive consomme-t-elle des crédits IA ?</summary><div class="a">Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro crédit consommé, jamais.</div></details>
+      <details><summary>Missive consomme-t-elle des conversations ?</summary><div class="a">Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro conversation consommée, jamais.</div></details>
     </div>
   </section>
 
@@ -297,7 +302,7 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
   <section class="band">
     <h2>Activez Missive dans votre OS.</h2>
     <p>Tous vos outils métier dans un seul cockpit. Démarrez en quelques minutes.</p>
-    <a class="btn btn-primary" href="/activate">Commencer <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+    <a class="btn btn-primary" href="/activate?free=1">Commencer gratuitement <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
   </section>
 
   <footer class="foot">
@@ -321,5 +326,6 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
   </footer>
 
 </div>
+
 </body>
 </html>

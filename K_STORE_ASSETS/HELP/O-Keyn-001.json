@@ -15,8 +15,8 @@
       "a": "Tout est rangé dans votre espace Keystone (base de données et stockage de fichiers), rattaché à votre compte. Vos bulles, photos, croquis et mémos vocaux ne sont jamais publics ni partagés : Keynapse est un outil personnel."
     },
     {
-      "q": "La note vocale consomme-t-elle des crédits IA ?",
-      "a": "Oui : la transcription du mémo puis l'analyse qui en tire des tâches et rappels comptent comme des actions IA (au compteur de crédits). L'enregistrement audio, lui, est toujours conservé même si l'IA n'est pas disponible — vous ne perdez jamais votre mémo."
+      "q": "La note vocale consomme-t-elle des conversations ?",
+      "a": "Oui : la transcription du mémo puis l'analyse qui en tire des tâches et rappels comptent comme des actions IA (au compteur de conversations). L'enregistrement audio, lui, est toujours conservé même si l'IA n'est pas disponible — vous ne perdez jamais votre mémo."
     },
     {
       "q": "Serai-je prévenu d'un rappel si Keynapse est fermé ?",

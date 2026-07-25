@@ -11,8 +11,8 @@
   ],
   "faq": [
     {
-      "q": "Qu'est-ce qui consomme des crédits IA, et qu'est-ce qui est gratuit ?",
-      "a": "La surveillance, l'audit complet et les correctifs « code à coller » sont gratuits (aucune IA). Seuls « Rédiger avec l'IA » (méta description, FAQ) et la mesure de visibilité IA (GEO) consomment des crédits — environ 1 par génération ou par mesure. Avec votre propre clé moteur (BYOK), ces actions passent hors compteur."
+      "q": "Qu'est-ce qui consomme des conversations, et qu'est-ce qui est gratuit ?",
+      "a": "La surveillance, l'audit complet et les correctifs « code à coller » sont gratuits (aucune IA). Seuls « Rédiger avec l'IA » (méta description, FAQ) et la mesure de visibilité IA (GEO) consomment des conversations — environ 1 par génération ou par mesure. Avec votre propre clé moteur (BYOK), ces actions passent hors compteur."
     },
     {
       "q": "Pourquoi l'axe « Visibilité IA (GEO) » n'apparaît-il pas ?",

@@ -31,8 +31,8 @@
       "a": "Le poids vient du nombre de pages et de la finesse des visuels (chaque page est déjà recompressée à l'import). Retirez les pages non essentielles, ou repartez d'un PDF exporté en qualité écran plutôt qu'imprimerie. En dessous de 15–20 Mo, tout va bien."
     },
     {
-      "q": "Consomme-t-il des crédits IA ? Mes documents sont-ils envoyés quelque part ?",
-      "a": "Non et non. booK est 100 % sans IA et tout se fabrique dans votre navigateur : vos PDF et images ne quittent jamais votre appareil. Zéro crédit consommé, zéro donnée transmise."
+      "q": "Consomme-t-il des conversations ? Mes documents sont-ils envoyés quelque part ?",
+      "a": "Non et non. booK est 100 % sans IA et tout se fabrique dans votre navigateur : vos PDF et images ne quittent jamais votre appareil. Zéro conversation consommée, zéro donnée transmise."
     },
     {
       "q": "Puis-je le partager par un lien ou un QR ?",

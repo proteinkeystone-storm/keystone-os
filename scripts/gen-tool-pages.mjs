@@ -19,6 +19,10 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// Grille tarifaire = source de vérité unique (app/lib/pricing.js). Les prix
+// affichés sur ces pages publiques ne sont donc JAMAIS recopiés à la main :
+// changer un palier dans la grille suffit, `npm run gen-pages` répercute.
+import { APP_TIER, TIERS, TIER } from '../app/lib/pricing.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -138,6 +142,11 @@ h1 em{font-style:normal;background:linear-gradient(120deg,var(--accent-3),var(--
 .ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:32px}
 .btn{display:inline-flex;align-items:center;gap:8px;font-size:14.5px;font-weight:600;padding:13px 24px;border-radius:999px;transition:transform .15s,box-shadow .2s,border-color .2s,background .2s}
 .btn svg{width:18px;height:18px}
+/* Le CTA d'achat est un <button> (il déclenche un appel, il ne navigue
+   pas) : sans ce reset il hériterait de la bordure et de la police par
+   défaut du navigateur et jurerait à côté des <a class="btn">. */
+button.btn{border:0;font-family:inherit;cursor:pointer}
+button.btn[disabled]{opacity:.6;cursor:default;transform:none}
 .btn-primary{background:linear-gradient(120deg,var(--accent),var(--accent-2));color:#fff;box-shadow:0 8px 26px rgba(99,102,241,.32)}
 .btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 32px rgba(99,102,241,.42)}
 .btn-ghost{border:1px solid var(--border-strong);color:var(--text)}
@@ -186,6 +195,83 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
 
 const ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
 const ICON_WRAP = (icon) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${icon}</svg>`;
+
+/* ═══════════════════════════════════════════════════════════════
+   LE BOUTON D'ACHAT — ce qui manquait
+   ─────────────────────────────────────────────────────────────
+   Jusqu'au 2026-07-25, les trois CTA de chaque page outil pointaient
+   sur /activate — un formulaire qui réclame une clé de licence. Un
+   visiteur venu pour acheter Smart Dynamic QR à 49 € y arrivait donc
+   sur une porte fermée, et AUCUN chemin public ne menait au paiement
+   d'une application à la carte : seule la carte « OS complet » de la
+   landing appelait Stripe. L'offre étiquetée « Populaire » était
+   littéralement invendable depuis le site.
+
+   Rien ne manquait pourtant : POST /api/stripe/checkout existe et
+   fonctionne, et chaque entrée de TOOLS porte déjà son `app`. Il n'y
+   avait qu'à les relier.
+
+   Décision (Stéphane, 2026-07-25) : DIRECT Stripe, sans écran
+   intermédiaire — les 3 applications gratuites ont remplacé l'essai,
+   celui qui clique « Obtenir » a déjà choisi. Le prix est écrit SUR le
+   bouton pour qu'il n'y ait aucune surprise à l'arrivée.
+
+   Le client ne nomme jamais un prix, seulement une application : le
+   serveur choisit le tarif (cf. routes/stripe-checkout.js).
+   ═══════════════════════════════════════════════════════════════ */
+const KS_API = 'https://keystone-os-api.keystone-os.workers.dev';
+
+const isFree  = (appId) => APP_TIER[appId] === TIER.FREE;
+const priceOf = (appId) => (TIERS[APP_TIER[appId]] || {}).price ?? null;
+
+// CTA principal. Gratuit → l'inscription 0 € ; payant → Stripe.
+function CTA_PRIMARY(t) {
+  if (isFree(t.app)) {
+    return `<a class="btn btn-primary" href="/activate?free=1">Commencer gratuitement ${ARROW}</a>`;
+  }
+  return `<button class="btn btn-primary" type="button" data-buy="${escAttr(t.app)}">`
+       + `Obtenir ${esc(t.j.title)} — ${priceOf(t.app)} €/mois ${ARROW}</button>`;
+}
+
+// Ligne de réassurance SOUS le CTA. « Sans carte bancaire » est vrai
+// pour une app gratuite et FAUX juste au-dessus d'un bouton qui ouvre
+// Stripe — on ne laisse pas la même phrase servir les deux cas.
+function CTA_TRUST(t) {
+  return isFree(t.app)
+    ? 'Sans carte bancaire · vos données restent à vous, hébergées en Europe'
+    : 'Sans engagement, résiliable à tout moment · vos données restent à vous, hébergées en Europe';
+}
+
+// Script d'achat, injecté seulement sur les pages payantes.
+const BUY_SCRIPT = `
+<script>
+/* Ouvre la page de paiement Stripe de l'application. La page ne connaît
+   ni montant ni identifiant de prix — elle nomme l'app, le serveur
+   choisit le tarif. Échec → le bouton revient, aucun état bloqué. */
+document.querySelectorAll('[data-buy]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var app = btn.getAttribute('data-buy');
+    var libelle = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Ouverture du paiement…';
+    fetch('${KS_API}/api/stripe/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app: app, interval: 'month' })
+    })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (d) {
+        if (d && d.url) { location.href = d.url; return; }
+        throw new Error((d && d.error) || 'indisponible');
+      })
+      .catch(function () {
+        btn.disabled = false;
+        btn.innerHTML = libelle;
+        alert("Le paiement est momentanément indisponible. Réessayez dans un instant.");
+      });
+  });
+});
+</script>`;
 
 function FOOT() {
   return `  <footer class="foot">
@@ -284,10 +370,10 @@ ${STYLE}
     <h1>${esc(t.h1a)}<br><em>${esc(t.h1b)}</em></h1>
     <p class="lead">${esc(t.j.tldr || '')}</p>
     <div class="ctas">
-      <a class="btn btn-primary" href="/activate">Commencer ${ARROW}</a>
+      ${CTA_PRIMARY(t)}
       <a class="btn btn-ghost" href="/#outils">Voir tous les outils</a>
     </div>
-    <p class="trust">Sans carte bancaire · vos données restent à vous, hébergées en Europe</p>
+    <p class="trust">${CTA_TRUST(t)}</p>
   </header>
 ${steps ? `
   <section class="block" aria-labelledby="how">
@@ -324,12 +410,13 @@ ${relCards}
   <section class="band">
     <h2>Activez ${esc(t.j.title)} dans votre OS.</h2>
     <p>Tous vos outils métier dans un seul cockpit. Démarrez en quelques minutes.</p>
-    <a class="btn btn-primary" href="/activate">Commencer ${ARROW}</a>
+    ${CTA_PRIMARY(t)}
   </section>
 
 ${FOOT()}
 
 </div>
+${isFree(t.app) ? '' : BUY_SCRIPT}
 </body>
 </html>
 `;
@@ -405,9 +492,9 @@ ${STYLE}
   <header class="hero">
     <span class="eyebrow">Questions fréquentes</span>
     <h1>Vos questions,<br><em>nos réponses.</em></h1>
-    <p class="lead">Tout ce qu'il faut savoir sur Keystone et ses outils — souveraineté, crédits IA, données, publication. Une question sans réponse ? Écrivez-nous.</p>
+    <p class="lead">Tout ce qu'il faut savoir sur Keystone et ses outils — souveraineté, conversations, données, publication. Une question sans réponse ? Écrivez-nous.</p>
     <div class="ctas">
-      <a class="btn btn-primary" href="/activate">Commencer ${ARROW}</a>
+      <a class="btn btn-primary" href="/activate?free=1">Commencer gratuitement ${ARROW}</a>
       <a class="btn btn-ghost" href="/#outils">Voir les outils</a>
     </div>
   </header>

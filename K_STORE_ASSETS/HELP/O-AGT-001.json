@@ -15,15 +15,15 @@
       "a": "Non, c'est le principe fondateur : il ne répond que depuis vos fiches validées, en les citant (dans le bac à sable). Hors de son savoir, il le dit avec ses mots — sans rien inventer — et la question rejoint ses Trous pour que vous puissiez la combler."
     },
     {
-      "q": "Qu'est-ce qui consomme mes crédits IA ?",
-      "a": "Une question posée à l'agent (par vous ou un visiteur public) et une extraction de fiches (coller un texte, lire une page web ou un fichier, structurer une réponse d'interview) : 1 crédit chacune. Quand l'agent ne sait pas répondre sans génération, le crédit est rendu. La lecture vocale, la dictée et le correcteur de trous sont gratuits."
+      "q": "Qu'est-ce qui consomme mes conversations ?",
+      "a": "Une question posée à l'agent (par vous ou un visiteur public) et une extraction de fiches (coller un texte, lire une page web ou un fichier, structurer une réponse d'interview) : 1 conversation chacune. Quand l'agent ne sait pas répondre sans génération, la conversation est rendue. La lecture vocale, la dictée et le correcteur de trous sont gratuits."
     },
     {
       "q": "Que voient mes visiteurs sur la page publique ?",
       "a": "Le nom de l'agent, son métier, son message d'accueil et ses réponses — jamais vos fiches, vos sources ni votre coffre. Leurs questions ne sont pas rattachées à leur identité et sont effacées après 90 jours."
     },
     {
-      "q": "Un visiteur peut-il épuiser mes crédits ?",
+      "q": "Un visiteur peut-il épuiser mes conversations ?",
       "a": "Des garde-fous limitent chaque appareil (50 questions/jour) et chaque lien (plafond quotidien réglable dans Réglages → Publier, 500 par défaut). Vous pouvez aussi fixer une date d'expiration ou dépublier à tout moment — le lien et le QR cessent immédiatement de fonctionner."
     },
     {
