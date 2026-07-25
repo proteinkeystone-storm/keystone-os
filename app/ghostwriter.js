@@ -97,8 +97,33 @@ function _ingestQuota(q) {
         remaining : q.remaining ?? null,
         unlimited : !!q.unlimited,
         period    : q.period    ?? 'day',   // 'month' = crédits IA · 'day' = quota/jour legacy
+        // Séparées à dessein : les incluses repartent le 1er, les packs
+        // ne périment jamais. Les additionner dans un seul dénominateur
+        // ferait croire qu'on perd ses packs au changement de mois.
+        included  : q.included  ?? null,
+        packs     : q.packs     ?? 0,
         fetchedAt : Date.now(),
     };
+}
+
+/* ── Libellé du compteur mensuel ───────────────────────────────────
+   PARTAGÉ par les trois pastilles (studio, panneau inline, modal) pour
+   qu'elles ne puissent plus raconter trois choses différentes.
+
+   Le piège qu'il évite : additionner les conversations INCLUSES et les
+   PACKS dans un seul dénominateur. On affichait « 1000/1300 · ce mois »
+   pour 300 incluses (épuisées) + 1000 achetées — arithmétiquement juste,
+   mais ça annonce 1300 par mois alors que 1000 d'entre elles ne
+   repartent PAS le 1er : les packs ne périment jamais. Le client pouvait
+   croire qu'il allait les perdre, ou au contraire compter sur 1300 le
+   mois suivant.
+
+   Sans pack, le dénominateur est homogène → on le garde. Avec pack, on
+   annonce le restant et on dit d'où il vient. */
+function _libelleMensuel(restant, max, packs) {
+    const n = (v) => Number(v || 0).toLocaleString('fr-FR');
+    if (packs > 0) return `${n(restant)} restantes · dont ${n(packs)} en packs`;
+    return `${n(restant)}/${n(max)} conversations · ce mois`;
 }
 
 // Message unique d'épuisement, adapté au système de la licence (crédits
@@ -167,7 +192,7 @@ function _quotaLabel() {
     // Période réelle : 'month' = portefeuille de conversations (modèle par
     // application), 'day' = ancien quota journalier. Dire « aujourd'hui »
     // sur un compteur mensuel ferait croire à un reset qui n'arrive pas.
-    if (_quotaCache.period === 'month') return `${r}/${m} conversations restantes ce mois`;
+    if (_quotaCache.period === 'month') return _libelleMensuel(r, m, _quotaCache.packs);
     const p = _quotaCache.plan ? ` · ${_quotaCache.plan}` : '';
     return `${r}/${m} restants aujourd'hui${p}`;
 }
@@ -1323,6 +1348,18 @@ export function getGhostwriterPlan() { return _quotaPlan(); }
  * mensuel promet un reset à minuit qui n'arrivera pas.
  */
 export function getGhostwriterQuotaPeriod() { return _quotaCache.period || 'day'; }
+
+/**
+ * Libellé prêt à afficher du compteur mensuel. UNE seule implémentation
+ * pour les trois pastilles — elles calculaient chacune la leur et
+ * pouvaient donc diverger (c'est arrivé : « / jour » ici, « ce mois »
+ * là). Retourne null hors modèle mensuel, à l'appelant de retomber sur
+ * son libellé journalier legacy.
+ */
+export function getGhostwriterQuotaLabel() {
+    if (_quotaCache.period !== 'month') return null;
+    return _libelleMensuel(_quotaCache.remaining, _quotaCache.max, _quotaCache.packs);
+}
 
 /**
  * Force un refresh du cache quota depuis le serveur.

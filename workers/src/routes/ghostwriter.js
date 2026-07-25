@@ -163,6 +163,13 @@ function _gwQuotaFromWallet(w) {
     remaining : w.unlimited ? null : w.remaining,
     unlimited : !!w.unlimited,
     period    : 'month',   // crédits mensuels → le frontend adapte son message
+    // Les deux composantes, SÉPARÉES. `max` les additionne, ce qui suffit
+    // pour un plafond mais induit en erreur si on l'affiche tel quel : les
+    // conversations INCLUSES repartent le 1er du mois, les PACKS jamais.
+    // Un « 1300 ce mois » laisse croire qu'on perdra ses packs au
+    // changement de mois. Le front a besoin du détail pour le dire juste.
+    included  : w.unlimited ? null : (w.includedQuota || 0),
+    packs     : w.packBalance || 0,
   };
 }
 // Mistral Small 3.1 N'EST PAS un modèle raisonneur : il écrit directement

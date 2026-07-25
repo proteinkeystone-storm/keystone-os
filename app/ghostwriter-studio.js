@@ -34,7 +34,8 @@ import { icon }                                from './lib/ui-icons.js';
 import { symbolsButtonHTML, openSymbolsPanel, closeSymbolsPanel } from './lib/symbols-panel.js';
 import {
   rewriteText, getGhostwriterQuotaRemaining, getGhostwriterQuotaMax,
-  getGhostwriterPlan, getGhostwriterQuotaPeriod, refreshGhostwriterQuota,
+  getGhostwriterPlan, getGhostwriterQuotaPeriod, getGhostwriterQuotaLabel,
+  refreshGhostwriterQuota,
   friendlyGhostwriterError, getGhostwriterQuotaMessage,
 } from './ghostwriter.js';
 
@@ -271,7 +272,7 @@ function _formatQuotaChip() {
   // 'month' = portefeuille de conversations (modèle par application).
   // Ni « / jour » (le reset est mensuel) ni le plan technique (PRO n'est
   // plus un palier acheté — l'afficher annonce une offre inexistante).
-  if (period === 'month') return `${remaining}/${max} conversations · ce mois`;
+  if (period === 'month') return getGhostwriterQuotaLabel();
   return `${remaining}/${max} / jour${plan ? ` · ${plan}` : ''}`;
 }
 
