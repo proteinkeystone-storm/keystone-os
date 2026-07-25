@@ -4286,12 +4286,14 @@ async function _fillAutoReload(el) {
     }
 
     // ── Pas de carte : consentement + enregistrement (zéro débit) ──
+    // Sobre façon auto-reload Anthropic : le consentement (une phrase,
+    // servie par le worker) EST l'explication — pas de paragraphe
+    // d'introduction qui la paraphrase.
     if (!s.cardOnFile) {
         el.innerHTML = `<div style="${bordure};padding:12px">${titre}`
-            + '<div class="sp-user-hint" style="margin:0 0 8px">Quand il te reste peu de conversations, un pack est rechargé automatiquement — dans la limite d\'un plafond mensuel que tu fixes. Rien n\'est prélevé aujourd\'hui : cette étape enregistre seulement ta carte.</div>'
-            + `<div style="font-size:.75rem;color:var(--text-muted);border-left:2px solid var(--gold,#c9b48a);padding-left:8px;margin-bottom:10px">${s.consent?.text || ''}</div>`
-            + '<button id="arl-setup" class="api-key-save-btn" style="width:100%">Accepter et enregistrer ma carte</button>'
-            + '<div id="arl-msg" class="sp-user-hint" style="min-height:14px;margin-top:6px"></div></div>';
+            + `<div style="font-size:.78rem;color:var(--text-muted);margin-bottom:10px">${s.consent?.text || ''}</div>`
+            + '<button id="arl-setup" class="api-key-save-btn" style="width:100%">Enregistrer ma carte</button>'
+            + '<div id="arl-msg" class="sp-user-hint" style="min-height:14px;margin-top:6px">Rien n\'est prélevé aujourd\'hui.</div></div>';
         el.querySelector('#arl-setup')?.addEventListener('click', async (e) => {
             e.target.disabled = true; e.target.textContent = 'Ouverture de l\'enregistrement…';
             try {
@@ -4299,7 +4301,7 @@ async function _fillAutoReload(el) {
                 if (d.url) { location.href = d.url; return; }
                 throw new Error('Réponse sans lien.');
             } catch (err2) {
-                e.target.disabled = false; e.target.textContent = 'Accepter et enregistrer ma carte';
+                e.target.disabled = false; e.target.textContent = 'Enregistrer ma carte';
                 const m = el.querySelector('#arl-msg'); if (m) m.textContent = err2.message;
             }
         });
@@ -4314,17 +4316,22 @@ async function _fillAutoReload(el) {
             : 'border:1px solid var(--bd,rgba(127,127,127,.25));color:var(--text-muted);background:transparent')
         + `">${libelle}</button>`;
 
-    el.innerHTML = `<div style="${bordure};padding:12px">${titre}`
-        + `<div class="sp-user-hint" style="margin:0 0 10px">${s.enabled
-            ? `Active — recharge dès que tu passes sous ${s.threshold} conversations. Dépensé ce mois : ${s.spentEur.toFixed(2).replace('.', ',')} € sur ${s.capEur} €.`
-            : 'Carte enregistrée. La recharge est prête — il ne reste qu\'à l\'activer.'}</div>`
-        + `<div style="display:flex;gap:8px;margin-bottom:10px">${packBtn('ks_pack_1000', 'Pack 1 000 · 9 €')}${packBtn('ks_pack_5000', 'Pack 5 000 · 39 €')}</div>`
+    // Statut en une ligne, chiffres en tête — pas de phrase qui répète
+    // ce que les champs disent déjà.
+    const statut = s.enabled
+        ? `<span style="color:var(--gold,#c9b48a);font-weight:700">Active</span> · ${s.spentEur.toFixed(0)} € / ${s.capEur} € ce mois`
+        : 'Inactive · carte enregistrée';
+    el.innerHTML = `<div style="${bordure};padding:12px">`
+        + `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">`
+        + '<span style="font-weight:800;font-size:.85rem">Recharge automatique</span>'
+        + `<span style="font-size:.75rem;color:var(--text-muted)">${statut}</span></div>`
+        + `<div style="display:flex;gap:8px;margin-bottom:10px">${packBtn('ks_pack_1000', '+1 000 · 9 €')}${packBtn('ks_pack_5000', '+5 000 · 39 €')}</div>`
         + '<div style="display:flex;gap:8px;margin-bottom:10px">'
-        + `<label style="flex:1;font-size:.72rem;color:var(--text-muted)">Recharger sous<input id="arl-threshold" type="number" min="5" max="2000" value="${s.threshold}" class="sp-user-input" style="width:100%;margin-top:3px"></label>`
+        + `<label style="flex:1;font-size:.72rem;color:var(--text-muted)">Sous (conversations)<input id="arl-threshold" type="number" min="5" max="2000" value="${s.threshold}" class="sp-user-input" style="width:100%;margin-top:3px"></label>`
         + `<label style="flex:1;font-size:.72rem;color:var(--text-muted)">Plafond €/mois<input id="arl-cap" type="number" min="${s.packPriceEur}" max="500" value="${s.capEur}" class="sp-user-input" style="width:100%;margin-top:3px"></label>`
         + '</div>'
-        + `<button id="arl-save" class="api-key-save-btn" style="width:100%">${s.enabled ? 'Enregistrer les réglages' : 'Activer la recharge automatique'}</button>`
-        + (s.enabled ? '<button id="arl-off" style="margin-top:8px;width:100%;background:transparent;border:1px solid var(--bd,rgba(127,127,127,.25));border-radius:8px;color:var(--text-muted);padding:8px;font-size:.78rem;cursor:pointer">Désactiver</button>' : '')
+        + `<button id="arl-save" class="api-key-save-btn" style="width:100%">${s.enabled ? 'Enregistrer' : 'Activer'}</button>`
+        + (s.enabled ? '<button id="arl-off" style="margin-top:8px;width:100%;background:transparent;border:0;color:var(--text-muted);padding:4px;font-size:.75rem;cursor:pointer;text-decoration:underline;text-underline-offset:3px">Désactiver</button>' : '')
         + '<div id="arl-msg" class="sp-user-hint" style="min-height:14px;margin-top:6px"></div></div>';
 
     let packChoisi = s.pack;

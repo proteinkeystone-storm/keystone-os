@@ -41,20 +41,19 @@ const SITE = 'https://protein-keystone.com';
 // ── Le texte que le client accepte. Toute modification de FOND doit
 //    incrémenter la version : une trace qui pointe une version périmée
 //    ne prouve pas ce que la personne a réellement lu.
-export const CONSENT_VERSION = '2026-07-25.v1';
+//    v2 (25/07) : condensé en UNE phrase sur le modèle de l'auto-reload
+//    Anthropic — les quatre phrases de la v1 noyaient l'essentiel. Tout
+//    ce qui engage y reste : montant, déclencheur, plafond, révocabilité.
+export const CONSENT_VERSION = '2026-07-25.v2';
 export function consentText({ capEur, packLabel, threshold }) {
-  return [
-    `J'autorise Keystone à débiter ma carte enregistrée pour ${packLabel}`,
-    `lorsqu'il me reste moins de ${threshold} conversations, sans que j'aie à intervenir.`,
-    `Ces débits s'arrêtent automatiquement dès que ${capEur} € ont été prélevés sur le mois en cours.`,
-    `Je peux désactiver cette recharge ou changer ce plafond à tout moment depuis mes réglages.`,
-  ].join(' ');
+  return `J'autorise le débit automatique de ${packLabel} quand mon solde passe sous `
+       + `${threshold} conversations, dans la limite de ${capEur} €/mois. Désactivable à tout moment.`;
 }
 
 function packLabel(lookup) {
   const n = PACK_LOOKUP_TO_CONVERSATIONS[lookup] || 0;
   const c = PACK_PRICE_CENTS[lookup] || 0;
-  return `un pack de ${n.toLocaleString('fr-FR')} conversations à ${(c / 100).toFixed(0)} €`;
+  return `${(c / 100).toFixed(0)} € (${n.toLocaleString('fr-FR')} conversations)`;
 }
 
 async function _stripe(env, path, { method = 'GET', body, idempotencyKey } = {}) {
