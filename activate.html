@@ -1787,34 +1787,55 @@ let _deviceLimit = 3;
  * Empreinte appareil — combinaison stable de signaux navigateur,
  * hashée en SHA-256 pour garder une longueur fixe et anonymiser.
  */
-async function _computeDeviceFingerprint() {
-  // Canvas signal — diffère selon GPU/police/anti-aliasing
-  let canvasSignal = '';
-  try {
-    const c = document.createElement('canvas');
-    const ctx = c.getContext('2d');
-    ctx.textBaseline = 'top';
-    ctx.font = '14px Arial';
-    ctx.fillStyle = '#069';
-    ctx.fillText('keystone-os \u{1F511}', 2, 2);
-    canvasSignal = c.toDataURL().slice(-80);
-  } catch (_) {}
+/* ═══════════════════════════════════════════════════════════════
+   IDENTITÉ D'APPAREIL — persistée, plus recalculée
+   ─────────────────────────────────────────────────────────────
+   AVANT (jusqu'au 2026-07-25) : l'empreinte était DÉRIVÉE à chaque
+   activation d'un canvas, du userAgent, de la RÉSOLUTION D'ÉCRAN, du
+   fuseau et de la plateforme. Conséquence : brancher un écran externe,
+   changer de résolution ou mettre à jour son navigateur produisait une
+   empreinte différente — donc « Cette clé est déjà activée sur un autre
+   appareil. Contactez le support. » sur le MÊME appareil. Ça s'est
+   produit trois fois dans la même journée pendant les tests.
 
+   MAINTENANT : l'identité est un jeton tiré UNE fois et conservé. Elle
+   ne dépend plus d'aucun signal matériel, donc rien de ce que
+   l'utilisateur fait à son écran ou à son navigateur ne l'invalide.
+
+   Même clé (`ks_fingerprint`) et même forme que auth-magic.html, qui
+   faisait déjà correctement les choses. Deux clés distinctes auraient
+   donné à un même navigateur DEUX identités selon le chemin de
+   connexion — et consommé deux emplacements d'appareil.
+
+   Ce que ça ne protège pas, et c'est assumé : vider le stockage local
+   ou ouvrir une fenêtre privée donne un nouvel appareil. C'est le
+   comportement attendu — un stockage vidé EST un appareil neuf du point
+   de vue du navigateur. Le vrai contrôle de partage vit dans la table
+   `devices` (enforce_devices_v2), avec révocation en self-service.
+   ═══════════════════════════════════════════════════════════════ */
+const KS_DEVICE_KEY = 'ks_fingerprint';
+
+async function _computeDeviceFingerprint() {
+  try {
+    const existant = localStorage.getItem(KS_DEVICE_KEY);
+    if (existant && existant.length >= 16) return existant;
+  } catch (_) { /* stockage inaccessible → on tire un jeton éphémère */ }
+
+  // Le tirage inclut de l'aléa : deux navigateurs identiques sur deux
+  // machines identiques doivent rester deux appareils distincts.
   const parts = [
-    canvasSignal,
     navigator.userAgent,
     navigator.language || '',
-    navigator.languages ? navigator.languages.join(',') : '',
-    `${screen.width}x${screen.height}x${screen.colorDepth}`,
-    Intl.DateTimeFormat().resolvedOptions().timeZone || '',
-    navigator.hardwareConcurrency || 0,
-    navigator.platform || '',
+    new Date().getTimezoneOffset(),
+    Math.random().toString(36).slice(2),
+    Date.now(),
   ];
-
   const data = new TextEncoder().encode(parts.join('|'));
   const buf  = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(buf))
+  const fp   = Array.from(new Uint8Array(buf))
     .map(b => b.toString(16).padStart(2, '0')).join('');
+  try { localStorage.setItem(KS_DEVICE_KEY, fp); } catch (_) {}
+  return fp;
 }
 
 async function activateLicence() {

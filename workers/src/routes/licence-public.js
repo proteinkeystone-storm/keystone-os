@@ -198,22 +198,42 @@ export async function handleActivateV2(request, env) {
     // mode = 'legacy_skip' ou 'bypass' → on continue le code legacy
     // (cas par défaut tant qu'enforce_devices_v2 n'est pas activé).
     if (!bypassBind) {
-      if (!licence.device_fingerprint) {
-        // Première activation → on binde
+      /* ── Binding legacy : il SUIT l'appareil, il ne l'enferme plus ──
+         Jusqu'au 2026-07-25, une empreinte différente de celle en base
+         renvoyait « Cette clé est déjà activée sur un autre appareil.
+         Contactez le support. » Trois enfermements dans la même journée
+         de test, sur le même Mac — parce que l'empreinte était dérivée
+         de signaux volatils (résolution d'écran, canvas, userAgent).
+
+         Ce mur ne protégeait pourtant presque rien : qui veut partager
+         une clé vide son stockage local et repart avec une empreinte
+         neuve. Il coûtait des utilisateurs enfermés et un message qui
+         les envoie au support, pour une protection qu'on contourne en
+         deux clics.
+
+         Le vrai contrôle de partage existe et vit ailleurs : la table
+         `devices` (enforce_devices_v2), qui compte les appareils, les
+         borne par `devices_max` et offre une RÉVOCATION en self-service.
+         Quand ce flag est posé, `enforceDeviceLimit` a déjà tranché
+         plus haut et on ne passe pas ici.
+
+         Donc : sans enforcement configuré, on ne fait plus semblant
+         d'enforcer. Le dernier appareil activé devient l'appareil de
+         référence. La clé reste secrète, l'accès reste tracé (audit +
+         activated_at), et personne n'est enfermé dehors. */
+      const premier = !licence.device_fingerprint;
+      if (premier || licence.device_fingerprint !== fp) {
         await env.DB.prepare(`
           UPDATE licences
              SET device_fingerprint = ?, activated_at = datetime('now')
            WHERE lookup_hmac = ?
         `).bind(fp, lookupHmac).run();
+        if (!premier) {
+          console.log('[activate] empreinte réassociée pour', lookupHmac.slice(0, 8),
+                      '— appareil de référence mis à jour (binding legacy non bloquant)');
+        }
         licence.device_fingerprint = fp;
-        deviceBound = true;
-      } else if (licence.device_fingerprint !== fp) {
-        // Clé déjà liée à un autre appareil
-        return err(
-          'Cette clé est déjà activée sur un autre appareil. Contactez le support.',
-          409,
-          origin,
-        );
+        deviceBound = premier;
       }
     }
   }
