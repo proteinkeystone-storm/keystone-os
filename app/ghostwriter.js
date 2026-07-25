@@ -815,7 +815,7 @@ async function _handleGenerate(overlay) {
     // remaining=null = quota jamais fetched → on laisse passer, le
     // serveur tranchera. remaining=0 = certain qu'on est à sec.
     if (_quotaRemaining() === 0) {
-        _setStatus(status, _quotaExhaustedMessage(), 'error');
+        _setQuotaExhausted(status);
         return;
     }
 
@@ -886,6 +886,32 @@ function _setStatus(el, text, kind) {
     if (!el) return;
     el.textContent = text || '';
     el.className = 'gw-status' + (kind ? ` gw-${kind}` : '');
+}
+
+/* ── Message « conversations épuisées » — actionnable ──────────────
+   Il disait « Ajoutez un pack de conversations dans les Réglages » :
+   une CONSIGNE, que l'utilisateur devait exécuter lui-même en cherchant
+   la bonne section. Un message qui décrit le remède sans y mener fait
+   porter le travail à celui qui est déjà bloqué.
+
+   Le bouton ouvre directement Réglages → Conversations, où vivent la
+   jauge et les deux packs. `window.ksOpenConversations` est posé par
+   ui-renderer (initSettings) — un import direct créerait un cycle. */
+function _setQuotaExhausted(el) {
+    if (!el) return;
+    el.className = 'gw-status gw-error';
+    el.textContent = '';
+    el.append(_quotaExhaustedMessage() + ' ');
+    if (typeof window !== 'undefined' && typeof window.ksOpenConversations === 'function') {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = 'Ajouter des conversations';
+        b.style.cssText = 'background:transparent;border:0;padding:0;margin-left:2px;'
+            + 'color:inherit;font:inherit;font-weight:700;text-decoration:underline;'
+            + 'text-underline-offset:3px;cursor:pointer';
+        b.addEventListener('click', () => window.ksOpenConversations());
+        el.append(b);
+    }
 }
 
 // Relais vers Social Manager : envoie la variante active dans le composer (bout aval

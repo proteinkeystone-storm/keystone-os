@@ -4149,9 +4149,18 @@ function _packUrl(base) {
         const jwt = localStorage.getItem('ks_jwt');
         if (jwt) {
             const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-            if (payload && payload.sub) {
-                return base + (base.includes('?') ? '&' : '?') + 'client_reference_id=' + encodeURIComponent(payload.sub);
-            }
+            const params = [];
+            if (payload?.sub) params.push('client_reference_id=' + encodeURIComponent(payload.sub));
+            // `prefilled_email` — le paramètre que les Payment Links Stripe
+            // attendent pour arriver avec le champ e-mail déjà rempli. Il
+            // manquait : un client connecté devait retaper l'adresse que
+            // l'application connaît déjà, sur une page de paiement, c'est-à-dire
+            // à l'endroit où chaque frottement se paie en abandons.
+            // Le JWT porte `email` (émis par licence-public.js), avec `owner`
+            // en repli pour les jetons anciens qui n'avaient pas le champ.
+            const mail = payload?.email || payload?.owner || null;
+            if (mail && /@/.test(mail)) params.push('prefilled_email=' + encodeURIComponent(mail));
+            if (params.length) return base + (base.includes('?') ? '&' : '?') + params.join('&');
         }
     } catch (_) { /* JWT illisible → lien nu ; le webhook retombera sur email/customer */ }
     return base;
@@ -4951,6 +4960,13 @@ function _closeSettings() {
 export function initSettings() {
     _renderSettingsBody();
     updateEngineChip(getActiveEngine());
+
+    // Raccourci global vers la section « Conversations » des Réglages.
+    // Exposé sur window (et pas importé) parce que les appelants sont des
+    // pads chargés dynamiquement : un import direct depuis ghostwriter.js
+    // créerait un cycle avec ui-renderer. Sert aux messages « épuisées »,
+    // qui doivent MENER à l'achat au lieu de le décrire.
+    window.ksOpenConversations = () => openSettingsTo('acc-credits');
 
     document.getElementById('settings-open-btn')?.addEventListener('click', _openSettings);
     document.getElementById('settings-close-btn')?.addEventListener('click', _closeSettings);

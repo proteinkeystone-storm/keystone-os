@@ -578,6 +578,7 @@ async function _handleGenerate() {
   // remaining=0 → certain qu'on est à sec.
   const remaining = getGhostwriterQuotaRemaining();
   if (remaining === 0) {
+    _toastAction = true;              // → le toast porte « Ajouter des conversations »
     _toast(getGhostwriterQuotaMessage(), true);
     return;
   }
@@ -700,6 +701,10 @@ function _refreshLibrary() {
 // Helpers
 // ══════════════════════════════════════════════════════════════════
 
+// Drapeau posé juste avant un _toast() qui doit porter le bouton d'achat.
+// Un paramètre supplémentaire aurait obligé à toucher les ~20 autres
+// appels de _toast() dans ce module pour rien.
+let _toastAction = false;
 function _toast(msg, isError) {
   let el = document.getElementById('gw-toast');
   if (!el) {
@@ -711,7 +716,23 @@ function _toast(msg, isError) {
   el.textContent = msg;
   el.className = 'gw-toast' + (isError ? ' gw-toast-error' : '') + ' gw-toast-show';
   clearTimeout(_toast._timer);
-  _toast._timer = setTimeout(() => el.classList.remove('gw-toast-show'), 3500);
+  // Un message qui propose une action doit laisser le temps de la faire :
+  // 3,5 s pour lire « épuisées » ET cliquer, c'est trop court.
+  const nettoie = () => el.classList.remove('gw-toast-show');
+  if (_toastAction && typeof window !== 'undefined' && typeof window.ksOpenConversations === 'function') {
+    el.append(' ');
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = 'Ajouter des conversations';
+    b.style.cssText = 'background:transparent;border:0;padding:0;color:inherit;font:inherit;'
+      + 'font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer';
+    b.addEventListener('click', () => { nettoie(); window.ksOpenConversations(); });
+    el.append(b);
+    _toast._timer = setTimeout(nettoie, 12000);
+  } else {
+    _toast._timer = setTimeout(nettoie, 3500);
+  }
+  _toastAction = false;
 }
 
 function _esc(s) {
