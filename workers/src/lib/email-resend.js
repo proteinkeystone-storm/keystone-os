@@ -112,6 +112,38 @@ function _emailShell({ title, body, ctaLabel, ctaUrl, footer }) {
   </body></html>`;
 }
 
+// ── Livraison de la clé du palier GRATUIT ─────────────────────
+// Template DISTINCT de tplWelcomeKey, qui est celui de l'après-paiement :
+// il parle d'« abonnement » et renvoie vers « ton compte Stripe » pour se
+// désabonner. Un utilisateur gratuit n'a NI abonnement NI client Stripe —
+// lui envoyer ça serait lui affirmer deux choses fausses.
+//
+// Le rappel sur le lien d'appareil est conservé : la clé se lie à la
+// première empreinte qui l'active, et se faire refuser plus tard sans
+// comprendre pourquoi est le scénario de support le plus probable.
+export function tplFreeKey({ ownerName, key, activateUrl }) {
+  const body = `
+    <p style="margin:0 0 24px 0;color:#94a3b8;font-size:15px;line-height:1.6">
+      Votre accès <strong style="color:#c9a96e">gratuit</strong> est ouvert : Missive, booK et Keynapse,
+      sans carte bancaire et sans limite de durée. Voici votre clé :
+    </p>
+    <div style="background:#0a0e14;border:1px solid #c9a96e;border-radius:8px;padding:20px;text-align:center;margin:0 0 24px 0">
+      <div style="font-family:'SF Mono','Courier New',monospace;font-size:22px;letter-spacing:2px;color:#c9a96e;font-weight:600">${escapeHtml(key)}</div>
+    </div>
+    <p style="margin:0 0 24px 0;color:#94a3b8;font-size:14px;line-height:1.6">
+      <strong style="color:#f1f5f9">À savoir :</strong> votre clé se lie au premier appareil sur lequel
+      vous l'activez. Gardez cet e-mail — c'est lui qui vous permettra de la retrouver.
+    </p>`;
+  return _emailShell({
+    title: `Bienvenue${ownerName ? ' ' + escapeHtml(ownerName) : ''} !`,
+    body,
+    ctaLabel: 'Ouvrir Keystone OS',
+    ctaUrl:   activateUrl,
+    footer:   'Vous pourrez ajouter une application payante plus tard, à l\'unité — rien ne se déclenche tout seul. '
+            + 'Une question ? Répondez simplement à cet e-mail.',
+  });
+}
+
 // ── Magic-link générique (activation initiale OU récupération) ──
 // purpose : 'activation' | 'recovery' | 'magic_login'
 // expiresMinutes : durée de validité du lien (default 15)

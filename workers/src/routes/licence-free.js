@@ -51,7 +51,7 @@
 import { json, err, getAllowedOrigin }   from '../lib/auth.js';
 import { generateLicenceKey }            from '../lib/keygen.js';
 import { blindIndex, hashKey }           from '../lib/kdf.js';
-import { sendEmail, tplWelcomeKey }      from '../lib/email-resend.js';
+import { sendEmail, tplFreeKey }         from '../lib/email-resend.js';
 import { APP_TIER, TIER }                from '../lib/pricing-grid.js';
 import { technicalPlanFor }              from '../lib/stripe-catalog.js';
 
@@ -165,10 +165,9 @@ export async function handleLicenceFree(request, env) {
     await sendEmail(env, {
       to:      email,
       replyTo: 'protein.keystone@gmail.com',
-      subject: 'Votre clé Keystone OS',
-      html:    tplWelcomeKey({
+      subject: 'Votre accès gratuit Keystone OS',
+      html:    tplFreeKey({
         ownerName:   email.split('@')[0],
-        plan:        'Gratuit',
         key,
         activateUrl: ACTIVATE_BASE + encodeURIComponent(key),
       }),
