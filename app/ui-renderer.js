@@ -1501,6 +1501,19 @@ function _renderKStoreItems() {
     _initKStoreHero();
 }
 
+// ── Mention de prix sur un bouton « Obtenir » ─────────────────
+// UNE seule fonction pour la grille du K-Store ET la fiche détaillée :
+// elles affichaient deux choses différentes (« Obtenir · 49 € » d'un côté,
+// « Obtenir » tout court de l'autre). Et « 49 € » sans période laisse
+// croire à un achat unique alors que c'est un abonnement mensuel — la
+// vente à vie a été abandonnée, le prix doit le dire.
+function _priceMention(appId) {
+    const prix = priceForApp(appId);
+    if (prix === null) return '';            // hors grille (app retirée)
+    if (prix === 0)    return ' · Gratuit';
+    return ` · ${prix} €/mois`;
+}
+
 // ── Helper de rendu de card ───────────────────────────────────
 function _renderAppCardSmall(app) {
     const ownedIds = getOwnedIds();
@@ -1527,11 +1540,7 @@ function _renderAppCardSmall(app) {
     } else if (isOwned) {
         cta = `<span class="ksfs-buy-btn ksfs-buy-btn--owned">✓ Actif</span>`;
     } else {
-        const prix = priceForApp(app.id);
-        const mention = prix === null ? ''            // hors grille (app retirée)
-                      : prix === 0    ? ' · Gratuit'
-                      : ` · ${prix} €`;
-        cta = `<button class="ksfs-buy-btn" data-action="obtenir" data-id="${app.id}">Obtenir${mention}</button>`;
+        cta = `<button class="ksfs-buy-btn" data-action="obtenir" data-id="${app.id}">Obtenir${_priceMention(app.id)}</button>`;
     }
 
     // Trois sources possibles pour l'icône, dans cet ordre :
@@ -1756,7 +1765,7 @@ function _renderKStoreAppDetail(appId) {
         if (isOwned) {
             return `<span class="ksfs-detail-buy ksfs-detail-buy--owned">✓ Actif</span>`;
         }
-        return `<button class="ksfs-detail-buy" data-action="obtenir" data-id="${appId}">Obtenir</button>`;
+        return `<button class="ksfs-detail-buy" data-action="obtenir" data-id="${appId}">Obtenir${_priceMention(appId)}</button>`;
     })();
 
     // ── "Également pour vous" — 4 apps de la même catégorie (hors self) ──
