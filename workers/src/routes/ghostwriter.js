@@ -53,6 +53,7 @@ import { quotaForPlan } from '../lib/ghost-quota.js';
 import {
   isEnforceEnabled, consumeCredits, refundCredits,
   ensureAiCreditsSchema, readMonthUsed, readPackBalance, creditsPayload,
+  resolveQuota, resolveLicenceByHmac,
 } from '../lib/ai-credits.js';
 
 // Modèle par défaut Keystone : Mistral Small 3.1 24B (cf. lib/ai-model.js,
@@ -237,8 +238,8 @@ export async function handleGhostwriterRewrite(request, env) {
       creditResult = await consumeCredits(env, { bucketKey: lookupHmac, plan, tool: 'ghostwriter' });
       if (!creditResult.ok && creditResult.blocked) {
         return json({
-          error: `Crédits IA épuisés ce mois sur le plan ${plan}. `
-               + `Ajoutez un pack de crédits ou attendez le 1er du mois (reset).`,
+          error: `Conversations épuisées ce mois. `
+               + `Ajoutez un pack de conversations ou attendez le 1er du mois (reset).`,
           code : 'AI_CREDITS_EXHAUSTED',
           quota: _gwQuotaFromWallet(creditResult.payload),
         }, 429, origin);
@@ -730,7 +731,15 @@ export async function handleGhostwriterQuota(request, env) {
     await ensureAiCreditsSchema(env);
     const usedM = await readMonthUsed(env, lookupHmac);
     const bal   = await readPackBalance(env, lookupHmac);
-    return json(_gwQuotaFromWallet(creditsPayload(claims.plan, usedM, bal, {})), 200, origin);
+    // ⚠️ Le quota DOIT être résolu comme il l'est au débit (consumeCredits
+    // → resolveQuota), sinon la jauge annonce un plafond que le mur ne
+    // respecte pas. Sous PRICING_V2, une licence dont le plan technique
+    // est PRO mais qui ne possède qu'une app Essentiel a 300 conversations,
+    // pas les 1 000 de l'ancien palier PRO. Le JWT ne porte pas le sac
+    // d'apps → on relit la licence (comme /api/ai-credits/quota).
+    const { ownedAssets } = await resolveLicenceByHmac(env, lookupHmac);
+    const quota = resolveQuota(env, claims.plan, ownedAssets);
+    return json(_gwQuotaFromWallet(creditsPayload(claims.plan, usedM, bal, {}, quota)), 200, origin);
   }
   await ensureGhostwriterSchema(env);
   const used = await _readUsage(env, lookupHmac);

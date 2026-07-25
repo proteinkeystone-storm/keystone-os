@@ -108,7 +108,10 @@ function _quotaExhaustedMessage() {
     const plan = _quotaCache.plan || 'cette licence';
     const max  = _quotaCache.max;
     if (_quotaCache.period === 'month') {
-        return `Crédits IA épuisés ce mois (${max} sur le plan ${plan}). Ajoutez un pack de crédits dans les Réglages, ou patientez jusqu'au 1er du mois.`;
+        // Pas de « sur le plan X » ici : sous le modèle par application, le
+        // plan technique (PRO…) n'est plus le palier acheté — l'afficher
+        // annoncerait une offre que le client n'a pas.
+        return `Conversations épuisées ce mois (${max} incluses). Ajoutez un pack de conversations dans les Réglages, ou patientez jusqu'au 1er du mois.`;
     }
     return `Quota journalier atteint (${max}/jour sur ${plan}). Passez à un plan supérieur ou réessayez demain.`;
 }
@@ -161,6 +164,10 @@ function _quotaLabel() {
     if (_quotaCache.fetchedAt === 0) return '—/— appels';
     const r = _quotaCache.remaining;
     const m = _quotaCache.max;
+    // Période réelle : 'month' = portefeuille de conversations (modèle par
+    // application), 'day' = ancien quota journalier. Dire « aujourd'hui »
+    // sur un compteur mensuel ferait croire à un reset qui n'arrive pas.
+    if (_quotaCache.period === 'month') return `${r}/${m} conversations restantes ce mois`;
     const p = _quotaCache.plan ? ` · ${_quotaCache.plan}` : '';
     return `${r}/${m} restants aujourd'hui${p}`;
 }
