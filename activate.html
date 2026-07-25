@@ -1385,12 +1385,12 @@ footer {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
           Créer mon accès gratuit — Missive, booK et Keynapse
         </button>
-        <!-- Échappatoire du mode gratuit : masquée par défaut, révélée par
-             _setFreeMode() pour celui qui a déjà une clé. -->
-        <button type="button" id="act-have-key" onclick="_setFreeMode(false)"
-                style="display:none;background:transparent;border:0;color:var(--text-3);font-size:.82rem;cursor:pointer;padding:10px 4px 0;width:100%;text-decoration:underline;text-underline-offset:3px">
-          J'ai déjà une clé de licence
-        </button>
+        <!-- [Lien « J'ai déjà une clé de licence » RETIRÉ le 2026-07-25.
+             Personne n'arrive sur ?free=1 avec une clé en poche — le pied de
+             page a déjà « Se connecter » — et un lien gris souligné ne se
+             lisait pas comme un contrôle. Le cas est traité là où il se
+             manifeste : si l'adresse porte déjà un accès, la route répond
+             409 et startFree() bascule la page en connexion toute seule. -->
 <!-- [Bouton « Activer la démo — 7 jours gratuits » SUPPRIMÉ le
              2026-07-25. Le palier gratuit le remplace : 3 applications
              à vie battent un essai qui expire, et il ne coûte rien. -->
@@ -1610,12 +1610,10 @@ function _setFreeMode(on) {
   const keyWrap = document.getElementById('act-key-wrap');
   const submit  = document.getElementById('act-btn');
   const free    = document.getElementById('act-free-btn');
-  const haveKey = document.getElementById('act-have-key');
   const status  = document.getElementById('act-status');
 
   if (keyWrap) keyWrap.style.display = on ? 'none' : '';
   if (submit)  submit.style.display  = on ? 'none' : '';
-  if (haveKey) haveKey.style.display = on ? '' : 'none';
   if (status)  { status.textContent = ''; status.className = 'act-status'; }
 
   if (free) {
@@ -1683,6 +1681,25 @@ async function startFree() {
       body   : JSON.stringify({ email }),
     });
     const data = await res.json().catch(() => ({}));
+
+    // 409 = cette adresse porte DÉJÀ un accès (payant, ou une gratuite
+    // créée avant). Il ne lui faut pas une seconde licence, il lui faut se
+    // connecter. On l'y emmène au lieu de lui laisser un message sans suite :
+    // la page repasse en connexion, son e-mail est conservé, il ne reste que
+    // la clé à saisir. C'est ce qui remplace l'ancien lien permanent
+    // « J'ai déjà une clé de licence » — présent seulement quand il sert.
+    if (res.status === 409) {
+      // Réactiver AVANT la bascule : en mode connexion ce bouton redevient
+      // visible (secondaire), un bouton mort à l'écran serait pire que rien.
+      btn.disabled = false;
+      _setFreeMode(false);
+      document.getElementById('act-email').value = email;
+      status.textContent = data.error || 'Cette adresse a déjà un accès Keystone.';
+      status.className   = 'act-status';
+      document.getElementById('act-key')?.focus();
+      return;
+    }
+
     if (!res.ok || !data.key) {
       throw new Error(data.error || 'Création impossible pour le moment.');
     }
