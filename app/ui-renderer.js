@@ -4207,16 +4207,24 @@ async function _fillCreditsGauge(el) {
     const brk = q.breakdown || {};
     const brkLines = Object.keys(brk).filter(k => brk[k] > 0)
         .map(k => `${LABELS[k] || k} ${brk[k]}`).join(' · ');
+    /* Mise en page EMPILÉE, pas en flex-row.
+       L'ancienne mettait deux longues chaînes côte à côte dans un panneau
+       de 380 px : chacune n'obtenait que la moitié de la largeur, donc
+       « 1000 conversations restantes » se cassait sur trois lignes. Une
+       phrase de trois mots sur trois lignes, ce n'est pas une question de
+       rédaction — c'est deux blocs qui se disputent la même largeur.
+       Empilés, chacun a toute la largeur et rien ne se casse.
+       `tabular-nums` fige la chasse des chiffres : sans lui, le nombre
+       saute latéralement à chaque rafraîchissement de la jauge. */
+    const n = (v) => Number(v || 0).toLocaleString('fr-FR');
     el.innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:.85rem;margin-bottom:6px">'
-        + `<span style="font-weight:800">${remaining} conversations restantes</span>`
-        + `<span style="color:var(--text-muted)">${used} / ${quota} ce mois${pack > 0 ? ` · +${pack} packs` : ''}</span>`
-        + '</div>'
+        `<div style="font-weight:800;font-size:1.05rem;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.2">${n(remaining)} <span style="font-size:.82rem;font-weight:600;color:var(--text-muted)">conversations restantes</span></div>`
+        + `<div style="color:var(--text-muted);font-size:.75rem;margin:2px 0 8px;font-variant-numeric:tabular-nums">${n(used)} / ${n(quota)} ce mois${pack > 0 ? ` · +${n(pack)} en packs` : ''}</div>`
         + '<div style="height:8px;border-radius:99px;background:var(--bg-secondary, rgba(127,127,127,.18));overflow:hidden">'
         + `<div style="height:100%;width:${pct}%;background:${barColor};border-radius:99px;transition:width .35s"></div>`
         + '</div>'
         + (brkLines ? `<div style="color:var(--text-muted);font-size:.75rem;margin-top:6px">dont ${brkLines}</div>` : '')
-        + (near ? '<div style="color:var(--danger,#e0533d);font-size:.8rem;margin-top:8px;font-weight:600">Tu approches de ta limite mensuelle — ajoute un pack de conversations ci-dessous.</div>' : '')
+        + (near ? '<div style="color:var(--danger,#e0533d);font-size:.78rem;margin-top:8px;font-weight:600">Tu approches de ta limite — ajoute un pack.</div>' : '')
         + '<div style="display:flex;gap:8px;margin-top:12px">'
         + `<a href="${_packUrl(PACK_1000_URL)}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;white-space:nowrap;padding:8px 6px;border:1px solid var(--gold,#c9b48a);border-radius:8px;color:var(--gold,#c9b48a);font-size:.78rem;font-weight:700">+1 000 · 9 €</a>`
         + `<a href="${_packUrl(PACK_5000_URL)}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;white-space:nowrap;padding:8px 6px;border:1px solid var(--gold,#c9b48a);border-radius:8px;color:var(--gold,#c9b48a);font-size:.78rem;font-weight:700">+5 000 · 39 €</a>`
@@ -4560,7 +4568,7 @@ function _renderSettingsBody() {
             open: false,
             content: `<div class="sp-user-form">
                 <div id="ks-credits-gauge" class="sp-user-hint">Chargement…</div>
-                <div class="sp-user-hint">Tes conversations alimentent Ghost Writer, le Brainstorming et le Concierge public. Elles se rechargent le 1er de chaque mois. Au-delà, tu peux ajouter un pack de conversations.</div>
+                <div class="sp-user-hint">Remises à zéro le 1er de chaque mois. Les packs, eux, n'expirent jamais.</div>
                 <div id="ks-auto-reload" style="margin-top:14px"></div>
             </div>`,
         },
