@@ -12,24 +12,34 @@
    Ici : e-mail → licence à SAC VIDE → clé, envoyée par e-mail et
    rendue à l'appelant pour enchaîner l'activation sans friction.
 
-   ⚠️ LE POINT QUI DÉCIDE DE TOUT — `owned_assets` vaut `'[]'`,
+   ⚠️ LE POINT QUI DÉCIDE DE TOUT — `owned_assets` est un TABLEAU,
    JAMAIS `null`. Un sac NULL est la sentinelle historique « accès
    TOTAL » (cf. lib/app-access.js §2) : une licence gratuite créée
    avec null ouvrirait les 14 applications. Vérifié au banc
-   (scripts/test-licence-free.mjs, suite 1) :
-     sac []   → Missive/booK/Keynapse ouverts, tout le reste FERMÉ,
-                0 conversation incluse, dictée Keynapse refusée ;
-     sac null → Ghost Writer et Smart Agent ouverts. Le piège.
+   (scripts/test-licence-free.mjs) :
+     sac garni → Missive/booK/Keynapse ouverts, tout le reste FERMÉ,
+                 0 conversation incluse, dictée Keynapse refusée ;
+     sac null  → Ghost Writer et Smart Agent ouverts. Le piège.
+
+   Le sac porte EXPLICITEMENT les 3 identifiants gratuits plutôt
+   qu'un tableau vide. Fonctionnellement c'est équivalent — les apps
+   gratuites sont ouvertes inconditionnellement, et leur palier vaut
+   0 conversation — mais un sac vide se LIT « cette licence n'a
+   rien », ce qui est faux et s'affiche tel quel dans l'admin. La
+   liste est dérivée de la grille (APP_TIER), pas recopiée : si une
+   app change de palier, le sac suit sans qu'on y pense.
 
    Le palier gratuit ne déclenche donc AUCUN coût : les 3 apps
    n'appellent aucune IA, et le quota per-app renvoie 0 (§9 bis du
    handoff pricing : « Gratuit, cœur seul »).
 
-   Plan technique = 'PRO' : sous PRICING_V2 le plan ne décide plus
-   des applications (c'est le sac), il ne pilote que devices_max et
-   les invitations. C'est ce que fait déjà technicalPlanFor() pour
-   les achats à la carte — on ne crée pas un plan 'FREE' que
-   quotaForPlan() ne connaîtrait pas.
+   Plan technique : on réutilise `technicalPlanFor()`, la fonction du
+   chemin Stripe, plutôt que d'écrire une valeur en dur — une seule
+   règle pour les deux portes d'entrée. Elle rend 'PRO' ici, soit
+   3 appareils (_devicesMaxForPlan). ⚠️ Ne PAS inventer un plan
+   'FREE' : `_devicesMaxForPlan` renvoie `null` = appareils
+   ILLIMITÉS pour tout plan qu'il ne connaît pas — un palier gratuit
+   plus permissif que l'OS complet, et personne ne le verrait.
 
    Idempotence : un e-mail déjà porteur d'une licence NE crée PAS une
    deuxième clé. Même principe que le webhook Stripe (« une personne,
@@ -42,6 +52,15 @@ import { json, err, getAllowedOrigin }   from '../lib/auth.js';
 import { generateLicenceKey }            from '../lib/keygen.js';
 import { blindIndex, hashKey }           from '../lib/kdf.js';
 import { sendEmail, tplWelcomeKey }      from '../lib/email-resend.js';
+import { APP_TIER, TIER }                from '../lib/pricing-grid.js';
+import { technicalPlanFor }              from '../lib/stripe-catalog.js';
+
+// Le sac d'une licence gratuite = les applications que la grille range
+// au palier FREE. Dérivé, jamais recopié : la grille reste la seule
+// source de vérité (cf. le filet anti-dérive de scripts/test-pricing-*).
+function sacGratuit() {
+  return Object.keys(APP_TIER).filter(id => APP_TIER[id] === TIER.FREE);
+}
 
 const ACTIVATE_BASE = 'https://protein-keystone.com/?ks_key=';
 const EMAIL_RE      = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
@@ -106,7 +125,10 @@ export async function handleLicenceFree(request, env) {
   if (known && known.is_active === 1) {
     let bag = null;
     try { bag = JSON.parse(known.owned_assets || 'null'); } catch (_) { /* illisible */ }
-    const estGratuite = Array.isArray(bag) && bag.length === 0;
+    // Gratuite = un sac qui ne contient QUE des apps du palier FREE.
+    // Couvre aussi les licences créées avant ce changement (sac vide).
+    const estGratuite = Array.isArray(bag)
+      && bag.every(id => APP_TIER[id] === TIER.FREE);
     if (!estGratuite) {
       // Licence payante (ou legacy « tout ouvert ») : lui donner une
       // gratuite serait au mieux inutile, au pire déroutant.
@@ -121,7 +143,8 @@ export async function handleLicenceFree(request, env) {
     }, 200, origin);
   }
 
-  // ── Création — sac VIDE (cf. avertissement en tête de fichier) ──
+  // ── Création — sac GARNI des 3 gratuites (cf. tête de fichier) ──
+  const bag   = sacGratuit();
   const key   = generateLicenceKey();
   const hmac  = await blindIndex(key, env.KS_LOOKUP_PEPPER);
   const kh    = await hashKey(key);
@@ -129,8 +152,11 @@ export async function handleLicenceFree(request, env) {
     INSERT INTO licences (
       key, tenant_id, owner, plan, is_active, owned_assets, customer_email,
       lookup_hmac, key_hash, salt, created_at
-    ) VALUES (?, 'default', ?, 'PRO', 1, '[]', ?, ?, ?, ?, datetime('now'))
-  `).bind(key, email.split('@')[0], email, hmac, kh.hash, kh.salt).run();
+    ) VALUES (?, 'default', ?, ?, 1, ?, ?, ?, ?, ?, datetime('now'))
+  `).bind(
+    key, email.split('@')[0], technicalPlanFor(bag), JSON.stringify(bag),
+    email, hmac, kh.hash, kh.salt,
+  ).run();
 
   // L'e-mail n'est PAS bloquant : la clé est déjà rendue dans la
   // réponse, le visiteur entre tout de suite. Le courrier ne sert

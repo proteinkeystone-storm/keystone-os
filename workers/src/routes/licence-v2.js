@@ -38,14 +38,14 @@ const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
 // Plans qui n'ont pas de binding strict (multi-device autorisé sans
 // création explicite d'entries member). Synchro avec licence-public.js.
-const PLAN_BYPASS_BIND = new Set(['ADMIN', 'DEMO']);
+const PLAN_BYPASS_BIND = new Set(['ADMIN']);
 
 // devices_max par plan (NULL = illimité)
 function _devicesMaxForPlan(plan) {
   const p = (plan || '').toUpperCase();
   if (p === 'STARTER') return 1;
   if (p === 'PRO')     return 3;
-  return null;  // MAX / ADMIN / DEMO / autres → illimité
+  return null;  // MAX / ADMIN / autres → illimité
 }
 
 // ── Auto-migration au boot ──────────────────────────────────────

@@ -416,7 +416,6 @@ export async function handleConsumeMagicLink(request, env) {
     owner:  licence.owner,
     email:  link.email,
     fp:     fp || null,
-    isDemo:  planUp === 'DEMO',
     isAdmin: planUp === 'ADMIN',
     via:    'magic_link',
   }, env);

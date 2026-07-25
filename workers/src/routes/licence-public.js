@@ -147,20 +147,19 @@ export async function handleActivateV2(request, env) {
   }
 
   // ── Étape 5 : First-Use device binding (Sprint 2.2 + S2.5) ─────
-  // Plan DEMO/ADMIN = bypass (multi-device pour démos, commerciaux,
-  // et l'admin qui doit accéder depuis tous ses appareils).
+  // Plan ADMIN = bypass (l'admin doit accéder depuis tous ses appareils).
   // Plan BETA = binding normal (1 testeur = 1 appareil).
+  // [Le bypass DEMO est parti avec le mode démo, le 2026-07-25.]
   const planUp    = (licence.plan || '').toUpperCase();
-  const isDemo    = planUp === 'DEMO';
   const isAdmin   = planUp === 'ADMIN';
   // MAX = appareils ILLIMITÉS (cf. _devicesMaxForPlan licence-v2 = null +
   // description plan « appareils illimités »). Il ne doit JAMAIS être verrouillé
   // sur un seul appareil par le binding legacy. Sans ce bypass, une licence MAX
   // se faisait bloquer dès le 2ᵉ navigateur/appareil (« Cette clé est déjà
   // activée sur un autre appareil ») tant qu'enforce_devices_v2 reste dormant —
-  // bug cross-device récurrent. DEMO/ADMIN étaient déjà bypass.
+  // bug cross-device récurrent. ADMIN était déjà bypass.
   const isMax     = planUp === 'MAX';
-  const bypassBind = isDemo || isAdmin || isMax;
+  const bypassBind = isAdmin || isMax;
   let   deviceBound = false;
   let   enforcementResult = null;  // S2.5 — résultat de enforceDeviceLimit (debug)
 
@@ -228,7 +227,6 @@ export async function handleActivateV2(request, env) {
     owner:    licence.owner,
     email:    email || licence.owner,
     fp:       fp,                // lié à l'empreinte
-    isDemo,
     isAdmin,
   }, env);
 
@@ -255,7 +253,6 @@ export async function handleMe(request, env) {
   return json({
     plan:    claims.plan,
     owner:   claims.owner,
-    isDemo:  !!claims.isDemo,
     expSec:  claims.exp - Math.floor(Date.now()/1000),
   }, 200, origin);
 }

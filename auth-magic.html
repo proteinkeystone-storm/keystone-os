@@ -265,12 +265,10 @@
       if (data.owner)       localStorage.setItem('ks_licence_owner', data.owner);
       if (data.email)       localStorage.setItem('ks_user_email',    data.email);
 
-      // Sort de mode démo si l'user y était : la licence est réelle
-      const planUp = (data.plan || '').toUpperCase();
-      if (planUp && planUp !== 'DEMO') {
-        ['ks_is_demo', 'ks_demo_started_at', 'ks_demo_last_switch', 'ks_demo_nudge_shown_at']
-          .forEach(k => localStorage.removeItem(k));
-      }
+      // [Mode démo supprimé le 2026-07-25.] Purge inconditionnelle des
+      // marqueurs restés chez des utilisateurs déjà installés.
+      ['ks_is_demo', 'ks_demo_started_at', 'ks_demo_last_switch', 'ks_demo_nudge_shown_at']
+        .forEach(k => localStorage.removeItem(k));
     }
 
     // ─── Restore Cloud Vault si possible (best-effort) ───────────

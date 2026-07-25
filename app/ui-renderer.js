@@ -43,16 +43,9 @@ import { ratingButtonHTML, bindRatingButton }                          from './l
 import { icon as uiIcon }                                              from './lib/ui-icons.js';
 import { helpButtonHTML, bindHelpButton }                              from './lib/help-overlay.js';
 import { keystoneDocHTML }                                            from './lib/keystone-doc.js';
-// Sprint Démo Limited A+B — TTL 7j + 1 app simultanée
-import {
-  isDemoMode, isDemoExpired, ensureDemoStarted,
-  canAddAppInDemo, getBlockingDemoApp, switchDemoApp,
-} from './lib/demo-mode.js';
-import { renderDemoChrono, refreshDemoChrono, DEMO_CHRONO_CSS } from './lib/demo-chrono.js';
-import {
-  showDemoUpsellModal, showDemoExpiredModal, maybeShowDemoNudge,
-  DEMO_MODAL_CSS,
-} from './lib/demo-modals.js';
+// [Mode démo SUPPRIMÉ le 2026-07-25 — le palier gratuit le remplace :
+//  3 applications à vie valent mieux qu'un essai de 7 jours, et une
+//  licence gratuite ne coûte rien (0 conversation, aucune IA).]
 import {
     KSTORE_CATEGORIES, KSTORE_MOCK_APPS, KSTORE_FEATURED_IDS, KSTORE_PROMOS,
     getMockApp, getMockAppsByCategory, getMockAppsBySubcategory,
@@ -365,63 +358,21 @@ function renderHeroDate() {
         timeEl.textContent = `${hh}:${mm}`;
     }
 
-    // Chronomètre démo : insère/met à jour à chaque tick
-    _renderDemoChronoInHero();
+    _removeLegacyDemoChrome();
 
     if (!_heroClockTimer) _heroClockTimer = setInterval(renderHeroDate, 30_000);
 }
 
-// ─── Injection CSS one-shot pour le sprint démo ──────────────
-let _demoCssInjected = false;
-function _injectDemoCssOnce() {
-    if (_demoCssInjected) return;
-    if (typeof document === 'undefined') return;
-    const style = document.createElement('style');
-    style.id = 'ks-demo-styles';
-    style.textContent = DEMO_CHRONO_CSS + '\n' + DEMO_MODAL_CSS;
-    document.head.appendChild(style);
-    _demoCssInjected = true;
-}
-
-// ─── Insère/refresh le chronomètre démo dans .hero-meta ───────
-// Idempotent : peut être appelé à chaque tick d'horloge sans surcoût.
-// - Pose ks_demo_started_at si pas encore posée (1re visite en démo)
-// - Inject le CSS au 1er appel
-// - Crée le DOM s'il manque, le rafraîchit sinon
-// - Affiche la modale expired si J0, ou nudge discret si J-3/2/1
-function _renderDemoChronoInHero() {
-    const heroMeta = document.querySelector('.hero-meta');
-    if (!heroMeta) return;
-
-    const existing = heroMeta.querySelector('.ks-demo-chrono');
-
-    if (!isDemoMode()) {
-        // Plus en démo → on retire le chrono s'il existait (passage à licence)
-        if (existing) existing.remove();
-        return;
-    }
-
-    // Pose la date de début si manquante (idempotent)
-    ensureDemoStarted();
-    // Injection CSS lazy
-    _injectDemoCssOnce();
-
-    if (existing) {
-        // Refresh in-place (préserve les transitions CSS)
-        refreshDemoChrono(existing);
-    } else {
-        // Insère le chrono AU-DESSUS de l'heure pour visibilité maximale
-        const html = renderDemoChrono();
-        if (html) heroMeta.insertAdjacentHTML('afterbegin', html);
-    }
-
-    // Si la démo a expiré, on affiche la modale plein écran (idempotent)
-    if (isDemoExpired()) {
-        showDemoExpiredModal();
-    } else {
-        // Sinon, nudge discret à J-3, J-2, J-1
-        maybeShowDemoNudge();
-    }
+// [Chronomètre de démo, injection CSS et modales d'expiration SUPPRIMÉS
+//  le 2026-07-25 avec le mode démo. Un chrono qui décompte 7 jours n'a
+//  plus d'objet : le palier gratuit ne s'arrête jamais.]
+// Nettoyage défensif, une seule fois : une PWA encore servie par l'ancien
+// cache peut avoir le chrono dans son DOM, et plus rien pour l'enlever.
+let _legacyDemoCleaned = false;
+function _removeLegacyDemoChrome() {
+    if (_legacyDemoCleaned || typeof document === 'undefined') return;
+    _legacyDemoCleaned = true;
+    document.querySelectorAll('.ks-demo-chrono, #ks-demo-styles, .ks-demo-modal').forEach(el => el.remove());
 }
 
 // Descriptions courtes des artefacts pour les pads du Dashboard
@@ -653,21 +604,14 @@ export function renderDashboard() {
     // la condition originale exigeait ownedIds !== null.
     // Fix 2026-06-02 : owned_assets=null veut dire DEUX choses opposées
     // (démo non-activée OU accès total type MAX/Stripe). On se fie donc à
-    // isDemoMode() (qui voit le JWT) au lieu de l'heuristique ownedIds===null.
-    // Sans ça, une licence payante (owned_assets=null) voyait TOUS ses
-    // artefacts disparaître du dashboard. Cf bug protein.std + clients Stripe.
-    const ownedArts  = (ownedIds !== null || _admin || !isDemoMode())
-        ? ARTEFACTS.filter(a => _isOwned(a.id) && !isPadDeactivated(a.id) && _isSelected(a.id))
-        : [];
+    // [Le mode démo forçait TOUS les artefacts dans « Débloquez » et vidait
+    //  la grille possédée. Supprimé le 2026-07-25 : la possession seule
+    //  décide, ce qui est aussi ce que le serveur applique (app-access.js).]
+    const ownedArts  = ARTEFACTS.filter(a => _isOwned(a.id) && !isPadDeactivated(a.id) && _isSelected(a.id));
     const lockedArts = ARTEFACTS.filter(a => {
         const notOwned    = !_isOwned(a.id);
         const notSelected = !_isSelected(a.id);
-        // ADMIN n'est jamais en "demo mode" : ses artefacts sont owned, pas suggested.
-        // Idem : on se fie à isDemoMode() (voit le JWT) et pas à ownedIds===null,
-        // sinon une licence payante (owned_assets=null) voit ses artefacts possédés
-        // bannis dans « Débloquez » au lieu du dashboard. Cf fix ownedArts ci-dessus.
-        const inDemoMode  = isDemoMode();
-        return (inDemoMode || notOwned || notSelected) && getCatalogEntry(a.id)?.published !== false;
+        return (notOwned || notSelected) && getCatalogEntry(a.id)?.published !== false;
     });
 
     // ── Bannière Mode Frigo ────────────────────────────────────
@@ -1340,31 +1284,6 @@ function _buildKStorePanel() {
 // ── Activation d'un outil depuis le KEY-STORE ─────────────────
 function _activateKStoreItem(id, btn) {
     if (!btn || btn.classList.contains('ks-item-btn--loading')) return;
-
-    // ─── Sprint Démo Limited A+B ──────────────────────────────
-    // En mode démo, blocage du quota 1 app + redirection vers modale upsell.
-    // L'utilisateur peut soit switcher (1x/24h) soit choisir un plan.
-    if (isDemoMode() && !canAddAppInDemo(id)) {
-        const blockingId = getBlockingDemoApp();
-        const blocking = blockingId ? getPad(blockingId) : null;
-        const target   = getPad(id);
-        const blockingLabel = blocking?.title || blocking?.name || blockingId || 'une app';
-        const targetLabel   = target?.title   || target?.name   || id;
-        showDemoUpsellModal({
-            blockingAppLabel: blockingLabel,
-            targetAppLabel:   targetLabel,
-            onSwitch: () => {
-                // Switch d'app : remplace la sélection démo + persiste
-                const ok = switchDemoApp(id);
-                if (ok) {
-                    // Reflète immédiatement dans ks_user_selection : poursuit le flow normal
-                    renderDashboard();
-                    _renderKStoreItems();
-                }
-            },
-        });
-        return;
-    }
 
     // ── P5 · une application payante s'ACHÈTE ──────────────────
     // En beta, « Obtenir » ajoutait simplement l'outil au tableau de
@@ -4503,7 +4422,7 @@ function _renderSettingsBody() {
                 // résiliation → le mailto de résiliation a été retiré
                 // (2026-06-15), il faisait doublon.
                 const _isAdminLic  = /admin/i.test(lic.plan || '');
-                const _showCancel  = lic.active && !isDemoMode() && !_isAdminLic;
+                const _showCancel  = lic.active && !_isAdminLic;
                 const statusBadge = lic.active
                     ? `<span class="sp-badge-green">Active · ${lic.plan}</span>`
                     : `<span class="sp-badge-warn">Non activée</span>`;

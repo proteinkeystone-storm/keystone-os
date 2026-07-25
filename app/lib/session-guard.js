@@ -11,7 +11,7 @@
    API :
      ksCleanLogout(opts?)  → efface TOUT l'état client puis redirige
      ksDecodeJwt(token?)   → payload décodé du JWT (ou null)
-     ksWhoami()            → { sub, owner, email, plan, isDemo, expSec } | null
+     ksWhoami()            → { sub, owner, email, plan, expSec } | null
    Exposés sur window pour les boutons inline + la console de debug.
    ═══════════════════════════════════════════════════════════════ */
 
@@ -38,7 +38,6 @@ export function ksWhoami() {
     owner:  p.owner || null,
     email:  p.email || null,
     plan:   p.plan || null,
-    isDemo: !!p.isDemo,
     expSec: typeof p.exp === 'number' ? p.exp - Math.floor(Date.now() / 1000) : null,
   };
 }

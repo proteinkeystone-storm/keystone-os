@@ -9,7 +9,6 @@
    ─────────────────────────────────────────────────────────────
    Mode dégradé (file:// ou localhost) :
      Simulation locale basée sur le format de la clé.
-     La clé DEMO-KEYS-TONE-2026 débloque tout en mode démo.
    ═══════════════════════════════════════════════════════════════ */
 
 import { setOwnedIds, getOwnedIds } from './pads-loader.js';
@@ -79,15 +78,11 @@ export async function activateLicence(key) {
     // ownedAssets : null = Enterprise (tout accessible), [] = rien, [...] = liste
     setOwnedIds(data.ownedAssets ?? null);
 
-    // Sprint Démo Limited A+B — l'activation d'une vraie licence sort
-    // l'utilisateur du mode démo (chrono, modale fin de démo, etc.)
-    const planUp = (data.plan || '').toUpperCase();
-    if (planUp !== 'DEMO') {
-      localStorage.removeItem('ks_is_demo');
-      localStorage.removeItem('ks_demo_started_at');
-      localStorage.removeItem('ks_demo_last_switch');
-      localStorage.removeItem('ks_demo_nudge_shown_at');
-    }
+    // [Mode démo supprimé le 2026-07-25.] On purge inconditionnellement
+    // les marqueurs : un utilisateur qui en avait encore verrait sinon
+    // des reliquats sans plus aucun code pour les consommer.
+    ['ks_is_demo', 'ks_demo_started_at', 'ks_demo_last_switch', 'ks_demo_nudge_shown_at']
+      .forEach(k => localStorage.removeItem(k));
 
     // ── Hot Reload — signal vers main.js + ui-renderer ─────────
     window.dispatchEvent(new CustomEvent('ks-licence-activated', {
@@ -128,8 +123,8 @@ export function getLicenceStatus() {
 export function revokeLicence() {
     [
         LS_KEY, LS_PLAN, LS_OWNER, 'ks_owned_assets',
-        // Sprint Démo Limited A+B — nettoie aussi les marqueurs démo
-        // pour que la prochaine ouverture parte sur un onboarding propre.
+        // Marqueurs de l'ancien mode démo — purgés tant qu'il peut en
+        // rester chez des utilisateurs déjà installés.
         'ks_is_demo', 'ks_demo_started_at',
         'ks_demo_last_switch', 'ks_demo_nudge_shown_at',
     ].forEach(k => localStorage.removeItem(k));
@@ -142,13 +137,10 @@ export function revokeLicence() {
 function _simulateLocal(key) {
     const upper = key.toUpperCase();
 
-    // Clé démo complète → accès Enterprise (tout débloqué)
-    if (upper === 'DEMO-KEYS-TONE-2026') {
-        return {
-            valid: true, plan: 'Enterprise (démo)', owner: 'Mode démonstration',
-            ownedAssets: null, // null = tout accessible
-        };
-    }
+    // [Raccourci « DEMO-KEYS-TONE-2026 → tout débloqué » supprimé avec le
+    //  mode démo le 2026-07-25. Il rendait `ownedAssets: null`, la
+    //  sentinelle « accès TOTAL » — exactement le piège que la refonte
+    //  pricing a passé sa journée à refermer.]
 
     // Format valide → plan Pro simulé
     // Sprint cleanup-1 (2026-05-22) : retiré les 6 IDs des outils abandonnés
