@@ -207,3 +207,26 @@ export function stripeCatalogPlan() {
 export function livemodeFlag(event) {
   return event?.livemode === false ? 0 : 1;
 }
+
+/**
+ * Un remboursement Stripe reprend-il des conversations, et combien ?
+ *
+ * Ferme le trou constaté en réel le 25/07 : un pack remboursé restait
+ * crédité — le client gardait ses 1 000 conversations ET ses 9 €.
+ *
+ * Deux garde-fous, volontairement stricts :
+ * · REMBOURSEMENT TOTAL uniquement (`charge.refunded === true`). Un
+ *   remboursement partiel est un geste commercial manuel de Stéphane —
+ *   on ne devine pas combien de conversations il vaut, on journalise
+ *   et on laisse l'admin trancher.
+ * · Le montant doit être EXACTEMENT celui d'un pack (900/3900). Le
+ *   remboursement d'un abonnement (1900/4900/9900/12900) ne touche
+ *   JAMAIS aux conversations : les droits d'abonnement se retirent par
+ *   la résiliation (customer.subscription.deleted), pas par ici.
+ *
+ * @returns {?number} conversations à reprendre, ou null = ne rien faire
+ */
+export function packConversationsForRefund(charge) {
+  if (!charge || charge.refunded !== true) return null;
+  return resolvePackConversations({ amountTotal: charge.amount }) || null;
+}

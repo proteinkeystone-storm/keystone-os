@@ -19,13 +19,14 @@ import { verifyStripeWebhook }              from '../lib/stripe.js';
 import { generateLicenceKey }               from '../lib/keygen.js';
 import { blindIndex, hashKey }              from '../lib/kdf.js';
 import { sendEmail, tplWelcomeKey }         from '../lib/email-resend.js';
-import { addPackCredits }                   from '../lib/ai-credits.js';
+import { addPackCredits, removePackCredits } from '../lib/ai-credits.js';
 import { ensureAutoReloadSchema }           from '../lib/auto-reload.js';
 import { needsCreditWall }                  from '../lib/app-mode.js';
 
 import {
   resolveAppFromPrice, resolveLegacyPlanFromPrice, resolvePackConversations,
   addEntitlement, removeEntitlement, technicalPlanFor, livemodeFlag,
+  packConversationsForRefund,
 } from '../lib/stripe-catalog.js';
 
 const PRICE_LOOKUP_TO_PLAN = {
@@ -298,6 +299,70 @@ async function _handlePackPurchase(env, session) {
   // 3) Créditer. Idempotence assurée en amont par stripe_events (event id).
   await addPackCredits(env, lic.lookup_hmac, credits);
   console.log('[Stripe pack]', credits, 'crédits attribués à la licence', lic.lookup_hmac);
+}
+
+/* ── Remboursement d'un pack (charge.refunded, 26/07) ─────────────
+   Le trou constaté en réel le 25/07 : rembourser un pack depuis le
+   dashboard Stripe ne reprenait RIEN — le client gardait ses 1 000
+   conversations ET ses 9 €. Ce handler ferme la boucle.
+
+   Résolution de la licence, dans le MÊME ordre que l'achat :
+     1. journal des recharges AUTO (`ai_auto_reload_log`, payment_intent
+        en PK) → la source EXACTE quand le débit venait du cron P3 ;
+     2. sinon : montant → pack (900/3900, sans ambiguïté), et licence
+        par stripe_customer_id puis par e-mail de facturation.
+
+   Ce qu'on ne fait PAS, volontairement (cf. packConversationsForRefund) :
+   remboursement partiel ou montant d'abonnement → zéro reprise, un log.
+   Et la reprise est PLANCHÉE à ce qui reste au solde : déjà consommé
+   n'est jamais repris sur les conversations incluses. */
+
+async function _handleChargeRefunded(env, event) {
+  const charge = event.data.object;
+
+  // Recharge auto P3 ? Le journal donne la licence ET le nombre exact.
+  let hmac = null, credits = null, source = 'pack';
+  try {
+    const row = await env.DB
+      .prepare('SELECT lookup_hmac, conversations FROM ai_auto_reload_log WHERE payment_intent = ? LIMIT 1')
+      .bind(charge.payment_intent || '').first();
+    if (row?.lookup_hmac) {
+      hmac    = row.lookup_hmac;
+      credits = parseInt(row.conversations, 10) || null;
+      source  = 'recharge-auto';
+    }
+  } catch (_) { /* table pas encore née → chemin pack ci-dessous */ }
+
+  // Achat manuel de pack : total + montant exact d'un pack, sinon rien.
+  if (!credits) {
+    credits = packConversationsForRefund(charge);
+    if (!credits) {
+      console.log('[Stripe refund] ignoré (partiel ou montant hors packs) charge', charge.id, 'amount=', charge.amount, 'refunded=', charge.refunded);
+      return;
+    }
+  }
+  if (!hmac) {
+    if (charge.customer) {
+      const lic = await env.DB
+        .prepare('SELECT lookup_hmac FROM licences WHERE stripe_customer_id = ? LIMIT 1')
+        .bind(charge.customer).first();
+      hmac = lic?.lookup_hmac || null;
+    }
+    const mail = charge.billing_details?.email || charge.receipt_email;
+    if (!hmac && mail) {
+      const lic = await env.DB
+        .prepare('SELECT lookup_hmac FROM licences WHERE customer_email = ? LIMIT 1')
+        .bind(mail).first();
+      hmac = lic?.lookup_hmac || null;
+    }
+  }
+  if (!hmac) {
+    console.error('[Stripe refund] licence introuvable pour charge', charge.id, '— conversations NON reprises (à réconcilier à la main)');
+    return;
+  }
+
+  const repris = await removePackCredits(env, hmac, credits);
+  console.log(`[Stripe refund] ${source} : ${repris}/${credits} conversations reprises sur ${hmac.slice(0, 8)}… (charge ${charge.id})`);
 }
 
 /* ── P3 · fin de l'enregistrement de carte (mode:'setup') ─────────
@@ -633,6 +698,9 @@ export async function handleStripeWebhook(request, env) {
         break;
       case 'customer.subscription.updated':
         await _handleSubscriptionUpdated(env, event);
+        break;
+      case 'charge.refunded':
+        await _handleChargeRefunded(env, event);
         break;
       default:
         // Pas d'erreur — Stripe envoie plein d'autres events qu'on ignore.

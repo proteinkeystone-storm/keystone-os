@@ -114,7 +114,13 @@ KS_ALLOWED_ORIGIN = "https://protein-keystone.com,https://www.protein-keystone.c
 # Éteindre = retour Mistral instantané sur ces surfaces. N'affecte PAS
 # /api/proxy/llm (BYOK explicite déjà en prod : Brief, Annonces, pads).
 # Lu par lib/llm-router.js → byokRoutingEnabled(env).
-BYOK_ROUTING = "off"
+# ── ALLUMÉ le 2026-07-26 (décision Stéphane, fin du chantier pricing).
+# Sans danger au moment du flip : le coffre tenant_api_keys était VIDE
+# (vérifié) → resolveEngineForTenant rend null pour tout le monde, et
+# les surfaces publiques restent de toute façon gardées par le mode
+# DÉCLARÉ per-app (P7, défaut MANAGED). Effet réel : l'option « Votre
+# propre moteur » devient atteignable dès qu'un client dépose une clé.
+BYOK_ROUTING = "on"
 
 # ── PRICING_V2 — refonte tarifaire per-app (HANDOFF_PRICING_REFONTE) ──
 # OFF par défaut : le compteur de conversations garde EXACTEMENT le

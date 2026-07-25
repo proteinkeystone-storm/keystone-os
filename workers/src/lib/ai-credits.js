@@ -430,6 +430,30 @@ async function addPackCredits(env, bucketKey, amount) {
   return true;
 }
 
+// ── Reprise de packs (remboursement Stripe, 26/07) ────────────────
+// Le miroir d'addPackCredits, avec UN plancher : le solde ne descend
+// JAMAIS sous zéro. Si le client a déjà consommé une partie du pack
+// remboursé, on reprend ce qui reste — un solde négatif mordrait sur
+// ses conversations INCLUSES, qu'il n'a pas à rendre.
+// Renvoie ce qui a réellement été repris (pour le journal).
+async function removePackCredits(env, bucketKey, amount) {
+  await ensureAiCreditsSchema(env);
+  const n = parseInt(amount, 10);
+  if (!bucketKey || !Number.isInteger(n) || n <= 0) return 0;
+  const row = await env.DB.prepare(
+    'SELECT balance FROM ai_credit_balance WHERE bucket_key = ?'
+  ).bind(bucketKey).first();
+  const avant  = Math.max(0, parseInt(row?.balance, 10) || 0);
+  const repris = Math.min(avant, n);
+  if (repris <= 0) return 0;
+  await env.DB.prepare(`
+    UPDATE ai_credit_balance
+       SET balance = MAX(0, balance - ?), updated_at = datetime('now')
+     WHERE bucket_key = ?
+  `).bind(n, bucketKey).run();
+  return repris;
+}
+
 export {
   quotaForPlan,
   resolveQuota,
@@ -447,5 +471,6 @@ export {
   consumeCredits,
   refundCredits,
   addPackCredits,
+  removePackCredits,
   creditsPayload,
 };

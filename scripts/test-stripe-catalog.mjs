@@ -16,6 +16,7 @@ import {
   resolveAppFromPrice, resolveLegacyPlanFromPrice, resolvePackConversations,
   addEntitlement, removeEntitlement, technicalPlanFor,
   lookupKeyForApp, isValidEntitlementId, stripeCatalogPlan, livemodeFlag,
+  packConversationsForRefund,
 } from '../workers/src/lib/stripe-catalog.js';
 import { APP_TIER, TIER, OS_ENTITLEMENT } from '../workers/src/lib/pricing-grid.js';
 
@@ -120,6 +121,20 @@ eq(livemodeFlag(undefined),           1, 'événement absent → 1');
 eq(livemodeFlag(null),                1, 'événement null → 1');
 eq(livemodeFlag({ livemode: 'false' }), 1, 'chaîne "false" ≠ booléen false → 1');
 eq(livemodeFlag({ livemode: 0 }),     1, 'zéro numérique ≠ booléen false → 1');
+
+// ── Remboursement de pack (charge.refunded) ────────────────────
+// Deux refus comptent plus que le cas nominal : un remboursement
+// PARTIEL ne reprend rien (geste commercial manuel, l'admin tranche),
+// et un montant d'ABONNEMENT ne touche jamais aux conversations (les
+// droits d'abo se retirent par la résiliation, pas par ici).
+eq(packConversationsForRefund({ refunded: true,  amount: 900 }),  1000, 'pack 9 € intégralement remboursé → reprendre 1000');
+eq(packConversationsForRefund({ refunded: true,  amount: 3900 }), 5000, 'pack 39 € intégralement remboursé → reprendre 5000');
+eq(packConversationsForRefund({ refunded: false, amount: 900 }),  null, 'remboursement PARTIEL → zéro reprise');
+eq(packConversationsForRefund({ refunded: true,  amount: 1900 }), null, 'montant d\'abonnement (19 €) → jamais de reprise');
+eq(packConversationsForRefund({ refunded: true,  amount: 9900 }), null, 'montant d\'abonnement (99 €) → jamais de reprise');
+eq(packConversationsForRefund({ refunded: true,  amount: 12900 }), null, 'montant OS (129 €) → jamais de reprise');
+eq(packConversationsForRefund(null),                              null, 'charge absente → rien, pas de crash');
+eq(packConversationsForRefund({ amount: 900 }),                   null, 'refunded absent → prudence, zéro reprise');
 
 console.log(`\n${pass + fail} tests — \x1b[32m${pass} ok\x1b[0m, ${fail ? `\x1b[31m${fail} ko\x1b[0m` : '0 ko'}\n`);
 process.exit(fail ? 1 : 0);
