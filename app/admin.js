@@ -499,7 +499,7 @@ async function renderLicences(panel) {
       ${total === 0
         ? '<div class="empty-state"><div class="icon">🗝</div><p>Aucune licence enregistrée</p></div>'
         : `<table class="data-table"><thead><tr>
-             <th>Clé</th><th>Propriétaire</th><th>Plan</th><th>Statut</th><th>Devices</th><th>Contrôles par licence</th><th>Créée le</th><th>Actions</th>
+             <th>Clé</th><th>Propriétaire</th><th>Accès</th><th>Statut</th><th>Devices</th><th>Contrôles par licence</th><th>Créée le</th><th>Actions</th>
            </tr></thead><tbody id="licences-tbody"></tbody></table>`}`;
 
     panel.querySelector('#btn-new-licence').addEventListener('click', () => showCreateLicenceModal(panel));
@@ -546,7 +546,7 @@ async function renderLicences(panel) {
         tr.innerHTML = `
           <td><code style="font-size:12px;font-family:'SF Mono',monospace;color:var(--gold)">${esc(l.key)}</code></td>
           <td>${esc(l.owner || '—')}</td>
-          <td><span class="badge ${pb}">${esc(l.plan || '—')}</span></td>
+          <td>${_accesCellHTML(l)}</td>
           <td><span class="badge ${l.active ? 'badge-active' : 'badge-revoked'}">${l.active ? 'Active' : 'Révoquée'}</span></td>
           <td style="font-size:13px">${devicesCell}</td>
           <td>${flagsCell}</td>
@@ -695,6 +695,31 @@ async function submitCreateLicence(panel) {
 // Sans ce 3ᵉ état, « aucune case cochée » serait ambigu (rien possédé ?
 // ou tout, comme le null d'aujourd'hui ?). On ne devine pas.
 // ══════════════════════════════════════════════════════════════════
+// ── Ce que la licence OUVRE (P6) ────────────────────────────────
+// La colonne affichait le « Plan » (STARTER/PRO/MAX). Ces paliers sont
+// morts avec la refonte : les voir listés laissait croire qu'ils se
+// vendent encore. Le champ `plan` survit, mais seulement comme réglage
+// technique (nombre d'appareils, invitations) — il ne décide plus des
+// applications. On montre donc le SAC, seule information qui compte.
+function _accesCellHTML(l) {
+  const plan = String(l.plan || '').toUpperCase();
+  const sac  = l.owned_assets;
+  const puce = (txt, couleur, note) =>
+    `<span class="badge" style="background:${couleur}22;color:${couleur};border:1px solid ${couleur}55">${txt}</span>`
+    + (note ? `<div style="font-size:10.5px;color:var(--text-muted);margin-top:3px">${note}</div>` : '');
+
+  if (plan === 'ADMIN') return puce('Administration', '#c084fc', 'accès total');
+  if (plan === 'MAX')   return puce('Accès total', '#c084fc', 'palier historique');
+  if (plan === 'DEMO')  return puce('Démo', '#63b3ed');
+  if (!Array.isArray(sac)) return puce('Accès total', '#f59e0b', 'sac non défini — historique');
+  if (sac.includes(OS_ENTITLEMENT)) return puce('OS complet', '#c084fc', 'les 14 applications');
+
+  const payantes = sac.filter(id => tierForApp(id) && tierForApp(id) !== TIER.FREE);
+  if (!payantes.length) return puce('Gratuit', '#34d399', 'applications gratuites seules');
+  const noms = payantes.map(id => _appTitle(id)).join(', ');
+  return puce(`${payantes.length} application${payantes.length > 1 ? 's' : ''}`, '#34d399', noms);
+}
+
 // ── Tarif d'une application (P5) ────────────────────────────────
 // LECTURE SEULE, et c'est voulu. Les colonnes « Plan » (STARTER/PRO/
 // MAX) et « Lifetime » ont disparu : les paliers sont morts avec la
