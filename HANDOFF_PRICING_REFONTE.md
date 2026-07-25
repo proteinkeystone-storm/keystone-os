@@ -10,7 +10,22 @@
 - **P0→P6 complets.** Grille 0/19/49/99/129 · entitlement par application · conversations · Stripe par app · paiement serveur · bascule.
 - **Stripe LIVE** : 12 produits / 24 prix créés, webhook réel signé, worker sur la clé live. Les 3 anciens plans sont archivés.
 - **Contrôle de possession CÔTÉ SERVEUR** (`workers/src/lib/app-access.js`) — c'était le vrai bloquant.
-- Dernier état : SW **v5.28.388**, worker **e1f7fe5f** (le palier gratuit et la suppression du mode démo attendent un déploiement, cf. §2 du reste-à-faire).
+- Dernier état (25/07 fin de session) : SW **v5.28.401**, worker **93f45fc6**. Tout est poussé et déployé, rien en attente.
+- **Écran de réglages de la recharge auto EN PROD** (Réglages → Conversations) : consentement servi par le worker, enregistrement de carte `mode:'setup'` (zéro débit), seuil/pack/plafond, états de pause explicites. La console n'est plus nécessaire.
+
+### 🔓 CE QUE P3 VIENT DE DÉBLOQUER — À LIRE AVANT DE CHOISIR LA SUITE
+
+**Les 3 garde-fous du §2 (« mode clé en main ») sont TOUS satisfaits depuis le 25/07 au soir.** La règle « tant que ces 3 points ne sont pas en place, une app publique ne s'ouvre qu'en BYOK » ne bloque donc plus rien :
+
+| Garde-fou §2 | État |
+|---|---|
+| 1. Plafond mensuel de recharge auto + hard-stop | ✅ **construit en P3 le 25/07** — c'était le dernier manquant |
+| 2. Prix conversation > coût réel | ✅ validé P0 §9.2 (0,6-0,8 ¢ chargé < 0,8-0,9 ¢ vendu) |
+| 3. La voix débite des conversations | ✅ P2 (angle mort `/api/kora/stt` bouché) + découverte que Smart Agent public utilise `SpeechRecognition` + Piper WASM → **coût Cloudflare NUL** |
+
+**⚠️ MAIS la pièce qui permettrait d'en profiter n'existe pas** : `MODE`, `PUBLIC_SURFACE_APPS` et `isPublicSurfaceApp()` sont déclarés dans `app/lib/pricing.js` depuis P1 et **utilisés NULLE PART** (vérifié par grep le 25/07). Du code mort qui attendait ce moment. Sans sélecteur géré/BYOK par app publique, on vend Smart Agent 99 € **sans pouvoir dire qui paie l'IA** — et le scénario « une dizaine d'agents à fond » du §2 reste ouvert.
+
+**→ C'est le dernier reste STRUCTUREL du chantier.** Décision préalable qui appartient à Stéphane : le mode se choisit-il **à l'achat** (irréversible sans repasser par le support) ou **à tout moment depuis les réglages de l'app** ? Le reste (§ ci-dessous) est du confort ou de l'exécution.
 
 ### Reste à faire (par ordre de valeur)
 1. **Plafonner les conversations** — 🟡 **ARMÉ SUR LA LICENCE TÉMOIN (2026-07-25), pas sur les autres.**
