@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Harnais — Qui paie l'IA (P7)</title>
+<title>Harnais — L'IA de votre agent (P7)</title>
 <style>
   :root{--border:rgba(128,128,128,.25);--accent:#0a84ff;color-scheme:light dark}
   body{font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:28px;
@@ -16,7 +16,7 @@
 </style>
 </head>
 <body>
-<h1>Qui paie l'IA — les cinq états</h1>
+<h1>L'IA de votre agent — les cinq états</h1>
 <p class="lede">Le panneau <code>app/lib/app-mode-panel.js</code> rendu hors application, avec un
 <code>fetch</code> simulé. Sert à vérifier ce que le client LIT dans chaque situation — en particulier
 qu'aucun état ne lui promet du BYOK qui ne tourne pas.</p>
@@ -57,6 +57,7 @@ const { mountModePanel } = await import('../app/lib/app-mode-panel.js?v=' + Date
 for (const id of Object.keys(STATES)) {
   _which = id;
   mountModePanel(document.getElementById(id), 'O-AGT-001', {
+    subject:   'votre agent',
     scopeNote: 'Ce choix vaut pour tous vos agents publiés.',
   });
   await new Promise(r => setTimeout(r, 30));   // laisse le fetch simulé se résoudre

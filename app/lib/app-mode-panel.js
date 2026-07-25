@@ -1,5 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Panneau « Qui paie l'IA » (Sprint P7)
+   KEYSTONE OS — Panneau « L'IA de votre agent » (Sprint P7)
+   (interne : le sélecteur géré / BYOK — cf. bloc COPY pour le pourquoi
+    du vocabulaire client, qui ne dit JAMAIS « qui paie »)
    ─────────────────────────────────────────────────────────────
    Le sélecteur géré / BYOK des deux applications à surface publique
    (Smart Agent, Concierge de Smart QR). Composant AUTONOME : on lui
@@ -67,14 +69,30 @@ function _ensureCss() {
   document.head.appendChild(st);
 }
 
+// ── Le vocabulaire ──────────────────────────────────────────────
+// Première version : « Qui paie l'IA », « Keystone fournit l'IA »,
+// « vous fournissez l'IA ». Vrai côté cuisine (c'est le §2 du handoff),
+// mais c'est du vocabulaire d'EXPLOITANT : ça fait du client le
+// comptable de mes coûts, deux minutes après qu'il a payé son
+// abonnement. Réécrit le 2026-07-25 sur remarque de Stéphane.
+//
+// L'axe client n'est pas « qui paie », c'est **ce qui se passe quand
+// son agent marche trop bien** : plafonné et sans surprise, ou sans
+// plafond. On ne mentionne plus qui règle la facture — le prix est le
+// même dans les deux cas, ça ne l'aide en rien de le savoir.
+//
+// ⚠️ Ne JAMAIS écrire ici un nombre de conversations incluses : il
+// dépend du sac d'apps (99 € = 1 000, OS = 3 000) et un chiffre en dur
+// finirait par mentir — c'est exactement le piège de `creditsPayload()`
+// sans `quotaOverride` (cf. handoff §Pièges).
 const COPY = {
   MANAGED: {
-    title: 'Clé en main — Keystone fournit l\'IA',
-    desc:  'Rien à configurer. Les échanges de vos visiteurs sont décomptés de vos conversations incluses ; au-delà, la recharge automatique prend le relais dans la limite que vous avez fixée.',
+    title: 'Comprise dans votre abonnement',
+    desc:  'Vos conversations incluses couvrent les échanges. Au-delà, la recharge automatique prend le relais dans la limite que vous fixez — vous ne pouvez pas avoir de surprise.',
   },
   BYOK: {
-    title: 'Ma clé — vous fournissez l\'IA',
-    desc:  'Vos visiteurs sont servis par votre propre moteur, sur votre clé et à vos frais. Aucune conversation Keystone n\'est décomptée, et aucun plafond ne s\'applique.',
+    title: 'Votre propre moteur',
+    desc:  'Vous branchez votre clé : aucun plafond, aucune interruption, quel que soit le volume. L\'IA vous est facturée directement par votre fournisseur, à son tarif.',
   },
 };
 
@@ -101,7 +119,7 @@ function _render(el, st) {
     // décomptée ») est FAUSSE : c'est justement le moment où elles le sont.
     // On la remplace plutôt que de laisser l'encart la contredire.
     const desc = (mode === 'BYOK' && d.degraded)
-      ? 'Sélectionné, mais suspendu : votre clé ne répond pas. Vos conversations Keystone sont décomptées en attendant.'
+      ? 'Sélectionné, mais suspendu : votre clé ne répond pas. Vos conversations incluses prennent le relais en attendant.'
       : COPY[mode].desc;
     return `<button type="button" class="ksmode-opt ${on ? 'is-on' : ''} ${on && d.degraded ? 'is-paused' : ''}" data-mode="${mode}" ${dis ? 'disabled' : ''}>
       <span class="ksmode-dot"></span>
@@ -114,32 +132,35 @@ function _render(el, st) {
     note = `<p class="ksmode-note is-warn">${icon('alert-triangle', 15)}<span>${_esc(st.error)}</span></p>`;
   } else if (d.degraded) {
     note = `<p class="ksmode-note is-warn">${icon('alert-triangle', 15)}<span><strong>Votre clé n'a pas répondu.</strong>
-      Vos visiteurs continuent d'être servis par Keystone — les échanges sont donc décomptés de vos conversations
-      en attendant. Vérifiez votre clé dans Réglages → Moteur IA, puis re-sélectionnez « Ma clé » ci-dessus.</span></p>`;
+      Vos visiteurs continuent d'être servis — votre abonnement prend le relais le temps que vous la remettiez
+      en route. Vérifiez-la dans Réglages → Moteur IA, puis re-sélectionnez « Votre propre moteur » ci-dessus.</span></p>`;
   } else if (!d.byok_available) {
     // `routing_disabled` = l'interrupteur de secours global est coupé.
     // On le dit sans jargon et sans renvoyer le client déposer une clé
     // qui ne servirait à rien pour l'instant.
     note = d.byok_blocker === 'routing_disabled'
-      ? `<p class="ksmode-note">${icon('info', 15)}<span>L'usage de votre propre clé n'est pas encore ouvert sur
-          cette application. En attendant, l'IA est fournie par Keystone.</span></p>`
+      ? `<p class="ksmode-note">${icon('info', 15)}<span>Le branchement d'un moteur personnel n'est pas encore ouvert
+          sur cette application. En attendant, l'IA est comprise dans votre abonnement.</span></p>`
       : `<p class="ksmode-note">${icon('info', 15)}<span>${
           d.byok_blocker === 'no_key'
             ? 'Vous n\'avez encore enregistré aucune clé.'
             : d.byok_blocker === 'no_active_engine'
               ? 'Aucun moteur IA n\'est actif.'
               : `Aucune clé n'est enregistrée pour votre moteur actif${d.active_engine ? ` (${_esc(d.active_engine)})` : ''}.`
-        } Pour utiliser votre propre IA, déposez-la dans <strong>Réglages → Moteur IA</strong> — l'option s'activera ici.</span></p>`;
+        } Pour brancher votre propre moteur, déposez-la dans <strong>Réglages → Moteur IA</strong> — l'option s'activera ici.</span></p>`;
   } else if (d.declared === 'BYOK') {
     note = `<p class="ksmode-note">${icon('shield-check', 15)}<span>Vos visiteurs sont servis par
       <strong>${_esc(d.active_engine || 'votre moteur')}</strong>, sur votre clé. Elle est chiffrée et n'est jamais
       transmise à vos visiteurs.</span></p>`;
   }
 
+  // Le sous-titre parle du RISQUE du client (un trafic qu'il ne maîtrise
+  // pas), pas de ma structure de coûts. Formulé sans genre : le panneau
+  // sert « votre agent » comme « votre Concierge ».
   el.innerHTML = `<section class="ksmode">
-    <h3 class="ksmode-h">${icon('key', 16)} Qui paie l'IA</h3>
-    <p class="ksmode-sub">Cette application répond à vos visiteurs : son usage de l'IA suit leur nombre, pas le vôtre.
-      Vous choisissez qui la fournit — et vous pouvez en changer à tout moment. Le prix de l'application est le même dans les deux cas.${
+    <h3 class="ksmode-h">${icon('key', 16)} L'IA de ${_esc(st.subject)}</h3>
+    <p class="ksmode-sub">Vos visiteurs peuvent être dix ou dix mille — vous ne le savez pas à l'avance.
+      Deux façons d'alimenter l'IA qui leur répond, et vous pouvez en changer à tout moment.${
         st.scopeNote ? ` <strong>${_esc(st.scopeNote)}</strong>` : ''}</p>
     <div class="ksmode-opts">${opt('MANAGED')}${opt('BYOK')}</div>
     ${note}
@@ -159,6 +180,8 @@ const _cache = {};
  * @param {HTMLElement} el       conteneur (son contenu est remplacé)
  * @param {string} appId         'O-AGT-001' | 'A-COM-001'
  * @param {object} [o]
+ * @param {string} [o.subject]   ce dont on parle au client, au génitif :
+ *                               « votre agent », « votre Concierge »
  * @param {string} [o.scopeNote] précision de portée (le réglage vaut pour
  *                               l'app entière, pas pour l'objet affiché)
  * @param {function} [o.onChange]
@@ -168,7 +191,11 @@ export function mountModePanel(el, appId, o = {}) {
   el.dataset.ksmode = '1';
   _ensureCss();
   const onChange = o.onChange;
-  const st = { data: _cache[appId] || null, busy: false, error: null, scopeNote: o.scopeNote || '' };
+  const st = {
+    data: _cache[appId] || null, busy: false, error: null,
+    scopeNote: o.scopeNote || '',
+    subject:   o.subject   || 'votre application',
+  };
 
   const paint = () => _render(el, st);
   paint();

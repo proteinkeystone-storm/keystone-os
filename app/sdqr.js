@@ -672,6 +672,7 @@ function _renderLibrary(panel) {
     const slot = content.querySelector('[data-ks-mode]');
     import('./lib/app-mode-panel.js')
       .then(m => m.mountModePanel(slot, 'A-COM-001', {
+        subject:   'votre Concierge',
         scopeNote: 'Ce choix vaut pour tous vos QR Concierge.',
       }))
       .catch(() => { /* la bibliothèque ne doit pas en dépendre */ });

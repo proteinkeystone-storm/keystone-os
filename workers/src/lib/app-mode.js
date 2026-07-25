@@ -248,11 +248,10 @@ export async function degradeAndWarn(env, tenantId, appId, reason = 'vendor_erro
       subject: 'Votre clé IA ne répond plus',
       html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;line-height:1.6;color:#111">
         <p>Votre clé de moteur IA n'a pas répondu sur <strong>${label}</strong>.</p>
-        <p>Vos visiteurs continuent d'être servis — l'application est repassée
-        en <strong>mode clé en main</strong> pour ne rien interrompre. Les échanges
-        sont donc décomptés de vos <strong>conversations incluses</strong> en attendant.</p>
-        <p>Pour revenir sur votre propre clé : vérifiez-la dans Réglages → Moteur IA,
-        puis repassez l'application sur « ma clé » dans ses réglages.</p></div>`,
+        <p>Vos visiteurs continuent d'être servis — <strong>votre abonnement prend le relais</strong>
+        pour ne rien interrompre, le temps que vous remettiez votre clé en route.</p>
+        <p>Pour y revenir : vérifiez-la dans Réglages → Moteur IA, puis re-sélectionnez
+        « Votre propre moteur » dans les réglages de l'application.</p></div>`,
     });
   } catch (e) {
     console.warn('[P7] e-mail dégradation KO :', e?.message);

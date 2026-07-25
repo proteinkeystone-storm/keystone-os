@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
    KEYSTONE OS — Routes du sélecteur de mode (Sprint P7)
    ─────────────────────────────────────────────────────────────
-   « Qui paie l'IA » sur une application publique, déclaré par le
+   Qui fournit l'IA d'une application publique, déclaré par le
    propriétaire depuis les réglages de l'app. Cf. lib/app-mode.js pour
    la doctrine, handoff §2 pour la décision commerciale.
 
@@ -122,7 +122,7 @@ export async function handleSetAppMode(request, env) {
     const eligible = _byokReachable(env, vault);
     if (!eligible.ok) {
       const msg = eligible.reason === 'routing_disabled'
-        ? 'L\'usage de votre propre clé n\'est pas encore ouvert sur cette application.'
+        ? 'Le branchement d\'un moteur personnel n\'est pas encore ouvert sur cette application.'
         : eligible.reason === 'no_key'
           ? 'Aucune clé enregistrée. Déposez d\'abord votre clé dans Réglages → Moteur IA.'
           : eligible.reason === 'no_active_engine'

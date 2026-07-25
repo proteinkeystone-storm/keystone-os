@@ -660,6 +660,7 @@ function _mountModeBlock(main) {
     if (!slot) return;
     import('./lib/app-mode-panel.js')
         .then(m => m.mountModePanel(slot, 'O-AGT-001', {
+            subject:   'votre agent',
             scopeNote: 'Ce choix vaut pour tous vos agents publiés.',
         }))
         .catch(() => { /* le reste de l'écran ne doit pas en dépendre */ });
