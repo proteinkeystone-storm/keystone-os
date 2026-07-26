@@ -529,16 +529,27 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 .beta-msg.error{color:#f87171}
 .beta-fine{margin:10px 0 0; font-size:11.5px; color:var(--text-3)}
 .plans{display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:44px}
-.plan{border:1px solid var(--border-strong); border-radius:20px; padding:28px; background:linear-gradient(160deg,var(--bg-2),var(--bg-3)); display:flex; flex-direction:column}
+.plan{position:relative; border:1px solid var(--border-strong); border-radius:20px; padding:28px; background:linear-gradient(160deg,var(--bg-2),var(--bg-3)); display:flex; flex-direction:column}
 .plan--pro{border-color:var(--accent-bd); box-shadow:0 30px 70px -40px var(--accent)}
-.plan-tag{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:var(--accent-3); height:16px}
-.plan h3{font-size:19px; font-weight:800; margin-top:8px}
-.plan .price{font-size:36px; font-weight:900; letter-spacing:-.03em; margin:12px 0 4px}
-.plan .price small{font-size:14px; font-weight:600; color:var(--text-3)}
-.plan ul{list-style:none; margin:18px 0 24px; display:flex; flex-direction:column; gap:11px}
+/* Badge flottant à cheval sur le bord haut (refonte vendeuse 2026-07-26) */
+.plan-tag{position:absolute; top:-11px; left:50%; transform:translateX(-50%); padding:4px 12px; border-radius:20px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#fff; background:linear-gradient(135deg,var(--accent) 0%,#8b5cf6 100%); white-space:nowrap}
+/* Picto de plan dans un carré teinté */
+.plan-ico{width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; margin-bottom:14px; background:var(--p-bg,rgba(255,255,255,.06)); border:1px solid var(--p-bd,rgba(255,255,255,.1)); color:var(--p-c,var(--accent-2))}
+.plan-ico svg{width:22px; height:22px}
+.plan h3{font-size:19px; font-weight:800}
+.plan-for{font-size:12.5px; color:var(--text-3); margin-top:3px; line-height:1.45; min-height:36px}
+.plan .price{font-size:40px; font-weight:900; letter-spacing:-.04em; margin:14px 0 2px}
+.plan .price small{font-size:14px; font-weight:600; color:var(--text-3); letter-spacing:0}
+.plan-anchor{font-size:11.5px; font-weight:600; color:var(--p-c,var(--accent-2)); min-height:16px}
+.plan ul{list-style:none; margin:16px 0 24px; display:flex; flex-direction:column; gap:11px}
 .plan li{font-size:13.5px; color:var(--text-2); display:flex; gap:9px; align-items:flex-start}
-.plan li svg{width:15px; height:15px; color:var(--accent-2); flex:0 0 auto; margin-top:1px}
+.plan li svg{width:15px; height:15px; color:var(--p-c,var(--accent-2)); flex:0 0 auto; margin-top:1px}
+.plan li strong{color:var(--text-1,#fff); font-weight:700}
 .plan .btn{width:100%; justify-content:center; margin-top:auto}
+/* Rangée de réassurance mutualisée sous la grille */
+.plans-trust-row{display:flex; justify-content:center; gap:34px; flex-wrap:wrap; margin-top:28px; padding-top:22px; border-top:1px solid var(--border-strong)}
+.plans-trust-item{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-2)}
+.plans-trust-item svg{width:15px; height:15px; color:var(--text-3); flex:0 0 auto}
 
 /* 6.5 · FAQ (AEO — questions/réponses structurées) */
 .faq{max-width:760px; margin:0 auto; padding:24px}
@@ -1634,9 +1645,14 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 </section>
 
 <section class="sec pricing" id="plans">
-  <div class="tools-head reveal"><span class="eyebrow">Tarifs</span><h2 class="h2">Choisissez votre plan.</h2></div>
+  <div class="tools-head reveal"><span class="eyebrow">Tarifs</span><h2 class="h2">Un tarif simple. Tout compris.</h2>
+    <p class="lead" style="margin:14px auto 0; max-width:480px">Commencez gratuitement, ajoutez ce qu'il vous faut, quand il le faut.</p></div>
   <div class="plans" id="plansGrid"></div>
-  <p class="plans-trust reveal">Données hébergées en Europe · Conforme RGPD · Activation sans carte bancaire</p>
+  <div class="plans-trust-row reveal">
+    <span class="plans-trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Hébergement Europe · RGPD</span>
+    <span class="plans-trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>Changez de plan à tout moment</span>
+    <span class="plans-trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Sans engagement · résiliable en un clic</span>
+  </div>
 </section>
 
 <!-- 6.5 · FAQ (AEO — visible + JSON-LD FAQPage ci-dessous) -->
@@ -2189,32 +2205,56 @@ function __keystonePostHero(){
   const g=document.getElementById('plansGrid'); if(!g) return;
   const chk='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
 
+  /* Refonte vendeuse 2026-07-26 : picto par plan, ligne « pour qui »,
+     ancre de valeur sous le prix, plus de features barrées ni de
+     répétition « sans engagement » (mutualisée sous la grille). */
+  const ICO_GIFT='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>';
+  const ICO_MODULES='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><path d="M17 14v6M14 17h6"/></svg>';
+  const ICO_OS='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h4M6.5 10v4M17.5 10v4M10 17.5h4"/></svg>';
+
   const PLANS_V2=[
     {name:"Gratuit", tag:"", price:"0€", cta:"Commencer gratuitement", primary:false,
-      href:"/activate?free=1", feats:[
-      "Missive — transmettre un secret qui s'autodétruit",
-      "booK — vos flipbooks en un fichier qui s'ouvre partout",
-      "Keynapse — vos idées en bulles vivantes",
-      "Sans carte bancaire, sans limite de durée",
-      "Hébergement Europe · RGPD"]},
-    {name:"À la carte", tag:"Populaire", price:"dès 19€", cta:"Voir les applications", primary:true,
-      href:"#outils", feats:[
-      "L'application de votre choix — 19€, 49€ ou 99€ selon l'outil",
-      "Conversations IA incluses, sans configuration",
-      "Ou branchez votre propre clé (Claude, GPT, Mistral…)",
-      "Ajoutez une application quand vous en avez besoin",
-      "Sans engagement · résiliable à tout moment"]},
+      href:"/activate?free=1", ico:ICO_GIFT,
+      colors:"--p-c:#34d399;--p-bg:rgba(52,211,153,.12);--p-bd:rgba(52,211,153,.25)",
+      forWho:"Pour découvrir Keystone en travaillant vraiment.",
+      anchor:"Pour toujours · sans carte bancaire",
+      feats:[
+      "<strong>3 applications complètes</strong>, sans limite de durée",
+      "<strong>Missive</strong> — un secret qui se lit une fois",
+      "<strong>booK</strong> — vos flipbooks en un seul fichier",
+      "<strong>Keynapse</strong> — vos idées en bulles vivantes"]},
+    {name:"À la carte", tag:"Le plus choisi", price:"dès 19€", cta:"Voir les applications", primary:true,
+      href:"#outils", ico:ICO_MODULES,
+      colors:"--p-c:#818cf8;--p-bg:rgba(99,102,241,.14);--p-bd:rgba(99,102,241,.3)",
+      forWho:"Pour payer uniquement les applications qui vous servent.",
+      anchor:"Par application · 19, 49 ou 99 €",
+      feats:[
+      "<strong>L'application de votre choix</strong>, complète dès le premier jour",
+      "<strong>Conversations IA incluses</strong> — rien à configurer",
+      "Ou votre propre clé (Claude, GPT, Mistral…)",
+      "Ajoutez une application quand le besoin arrive"]},
     {name:"OS complet", tag:"", price:"129€", cta:"Choisir l'OS complet", primary:false,
-      href:"#os", feats:[
-      "Les 14 applications, nouveautés comprises",
-      "Elles se parlent entre elles — c'est tout l'intérêt",
-      "3 000 conversations IA par mois",
-      "Support prioritaire",
-      "Sans engagement · résiliable à tout moment"]}
+      href:"#os", ico:ICO_OS,
+      colors:"--p-c:#c084fc;--p-bg:rgba(192,132,252,.12);--p-bd:rgba(192,132,252,.28)",
+      forWho:"Pour équiper toute votre activité — les applications se parlent entre elles.",
+      anchor:"Soit ~9 € par application",
+      feats:[
+      "<strong>Les 14 applications</strong>, nouveautés comprises",
+      "<strong>Elles communiquent entre elles</strong> — c'est tout l'intérêt",
+      "<strong>3 000 conversations IA</strong> incluses par mois",
+      "<strong>Support prioritaire</strong>"]}
   ];
 
   const LISTE = PLANS_V2;
-  g.innerHTML=LISTE.map(p=>'<div class="plan'+(p.primary?' plan--pro':'')+' reveal"><span class="plan-tag">'+p.tag+'</span><h3>'+p.name+'</h3><div class="price">'+p.price+'<small> /mois</small></div><ul>'+p.feats.map(f=>'<li>'+chk+f+'</li>').join('')+'</ul><a class="btn '+(p.primary?'btn-primary':'btn-ghost')+'" href="'+p.href+'" target="_top">'+p.cta+'</a></div>').join('');
+  g.innerHTML=LISTE.map(p=>'<div class="plan'+(p.primary?' plan--pro':'')+' reveal" style="'+p.colors+'">'
+    +(p.tag?'<span class="plan-tag">'+p.tag+'</span>':'')
+    +'<div class="plan-ico">'+p.ico+'</div>'
+    +'<h3>'+p.name+'</h3>'
+    +'<p class="plan-for">'+p.forWho+'</p>'
+    +'<div class="price">'+p.price+'<small> /mois</small></div>'
+    +'<div class="plan-anchor">'+p.anchor+'</div>'
+    +'<ul>'+p.feats.map(f=>'<li>'+chk+'<span>'+f+'</span></li>').join('')+'</ul>'
+    +'<a class="btn '+(p.primary?'btn-primary':'btn-ghost')+'" href="'+p.href+'" target="_top">'+p.cta+'</a></div>').join('');
 
   /* Nouvelle grille : « Choisir l'OS complet » ouvre directement la page
      de paiement. Le serveur choisit le tarif — la page ne connaît aucun

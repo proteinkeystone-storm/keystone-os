@@ -903,52 +903,63 @@ let _ksDebounce   = null;
 // Supprimer les anciens AVANT la bascule afficherait des tarifs que
 // le paiement ne sait pas encore honorer. Au sprint P6 : on retire
 // KS_PLANS_LEGACY et ce commutateur.
+// Refonte vendeuse 2026-07-26 : picto par plan, ligne « pour qui »
+// (forWho), ancre de valeur sous le prix (anchor), chip mis en avant.
+// Plus de features barrées (montrer ce qu'on n'a pas culpabilise) ni de
+// « sans engagement » répété (mutualisé dans la rangée de réassurance).
+const KS_PLAN_ICONS = {
+    gift: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>',
+    modules: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><path d="M17 14v6M14 17h6"/></svg>',
+    os: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h4M6.5 10v4M17.5 10v4M10 17.5h4"/></svg>',
+};
+
 const KS_PLANS_V2 = [
     {
         id: 'FREE',
         name: 'Gratuit',
         price: 0,
-        color: '#34d399',
-        desc: `Trois applications complètes, sans carte bancaire et sans limite de durée.`,
+        icon: 'gift',
+        colors: '--p-c:#34d399;--p-bg:rgba(52,211,153,.12);--p-bd:rgba(52,211,153,.25)',
+        forWho: 'Pour découvrir Keystone en travaillant vraiment.',
+        anchor: 'Pour toujours · sans carte bancaire',
         features: [
+            { html: '<strong>3 applications complètes</strong>, sans limite de durée' },
             { html: '<strong>Missive</strong> — un secret qui se lit une fois' },
             { html: '<strong>booK</strong> — vos flipbooks en un seul fichier' },
             { html: '<strong>Keynapse</strong> — vos idées en bulles vivantes' },
-            { text: 'Hébergement Europe · RGPD' },
-            { text: 'Conversations IA incluses', disabled: true },
-            { text: 'Support prioritaire', disabled: true },
         ],
     },
     {
         id: 'ALACARTE',
         name: 'À la carte',
         price: 19,
-        priceNote: 'à partir de',
-        color: 'var(--gold)',
+        priceNote: 'dès',
+        icon: 'modules',
+        colors: '--p-c:var(--gold2);--p-bg:rgba(99,102,241,.14);--p-bd:rgba(99,102,241,.3)',
         recommended: true,
-        desc: `Vous ne payez que les applications dont vous vous servez.`,
+        forWho: 'Pour payer uniquement les applications qui vous servent.',
+        anchor: 'Par application · 19, 49 ou 99 €',
         features: [
-            { html: "L'application de votre choix — <strong>19, 49 ou 99 €</strong>" },
-            { text: 'Conversations IA incluses, sans rien configurer' },
+            { html: "<strong>L'application de votre choix</strong>, complète dès le premier jour" },
+            { html: '<strong>Conversations IA incluses</strong> — rien à configurer' },
             { text: 'Ou votre propre clé (Claude, GPT, Mistral…)' },
-            { text: 'Ajoutez-en une quand le besoin arrive' },
-            { text: 'Sans engagement · résiliable à tout moment' },
-            { text: 'Support prioritaire', disabled: true },
+            { text: 'Ajoutez une application quand le besoin arrive' },
         ],
     },
     {
         id: 'OS',
         name: 'OS complet',
         price: 129,
-        color: '#c084fc',
+        icon: 'os',
+        colors: '--p-c:#c084fc;--p-bg:rgba(192,132,252,.12);--p-bd:rgba(192,132,252,.28)',
         buyApp: 'OS',                      // ← ouvre le paiement directement
-        desc: `Les 14 applications, et surtout : elles se parlent entre elles.`,
+        forWho: 'Pour équiper toute votre activité — les applications se parlent entre elles.',
+        anchor: 'Soit ~9 € par application',
+        chip: '2 mois offerts en paiement annuel',
         features: [
             { html: '<strong>Les 14 applications</strong>, nouveautés comprises' },
-            { text: 'Elles communiquent — c\'est tout l\'intérêt' },
-            { html: '<strong>3 000 conversations</strong> incluses / mois' },
-            { text: 'Ou votre propre clé (Claude, GPT, Mistral…)' },
-            { html: '<strong>2 mois offerts</strong> en paiement annuel' },
+            { html: '<strong>Elles communiquent entre elles</strong> — c\'est tout l\'intérêt' },
+            { html: '<strong>3 000 conversations IA</strong> incluses par mois' },
             { html: '<strong>Support prioritaire</strong>' },
         ],
     },
@@ -1996,51 +2007,70 @@ function _renderKStorePlans() {
     const ownedIds    = getOwnedIds();
     const currentPlan = (localStorage.getItem('ks_plan') || '').toUpperCase();
 
-    const renderFeature = f => {
-        const inner = f.html ? f.html : f.text;
-        return `<li${f.disabled ? ' class="disabled"' : ''}>${inner}</li>`;
-    };
+    const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    const ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
+
+    const renderFeature = f =>
+        `<li><span class="ksp2-check">${CHECK}</span><span>${f.html || f.text}</span></li>`;
 
     view.innerHTML = `
-        <div class="ks-plans-intro">
-            Engagement mensuel, sans frais cachés. Changez de plan à tout moment.
+        <div class="ksp2-head">
+            <div class="ksp2-sub">Un tarif simple. Tout compris. Commencez gratuitement,
+            ajoutez ce qu'il vous faut, quand il le faut.</div>
         </div>
-        <div class="ks-plans-grid">
+        <div class="ksp2-grid">
             ${_ksPlans().map(plan => {
                 const isActive = currentPlan === plan.id
                               || (plan.id === 'MAX' && ownedIds === null)
                               || (plan.id === 'OS'  && ownedIds === null);
                 return `
-                <div class="ks-plan-card${plan.recommended ? ' ks-plan-card--recommended' : ''}${isActive ? ' ks-plan-card--active' : ''}"
-                     style="--plan-color:${plan.color}">
-                    ${plan.recommended ? '<div class="ks-plan-badge">POPULAIRE</div>' : ''}
-                    ${isActive        ? '<div class="ks-plan-badge ks-plan-badge--active">VOTRE PLAN</div>' : ''}
-                    <div class="ks-plan-name">${plan.name.toUpperCase()}</div>
-                    <div class="ks-plan-price">
-                        ${plan.priceNote ? `<span class="ks-plan-per">${plan.priceNote} </span>` : ''}
-                        <span class="ks-plan-currency">€</span>${plan.price}<span class="ks-plan-per">/mois</span>
+                <div class="ksp2-card${plan.recommended ? ' ksp2-card--reco' : ''}${isActive ? ' ksp2-card--active' : ''}"
+                     style="${plan.colors}">
+                    ${isActive ? '<div class="ksp2-badge ksp2-badge--active">Votre plan</div>'
+                               : plan.recommended ? '<div class="ksp2-badge">Le plus choisi</div>' : ''}
+                    <div class="ksp2-ico">${KS_PLAN_ICONS[plan.icon] || ''}</div>
+                    <h2 class="ksp2-name">${plan.name}</h2>
+                    <p class="ksp2-for">${plan.forWho}</p>
+                    <div class="ksp2-price-row">
+                        ${plan.priceNote ? `<span class="ksp2-per">${plan.priceNote}</span>` : ''}
+                        <span class="ksp2-price"><span class="cur">€</span>${plan.price}</span>
+                        <span class="ksp2-per">/ mois</span>
                     </div>
-                    <p class="ks-plan-desc">${plan.desc}</p>
-                    <ul class="ks-plan-list">
+                    <div class="ksp2-price-note">${plan.anchor || ''}</div>
+                    ${plan.chip ? `<div class="ksp2-chip">${KS_PLAN_ICONS.gift}${plan.chip}</div>` : ''}
+                    <ul class="ksp2-list">
                         ${plan.features.map(renderFeature).join('')}
                     </ul>
                     ${(() => {
                         if (isActive) {
-                            return `<button class="ks-plan-cta" disabled style="opacity:.7;cursor:default">Votre offre actuelle ✓</button>`;
+                            return `<button class="ksp2-cta ksp2-cta--current" disabled>Votre offre actuelle ${CHECK}</button>`;
                         }
                         // Nouveau modèle : l'OS s'achète via le paiement serveur
                         // (aucun montant côté client) ; « à la carte » et le
                         // gratuit renvoient au catalogue, où l'app se choisit.
                         if (plan.buyApp) {
-                            return `<button class="ks-plan-cta" data-buy-plan="${plan.buyApp}" style="width:100%">Choisir ${plan.name}</button>`;
+                            return `<button class="ksp2-cta" data-buy-plan="${plan.buyApp}">Choisir ${plan.name}</button>`;
                         }
                         // Reste : le gratuit et « à la carte » — dans les deux
                         // cas l'application se choisit dans le catalogue.
-                        return `<button class="ks-plan-cta" data-goto-catalogue="1" style="width:100%">Voir les applications</button>`;
+                        return `<button class="ksp2-cta${plan.recommended ? ' ksp2-cta--main' : ''}" data-goto-catalogue="1">${plan.recommended ? `Choisir mes applications ${ARROW}` : 'Voir les applications'}</button>`;
                     })()}
-                    <p class="ks-plan-note">Sans engagement · Résiliable à tout moment</p>
                 </div>`;
             }).join('')}
+        </div>
+        <div class="ksp2-footer">
+            <div class="ksp2-trust">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                Hébergement Europe · RGPD
+            </div>
+            <div class="ksp2-trust">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
+                Changez de plan à tout moment
+            </div>
+            <div class="ksp2-trust">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                Sans engagement · résiliable en un clic
+            </div>
         </div>
     `;
 }
