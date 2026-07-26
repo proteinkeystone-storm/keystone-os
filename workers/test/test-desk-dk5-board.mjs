@@ -63,11 +63,21 @@ const iso = (days) => new Date(Date.now() + days * 86400000).toISOString().slice
 async function main() {
   console.log('desK DK-5 — capteur Living Layer sur', API, '\n');
 
-  // 0 · Board anonyme : 200, et desk* à zéro (pas de fuite).
+  // 0 · Board anonyme : aucune donnée desK ne doit fuiter.
+  //
+  //     Le contrat a changé avec l'audit sécurité de sept. 2026 (M-1) : sans
+  //     licence identifiée, le board SORT avant d'interroger la base. Il
+  //     renvoyait un bloc `metrics` rempli de zéros au prix d'environ dix-sept
+  //     requêtes D1 — soit une route publique capable de consommer le quota
+  //     de lectures en boucle. Il renvoie désormais { ok, skipped:'no-tenant' }.
+  //
+  //     L'intention de ce test est inchangée — « pas de fuite » — et elle est
+  //     même mieux servie qu'avant : on ne renvoie plus rien du tout.
   const b0 = await board(null);
   ok(b0.status === 200, 'board anonyme → 200', b0.status);
-  ok((b0.data.metrics || {}).deskInbox === 0 && (b0.data.metrics || {}).deskIssuesLive === 0,
-     'board anonyme → deskInbox=0, deskIssuesLive=0', b0.data.metrics);
+  ok(b0.data.skipped === 'no-tenant', 'board anonyme → sortie avant toute requête (M-1)', b0.data);
+  const m0 = b0.data.metrics || {};
+  ok(!m0.deskInbox && !m0.deskIssuesLive, 'board anonyme → aucune donnée desK exposée', m0);
 
   // 1 · Décor : publication + numéro (bouclage dans 2 j) + article en retard posé.
   await desk(A, '/bootstrap');
