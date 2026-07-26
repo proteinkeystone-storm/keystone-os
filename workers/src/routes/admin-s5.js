@@ -333,6 +333,14 @@ export async function handleAdminIssueJWT(request, env) {
   const ownerLower = (adminLicence.owner || '').toString().trim().toLowerCase();
   const emailClaim = EMAIL_RE_ADMIN.test(ownerLower) ? ownerLower : null;
 
+  // Durée de vie VOLONTAIREMENT COURTE (12 h au lieu des 7 jours par
+  // défaut). Depuis E-3, ce jeton ouvre toutes les routes admin : c'est
+  // la contrepartie de ne plus garder KS_ADMIN_SECRET dans le navigateur.
+  // Un secret volé était valable jusqu'à rotation manuelle, c'est-à-dire
+  // en pratique pour toujours ; ce jeton-ci meurt en une journée de
+  // travail. Concrètement : ressaisir le secret une fois par jour sur
+  // /admin — le prix d'un vol qui ne dure pas.
+  const ADMIN_JWT_TTL_S = 12 * 60 * 60;
   const jwt = await signJWT({
     sub,
     plan:    'ADMIN',
@@ -340,7 +348,7 @@ export async function handleAdminIssueJWT(request, env) {
     email:   emailClaim,
     isAdmin: true,
     via:     'admin_login',
-  }, env);
+  }, env, ADMIN_JWT_TTL_S);
 
   await audit(env, {
     action:   'admin_jwt_issued',

@@ -252,18 +252,39 @@ export default {
       // publiques — QR scanné, agent public, formulaire Key Form
       // rempli par un visiteur : les clients DU client n'ont pas de
       // licence et ne doivent jamais en avoir besoin.
-      if (method !== 'OPTIONS' && request.headers.get('Authorization')) {
-        const cible = appForPath(path);
-        if (cible) {
-          const claims = await requireJWT(request, env);   // null si absent/invalide
-          if (claims) {
-            const { allowed } = await checkAppAccess(env, { path, claims });
-            if (!allowed) {
-              return err(
-                "Cette application n'est pas incluse dans votre licence.",
-                403, origin,
-              );
-            }
+      const authzHeader = request.headers.get('Authorization') || '';
+      if (method !== 'OPTIONS' && authzHeader) {
+        // Un JWT porte trois segments séparés par des points ; le secret
+        // maître, non. On évite ainsi une vérification HMAC inutile sur
+        // les appels qui présentent le secret.
+        const looksLikeJwt = authzHeader.replace(/^Bearer\s+/i, '').split('.').length === 3;
+        const claims = looksLikeJwt ? await requireJWT(request, env) : null;
+
+        // ── PROMOTION ADMIN (audit sept. 2026 · E-3) ────────────────
+        // Un JWT ADMIN vaut le secret maître. C'est ce qui permet à
+        // /admin de ne plus garder KS_ADMIN_SECRET dans le navigateur :
+        // il l'échange une fois contre un jeton court, et ne stocke que
+        // le jeton. Le secret ne survit plus à la fermeture de l'onglet.
+        //
+        // Ce n'est pas un élargissement de surface : le patron existait
+        // déjà, dupliqué, sous les noms requireAdminFlexible (social.js)
+        // et _requireAdminFlexible (asset-transfer.js). On le rend
+        // simplement uniforme, et à un seul endroit.
+        //
+        // Le verdict est déposé sur l'objet requête, jamais dans un
+        // en-tête : voir le commentaire de requireAdmin (lib/auth.js).
+        if (claims && (claims.isAdmin === true || String(claims.plan || '').toUpperCase() === 'ADMIN')) {
+          request._ksAdmin = true;
+        }
+
+        // ── PORTE DE POSSESSION (lib/app-access.js) ────────────────
+        if (claims && appForPath(path)) {
+          const { allowed } = await checkAppAccess(env, { path, claims });
+          if (!allowed) {
+            return err(
+              "Cette application n'est pas incluse dans votre licence.",
+              403, origin,
+            );
           }
         }
       }

@@ -121,7 +121,24 @@ const API_BASE      = _customBase
                       : CF_WORKER_URL;
 
 // ── State ──────────────────────────────────────────────────────
-let adminToken   = localStorage.getItem('ks_admin_token') || '';
+// `adminToken` porte le jeton ADMIN court (12 h), PAS le secret maître.
+//
+// Avant (audit sept. 2026 · E-3), KS_ADMIN_SECRET dormait en clair dans
+// localStorage : permanent, sans expiration, et lisible par n'importe
+// quelle injection de script sur le domaine. Il ouvrait tout — les clés
+// API tierces en clair, la purge d'un client, les prélèvements Stripe.
+// Désormais le secret est échangé une fois contre un jeton court et
+// n'est JAMAIS écrit sur le disque ; il ne vit qu'en mémoire, le temps
+// de l'onglet, et sert uniquement de secours si l'échange échoue.
+let adminToken   = localStorage.getItem('ks_admin_jwt') || '';
+// Secours EN MÉMOIRE UNIQUEMENT — jamais persisté, perdu au rechargement.
+let adminSecretMem = '';
+
+// Ménage : on efface le secret laissé par les versions précédentes.
+// Les autres modules (pulsa, sdqr, kodex, asset-deliver…) lisent
+// `ks_admin_token` puis retombent sur `ks_jwt`, qui est posé plus bas —
+// leur accès n'est donc pas interrompu.
+try { localStorage.removeItem('ks_admin_token'); } catch (_) {}
 let catalogData  = null;
 let padsCache    = {};
 let editingPadId = null;
@@ -281,7 +298,9 @@ async function tryLogin() {
   const prev = adminToken; adminToken = secret;
   try {
     await api('/api/licence/list');
-    localStorage.setItem('ks_admin_token', secret);
+    // Le secret a fait ses preuves : on le garde EN MÉMOIRE comme secours,
+    // et on ne l'écrit nulle part (cf. E-3 en tête de fichier).
+    adminSecretMem = secret;
 
     // S5.6 — Pose AUSSI un ks_jwt user lié à la licence ADMIN active,
     // pour que le Cloud Vault sync puisse fonctionner cross-device.
@@ -290,6 +309,11 @@ async function tryLogin() {
     try {
       const jwtResp = await api('/api/admin/issue-jwt', 'POST');
       if (jwtResp?.jwt) {
+        // Depuis E-3, ce jeton n'est plus un simple confort de synchro :
+        // c'est LE justificatif d'identité de la console admin. Il
+        // remplace le secret pour tous les appels suivants.
+        adminToken = jwtResp.jwt;
+        localStorage.setItem('ks_admin_jwt', jwtResp.jwt);
         localStorage.setItem('ks_jwt', jwtResp.jwt);
         localStorage.setItem('ks_licence_plan', jwtResp.plan || 'ADMIN');
         if (jwtResp.email) localStorage.setItem('ks_user_email', jwtResp.email);
@@ -311,8 +335,10 @@ async function tryLogin() {
   }
 }
 function logout() {
-  localStorage.removeItem('ks_admin_token');
+  localStorage.removeItem('ks_admin_jwt');
+  localStorage.removeItem('ks_admin_token');   // legacy — ménage
   adminToken = '';
+  adminSecretMem = '';
   adminScreen.style.display = 'none';
   loginScreen.style.display = 'flex';
   secretInput.value = ''; loginError.textContent = '';
@@ -4183,7 +4209,8 @@ async function renderSettings(panel) {
       </table>
       <div class="rgpd-notice">
         Les clés API des moteurs IA sont chiffrées en AES-256-GCM avant stockage.<br>
-        L'accès admin est protégé par un secret Bearer Token (non transmis en clair).<br>
+        Votre secret d'administration n'est jamais enregistré par le navigateur :
+        il est échangé à la connexion contre un jeton valable 12 heures.<br>
         Toutes les communications transitent via HTTPS/TLS 1.3.
       </div>
     </div>

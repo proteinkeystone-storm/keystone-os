@@ -45,7 +45,27 @@ function _safeEq(a, b) {
 }
 
 // ── Vérification token Admin ──────────────────────────────────
+// Deux façons d'être admin, et une seule fonction pour les deux :
+//
+//   1. Le SECRET MAÎTRE en Bearer (voie historique, toujours valable —
+//      c'est le passe de secours si tout le reste échoue).
+//   2. Un JWT ADMIN, reconnu en amont par le routeur (index.js), qui pose
+//      alors `_ksAdmin` sur l'objet requête.
+//
+// Pourquoi la promotion est-elle faite par le routeur, et pas ici ?
+// Parce que vérifier un JWT est asynchrone, et que cette fonction est
+// appelée de façon SYNCHRONE à 87 endroits, sous la forme
+// `if (!requireAdmin(request, env)) return err(...)`. La rendre `async`
+// obligerait à ajouter un `await` aux 87 appels — et un seul oubli
+// transformerait le test en `if (!Promise)`, c'est-à-dire toujours faux :
+// la route deviendrait ouverte à tous, en silence. Le routeur décide donc
+// en amont, une fois, et dépose le verdict ici.
+//
+// `_ksAdmin` n'est PAS lisible depuis la requête entrante : c'est une
+// propriété posée côté serveur sur l'objet Request, jamais un en-tête.
+// Un client ne peut donc pas se l'attribuer.
 export function requireAdmin(request, env) {
+  if (request?._ksAdmin === true) return true;
   const header = request.headers.get('Authorization') || '';
   const token  = header.replace(/^Bearer\s+/i, '').trim();
   if (!env.KS_ADMIN_SECRET || !token) return false;
