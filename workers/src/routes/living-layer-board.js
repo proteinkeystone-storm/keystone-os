@@ -1346,6 +1346,18 @@ export async function handleLivingBoard(request, env) {
     }
   } catch (e) { /* token invalide → on continue en mode anonyme */ }
 
+  // Sans licence identifiée, il n'y a RIEN à calculer : tous les capteurs
+  // ci-dessous filtrent sur le tenant et renverraient zéro. On sortait
+  // quand même APRÈS les avoir tous interrogés — soit ~17 requêtes D1 par
+  // appel, sur une route publique et sans compteur : de quoi consommer le
+  // quota de lectures en boucle sans jamais s'authentifier.
+  // On sort donc AVANT de toucher la base. Réponse alignée sur
+  // handleLivingFeedback ; côté front, l'absence de `text` emprunte le
+  // chemin d'échec déjà prévu (barre masquée, ligne d'ambiance affichée).
+  if (!claims?.sub) {
+    return json({ ok: true, skipped: 'no-tenant' }, 200, origin);
+  }
+
   const lookupHmac = claims?.sub  || null;
   const plan       = (claims?.plan || '').toLowerCase() || 'all';
   // Résolution tenant alignée sur les PADS : un compte ADMIN range ses données

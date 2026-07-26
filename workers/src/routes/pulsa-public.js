@@ -78,6 +78,17 @@ function _getAccessCode(row) {
   return cfg.meta?.access_code?.trim() || null;
 }
 
+// Comparaison à temps constant — même implémentation que lib/auth._safeEq.
+// Un `!==` s'arrête au premier octet différent : le temps de réponse laisse
+// alors deviner le code caractère par caractère.
+function _safeEq(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // GET /api/pulsa/public/:slug?code=XXXX
 // Si access_code est défini, le code doit matcher exactement.
@@ -98,8 +109,11 @@ export async function handlePulsaPublic(request, env, slug, url) {
 
   const expectedCode = _getAccessCode(row);
   if (expectedCode) {
+    // Ici le code reste en query : c'est un GET, le lien est partagé tel
+    // quel, on ne peut pas le déplacer dans un corps sans casser l'usage.
+    // La soumission (POST), elle, le lit désormais dans le corps.
     const providedCode = url?.searchParams?.get('code')?.trim() || '';
-    if (!providedCode || providedCode !== expectedCode) {
+    if (!_safeEq(providedCode, expectedCode)) {
       return json({
         ok: false,
         protected: true,

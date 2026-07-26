@@ -1726,8 +1726,13 @@ function _formatValueForUI(field, raw) {
     case 'email':
       return `<a href="mailto:${_escape(raw)}">${_escape(raw)}</a>`;
     case 'website':
-    case 'url-external':
-      return `<a href="${_escape(raw)}" target="_blank" rel="noopener">${_escape(raw)}</a>`;
+    case 'url-external': {
+      const href = _safeHref(raw);
+      // Schéma refusé → on montre le texte, sans le rendre cliquable.
+      return href
+        ? `<a href="${href}" target="_blank" rel="noopener">${_escape(raw)}</a>`
+        : _escape(raw);
+    }
     case 'chips': {
       const c = (opts.choices || []).find(c => c.id === raw);
       return _escape(c?.label || raw);
@@ -1767,8 +1772,12 @@ function _formatValueForUI(field, raw) {
         .filter(Boolean);
       return lines.join(' · ');
     }
-    case 'signature':
-      return `<img src="${_escape(raw)}" alt="Signature" style="max-width:200px;background:#fff;border-radius:4px;padding:4px;border:1px solid rgba(255,255,255,.1)">`;
+    case 'signature': {
+      const src = _safeImgSrc(raw);
+      return src
+        ? `<img src="${src}" alt="Signature" style="max-width:200px;background:#fff;border-radius:4px;padding:4px;border:1px solid rgba(255,255,255,.1)">`
+        : '<em style="color:#64748b">(signature illisible)</em>';
+    }
     case 'nps': {
       const n = Number(raw);
       if (isNaN(n)) return _escape(raw);
@@ -3475,6 +3484,31 @@ function _escape(s) {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
+}
+
+// Une réponse de visiteur peut atterrir dans un href de NOTRE tableau de
+// bord. L'échappement HTML ne suffit pas ici : `javascript:…` ne contient
+// aucun caractère échappé et resterait cliquable — un clic du propriétaire
+// suffirait alors à exécuter du script avec sa session.
+// On juge donc le SCHÉMA, pas seulement les caractères.
+function _safeHref(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  return /^(https?:|mailto:)/i.test(s) ? _escape(s) : '';
+}
+
+// Signature manuscrite : le formulaire la sérialise en
+// `data:image/svg+xml;base64,…` (cf. form.html, capture du tracé) — le SVG
+// est donc INDISPENSABLE ici, ne pas le retirer de la liste sans casser la
+// signature en production. Il reste inoffensif : un SVG chargé via <img>
+// n'exécute pas de script, contrairement à un SVG ouvert en pleine page.
+// Ce qu'on refuse, c'est `data:text/html`, `javascript:` et consorts.
+function _safeImgSrc(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return _escape(s);
+  if (/^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(s)) return s;
+  return '';
 }
 
 // ═══════════════════════════════════════════════════════════════

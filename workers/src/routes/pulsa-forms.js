@@ -94,6 +94,44 @@ async function _isSlugTaken(env, slug, ignoreId = null) {
   return row.id !== ignoreId;
 }
 
+// ── Identifiants techniques : liste blanche à l'écriture ────────
+// Le rendu public (form.html) réinjecte les ids de section, de champ et de
+// sous-champ dans des attributs HTML. Un id porteur d'un guillemet s'échappe
+// de son attribut et devient du script exécutable chez CHAQUE visiteur du
+// formulaire — sur notre propre domaine, donc à portée du stockage local.
+//
+// C'est la porte serveur : elle vaut pour toutes les surfaces d'affichage,
+// présentes et futures, là où un échappement se contourne en oubliant un
+// point d'usage.
+//
+// Le jeu autorisé est exactement celui que produisent déjà tous nos
+// générateurs (`_uid` de pulsa-types, gabarits livrés, gabarit Concierge) :
+// aucun formulaire légitime ne peut être refusé ici.
+//
+// Les ids de CHOIX ne sont volontairement pas soumis à cette porte : ils
+// sont, eux, correctement échappés à l'affichage (`escape(c.id)`), et les
+// contraindre risquerait de refuser des formulaires en place sans rien
+// fermer de plus.
+const SAFE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** Retourne la description du 1er id non conforme, ou null si tout va bien. */
+function _firstInvalidId(form) {
+  const cut = v => String(v).slice(0, 40);
+  const sections = Array.isArray(form?.sections) ? form.sections : [];
+  for (const sec of sections) {
+    if (sec?.id != null && !SAFE_ID_RE.test(String(sec.id))) return `section « ${cut(sec.id)} »`;
+    const fields = Array.isArray(sec?.fields) ? sec.fields : [];
+    for (const f of fields) {
+      if (f?.id != null && !SAFE_ID_RE.test(String(f.id))) return `champ « ${cut(f.id)} »`;
+      const subs = Array.isArray(f?.options?.fields) ? f.options.fields : [];
+      for (const sf of subs) {
+        if (sf?.id != null && !SAFE_ID_RE.test(String(sf.id))) return `sous-champ « ${cut(sf.id)} »`;
+      }
+    }
+  }
+  return null;
+}
+
 function _rowToForm(row) {
   if (!row) return null;
   let config = {};
@@ -122,6 +160,14 @@ export async function handlePulsaUpsert(request, env) {
   const form = body?.form;
   if (!form || typeof form !== 'object') {
     return err('Champ "form" requis (objet config)', 400, origin);
+  }
+
+  const badId = _firstInvalidId(form);
+  if (badId) {
+    return err(
+      `Identifiant technique invalide sur le ${badId} : lettres, chiffres, tiret et souligné uniquement (64 caractères max).`,
+      400, origin,
+    );
   }
 
   const id = form.id || generateId();

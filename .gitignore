@@ -41,6 +41,14 @@ LIvre T3-T1-13-11-2025.pdf
 # Aperçus temporaires (contenu client) — jamais versionnés
 .preview-tmp/
 
+# Rapports d'audit de sécurité — JAMAIS versionnés.
+# Ce dépôt est PUBLIC. Un rapport d'audit liste, fichier et ligne à l'appui,
+# des failles encore ouvertes et leur scénario d'exploitation : c'est une
+# feuille de route clés en main pour un attaquant. Le code, lui, est déjà
+# lisible par tous — mais rien n'oblige à faire le travail d'analyse à sa
+# place. Ces rapports restent en local (ou dans le coffre Obsidian).
+AUDIT_*.md
+
 # Notice Smart Agent — artefacts régénérables (le PDF vit dans CLD-AI/KEYSTONE/Notices)
 _design-lab/notice-sa-src/assets.py
 _design-lab/notice-sa-src/NOTICE_SMART_AGENT.html

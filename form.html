@@ -848,6 +848,43 @@
         .replaceAll('\'', '&#039;');
     }
 
+    // Les identifiants techniques (section, champ, sous-champ) repartent dans
+    // des attributs HTML à une cinquantaine d'endroits du rendu, sans passer
+    // par escape(). Plutôt que d'échapper chaque point d'usage — et d'en
+    // oublier au prochain type de champ — on les ramène ICI, une fois, au jeu
+    // de caractères que TOUS les générateurs produisent déjà (_uid de
+    // pulsa-types, gabarits livrés) : sans effet sur un formulaire légitime,
+    // et une configuration forgée ne peut plus sortir de son attribut.
+    // Ne PAS déplacer au rendu : les clés composites des blocs répétables
+    // (`champ::index::sous-champ`) se construisent après, à partir d'ids déjà
+    // assainis.
+    const SAFE_ID_RE   = /^[A-Za-z0-9_-]{1,64}$/;
+    const FIELD_WIDTHS = ['full', '3/4', '1/2', '1/4'];
+
+    function safeId(v, fallback) {
+      const s = String(v == null ? '' : v);
+      if (SAFE_ID_RE.test(s)) return s;
+      return s.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) || fallback;
+    }
+
+    function sanitizeFormIds(form) {
+      if (!form || !Array.isArray(form.sections)) return form;
+      form.sections.forEach((sec, si) => {
+        if (!sec) return;
+        sec.id = safeId(sec.id, 'sec' + si);
+        (Array.isArray(sec.fields) ? sec.fields : []).forEach((f, fi) => {
+          if (!f) return;
+          f.id = safeId(f.id, 'fld' + si + '_' + fi);
+          if (!FIELD_WIDTHS.includes(f.width)) f.width = 'full';
+          const subs = f.options && f.options.fields;
+          if (Array.isArray(subs)) {
+            subs.forEach((sf, sfi) => { if (sf) sf.id = safeId(sf.id, 'sub' + sfi); });
+          }
+        });
+      });
+      return form;
+    }
+
     function getSlug() {
       const params = new URLSearchParams(location.search);
       const fromQuery = params.get('s') || params.get('slug');
@@ -2069,12 +2106,18 @@
       if (btn) { btn.disabled = true; btn.textContent = 'Envoi en cours…'; }
 
       const slug = _slug || getSlug();
-      const submitUrl = `${API_BASE}/api/pulsa/responses/${slug}${_accessCode ? '?code=' + encodeURIComponent(_accessCode) : ''}`;
+      // Le code d'accès part dans le CORPS, plus dans l'URL : en query il
+      // finissait dans les journaux serveur, l'historique du navigateur et
+      // l'en-tête Referer. Le worker accepte encore l'ancien format en
+      // repli, le temps que les pages en cache se renouvellent.
+      const submitUrl = `${API_BASE}/api/pulsa/responses/${slug}`;
       try {
+        const payload = { responses: _buildResponses() };
+        if (_accessCode) payload.code = _accessCode;
         const res = await fetch(submitUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ responses: _buildResponses() }),
+          body: JSON.stringify(payload),
         });
         const data = await res.json().catch(() => ({}));
 
@@ -2165,7 +2208,7 @@
           return;
         }
         const data = await res.json();
-        _form = data?.form;
+        _form = sanitizeFormIds(data?.form);
         if (!_form || !Array.isArray(_form.sections)) {
           renderError('Formulaire introuvable', 'La réponse du serveur est invalide.', 'NO_FORM');
           return;
@@ -2306,7 +2349,7 @@
         if (e.origin !== location.origin) return;
         const d = e.data;
         if (!d || d.type !== 'pulsa:preview') return;
-        _form = d.form;
+        _form = sanitizeFormIds(d.form);
         if (!_form || !Array.isArray(_form.sections) || _form.sections.length === 0) {
           const app = document.getElementById('pf-app');
           if (app) app.innerHTML = '<div class="pf-loading" style="margin-top:64px;color:var(--pf-muted);font-size:14px;">Ajoutez une section pour voir l\'aperçu prendre forme…</div>';

@@ -61,6 +61,40 @@ async function _assertOwnsForm(env, formId, owner) {
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
+/* ── Garde-fous de la collecte publique ──────────────────────────
+   POST /api/pulsa/responses/:slug est ouvert par nature : ce sont les
+   clients DU client qui répondent, sans compte. Sans compteur, une simple
+   boucle suffisait à remplir la base ET — bien plus grave — à déclencher
+   un e-mail par appel depuis NOTRE domaine d'envoi. La réputation
+   d'expédition part avec, et avec elle les liens de connexion, les codes
+   à 6 chiffres et les clés de licence : une panne d'authentification
+   globale déclenchée depuis un formulaire public.
+
+   AUCUN PLAFOND PAR IP, volontairement. Une biennale, un vernissage, un
+   salon, c'est des dizaines de répondants derrière le même Wi-Fi, donc
+   la même IP : un compteur par IP casserait précisément l'usage réel que
+   ce module a pour mission de servir. On compte PAR FORMULAIRE — ça borne
+   l'abus sans punir l'affluence.
+
+   Et les deux plafonds sont SÉPARÉS, parce que les deux risques n'ont pas
+   la même gravité. Au-delà du plafond d'e-mails on continue d'enregistrer :
+   aucune réponse n'est jamais perdue, on cesse seulement de notifier. */
+const MAX_RESPONSE_BYTES    = 64 * 1024;   // une réponse de formulaire, pas un transfert de fichier
+const MAX_RESPONSES_PER_DAY = 2000;        // par formulaire — très au-dessus de tout usage réel observé
+const MAX_EMAILS_PER_HOUR   = 30;          // par formulaire — au-delà : on enregistre sans notifier
+
+// Comparaison à temps constant — même implémentation que lib/auth._safeEq
+// et lib/stripe._safeEq. Sert au code d'accès du formulaire : un `!==`
+// s'arrête au premier octet différent, ce qui laisse deviner le secret
+// caractère par caractère en mesurant le temps de réponse.
+function _safeEq(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 // Empreinte SHA-256 (hex) d'une chaîne — Web Crypto natif Workers.
 async function _sha256Hex(str) {
   const data = new TextEncoder().encode(str);
@@ -86,6 +120,11 @@ async function _ensureSchema(env) {
   ).run().catch(() => {});
   await env.DB.prepare(
     'CREATE INDEX IF NOT EXISTS idx_pulsa_responses_expires ON pulsa_responses(expires_at)'
+  ).run().catch(() => {});
+  // Sert les deux compteurs de la soumission publique (plafond du jour et
+  // plafond de notification), qui filtrent sur slug + fenêtre de temps.
+  await env.DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_pulsa_responses_slug_date ON pulsa_responses(slug, created_at)'
   ).run().catch(() => {});
   // Colonnes preuve (ajout idempotent : ALTER échoue en silence si déjà présent).
   await env.DB.prepare('ALTER TABLE pulsa_responses ADD COLUMN response_hash TEXT').run().catch(() => {});
@@ -117,29 +156,56 @@ export async function handlePulsaSubmit(request, env, slug) {
   try { recipients = JSON.parse(formRow.recipients_json || '[]'); } catch {}
   const ttlDays = formRow.ttl_days || 90;
 
+  // 2. Validation du payload
+  const body = await parseBody(request);
+
   // Vérification du code d'accès si le formulaire est protégé.
-  // Le code arrive en query param (?code=XXXX) — même flow que GET public.
+  // Le code est lu DANS LE CORPS en priorité : en query, il finissait dans
+  // les journaux du serveur, l'historique du navigateur et l'en-tête
+  // Referer sortant. Le repli sur ?code= reste accepté — un form.html
+  // déjà en cache (PWA) continue d'envoyer l'ancien format, et une
+  // collecte en cours ne doit pas s'arrêter le jour du déploiement.
   const expectedCode = config.meta?.access_code?.trim();
   if (expectedCode) {
-    const url = new URL(request.url);
-    const providedCode = url.searchParams.get('code')?.trim() || '';
-    if (providedCode !== expectedCode) {
+    const fromBody  = (typeof body?.code === 'string') ? body.code.trim() : '';
+    const fromQuery = new URL(request.url).searchParams.get('code')?.trim() || '';
+    const providedCode = fromBody || fromQuery;
+    // Comparaison à temps constant, comme partout ailleurs dans ce code
+    // (lib/auth._safeEq, lib/stripe._safeEq) : un `!==` court-circuite au
+    // premier octet différent et laisse deviner le code caractère par
+    // caractère en mesurant le temps de réponse.
+    if (!_safeEq(providedCode, expectedCode)) {
       return err('Code d\'accès incorrect', 401, origin);
     }
   }
 
-  // 2. Validation du payload
-  const body = await parseBody(request);
   const responses = body?.responses;
   if (!responses || typeof responses !== 'object') {
     return err('Champ "responses" requis (objet fieldId → valeur)', 400, origin);
+  }
+
+  // Taille : une réponse de formulaire, pas un transfert de fichier.
+  const responseStr = JSON.stringify(responses);
+  if (responseStr.length > MAX_RESPONSE_BYTES) {
+    return err(`Réponse trop volumineuse (max ${Math.round(MAX_RESPONSE_BYTES / 1024)} Ko).`, 413, origin);
+  }
+
+  // Plafond d'ENREGISTREMENT du jour, par formulaire. Ne dépend d'aucune
+  // IP : l'affluence légitime derrière un Wi-Fi partagé passe intacte.
+  const dayCount = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM pulsa_responses WHERE slug = ? AND created_at >= datetime('now','-1 day')"
+  ).bind(slug).first().catch(() => null);
+  if ((dayCount?.n ?? 0) >= MAX_RESPONSES_PER_DAY) {
+    return err(
+      'Ce formulaire a atteint sa limite de réponses pour aujourd\'hui. Réessayez demain ou contactez son auteur.',
+      429, origin,
+    );
   }
 
   // 3. INSERT D1 — CŒUR INCHANGÉ (garanti même si les colonnes preuve
   // n'existent pas encore) : ne jamais casser la collecte (Biennale).
   const responseId = generateId();
   const expiresAt = _isoDaysFromNow(ttlDays);
-  const responseStr = JSON.stringify(responses);
   await env.DB.prepare(`
     INSERT INTO pulsa_responses (id, form_id, slug, response_json, expires_at)
     VALUES (?, ?, ?, ?, ?)
@@ -162,22 +228,53 @@ export async function handlePulsaSubmit(request, env, slug) {
   }
 
   // 4. Envoi mail (best-effort)
+  //
+  // Plafond de NOTIFICATION, distinct du plafond d'enregistrement : la
+  // réponse ci-dessus est DÉJÀ en base. On ne perd donc jamais rien — on
+  // cesse seulement d'écrire au propriétaire, qui retrouve tout dans son
+  // tableau de bord. C'est ce plafond-là qui protège le domaine d'envoi.
   let mailStatus = 'skipped';
   if (recipients.length > 0 && emailConfigured(env)) {
-    try {
-      const subject = `Nouvelle réponse — ${formRow.title || 'Pulsa'}`;
-      const html = _renderResponseEmail({
-        form: { ...config, slug, ttl_days: ttlDays },
-        responses,
-        responseId,
-        receivedAt: new Date(),
-        proofHash: responseHash,
-      });
-      await sendEmail(env, { to: recipients, subject, html });
-      mailStatus = 'sent';
-    } catch (e) {
-      console.warn('[pulsa-responses] mail send failed', e?.message || e);
-      mailStatus = 'failed';
+    const hourCount = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM pulsa_responses WHERE slug = ? AND created_at >= datetime('now','-1 hour')"
+    ).bind(slug).first().catch(() => null);
+    const sentThisHour = hourCount?.n ?? 0;
+
+    if (sentThisHour > MAX_EMAILS_PER_HOUR) {
+      mailStatus = 'throttled';
+      console.warn('[pulsa-responses] notifications suspendues (plafond horaire)', slug, sentThisHour);
+      // Un seul avertissement par franchissement : sans lui, le
+      // propriétaire cesse de recevoir ses réponses sans jamais savoir
+      // pourquoi. Le `===` ne matche qu'au premier dépassement.
+      if (sentThisHour === MAX_EMAILS_PER_HOUR + 1) {
+        try {
+          await sendEmail(env, {
+            to: recipients,
+            subject: `Afflux de réponses — ${formRow.title || 'votre formulaire'}`,
+            html: `<p>Votre formulaire « ${_escapeHtml(formRow.title || slug)} » reçoit un nombre inhabituel de réponses.</p>
+                   <p><strong>Toutes les réponses continuent d'être enregistrées normalement</strong> et restent consultables dans Key Form. Seuls les e-mails de notification sont suspendus pour l'heure qui vient, afin de protéger la remise de vos autres messages.</p>
+                   <p>Si cet afflux ne vous semble pas normal, envisagez d'ajouter un code d'accès au formulaire.</p>`,
+          });
+        } catch (e) {
+          console.warn('[pulsa-responses] avertissement afflux non envoyé', e?.message || e);
+        }
+      }
+    } else {
+      try {
+        const subject = `Nouvelle réponse — ${formRow.title || 'Pulsa'}`;
+        const html = _renderResponseEmail({
+          form: { ...config, slug, ttl_days: ttlDays },
+          responses,
+          responseId,
+          receivedAt: new Date(),
+          proofHash: responseHash,
+        });
+        await sendEmail(env, { to: recipients, subject, html });
+        mailStatus = 'sent';
+      } catch (e) {
+        console.warn('[pulsa-responses] mail send failed', e?.message || e);
+        mailStatus = 'failed';
+      }
     }
   }
 
@@ -667,6 +764,27 @@ function _escapeHtml(s) {
   }[m]));
 }
 
+// Réponse de visiteur placée dans un href : l'échappement HTML laisse passer
+// `javascript:…` intact (aucun caractère filtré). On juge le schéma.
+// Aligné sur _safeHref de app/pulsa.js — même défaut, deux surfaces.
+function _safeHref(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  return /^(https?:|mailto:)/i.test(s) ? _escapeHtml(s) : '';
+}
+
+// Signature : le formulaire la sérialise en `data:image/svg+xml;base64,…`
+// — le SVG est donc INDISPENSABLE, ne pas le retirer sans casser l'aperçu
+// de signature dans le mail. Inoffensif via <img> (pas d'exécution de
+// script) ; ce qu'on refuse, c'est data:text/html et javascript:.
+function _safeImgSrc(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return _escapeHtml(s);
+  if (/^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(s)) return s;
+  return '';
+}
+
 /**
  * Convertit la valeur brute d'un champ en HTML humain lisible
  * dans l'email de notification.
@@ -681,8 +799,13 @@ function _formatValue(field, raw) {
     case 'email':
       return `<a href="mailto:${_escapeHtml(raw)}" style="color:#c9a96e">${_escapeHtml(raw)}</a>`;
     case 'website':
-    case 'url-external':
-      return `<a href="${_escapeHtml(raw)}" target="_blank" rel="noopener" style="color:#c9a96e;word-break:break-all">${_escapeHtml(raw)}</a>`;
+    case 'url-external': {
+      const href = _safeHref(raw);
+      // Schéma refusé → texte brut, non cliquable.
+      return href
+        ? `<a href="${href}" target="_blank" rel="noopener" style="color:#c9a96e;word-break:break-all">${_escapeHtml(raw)}</a>`
+        : _escapeHtml(raw);
+    }
     case 'chips': {
       const choice = (opts.choices || []).find(c => c.id === raw);
       return _escapeHtml(choice?.label || raw);
@@ -730,7 +853,10 @@ function _formatValue(field, raw) {
     }
     case 'signature': {
       // raw = data URI base64 SVG. On l'affiche inline dans le mail.
-      return `<img src="${_escapeHtml(raw)}" alt="Signature" style="max-width:280px;background:#fff;border:1px solid #1f2a37;border-radius:6px;padding:6px"/>`;
+      const src = _safeImgSrc(raw);
+      return src
+        ? `<img src="${src}" alt="Signature" style="max-width:280px;background:#fff;border:1px solid #1f2a37;border-radius:6px;padding:6px"/>`
+        : '<em style="color:#64748b">(signature illisible)</em>';
     }
     case 'nps': {
       const n = Number(raw);
