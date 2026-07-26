@@ -322,14 +322,18 @@ function _buildAlertText(sen) {
   return '';
 }
 
-console.log('\nJ. Gating serveur (beta : création réservée MAX/ADMIN/BETA)');
+console.log('\nJ. Gating serveur (M-6 : Missive est GRATUITE — tout JWT valide crée)');
 env.DB = makeD1();
 {
   const jwtReq = (plan) => async () => {
     const tok = await signJWT({ sub: 'user-' + plan, plan, isAdmin: false }, env);
     return new Request('https://x/api/sceau/init', { method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: '{}' });
   };
-  ok((await handleSceauInit(await jwtReq('STARTER')(), env)).status === 403, 'init avec plan STARTER -> 403 (non éligible)');
+  // Nouveau contrat (audit sept. 2026 · M-6) : Missive est au palier FREE de
+  // la grille — l'ancien 403 sur STARTER refusait des licences gratuites qui
+  // portent O-SEC-001 dans leur sac. Toute identité authentifiée passe.
+  ok((await handleSceauInit(await jwtReq('STARTER')(), env)).status === 201, 'init avec plan STARTER -> 201 (Missive gratuite)');
+  ok((await handleSceauInit(await jwtReq('PRO')(), env)).status === 201, 'init avec plan PRO -> 201 (Missive gratuite)');
   ok((await handleSceauInit(await jwtReq('MAX')(), env)).status === 201, 'init avec plan MAX -> 201 (éligible)');
   ok((await handleSceauInit(await jwtReq('BETA')(), env)).status === 201, 'init avec plan BETA -> 201 (testeur)');
   ok((await handleSceauInit(req('POST', {}), env)).status === 201, 'init en admin (KS_ADMIN_SECRET) -> 201');

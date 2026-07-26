@@ -31,6 +31,10 @@ _backups/
 # Secrets de dev local (jamais commit)
 workers/.dev.vars
 .dev.vars
+# Audit sept. 2026 (F-7) : couvrir aussi la famille .env — rien n'existe
+# aujourd'hui, mais un futur .env.local partirait dans un dépôt PUBLIC.
+.env
+.env.*
 
 # OPS-3 smoke-prod — baseline gardien QR (local, par-machine)
 scripts/.smoke-qr-baseline.json

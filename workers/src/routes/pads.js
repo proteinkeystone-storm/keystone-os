@@ -2,7 +2,8 @@
    KEYSTONE OS — Routes PADs v1.0
    Stockage des outils & artefacts en D1 (remplace fichiers JSON)
 
-   GET  /api/pads                  Public  — liste les PADs d'un tenant
+   GET  /api/pads                  Public pour 'default' UNIQUEMENT ;
+                                   admin ou JWT du tenant sinon (M-9)
    POST /api/admin/pad             Admin   — créer ou mettre à jour
    DELETE /api/admin/pad           Admin   — supprimer
    GET  /api/admin/catalog         Admin   — récupérer le catalogue
@@ -10,14 +11,24 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { json, err, requireAdmin, parseBody, getAllowedOrigin } from '../lib/auth.js';
+import { requireJWT } from '../lib/jwt.js';
 
 // ── GET /api/pads ──────────────────────────────────────────────
 // Retourne tous les PADs d'un tenant sous forme de tableau JSON.
 // Utilisé par pads-loader.js côté dashboard.
+// Audit sept. 2026 (M-9) : la lecture SANS authentification n'est permise
+// que pour le tenant 'default' — c'est le seul que le front appelle sans
+// jeton (pads-loader.js), et il ne contient que la configuration commune
+// des outils. Tout autre tenant exige l'admin ou un JWT du tenant visé.
 export async function handleListPads(request, env) {
   const origin   = getAllowedOrigin(env, request);
   const url      = new URL(request.url);
   const tenantId = url.searchParams.get('tenantId') || 'default';
+
+  if (tenantId !== 'default' && !requireAdmin(request, env)) {
+    const claims = await requireJWT(request, env);
+    if (!claims || claims.sub !== tenantId) return err('Non autorisé', 401, origin);
+  }
 
   const { results } = await env.DB
     .prepare('SELECT id, data FROM pads WHERE tenant_id = ? ORDER BY updated_at DESC')
@@ -45,13 +56,22 @@ export async function handleSavePad(request, env) {
 
   const dataJson = JSON.stringify(body);
 
-  await env.DB.prepare(`
+  // Audit sept. 2026 (F-5) : la clé primaire de `pads` est `id` SEUL — un
+  // upsert sans garde permettait d'écraser le pad homonyme d'un AUTRE
+  // tenant. Le WHERE sur le DO UPDATE ne met à jour que si le tenant
+  // correspond ; sinon rien ne bouge (changes = 0) et on refuse en 409.
+  const res = await env.DB.prepare(`
     INSERT INTO pads (id, tenant_id, data, updated_at)
     VALUES (?, ?, ?, datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
       data       = excluded.data,
       updated_at = datetime('now')
+    WHERE pads.tenant_id = excluded.tenant_id
   `).bind(id, tenantId, dataJson).run();
+
+  if (!res.meta.changes) {
+    return err('Cet identifiant de pad appartient à un autre tenant', 409, origin);
+  }
 
   return json({ success: true, id, updatedAt: new Date().toISOString() }, 200, origin);
 }
@@ -61,12 +81,14 @@ export async function handleDeletePad(request, env) {
   const origin = getAllowedOrigin(env, request);
   if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
 
-  const { id } = await parseBody(request);
+  const { id, tenantId = 'default' } = await parseBody(request);
   if (!id) return err('Champ "id" requis', 400, origin);
 
+  // Audit sept. 2026 (F-5) : suppression bornée au tenant visé — sans ce
+  // filtre, supprimer par id pouvait emporter le pad d'un autre tenant.
   const result = await env.DB
-    .prepare('DELETE FROM pads WHERE id = ?')
-    .bind(id)
+    .prepare('DELETE FROM pads WHERE id = ? AND tenant_id = ?')
+    .bind(id, tenantId)
     .run();
 
   if (!result.meta.changes) return err('PAD introuvable', 404, origin);

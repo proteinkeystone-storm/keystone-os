@@ -60,6 +60,7 @@ import { budgetGuard, recordUsage }               from '../lib/ai-budget.js';
 import { callLLM, byokRoutingEnabled } from '../lib/llm-router.js';
 import { resolveEngineForApp, degradeAndWarn } from '../lib/app-mode.js';
 import { streamLLM }                               from '../lib/llm-stream.js';
+import { bagAllows }                               from '../lib/app-access.js';
 
 // Version du moteur — bumpée à chaque sprint livré (l'aside du pad l'affiche).
 const SA_ENGINE_VERSION = 'SA-15.4';
@@ -603,13 +604,31 @@ async function _vaultsForAgent(env, tenant, agentId) {
 }
 
 // ── Auth, entitlement & tenant ──────────────────────────────────
-// Beta : Smart Agent réservé aux plans MAX/ADMIN (+ BETA, traité aussi
-// généreusement que MAX par ai-credits — ne jamais brider un testeur).
-function _entitled(claims) {
+// Audit sept. 2026 (M-6) : Smart Agent se vend SEUL au palier Déploiement —
+// un acheteur a plan='PRO' et O-AGT-001 dans son sac. L'ancien test
+// plan===MAX (époque « Smart Agent réservé MAX pendant la beta ») refusait
+// ce client payant. Modèle repris de socialEntitled (routes/social.js) :
+// raccourci MAX/ADMIN/BETA, PUIS lecture du sac — bagAllows() reste
+// l'unique arbitre de possession.
+const SA_ASSET = 'O-AGT-001';
+async function _entitled(env, claims) {
   if (!claims) return false;
   if (claims.isAdmin === true) return true;
   const p = String(claims.plan || '').toUpperCase();
-  return p === 'MAX' || p === 'ADMIN' || p === 'BETA';
+  if (p === 'MAX' || p === 'ADMIN' || p === 'BETA') return true;
+  if (!claims.sub) return false;
+  const lic = await env.DB
+    .prepare('SELECT plan, owned_assets FROM licences WHERE lookup_hmac = ? LIMIT 1')
+    .bind(claims.sub).first();
+  if (!lic) return false;
+  // Même convention que socialEntitled : sac NULL/vide = accès total (legacy),
+  // liste explicite = elle doit contenir l'app, liste illisible = refus.
+  let bag = null;
+  if (lic.owned_assets != null && lic.owned_assets !== '') {
+    try { bag = JSON.parse(lic.owned_assets); } catch (_) { return false; }
+    if (!Array.isArray(bag)) return false;
+  }
+  return bagAllows({ ownedAssets: bag, plan: lic.plan, appId: SA_ASSET });
 }
 
 // Tenant = identité authentifiée, JAMAIS un paramètre client (même règle
@@ -638,8 +657,8 @@ async function _ensureTenant(env, id, plan) {
 async function _gate(request, env, origin) {
   const claims = await requireJWT(request, env);
   if (!claims && !requireAdmin(request, env)) return { error: err('Authentification requise', 401, origin) };
-  if (claims && !_entitled(claims) && !requireAdmin(request, env)) {
-    return { error: err('Smart Agent est réservé au plan MAX pendant la beta.', 403, origin) };
+  if (claims && !(await _entitled(env, claims)) && !requireAdmin(request, env)) {
+    return { error: err('Smart Agent n\'est pas inclus dans votre licence.', 403, origin) };
   }
   const tenant = _tenantOf(request, env, claims);
   if (!tenant) return { error: err('Authentification requise', 401, origin) };
@@ -2325,8 +2344,8 @@ export async function kortexGroundingForGest(env, request, claims, { agentId, qu
   try {
     if (!agentId || typeof agentId !== 'string')                return { ok: false, reason: 'no-agent' };
     if (!query || typeof query !== 'string' || query.trim().length < 3) return { ok: false, reason: 'no-query' };
-    // Smart Agent = MAX/ADMIN/BETA — sinon pas d'ancrage (Gest reste persona).
-    if (claims && !_entitled(claims) && !requireAdmin(request, env)) return { ok: false, reason: 'not-entitled' };
+    // Smart Agent possédé (sac ou plan) — sinon pas d'ancrage (Gest reste persona).
+    if (claims && !(await _entitled(env, claims)) && !requireAdmin(request, env)) return { ok: false, reason: 'not-entitled' };
     const tenant = _tenantOf(request, env, claims);
     if (!tenant) return { ok: false, reason: 'no-tenant' };
     await ensureSmartAgentSchema(env);

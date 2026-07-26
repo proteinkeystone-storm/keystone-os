@@ -191,9 +191,9 @@ console.log('\n\x1b[1m▶ Suite 6 — sa.public_usage\x1b[0m');
 console.log('\n\x1b[1m▶ Suite 7 — gating MAX (le message worker traverse tel quel)\x1b[0m');
 {
   const savedFetch = globalThis.fetch;
-  globalThis.fetch = async () => ({ ok: false, status: 403, json: async () => ({ error: 'Smart Agent est réservé au plan MAX pendant la beta.' }) });
+  globalThis.fetch = async () => ({ ok: false, status: 403, json: async () => ({ error: "Smart Agent n'est pas inclus dans votre licence." }) });
   const r = await runKoraAction('sa.list_agents', {});
-  check('403 → message du worker restitué tel quel (pas un code générique)', !r.ok && r.error === 'Smart Agent est réservé au plan MAX pendant la beta.');
+  check('403 → message du worker restitué tel quel (pas un code générique)', !r.ok && r.error === "Smart Agent n'est pas inclus dans votre licence.");
   globalThis.fetch = savedFetch;
 }
 

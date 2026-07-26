@@ -645,6 +645,11 @@ export async function handleSocialPublish(request, env) {
 // GET /api/social/registry  (capacités déclaratives par réseau — public, aucun secret)
 // Le composer lit ceci pour ses garde-fous (longueur, médias, hashtags…) au
 // lieu de coder un réseau en dur. Pas d'auth : ce sont des specs d'API publiques.
+// VOULU public (audit sept. 2026 · M-9, statué le 26/07) : contrairement à
+// ses voisines gatées par socialEntitled, cette route ne renvoie QUE des
+// métadonnées de plateformes (listPlatformsPublic), identiques pour tous les
+// tenants — aucune donnée client, aucun token. Kora l'appelle d'ailleurs
+// explicitement en auth:false (app/kora-actions.js).
 export function handleSocialRegistry(request, env) {
   const origin = getAllowedOrigin(env, request);
   return json({ platforms: listPlatformsPublic() }, 200, origin);

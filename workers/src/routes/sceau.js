@@ -45,16 +45,18 @@ function _shortId(len = 8) {
 }
 
 // ── Auth & entitlement (manifeste §7/§8) ───────────────────────
-// Tenant : admin → 'default', sinon claims.sub. Entitlement (beta, modèle Smart
-// Agent) : la CRÉATION de secrets est réservée MAX/ADMIN/BETA (ne jamais brider
-// un testeur). La LECTURE publique reste ouverte (c'est le principe du sceau).
+// Tenant : admin → 'default', sinon claims.sub. Entitlement : Missive est
+// GRATUITE (APP_TIER['O-SEC-001'] = FREE, lib/pricing-grid.js) — toute
+// identité authentifiée peut créer des sceaux. L'ancien test plan===MAX
+// (reliquat d'avant la grille) refusait des licences gratuites qui portent
+// pourtant O-SEC-001 dans leur sac — audit sept. 2026, M-6.
+// La LECTURE publique reste ouverte (c'est le principe du sceau).
 async function _resolveAuth(request, env) {
   if (requireAdmin(request, env)) return { tenant: 'default', entitled: true };
   const claims = await requireJWT(request, env);
   if (claims?.isAdmin) return { tenant: 'default', entitled: true };
   if (claims?.sub) {
-    const p = String(claims.plan || '').toUpperCase();
-    return { tenant: claims.sub, entitled: p === 'MAX' || p === 'ADMIN' || p === 'BETA' };
+    return { tenant: claims.sub, entitled: true };
   }
   const device = await requireDevice(request, env);
   if (device?.tenant_id) return { tenant: device.tenant_id, entitled: true }; // appareil approuvé
@@ -108,7 +110,7 @@ export async function handleSceauInit(request, env) {
   const origin = getAllowedOrigin(env, request);
   const { tenant, entitled } = await _resolveAuth(request, env);
   if (!tenant) return err('Non autorisé', 401, origin);
-  if (!entitled) return err('Missive est réservée aux formules Max pendant la beta.', 403, origin);
+  if (!entitled) return err('Non autorisé', 403, origin);
 
   const body = await parseBody(request);
   const label = typeof body.label === 'string' ? body.label.slice(0, 120) : null;
@@ -471,7 +473,7 @@ export async function handleTokenCreate(request, env) {
   const origin = getAllowedOrigin(env, request);
   const { tenant, entitled } = await _resolveAuth(request, env);
   if (!tenant) return err('Non autorisé', 401, origin);
-  if (!entitled) return err('Missive est réservée aux formules Max pendant la beta.', 403, origin);
+  if (!entitled) return err('Non autorisé', 403, origin);
   const body = await parseBody(request);
   const label = typeof body.label === 'string' ? body.label.slice(0, 120) : null;
 

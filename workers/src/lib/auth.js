@@ -124,8 +124,15 @@ export function getAllowedOrigin(env, request) {
   // Auto-whitelist des previews Vercel du projet keystone-os (team
   // storms-projects-01b49fbc). Évite de devoir ajouter manuellement
   // chaque URL de preview lors des sprints sur branche dédiée.
-  // Pattern : https://keystone-<hash>-storms-projects-01b49fbc.vercel.app
-  if (reqOrigin && /^https:\/\/keystone(-[\w-]+)?-storms-projects-01b49fbc\.vercel\.app$/.test(reqOrigin)) {
+  // Audit sept. 2026 (F-3) : l'ancien motif `keystone(-[\w-]+)?` acceptait
+  // n'importe quel déploiement de l'équipe dont le nom commence par
+  // « keystone » (un projet « keystone-evil » passait). Restreint aux DEUX
+  // seules formes d'URL que Vercel produit pour LE projet keystone :
+  //   - alias de branche : keystone-git-<branche>-storms-…
+  //   - déploiement      : keystone-<id alphanumérique>-storms-…
+  // (un id de déploiement ne contient jamais de tiret, ce qui exclut les
+  // projets homonymes ; la forme nue keystone-storms-… reste acceptée).
+  if (reqOrigin && /^https:\/\/keystone(-git-[\w-]+|-[a-z0-9]{7,12})?-storms-projects-01b49fbc\.vercel\.app$/.test(reqOrigin)) {
     return reqOrigin;
   }
   return allowed[0] || '*';

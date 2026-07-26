@@ -661,7 +661,7 @@ function render(){
 
   let h='<div class="nav"><div class="nav-in"><span class="nav-name">'+esc(DATA.name)+'</span>';
   for(const[a,l]of navLinks)h+='<a href="'+a+'">'+l+'</a>';
-  h+='<span class="sp"></span><span class="vbadge">Version '+DATA.version+' — '+new Date(DATA.updated_at+'Z').toLocaleDateString('fr-FR')+'</span>'+
+  h+='<span class="sp"></span><span class="vbadge">Version '+esc(String(DATA.version))+' — '+new Date(DATA.updated_at+'Z').toLocaleDateString('fr-FR')+'</span>'+
      '<button class="print" id="printbtn">Exporter en PDF</button></div></div>';
 
   // Héros — scène d'ouverture (KB-8 : fond, mise en scène, encre, tempo)
@@ -704,7 +704,7 @@ function render(){
      '<div class="hero-txt"><div class="hero-name"'+(nmSt?' style="'+nmSt+'"':'')+'>'+nameHtml+'</div>'+
      (heroText?'<div class="hero-base" style="--bs:'+bSize+';'+(inkBase?'color:'+inkBase:'')+'">'+esc(heroText)+'</div>':'')+
      '</div></div>')+
-     '<div class="cover-foot"'+(inkName?' style="color:'+inkName+'"':'')+'>Charte graphique — <b>version '+DATA.version+'</b></div>'+
+     '<div class="cover-foot"'+(inkName?' style="color:'+inkName+'"':'')+'>Charte graphique — <b>version '+esc(String(DATA.version))+'</b></div>'+
      '</div>';
 
   // Sommaire sur aplat (numéros = mêmes chapitres que la nav).
@@ -772,9 +772,9 @@ function render(){
     if((prot&&prot.ratio)||mins&&(mins.printMm||mins.digitalPx)){
       h+='<section><h2>Zone de protection & taille minimale</h2><p class="sub">L\\'espace vital du logotype — rien ne doit y entrer.</p><div class="card protec">';
       if(prot&&prot.ratio&&heroLogo)h+='<div class="protec-viz" style="--pm:'+Math.round(prot.ratio*48)+'px"><div class="protec-zone"><img src="'+fileUrl(heroLogo.assetId)+'" alt=""></div></div>';
-      h+='<div class="mins">'+(prot&&prot.ratio?'<div><b>Zone de protection</b> : '+prot.ratio+' × '+esc(prot.basis||'hauteur du logo')+' — aucun élément dans la zone en pointillés.</div>':'');
-      if(mins&&mins.printMm)h+='<div><b>Taille minimale impression</b> : '+mins.printMm+' mm de large</div>';
-      if(mins&&mins.digitalPx)h+='<div><b>Taille minimale numérique</b> : '+mins.digitalPx+' px de large</div>';
+      h+='<div class="mins">'+(prot&&prot.ratio?'<div><b>Zone de protection</b> : '+esc(String(prot.ratio))+' × '+esc(prot.basis||'hauteur du logo')+' — aucun élément dans la zone en pointillés.</div>':'');
+      if(mins&&mins.printMm)h+='<div><b>Taille minimale impression</b> : '+esc(String(mins.printMm))+' mm de large</div>';
+      if(mins&&mins.digitalPx)h+='<div><b>Taille minimale numérique</b> : '+esc(String(mins.digitalPx))+' px de large</div>';
       h+='</div></div></section>';
     }
   }
@@ -1020,7 +1020,7 @@ function render(){
     h+='</ul></details>';
   }
   const credit=meta.credit&&meta.credit.label;
-  h+='<footer><span>'+(credit?'Direction artistique : '+esc(credit)+' · ':'')+'Version '+DATA.version+'</span>'+
+  h+='<footer><span>'+(credit?'Direction artistique : '+esc(credit)+' · ':'')+'Version '+esc(String(DATA.version))+'</span>'+
      '<span><a href="https://protein-keystone.com" target="_blank" rel="noopener noreferrer">'+esc((kit.settings&&kit.settings.footer)||'Réalisé par Protein Keystone Studio')+'</a></span></footer></div>';
 
   app.innerHTML=h;

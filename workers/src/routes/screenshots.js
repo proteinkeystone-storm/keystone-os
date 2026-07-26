@@ -76,6 +76,12 @@ export async function handleUploadScreenshot(request, env) {
 
 // ── GET /api/screenshot/:id ───────────────────────────────────
 // Public — sert l'image décodée avec cache long (id immuable).
+// VOULU public (audit sept. 2026 · M-9, statué le 26/07) : ces images
+// sont servies dans des <img>, qui ne peuvent pas porter de jeton.
+// La protection est l'id lui-même : un crypto.randomUUID() (128 bits,
+// posé à l'upload ci-dessus) — non devinable, non énumérable. Même
+// modèle que kodex-assets. Contenu : captures de fiches Key-Store,
+// déposées par l'admin uniquement, aucune donnée client.
 export async function handleGetScreenshot(request, env, id) {
   await ensureSchema(env);
 

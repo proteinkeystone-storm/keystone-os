@@ -118,19 +118,27 @@ async function _writeOwnedAssets(env, lookupHmac, bag) {
 // URL du tunnel d'activation côté front (domaine officiel)
 const ACTIVATE_BASE = 'https://protein-keystone.com/?ks_key=';
 
-// ───────────────────────────────────────────────────────────────
-async function _alreadyProcessed(env, eventId) {
-  const row = await env.DB
-    .prepare('SELECT id FROM stripe_events WHERE id = ?')
-    .bind(eventId)
-    .first();
-  return !!row;
+// ── Idempotence (audit sept. 2026 · F-2) ───────────────────────
+// L'ancien schéma « lire avant, marquer après » laissait passer deux
+// livraisons SIMULTANÉES du même événement (les deux lisaient « absent »
+// avant que l'une n'écrive) → double crédit possible. Ici on RÉSERVE
+// l'événement d'abord : INSERT OR IGNORE, et seul l'appel dont
+// meta.changes === 1 a le droit de traiter. L'autre livraison dédupe.
+async function _claimEvent(env, eventId, type) {
+  const res = await env.DB
+    .prepare('INSERT OR IGNORE INTO stripe_events (id, type) VALUES (?, ?)')
+    .bind(eventId, type)
+    .run();
+  return res?.meta?.changes === 1;
 }
-async function _markProcessed(env, eventId, type) {
+// En cas d'échec du handler, on RELÂCHE la réservation : Stripe va
+// retenter, et ce retry doit pouvoir re-réserver (sinon l'événement
+// serait dédupé à tort et perdu).
+async function _releaseEvent(env, eventId) {
   try {
     await env.DB
-      .prepare('INSERT OR IGNORE INTO stripe_events (id, type) VALUES (?, ?)')
-      .bind(eventId, type)
+      .prepare('DELETE FROM stripe_events WHERE id = ?')
+      .bind(eventId)
       .run();
   } catch (_) {}
 }
@@ -737,8 +745,9 @@ export async function handleStripeWebhook(request, env) {
     return json({ received: true, ignored: 'test_key_missing' }, 200, origin);
   }
 
-  // Idempotence
-  if (await _alreadyProcessed(env, event.id)) {
+  // Idempotence : réservation AVANT traitement (F-2). Si la ligne existe
+  // déjà — traitement passé ou livraison jumelle en cours — on dédupe.
+  if (!(await _claimEvent(env, event.id, event.type))) {
     return json({ received: true, deduped: true }, 200, origin);
   }
 
@@ -760,11 +769,11 @@ export async function handleStripeWebhook(request, env) {
         // Pas d'erreur — Stripe envoie plein d'autres events qu'on ignore.
         break;
     }
-    await _markProcessed(env, event.id, event.type);
     return json({ received: true }, 200, origin);
   } catch (e) {
     console.error('[Stripe webhook]', event.type, e);
-    // Ne PAS marquer processed → Stripe va retry, c'est ce qu'on veut
+    // Réservation relâchée → Stripe va retry et pourra re-réserver.
+    await _releaseEvent(env, event.id);
     return err(`Handler error: ${e.message}`, 500, origin);
   }
 }
