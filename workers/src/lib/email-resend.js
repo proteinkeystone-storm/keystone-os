@@ -11,6 +11,43 @@
 
 const RESEND_URL = 'https://api.resend.com/emails';
 
+// AUTH-5 — journal des envois : pouvoir répondre à « je n'ai rien
+// reçu » sans deviner. Best-effort : un échec de log ne casse JAMAIS
+// l'envoi (et inversement, un échec d'envoi EST loggé).
+let _emailLogReady = false;
+async function _logEmail(env, { to, subject, status, provider_id, error }) {
+  try {
+    if (!env.DB) return;
+    if (!_emailLogReady) {
+      await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS email_log (
+          id          TEXT PRIMARY KEY,
+          recipient   TEXT NOT NULL,
+          subject     TEXT,
+          status      TEXT NOT NULL,
+          provider_id TEXT,
+          error       TEXT,
+          created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      `).run().catch(() => {});
+      await env.DB.prepare(
+        'CREATE INDEX IF NOT EXISTS idx_email_log_recipient ON email_log(recipient, created_at)'
+      ).run().catch(() => {});
+      _emailLogReady = true;
+    }
+    await env.DB.prepare(
+      'INSERT INTO email_log (id, recipient, subject, status, provider_id, error) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(
+      crypto.randomUUID(),
+      Array.isArray(to) ? to.join(',') : String(to || ''),
+      (subject || '').slice(0, 200),
+      status,
+      provider_id || null,
+      (error || '').slice(0, 300) || null,
+    ).run();
+  } catch (_) { /* best-effort */ }
+}
+
 export async function sendEmail(env, { to, subject, html, replyTo, bcc }) {
   if (!env.KS_RESEND_KEY) throw new Error('KS_RESEND_KEY manquant');
   const from = env.KS_RESEND_FROM || 'Keystone OS <onboarding@resend.dev>';
@@ -29,9 +66,12 @@ export async function sendEmail(env, { to, subject, html, replyTo, bcc }) {
   });
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
+    await _logEmail(env, { to, subject, status: 'failed', error: `Resend ${res.status}: ${txt.slice(0, 200)}` });
     throw new Error(`Resend ${res.status}: ${txt.slice(0, 200)}`);
   }
-  return await res.json();
+  const out = await res.json();
+  await _logEmail(env, { to, subject, status: 'sent', provider_id: out?.id });
+  return out;
 }
 
 // ── Template HTML : livraison de la clé après paiement ────────
@@ -147,17 +187,28 @@ export function tplFreeKey({ ownerName, key, activateUrl }) {
 // ── Magic-link générique (activation initiale OU récupération) ──
 // purpose : 'activation' | 'recovery' | 'magic_login'
 // expiresMinutes : durée de validité du lien (default 15)
-export function tplMagicLink({ ownerName, magicUrl, purpose = 'magic_login', expiresMinutes = 15 }) {
+// otpCode : code 6 chiffres (AUTH-2) — chemin cross-device et repli
+//   quand la protection email d'entreprise a neutralisé le lien.
+export function tplMagicLink({ ownerName, magicUrl, otpCode = null, purpose = 'magic_login', expiresMinutes = 15 }) {
   const headers = {
     activation:   { title: `Bienvenue${ownerName ? ' ' + ownerName : ''} !`, intro: 'Cliquez sur le lien ci-dessous pour activer Keystone OS sur cet appareil. Ce lien est personnel et fonctionne une seule fois.', cta: 'Activer Keystone OS' },
     recovery:     { title: 'Récupération de votre accès',                     intro: 'Voici votre lien de récupération. Cliquez dessus depuis l\'appareil sur lequel vous voulez retrouver vos données. Aucune clé à saisir.', cta: 'Récupérer mon accès' },
     magic_login:  { title: 'Connexion à Keystone OS',                          intro: 'Cliquez pour vous connecter sans avoir à saisir votre clé. Ce lien est valable une seule fois et expire bientôt.', cta: 'Se connecter' },
   };
   const h = headers[purpose] || headers.magic_login;
+  const otpBlock = otpCode ? `
+    <p style="margin:0 0 8px 0;color:#94a3b8;font-size:14px;line-height:1.6">
+      Sur un autre appareil, ou si le bouton ne fonctionne pas (protections email d'entreprise) :
+      saisissez ce code sur la page de connexion.
+    </p>
+    <div style="background:#0a0e14;border:1px solid #c9a96e;border-radius:8px;padding:16px;text-align:center;margin:0 0 24px 0">
+      <div style="font-family:'SF Mono','Courier New',monospace;font-size:28px;letter-spacing:8px;color:#c9a96e;font-weight:600">${escapeHtml(otpCode)}</div>
+    </div>` : '';
   const body = `
     <p style="margin:0 0 16px 0;color:#94a3b8;font-size:15px;line-height:1.6">
       ${escapeHtml(h.intro)}
     </p>
+    ${otpBlock}
     <p style="margin:0 0 24px 0;color:#94a3b8;font-size:14px;line-height:1.6">
       <strong style="color:#f1f5f9">Expire dans ${expiresMinutes} minutes.</strong> Si vous n'avez pas demandé ce lien, ignorez cet email — votre compte reste protégé.
     </p>`;

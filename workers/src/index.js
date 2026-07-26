@@ -123,6 +123,8 @@ import {
 import {
   handleRequestMagicLink,
   handleConsumeMagicLink,
+  handleConsumeOtp,
+  purgeExpiredMagicLinks,
 } from './routes/auth-magic-link.js';
 // ── Social Broadcast — routes de production (Sprint Social-1) ──
 import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialProvisionTelegram, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry, handleSocialPostsList, handleSocialPostCancel, handleSocialPostsDelete, handleSocialPostRetry, handleSocialAccountDisconnect, sweepDuePosts, refreshSocialTokens, handleSocialTokenRefreshNow, handleSocialPostInsights } from './routes/social.js';
@@ -625,6 +627,10 @@ export default {
       }
       if (path === '/api/auth/consume-magic-link' && method === 'POST') {
         return handleConsumeMagicLink(request, env);
+      }
+      // AUTH-2 — chemin cross-device : code 6 chiffres saisi à la main
+      if (path === '/api/auth/consume-otp' && method === 'POST') {
+        return handleConsumeOtp(request, env);
       }
 
       // ── Auth refresh (Sprint Sécu-2 / H4 / Q2b) ──────────────
@@ -1216,6 +1222,12 @@ export default {
     // ── Maintenance quotidienne (0 3 * * *) — purges & refresh, GATÉE explicitement ──
     if (cron === '0 3 * * *') {
       ctx.waitUntil(handleScheduledPurge(env));
+      // AUTH-3 — purge magic links expirés/consommés + journal de demandes.
+      ctx.waitUntil(
+        purgeExpiredMagicLinks(env)
+          .then(r => console.log('[magic-link-purge]', JSON.stringify(r)))
+          .catch(e => console.warn('[magic-link-purge] failed', e?.message || e))
+      );
       // Sentinel — mesure GEO hebdomadaire (file lissée par next_geo_at, lot borné).
       ctx.waitUntil(
         sweepDueGeo(env)

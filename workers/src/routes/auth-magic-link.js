@@ -1,42 +1,56 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Magic-link auth (Sprint S3)
+   KEYSTONE OS — Magic-link auth (Sprint S3, durci AUTH-1→4)
    ═══════════════════════════════════════════════════════════════
    Flow d'authentification sans saisie de clé. Le user demande un
-   magic-link → reçoit un email avec un lien unique de 15 min →
-   clique → device activé + JWT émis, sans avoir tapé sa clé.
+   magic-link → reçoit un email avec un lien unique + un CODE à
+   6 chiffres → confirme (bouton côté front, jamais d'auto-consume)
+   → device activé + JWT émis.
 
    Endpoints :
      POST /api/auth/request-magic-link
        Body : { email, licence_key?, fingerprint?, purpose? }
-       → 200 { ok: true, expires_at } (silent : on dit toujours OK
-         même si l'email n'existe pas, pour ne pas permettre l'énum)
-       → 429 si rate limit atteint
+       → 200 { ok: true } TOUJOURS (même email inconnu, même rate
+         limit atteint) — réponse indistinguable, anti-énumération.
 
      POST /api/auth/consume-magic-link
        Body : { token, fingerprint }
-       → 200 { jwt, plan, owner, expires_at, deviceBound }
+       → 200 { jwt, plan, owner, expires_at }
        → 401 token invalide / expiré / déjà consommé
        → 403 fingerprint ne matche pas (anti vol de mail)
 
+     POST /api/auth/consume-otp                    (AUTH-2)
+       Body : { email, code, fingerprint }
+       → 200 { jwt, … } — chemin cross-device : le fingerprint
+         mismatch est AUDITÉ mais pas bloquant (c'est le chemin
+         « demandé sur desktop, ouvert sur mobile »).
+       → 401 code faux / expiré (générique)
+       → 423 verrouillé après 5 tentatives
+
    Stockage :
-     Table magic_links (auto-migrée au boot) :
-       id, token_hash (SHA-256 hex), email, licence_key, purpose,
-       fingerprint (opt), expires_at, consumed_at, created_at, ip_hash
+     magic_links : id, token_hash, otp_hash, otp_attempts, email,
+       licence_key, purpose, fingerprint, expires_at, consumed_at,
+       created_at, ip_hash
+     auth_request_log : TOUTES les demandes (email connu ou non) —
+       le rate limit compte ICI, sinon seul un email existant peut
+       atteindre le quota et l'endpoint devient un oracle.
 
    Sécurité — defense in depth :
-     - Token clair (32 bytes hex = 64 chars) jamais stocké, juste son SHA-256
-     - Unique-shot : consumed_at set à la 1re utilisation
-     - TTL strict : 15 min par défaut (paramétrable par purpose)
-     - Fingerprint optionnel à l'émission → si présent, vérifié au consume
-       (empêche un attaquant qui aurait intercepté l'email d'utiliser le
-       lien depuis un autre device)
-     - Rate limit par email + IP (anti-énumération + anti-DOS)
-     - Silent response sur request : 200 OK même si email inconnu
+     - Token clair (32 bytes hex) jamais stocké, juste son SHA-256
+     - Code OTP 6 chiffres CSPRNG, hashé SHA-256(id:code:pepper),
+       5 tentatives max par lien
+     - Consommation ANTI-COURSE : UPDATE gardé (consumed_at IS NULL)
+       + vérif meta.changes — le JWT n'est émis que si NOTRE update
+       a gagné. Deux clics simultanés → un seul JWT.
+     - Nouvelle demande → invalidation des liens précédents non
+       consommés du même email+purpose (sauf invite, émis par un tiers)
+     - Rate limit : 1/60s + 5/h par email, 20/h par IP — dépassement
+       → même 200 silencieux que le nominal
+     - Purge des expirés : cron 3h UTC + opportuniste
 
    Backward compat stricte :
-     - Aucun helper auth modifié
-     - Aucune route existante touchée
-     - Migration purement additive (nouvelle table + index)
+     - Migrations additives (ALTER + CREATE IF NOT EXISTS)
+     - Les liens émis avant le durcissement restent consommables
+       (otp_hash NULL → seul le chemin lien marche, normal)
    ═══════════════════════════════════════════════════════════════ */
 
 import { json, err, parseBody, getAllowedOrigin, generateId, generateToken } from '../lib/auth.js';
@@ -45,7 +59,6 @@ import { blindIndex }           from '../lib/kdf.js';
 import { sendEmail, tplMagicLink } from '../lib/email-resend.js';
 import { audit }                from '../lib/audit.js';
 
-const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 const VALID_PURPOSES = new Set(['activation', 'recovery', 'magic_login', 'invite']);
 
 // TTL par purpose (en minutes)
@@ -59,6 +72,8 @@ const TTL_MIN = {
 // Rate limit : max requests par fenêtre
 const RL_PER_EMAIL_PER_HOUR = 5;
 const RL_PER_IP_PER_HOUR    = 20;
+const RL_EMAIL_COOLDOWN_S   = 60;   // 1 demande / 60 s par email
+const OTP_MAX_ATTEMPTS      = 5;
 
 // ── Auto-migration ──────────────────────────────────────────────
 let _schemaReady = false;
@@ -80,6 +95,20 @@ async function _ensureSchema(env) {
     )
   `).run().catch(() => {});
 
+  // AUTH-2 — colonnes OTP (additif, silencieux si déjà posées)
+  await env.DB.prepare("ALTER TABLE magic_links ADD COLUMN otp_hash TEXT").run().catch(() => {});
+  await env.DB.prepare("ALTER TABLE magic_links ADD COLUMN otp_attempts INTEGER NOT NULL DEFAULT 0").run().catch(() => {});
+
+  // AUTH-4 — journal de TOUTES les demandes (anti-oracle)
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS auth_request_log (
+      id         TEXT PRIMARY KEY,
+      email      TEXT NOT NULL,
+      ip_hash    TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `).run().catch(() => {});
+
   await env.DB.prepare(
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_magic_links_token_hash ON magic_links(token_hash)'
   ).run().catch(() => {});
@@ -88,6 +117,12 @@ async function _ensureSchema(env) {
   ).run().catch(() => {});
   await env.DB.prepare(
     'CREATE INDEX IF NOT EXISTS idx_magic_links_expires ON magic_links(expires_at)'
+  ).run().catch(() => {});
+  await env.DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_auth_req_email ON auth_request_log(email, created_at)'
+  ).run().catch(() => {});
+  await env.DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_auth_req_ip ON auth_request_log(ip_hash, created_at)'
   ).run().catch(() => {});
 
   _schemaReady = true;
@@ -99,7 +134,7 @@ function _normEmail(v) {
 }
 
 function _emailValid(v) {
-  return typeof v === 'string' && EMAIL_RE.test(v);
+  return typeof v === 'string' && /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(v);
 }
 
 // SHA-256 hex
@@ -107,6 +142,22 @@ async function _sha256Hex(str) {
   const buf  = new TextEncoder().encode(str);
   const hash = await crypto.subtle.digest('SHA-256', buf);
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Code OTP 6 chiffres, CSPRNG sans biais modulo (rejet au-delà du
+// plus grand multiple de 1e6 représentable sur 32 bits)
+function _genOtp() {
+  const buf = new Uint32Array(1);
+  let v;
+  do { crypto.getRandomValues(buf); v = buf[0]; } while (v >= 4_294_000_000);
+  return String(v % 1_000_000).padStart(6, '0');
+}
+
+// Hash OTP salé par l'id du lien + pepper serveur → un même code sur
+// deux liens différents donne deux hashs différents (anti rainbow).
+async function _otpHash(env, linkId, code) {
+  const pepper = env.KS_LOOKUP_PEPPER || 'ks-default-pepper-do-not-use-in-prod';
+  return await _sha256Hex(`${linkId}:${code}:${pepper}`);
 }
 
 // Hash IP avec un pepper pour audit RGPD-safe (pas de PII brute en DB)
@@ -117,13 +168,20 @@ async function _ipHash(env, request) {
   return await _sha256Hex(ip + pepper);
 }
 
-// Vérifie le rate limit pour un couple (email, ip_hash) sur la dernière heure
+// AUTH-4 — rate limit calculé sur auth_request_log (toutes les
+// demandes, y compris emails inconnus) : plus d'oracle d'énumération.
 async function _checkRateLimit(env, email, ipHash) {
-  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+  const cooldown = await env.DB
+    .prepare(`SELECT COUNT(*) AS n FROM auth_request_log
+              WHERE email = ? AND created_at > datetime('now', ?)`)
+    .bind(email, `-${RL_EMAIL_COOLDOWN_S} seconds`)
+    .first();
+  if ((cooldown?.n || 0) >= 1) return { allowed: false, reason: 'cooldown' };
 
   const emailCnt = await env.DB
-    .prepare("SELECT COUNT(*) AS n FROM magic_links WHERE email = ? AND created_at > ?")
-    .bind(email, since)
+    .prepare(`SELECT COUNT(*) AS n FROM auth_request_log
+              WHERE email = ? AND created_at > datetime('now', '-1 hour')`)
+    .bind(email)
     .first();
   if ((emailCnt?.n || 0) >= RL_PER_EMAIL_PER_HOUR) {
     return { allowed: false, reason: 'email_quota_exceeded' };
@@ -131,8 +189,9 @@ async function _checkRateLimit(env, email, ipHash) {
 
   if (ipHash) {
     const ipCnt = await env.DB
-      .prepare("SELECT COUNT(*) AS n FROM magic_links WHERE ip_hash = ? AND created_at > ?")
-      .bind(ipHash, since)
+      .prepare(`SELECT COUNT(*) AS n FROM auth_request_log
+                WHERE ip_hash = ? AND created_at > datetime('now', '-1 hour')`)
+      .bind(ipHash)
       .first();
     if ((ipCnt?.n || 0) >= RL_PER_IP_PER_HOUR) {
       return { allowed: false, reason: 'ip_quota_exceeded' };
@@ -140,6 +199,54 @@ async function _checkRateLimit(env, email, ipHash) {
   }
 
   return { allowed: true };
+}
+
+// Journalise la demande (TOUJOURS, avant tout filtrage par existence)
+async function _logRequest(env, email, ipHash) {
+  await env.DB
+    .prepare('INSERT INTO auth_request_log (id, email, ip_hash) VALUES (?, ?, ?)')
+    .bind(generateId(), email, ipHash || null)
+    .run()
+    .catch(() => {});
+}
+
+// AUTH-3 — une nouvelle demande invalide les liens précédents non
+// consommés du même email+purpose. Les invites (émises par un tiers,
+// TTL 7 j) ne sont jamais invalidées par une demande de login.
+async function _invalidatePrevious(env, email, purpose) {
+  if (purpose === 'invite') return;
+  await env.DB
+    .prepare(`UPDATE magic_links SET expires_at = ?
+              WHERE email = ? AND purpose = ? AND consumed_at IS NULL`)
+    .bind(new Date(0).toISOString(), email, purpose)
+    .run()
+    .catch(() => {});
+}
+
+// AUTH-3 — purge : liens expirés depuis > 48 h, consommés > 48 h,
+// journal de demandes > 24 h. Appelée par le cron 3 h UTC et en
+// opportuniste (1 fois / ~50 requests).
+export async function purgeExpiredMagicLinks(env) {
+  await _ensureSchema(env);
+  const cutoffIso = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+  const r1 = await env.DB.prepare('DELETE FROM magic_links WHERE expires_at < ?')
+    .bind(cutoffIso).run().catch(() => null);
+  // consumed_at est posé par datetime('now') → format 'YYYY-MM-DD HH:MM:SS'
+  const r2 = await env.DB.prepare("DELETE FROM magic_links WHERE consumed_at IS NOT NULL AND consumed_at < datetime('now', '-48 hours')")
+    .run().catch(() => null);
+  const r3 = await env.DB.prepare("DELETE FROM auth_request_log WHERE created_at < datetime('now', '-24 hours')")
+    .run().catch(() => null);
+  return {
+    expired:  r1?.meta?.changes ?? 0,
+    consumed: r2?.meta?.changes ?? 0,
+    log:      r3?.meta?.changes ?? 0,
+  };
+}
+
+function _maybePurge(env) {
+  // Opportuniste et non bloquant — 1 chance sur 50.
+  if (Math.floor(Math.random() * 50) !== 0) return;
+  purgeExpiredMagicLinks(env).catch(() => {});
 }
 
 // URL frontend pour consommer le magic-link.
@@ -153,9 +260,10 @@ function _magicLinkUrl(env, token) {
 // ═══════════════════════════════════════════════════════════════
 // issueMagicLink — helper exporté pour usage par d'autres routes
 // ───────────────────────────────────────────────────────────────
-// Crée un magic-link en DB et retourne { tokenClear, magicUrl,
-// expiresAt }. NE déclenche PAS l'envoi de l'email — c'est au
-// caller d'envoyer le mail (avec le template approprié à son cas).
+// Crée un magic-link (+ code OTP) en DB et retourne { tokenClear,
+// otpCode, magicUrl, expiresAt }. NE déclenche PAS l'envoi de
+// l'email — c'est au caller d'envoyer le mail (avec le template
+// approprié à son cas).
 //
 // Utilisé par :
 //   - handleRequestMagicLink (route publique)
@@ -171,23 +279,28 @@ export async function issueMagicLink(env, { email, licenceKey, purpose, fingerpr
   if (!_emailValid(e)) throw new Error('Email invalide');
   if (!VALID_PURPOSES.has(purpose)) throw new Error('Purpose invalide');
 
+  await _invalidatePrevious(env, e, purpose);
+
   const tokenClear = generateToken(32);
   const tokenHash  = await _sha256Hex(tokenClear);
   const id = generateId();
+  const otpCode = _genOtp();
+  const otpHash = await _otpHash(env, id, otpCode);
   const ttlMin = TTL_MIN[purpose] || 15;
   const expiresAt = new Date(Date.now() + ttlMin * 60 * 1000).toISOString();
 
   await env.DB.prepare(`
-    INSERT INTO magic_links (id, token_hash, email, licence_key, purpose, fingerprint, expires_at, ip_hash)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO magic_links (id, token_hash, otp_hash, email, licence_key, purpose, fingerprint, expires_at, ip_hash)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    id, tokenHash, e, licenceKey || null, purpose,
+    id, tokenHash, otpHash, e, licenceKey || null, purpose,
     (fingerprint || '').trim() || null, expiresAt, ipHash || null,
   ).run();
 
   return {
     id,
     tokenClear,
+    otpCode,
     magicUrl:   _magicLinkUrl(env, tokenClear),
     expiresAt,
     ttlMinutes: ttlMin,
@@ -198,16 +311,21 @@ export async function issueMagicLink(env, { email, licenceKey, purpose, fingerpr
 // POST /api/auth/request-magic-link
 // ───────────────────────────────────────────────────────────────
 // Reçoit { email, licence_key?, fingerprint?, purpose? } et envoie
-// un magic-link à l'adresse si elle correspond à un email autorisé.
+// un magic-link + code OTP si l'adresse correspond à un compte.
 //
-// Comportement silent : on retourne TOUJOURS 200 OK (avec un message
-// générique) pour ne pas révéler l'existence ou non d'une adresse.
-// Seuls les cas de validation côté client (email mal formé, body
-// invalide, rate limit) retournent une erreur explicite.
+// Comportement silent STRICT (AUTH-4) : 200 OK avec le MÊME corps
+// que l'email existe ou non, ET que le rate limit soit atteint ou
+// non. Seul un body invalide (email mal formé) renvoie une erreur.
 // ═══════════════════════════════════════════════════════════════
+const SILENT_OK = {
+  ok: true,
+  message: 'Si cet email correspond à un compte actif, un lien vient d\'être envoyé.',
+};
+
 export async function handleRequestMagicLink(request, env) {
   const origin = getAllowedOrigin(env, request);
   await _ensureSchema(env);
+  _maybePurge(env);
 
   const body = await parseBody(request);
   const email = _normEmail(body.email);
@@ -220,10 +338,13 @@ export async function handleRequestMagicLink(request, env) {
 
   const ipHash = await _ipHash(env, request);
 
-  // Rate limit
+  // Rate limit calculé sur auth_request_log (toutes les demandes,
+  // emails connus ou non) PUIS journalisation de la demande courante.
+  // Dépassement → même 200 silencieux que le nominal (anti-oracle).
   const rl = await _checkRateLimit(env, email, ipHash);
+  await _logRequest(env, email, ipHash);
   if (!rl.allowed) {
-    return err('Trop de demandes. Réessayez dans une heure.', 429, origin);
+    return json(SILENT_OK, 200, origin);
   }
 
   // Cherche l'email dans licence_emails (S1) — si pas trouvé ET pas de
@@ -279,32 +400,21 @@ export async function handleRequestMagicLink(request, env) {
     }
   }
 
-  // Pas de match → silent OK (anti enum)
+  // Pas de match → silent OK (anti enum), MÊME corps que le nominal
   if (!memberRow || !licenceRow) {
-    return json({
-      ok: true,
-      sent: false,
-      message: 'Si cet email correspond à un compte actif, un lien vient d\'être envoyé.',
-    }, 200, origin);
+    return json(SILENT_OK, 200, origin);
   }
 
-  // Génération du token clair + hash
-  const tokenClear = generateToken(32);  // 64 chars hex
-  const tokenHash  = await _sha256Hex(tokenClear);
-  const id = generateId();
-  const ttlMin = TTL_MIN[purpose] || 15;
-  const expiresAt = new Date(Date.now() + ttlMin * 60 * 1000).toISOString();
-
-  await env.DB.prepare(`
-    INSERT INTO magic_links (id, token_hash, email, licence_key, purpose, fingerprint, expires_at, ip_hash)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
-    id, tokenHash, email, licenceRow.key, purpose,
-    fingerprint || null, expiresAt, ipHash,
-  ).run();
+  // Génération lien + code (invalide les précédents du même purpose)
+  const issued = await issueMagicLink(env, {
+    email,
+    licenceKey: licenceRow.key,
+    purpose,
+    fingerprint,
+    ipHash,
+  });
 
   // Envoi de l'email
-  const magicUrl = _magicLinkUrl(env, tokenClear);
   try {
     const subject = purpose === 'invite'
       ? `Vous êtes invité sur Keystone OS`
@@ -314,9 +424,10 @@ export async function handleRequestMagicLink(request, env) {
     const ownerName = (licenceRow.owner && _emailValid(licenceRow.owner) ? null : licenceRow.owner) || null;
     const html = tplMagicLink({
       ownerName,
-      magicUrl,
+      magicUrl: issued.magicUrl,
+      otpCode:  issued.otpCode,
       purpose: purpose === 'invite' ? 'activation' : purpose,
-      expiresMinutes: ttlMin,
+      expiresMinutes: issued.ttlMinutes,
     });
     await sendEmail(env, { to: email, subject, html });
   } catch (e) {
@@ -324,25 +435,97 @@ export async function handleRequestMagicLink(request, env) {
     console.warn('[magic-link] sendEmail failed', e.message);
   }
 
+  return json(SILENT_OK, 200, origin);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Consommation partagée (lien OU code) — AUTH-3 anti-course
+// ───────────────────────────────────────────────────────────────
+// L'UPDATE gardé (consumed_at IS NULL) est LE point de vérité :
+// si meta.changes !== 1, quelqu'un d'autre a consommé entre notre
+// lecture et notre écriture → pas de JWT.
+// ═══════════════════════════════════════════════════════════════
+async function _consumeAndIssueJwt(request, env, origin, link, { fp, via, fingerprintMatch }) {
+  // Charge la licence AVANT de consommer : si elle est morte, le
+  // lien reste utilisable pour un message d'erreur propre au support.
+  const licence = await env.DB
+    .prepare('SELECT * FROM licences WHERE key = ? LIMIT 1')
+    .bind(link.licence_key)
+    .first();
+  if (!licence) return err('Licence introuvable', 404, origin);
+  if (!licence.is_active) return err('Licence inactive', 403, origin);
+
+  // Consomme le token — gardé, anti-course.
+  const upd = await env.DB
+    .prepare("UPDATE magic_links SET consumed_at = datetime('now') WHERE id = ? AND consumed_at IS NULL")
+    .bind(link.id)
+    .run();
+  if ((upd?.meta?.changes ?? 0) !== 1) {
+    return err('Lien déjà utilisé', 401, origin);
+  }
+
+  // Si c'était un invite avec un email en 'pending' → bascule à 'active'
+  let pendingActivated = false;
+  if (link.purpose === 'invite') {
+    const pending = await env.DB
+      .prepare("SELECT id FROM licence_emails WHERE licence_key = ? AND email = ? AND status = 'pending' LIMIT 1")
+      .bind(link.licence_key, link.email)
+      .first();
+    if (pending) {
+      await env.DB
+        .prepare("UPDATE licence_emails SET status = 'active', activated_at = datetime('now') WHERE id = ?")
+        .bind(pending.id)
+        .run();
+      pendingActivated = true;
+    }
+  }
+
+  // Émission JWT (sub = lookup_hmac de la licence, comme handleActivateV2)
+  const lookupHmac = await blindIndex(licence.key, env.KS_LOOKUP_PEPPER);
+  const planUp = (licence.plan || '').toUpperCase();
+  const jwt = await signJWT({
+    sub:    lookupHmac,
+    plan:   licence.plan,
+    owner:  licence.owner,
+    email:  link.email,
+    fp:     fp || null,
+    isAdmin: planUp === 'ADMIN',
+    via,
+  }, env);
+
+  // Sprint S5.1 — audit du login (= event critique)
+  await audit(env, {
+    action:   via === 'otp' ? 'otp_consume' : 'magic_link_consume',
+    actor:    link.email,
+    target:   licence.key,
+    tenantId: licence.tenant_id || null,
+    details:  {
+      purpose:           link.purpose,
+      plan:              licence.plan,
+      pending_activated: pendingActivated,
+      fingerprint_match: fingerprintMatch,
+    },
+    request,
+  });
+
   return json({
-    ok: true,
-    sent: true,
-    expires_at: expiresAt,
-    purpose,
-    message: 'Si cet email correspond à un compte actif, un lien vient d\'être envoyé.',
+    ok:                true,
+    jwt,
+    licence_key:       licence.key,
+    plan:              licence.plan,
+    owner:             licence.owner,
+    email:             link.email,
+    expires_at:        licence.expires_at,
+    magic_purpose:     link.purpose,
+    pending_activated: pendingActivated,
+    note: pendingActivated
+      ? 'Votre invitation est validée. Bienvenue dans l\'équipe.'
+      : null,
   }, 200, origin);
 }
 
 // ═══════════════════════════════════════════════════════════════
 // POST /api/auth/consume-magic-link
-// ───────────────────────────────────────────────────────────────
-// Reçoit { token, fingerprint } et :
-//   1. Hash le token → lookup en DB
-//   2. Vérifie expires_at + consumed_at + fingerprint (si posé à l'émission)
-//   3. Marque consumed_at = now (unique-shot)
-//   4. Si licence_emails.status = 'pending' → passe à 'active' (cas invite)
-//   5. Génère JWT (sub = lookup_hmac de la licence)
-//   6. Retour { jwt, plan, owner, expires_at, magic_purpose }
 // ═══════════════════════════════════════════════════════════════
 export async function handleConsumeMagicLink(request, env) {
   const origin = getAllowedOrigin(env, request);
@@ -372,81 +555,78 @@ export async function handleConsumeMagicLink(request, env) {
     return err('Lien expiré', 401, origin);
   }
 
-  // Fingerprint check si posé à l'émission (anti vol de mail)
+  // Fingerprint check si posé à l'émission (anti vol de mail).
+  // Chemin LIEN : strict. Le repli cross-device, c'est le code OTP.
   if (link.fingerprint && link.fingerprint !== fp) {
-    return err('Fingerprint ne correspond pas. Utilisez le lien depuis l\'appareil qui l\'a demandé.', 403, origin);
+    return err('Fingerprint ne correspond pas. Utilisez le lien depuis l\'appareil qui l\'a demandé, ou saisissez le code à 6 chiffres de l\'email.', 403, origin);
   }
 
-  // Charge la licence
-  const licence = await env.DB
-    .prepare('SELECT * FROM licences WHERE key = ? LIMIT 1')
-    .bind(link.licence_key)
-    .first();
-  if (!licence) return err('Licence introuvable', 404, origin);
-  if (!licence.is_active) return err('Licence inactive', 403, origin);
-
-  // Consomme le token (unique-shot)
-  await env.DB
-    .prepare("UPDATE magic_links SET consumed_at = datetime('now') WHERE id = ?")
-    .bind(link.id)
-    .run();
-
-  // Si c'était un invite avec un email en 'pending' → bascule à 'active'
-  let pendingActivated = false;
-  if (link.purpose === 'invite') {
-    const pending = await env.DB
-      .prepare("SELECT id FROM licence_emails WHERE licence_key = ? AND email = ? AND status = 'pending' LIMIT 1")
-      .bind(link.licence_key, link.email)
-      .first();
-    if (pending) {
-      await env.DB
-        .prepare("UPDATE licence_emails SET status = 'active', activated_at = datetime('now') WHERE id = ?")
-        .bind(pending.id)
-        .run();
-      pendingActivated = true;
-    }
-  }
-
-  // Émission JWT (sub = lookup_hmac de la licence, comme handleActivateV2)
-  const lookupHmac = await blindIndex(licence.key, env.KS_LOOKUP_PEPPER);
-  const planUp = (licence.plan || '').toUpperCase();
-  const jwt = await signJWT({
-    sub:    lookupHmac,
-    plan:   licence.plan,
-    owner:  licence.owner,
-    email:  link.email,
-    fp:     fp || null,
-    isAdmin: planUp === 'ADMIN',
-    via:    'magic_link',
-  }, env);
-
-  // Sprint S5.1 — audit du login magic-link (= login event critique)
-  await audit(env, {
-    action:   'magic_link_consume',
-    actor:    link.email,
-    target:   licence.key,
-    tenantId: licence.tenant_id || null,
-    details:  {
-      purpose:           link.purpose,
-      plan:              licence.plan,
-      pending_activated: pendingActivated,
-      fingerprint_match: !!link.fingerprint,
-    },
-    request,
+  return _consumeAndIssueJwt(request, env, origin, link, {
+    fp,
+    via: 'magic_link',
+    fingerprintMatch: !!link.fingerprint,
   });
+}
 
-  return json({
-    ok:                true,
-    jwt,
-    licence_key:       licence.key,
-    plan:              licence.plan,
-    owner:             licence.owner,
-    email:             link.email,
-    expires_at:        licence.expires_at,
-    magic_purpose:     link.purpose,
-    pending_activated: pendingActivated,
-    note: pendingActivated
-      ? 'Votre invitation est validée. Bienvenue dans l\'équipe.'
-      : null,
-  }, 200, origin);
+// ═══════════════════════════════════════════════════════════════
+// POST /api/auth/consume-otp                              (AUTH-2)
+// ───────────────────────────────────────────────────────────────
+// { email, code, fingerprint } — le chemin cross-device : demandé
+// sur desktop, saisi sur mobile. Erreurs volontairement génériques
+// (pas de distinction « email inconnu » / « code faux »).
+// ═══════════════════════════════════════════════════════════════
+export async function handleConsumeOtp(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  await _ensureSchema(env);
+
+  if (!env.KS_LOOKUP_PEPPER) return err('Server: KS_LOOKUP_PEPPER manquant', 500, origin);
+  if (!env.KS_JWT_SECRET)    return err('Server: KS_JWT_SECRET manquant',    500, origin);
+
+  const body = await parseBody(request);
+  const email = _normEmail(body.email);
+  const code  = (body.code || '').toString().trim();
+  const fp    = (body.fingerprint || '').toString().trim();
+
+  if (!_emailValid(email) || !/^\d{6}$/.test(code)) {
+    return err('Code invalide ou expiré', 401, origin);
+  }
+
+  // Dernier lien vivant pour cet email (avec code : otp_hash posé)
+  const link = await env.DB
+    .prepare(`SELECT * FROM magic_links
+              WHERE email = ? AND consumed_at IS NULL AND otp_hash IS NOT NULL
+              ORDER BY created_at DESC, rowid DESC LIMIT 1`)
+    .bind(email)
+    .first();
+
+  if (!link) return err('Code invalide ou expiré', 401, origin);
+  if (new Date(link.expires_at) < new Date()) {
+    return err('Code invalide ou expiré', 401, origin);
+  }
+  if ((link.otp_attempts || 0) >= OTP_MAX_ATTEMPTS) {
+    return err('Trop de tentatives. Demandez un nouveau code.', 423, origin);
+  }
+
+  const expected = await _otpHash(env, link.id, code);
+  if (expected !== link.otp_hash) {
+    await env.DB
+      .prepare('UPDATE magic_links SET otp_attempts = otp_attempts + 1 WHERE id = ?')
+      .bind(link.id)
+      .run()
+      .catch(() => {});
+    const left = OTP_MAX_ATTEMPTS - (link.otp_attempts || 0) - 1;
+    return err(left <= 0
+      ? 'Trop de tentatives. Demandez un nouveau code.'
+      : 'Code invalide ou expiré', left <= 0 ? 423 : 401, origin);
+  }
+
+  // Fingerprint : sur le chemin OTP le mismatch est ATTENDU (c'est le
+  // chemin cross-device) — on ne bloque pas, on audite.
+  const fingerprintMatch = !link.fingerprint || link.fingerprint === fp;
+
+  return _consumeAndIssueJwt(request, env, origin, link, {
+    fp,
+    via: 'otp',
+    fingerprintMatch,
+  });
 }

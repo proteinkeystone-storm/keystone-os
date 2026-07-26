@@ -1,0 +1,106 @@
+# HANDOFF — Durcissement de l'authentification (magic link + OTP + SSO)
+
+**Créé le :** 2026-07-26
+**Origine :** brief externe `~/Desktop/brief-magic-link.md` (P1→P6) — adapté ici à la VRAIE stack.
+**Objectif :** auth fiable pour des clients ENTREPRISE (Outlook/M365, Proofpoint, quarantaines) avant le lancement de septembre 2026.
+
+---
+
+## 0. Constat capital — les hypothèses du brief étaient FAUSSES
+
+Le brief supposait Astro SSR + Supabase Auth (`signInWithOtp`, PKCE, `@supabase/ssr`). **Rien de tout cela n'existe.** La stack réelle :
+
+| Brief supposait | Réalité Keystone |
+|---|---|
+| Supabase Auth | **Magic link MAISON** : `workers/src/routes/auth-magic-link.js` (Sprint S3) |
+| Astro SSR + cookies | Front statique Vercel + **JWT HS256 dans localStorage** (`ks_jwt`) |
+| SMTP Supabase | **Resend** (`lib/email-resend.js`), FROM par défaut `onboarding@resend.dev` |
+| PKCE / code_verifier | **Fingerprint device** optionnel vérifié au consume |
+
+Conséquences :
+- P6 du brief (cookies SSR) **ne s'applique pas** — pas de SSR, pas de cookies de session.
+- P5 (cycle de vie du token) est **dans notre code**, donc actionnable à 100 %.
+- Le « P2 changement d'appareil » existe mais sa cause est le **fingerprint** (403 si mismatch), pas un code_verifier PKCE.
+
+## 0bis. Ce qui existait déjà (ne pas re-livrer)
+
+- Token 32 octets CSPRNG, stocké **hashé** SHA-256, index unique.
+- Usage unique (`consumed_at`), TTL par purpose (15 min login / 60 min activation / 30 min recovery / 7 j invite).
+- Rate limit 5/email/h + 20/IP/h, IP hashée avec pepper (RGPD).
+- Réponse silencieuse « si cet email correspond… » (anti-énumération).
+- Audit log au consume (S5.1).
+
+## 0ter. Les trous constatés (avant ce chantier)
+
+1. **P1 — `auth-magic.html` consommait le token automatiquement au chargement** (fetch au boot). Une sandbox Safe Links/Proofpoint qui exécute le JS tuait le lien avant l'humain. C'était l'anti-pattern exact interdit par le brief.
+2. **P2 — fingerprint** : demandé sur desktop → ouvert sur mobile = 403 sec. Aucun chemin de repli saisissable (pas de code OTP).
+3. **Course sur la consommation** : lecture `consumed_at` puis UPDATE non gardé → deux consommations simultanées pouvaient obtenir chacune un JWT.
+4. **Pas d'invalidation** des tokens précédents à la nouvelle demande ; **pas de purge** des expirés.
+5. **Oracle d'énumération subtil dans le rate limit** : les lignes `magic_links` n'étaient insérées QUE pour les emails connus → seul un email existant pouvait déclencher le 429. Un attaquant patient distinguait donc les comptes réels.
+6. **Pas de throttle court** (1/60 s) — seulement 5/h.
+7. **Délivrabilité** : FROM Resend par défaut, pas de log des envois, pas de webhook statut.
+
+---
+
+## Sprints
+
+### ✅ AUTH-1 — Anti-scanner (P1) — LIVRÉ CE CHANTIER
+`auth-magic.html` n'auto-consomme plus. Page de confirmation : bouton **« Confirmer ma connexion »** → POST `consume-magic-link`. Aucun `<meta refresh>`, aucun fetch au onload, aucun redirect automatique avant action humaine. Les 401 de liens déjà consommés proposent le repli code.
+
+### ✅ AUTH-2 — Code OTP 6 chiffres (P2, décision D1) — LIVRÉ CE CHANTIER
+- Chaque magic link porte AUSSI un code à 6 chiffres (CSPRNG, stocké hashé SHA-256+pepper, `otp_hash`).
+- L'email affiche le code en évidence + le bouton. Message : « Sur un autre appareil, saisissez ce code. »
+- `POST /api/auth/consume-otp` `{ email, code, fingerprint }` : max **5 tentatives** par lien (`otp_attempts`), même consommation gardée, même JWT.
+- **Politique fingerprint** : le chemin OTP n'exige PAS le match fingerprint (c'est le chemin cross-device par définition) mais l'écart est **audité** (`fingerprint_match:false`). Le chemin lien garde le 403 strict.
+
+### ✅ AUTH-3 — Cycle de vie (P5) — LIVRÉ CE CHANTIER
+- Consommation **anti-course** : `UPDATE … SET consumed_at = now WHERE id = ? AND consumed_at IS NULL` + vérif `meta.changes === 1`. Le JWT n'est émis que si NOTRE update a gagné.
+- **Nouvelle demande invalide les précédents** tokens non consommés du même email+purpose (sauf `invite`, qui vit 7 jours et vient d'un tiers).
+- **Purge** des liens expirés/consommés > 48 h : au cron quotidien 3 h UTC + opportuniste à chaque request.
+
+### ✅ AUTH-4 — Rate limiting (P4) — LIVRÉ CE CHANTIER
+- Nouvelle table `auth_request_log` : **toutes** les demandes y passent (email connu ou non) → le rate limit compte dessus → **l'oracle d'énumération est mort**.
+- Throttle **1/60 s par email** + 5/h par email + 20/h par IP. Dépassement → même réponse 200 silencieuse que le cas nominal (le brief exigeait l'indistinguabilité ; le 429 explicite a été retiré).
+- `magic_links` ne reçoit toujours une ligne QUE pour les comptes réels (pas de pollution).
+
+### 🔲 AUTH-5 — Délivrabilité (P3) — CODE PARTIEL, ACTIONS STÉPHANE REQUISES
+Fait ce chantier : table `email_log` (destinataire, sujet, statut, id Resend) alimentée par `sendEmail()` — on peut répondre à « je n'ai rien reçu » sans deviner.
+Reste (actions console/DNS, impossibles sans toi) :
+1. **[DÉCISION D3 + SOUVERAINETÉ]** choisir le fournisseur définitif. ⚠️ Resend = le dernier maillon qui fait sortir de la donnée perso d'UE (cf. mémoire `resend-souverainete-email`, à trancher avant sept.). Candidats UE : Scaleway TEM (FR), Mailjet (FR), Brevo (FR). Si on reste sur Resend : l'assumer au DPA.
+2. Domaine expéditeur dédié `auth@mail.protein-keystone.com` (ou équivalent) : SPF + DKIM + DMARC, 4 enregistrements DNS chez le fournisseur choisi, puis `wrangler secret put`/var `KS_RESEND_FROM`.
+3. Webhook statut fournisseur (bounce/delivered) → route à créer une fois le fournisseur tranché.
+4. Critère : ≥ 9/10 sur mail-tester.com, tests réels Gmail + Outlook + OVH/Orange.
+
+### 🔲 AUTH-6 — SSO entreprise (OIDC) — À FAIRE (prochain « go SSO »)
+Décision D4/D5 : pas de mot de passe (le magic link hérite du MFA de la boîte d'entreprise) ; la réponse aux exigences institutionnelles = **SSO**, pas mot de passe.
+- **OIDC d'abord, SAML jamais en direct.** Microsoft Entra ID + Google Workspace parlent tous deux OIDC → couvre ~95 % des clients entreprise. SAML pur (fédérations exotiques) : hors scope tant qu'aucun client ne l'exige contractuellement.
+- Architecture prévue (tout dans le Worker, zéro dépendance) :
+  - Table `sso_connections` : `licence_key, issuer, client_id, client_secret (chiffré), allowed_email_domains`.
+  - `GET /api/auth/oidc/start?domain=…` → découverte `.well-known/openid-configuration`, state+nonce+PKCE en D1, redirect vers l'IdP.
+  - `GET /api/auth/oidc/callback` → échange code, vérif `id_token` (JWKS, nonce, aud, iss), email vérifié → lookup `licence_emails` → **même émission JWT que le magic link** (`via:'oidc'`).
+  - Le front : bouton « Se connecter avec Microsoft/Google » sur l'écran d'activation, visible si le domaine email a une connexion SSO.
+- **Prérequis Stéphane (bloquants, à faire pendant/avant le sprint) :** enregistrer l'app sur Entra ID et Google Cloud Console (redirect URI = `https://keystone-os-api.keystone-os.workers.dev/api/auth/oidc/callback`), récupérer client_id/secret. En multi-tenant Entra, UNE app suffit pour tous les clients Microsoft.
+
+---
+
+## Décisions actées ce chantier (ne pas re-débattre)
+- **D1 = OTP 6 chiffres**, chemin principal cross-device (pas le verifier serveur, pas le flow implicite).
+- **D2 = TTL inchangés** (15 min login MAIS le token ne meurt plus au premier GET ; l'invalidation par nouvelle demande couvre le reste). Si les quarantaines d'entreprise posent problème en réel → passer `magic_login` à 60 min, une constante à changer (`TTL_MIN`).
+- **D4 = pas de mot de passe.** SSO OIDC pour les exigences entreprise.
+- Le 429 explicite du throttle a été remplacé par le 200 silencieux (anti-oracle) — c'est voulu, ne pas « réparer ».
+
+## Parcours de test couverts par le banc (`workers/test/test-auth-magic-hardening.mjs`)
+1. GET répétés sur le lien (scanner) → token intact ; 2. double consommation concurrente → un seul JWT ; 3. OTP nominal ; 4. OTP faux ×5 → verrouillé ; 5. nouvelle demande → ancien token mort ; 6. email inexistant → réponse identique ; 7. throttle 60 s silencieux ; 8. purge.
+
+Lancement :
+```
+npx wrangler dev --local -c wrangler.dktest.toml --port 8799 --test-scheduled \
+  --var KS_JWT_SECRET:bk-test-secret --var "KS_ALLOWED_ORIGIN:*" \
+  --var KS_ADMIN_SECRET:bk-admin --var KS_LOOKUP_PEPPER:bk-pepper
+node test/test-auth-magic-hardening.mjs
+```
+
+## Déploiement
+- Worker : `cd workers && npx wrangler deploy` (indépendant du front).
+- Front : push `main` (Vercel auto) + **bump-sw obligatoire** (PWA).
+- Rétro-compat : les liens déjà émis (anciens emails) passent par la nouvelle page à bouton — ils marchent toujours ; les lignes `magic_links` sans `otp_hash` refusent juste le chemin code (normal).
