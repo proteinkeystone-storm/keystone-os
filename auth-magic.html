@@ -231,6 +231,7 @@
         <input id="otp-code" class="auth-field auth-field--code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="\d{6}" maxlength="6" placeholder="······" required />
         <p id="otp-err" class="auth-form-err" aria-live="polite"></p>
         <button id="otp-submit" class="auth-btn auth-btn-primary" type="submit">Se connecter</button>
+        <button id="sso-btn" class="auth-btn auth-btn-tertiary" type="button">Connexion SSO entreprise</button>
       </form>
     </div>
 
@@ -447,15 +448,55 @@
       }
     }
 
+    // ─── SSO entreprise (AUTH-6) ─────────────────────────────────
+    // Le bouton utilise l'email saisi pour trouver le domaine ; si une
+    // connexion SSO existe → redirection vers l'IdP (Entra/Google).
+    // Aucune action au chargement, cohérent avec la règle anti-scanner.
+    async function startSso() {
+      const errEl = $('otp-err');
+      errEl.textContent = '';
+      const email = $('otp-email').value.trim();
+      const domain = (email.split('@')[1] || '').toLowerCase();
+      if (!domain) { errEl.textContent = 'Saisissez d\'abord votre email professionnel.'; return; }
+      try {
+        const res = await fetch(WORKER + '/api/auth/sso/lookup?domain=' + encodeURIComponent(domain));
+        const data = await res.json().catch(() => ({}));
+        if (data?.sso) {
+          window.location.assign(WORKER + '/api/auth/oidc/start?domain=' + encodeURIComponent(domain));
+        } else {
+          errEl.textContent = 'Pas de SSO configuré pour ' + domain + ' — utilisez le lien ou le code reçus par email.';
+        }
+      } catch {
+        errEl.textContent = 'Erreur réseau. Réessayez.';
+      }
+    }
+
+    const SSO_ERRORS = {
+      no_account:            'Votre identité entreprise est vérifiée, mais aucun compte Keystone n\'y est associé. Contactez votre administrateur.',
+      no_sso:                'Aucune connexion SSO n\'est configurée pour ce domaine.',
+      idp_denied:            'La connexion a été refusée par votre fournisseur d\'identité.',
+      state_expired:         'La session SSO a expiré. Recommencez la connexion.',
+      email_domain_mismatch: 'Le compte utilisé n\'appartient pas au domaine attendu.',
+    };
+
     // ─── Main — AUCUNE action réseau ici, juste l'affichage ──────
     (() => {
       const params = new URLSearchParams(window.location.search);
       const token  = params.get('token');
+      const ssoError = params.get('sso_error');
 
       $('confirm-btn').addEventListener('click', confirmLink);
       $('confirm-otp-link').addEventListener('click', () => showState('otp'));
       $('error-otp-link').addEventListener('click', () => showState('otp'));
       $('otp-form').addEventListener('submit', submitOtp);
+      $('sso-btn').addEventListener('click', startSso);
+
+      if (ssoError) {
+        showError('Connexion SSO impossible',
+          SSO_ERRORS[ssoError] || 'La connexion SSO a échoué (' + ssoError + '). Utilisez le lien ou le code reçus par email.',
+          { offerOtp: true });
+        return;
+      }
       // Le code ne garde que les chiffres (collage depuis l'email inclus)
       $('otp-code').addEventListener('input', e => {
         e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);

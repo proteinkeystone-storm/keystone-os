@@ -126,6 +126,13 @@ import {
   handleConsumeOtp,
   purgeExpiredMagicLinks,
 } from './routes/auth-magic-link.js';
+// ── AUTH-6 (SSO entreprise OIDC — Entra ID / Google Workspace) ──
+import {
+  handleSsoLookup,
+  handleOidcStart,
+  handleOidcCallback,
+  handleSsoConnectionsAdmin,
+} from './routes/auth-oidc.js';
 // ── Social Broadcast — routes de production (Sprint Social-1) ──
 import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialProvisionTelegram, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry, handleSocialPostsList, handleSocialPostCancel, handleSocialPostsDelete, handleSocialPostRetry, handleSocialAccountDisconnect, sweepDuePosts, refreshSocialTokens, handleSocialTokenRefreshNow, handleSocialPostInsights } from './routes/social.js';
 import { handleSocialMediaUpload, handleSocialMediaServe } from './routes/social-media.js';
@@ -632,6 +639,11 @@ export default {
       if (path === '/api/auth/consume-otp' && method === 'POST') {
         return handleConsumeOtp(request, env);
       }
+      // ── AUTH-6 — SSO entreprise OIDC ─────────────────────────
+      if (path === '/api/auth/sso/lookup'    && method === 'GET') return handleSsoLookup(request, env);
+      if (path === '/api/auth/oidc/start'    && method === 'GET') return handleOidcStart(request, env);
+      if (path === '/api/auth/oidc/callback' && method === 'GET') return handleOidcCallback(request, env);
+      if (path === '/api/admin/sso-connections') return handleSsoConnectionsAdmin(request, env);
 
       // ── Auth refresh (Sprint Sécu-2 / H4 / Q2b) ──────────────
       // Rolling refresh du JWT : prend un JWT valide, en réémet un avec exp réinitialisé.
