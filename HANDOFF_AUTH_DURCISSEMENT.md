@@ -63,7 +63,10 @@ Conséquences :
 - Throttle **1/60 s par email** + 5/h par email + 20/h par IP. Dépassement → même réponse 200 silencieuse que le cas nominal (le brief exigeait l'indistinguabilité ; le 429 explicite a été retiré).
 - `magic_links` ne reçoit toujours une ligne QUE pour les comptes réels (pas de pollution).
 
-### 🟡 AUTH-5 — Délivrabilité (P3) — **D3 TRANCHÉE : SCALEWAY TEM** (26/07), code câblé, DNS/console restent
+### ✅ AUTH-5 — Délivrabilité (P3) — **SCALEWAY TEM ACTIF EN PROD, PARCOURS VALIDÉ BOUT EN BOUT (26/07 nuit)**
+Domaine `mail.protein-keystone.com` vérifié (DNS chez Vercel), policy IAM corrigée (piège : `BlocklistFullAccess` ≠ `FullAccess`), `KS_EMAIL_PROVIDER=scaleway` déployé, email réel reçu (bouton + code OTP) et **connexion complète testée par Stéphane : OK**. Quota 10 000/mois. Reste (non bloquant) : màj `dpa.html`/Annexe A, révoquer `KS_RESEND_KEY` après quelques jours, webhook bounces, œil sur le spam la 1re semaine.
+
+#### Détail d'origine (archive) :
 Fait :
 - Table `email_log` (destinataire, sujet, statut, id fournisseur) alimentée par `sendEmail()`.
 - **Dispatch fournisseur dans `lib/email-resend.js`** : `KS_EMAIL_PROVIDER = 'resend' (défaut) | 'scaleway'` — bascule par VAR, sans redéploiement. Chemin Scaleway = API TEM `fr-par` (`X-Auth-Token`), from décomposé, `text` dérivé du html, Reply-To en `additional_headers`, bcc en copies séparées, ids `scw:` dans `email_log`. Testé unitaire 13/13 (`test/test-email-provider.mjs`).
