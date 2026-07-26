@@ -1394,6 +1394,52 @@ footer {
 <!-- [Bouton « Activer la démo — 7 jours gratuits » SUPPRIMÉ le
              2026-07-25. Le palier gratuit le remplace : 3 applications
              à vie battent un essai qui expire, et il ne coûte rien. -->
+
+        <!-- Pédagogie « sans mot de passe » — pill repliée, zéro friction.
+             Un nouveau venu cherche le champ mot de passe et ne le trouve
+             pas : on lui explique en 3 gestes POURQUOI, sans rien imposer. -->
+        <style>
+          .act-explain-pill {
+            display: inline-flex; align-items: center; gap: 7px;
+            margin: 18px auto 0; padding: 7px 14px;
+            border-radius: 999px; border: 1px solid var(--border);
+            background: transparent; color: var(--text-2);
+            font-size: 12.5px; font-weight: 600; font-family: inherit;
+            letter-spacing: -0.01em; cursor: pointer;
+            transition: color 160ms ease, border-color 160ms ease;
+          }
+          .act-explain-pill:hover { color: var(--text); border-color: var(--accent-bd); }
+          .act-explain-pill svg { width: 13px; height: 13px; flex-shrink: 0; }
+          .act-explain {
+            margin-top: 14px; text-align: left;
+            border: 1px solid var(--border); border-radius: 12px;
+            background: var(--bg-2); padding: 16px 18px;
+          }
+          .act-explain-row { display: flex; gap: 12px; align-items: flex-start; padding: 8px 0; }
+          .act-explain-row + .act-explain-row { border-top: 1px solid var(--border); }
+          .act-explain-row svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--accent-2); margin-top: 2px; }
+          .act-explain-row p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
+          .act-explain-row p strong { color: var(--text); font-weight: 700; }
+        </style>
+        <button id="act-explain-pill" class="act-explain-pill" type="button" aria-expanded="false" aria-controls="act-explain-panel"
+                onclick="var p=document.getElementById('act-explain-panel');p.hidden=!p.hidden;this.setAttribute('aria-expanded',String(!p.hidden))">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Pas de mot de passe ? C'est normal — comprendre en 30 secondes
+        </button>
+        <div id="act-explain-panel" class="act-explain" hidden>
+          <div class="act-explain-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <p><strong>Aucun mot de passe à inventer.</strong> Votre clé de licence (reçue par e-mail après l'achat) et votre adresse suffisent — le Trousseau de votre appareil retient la clé pour vous.</p>
+          </div>
+          <div class="act-explain-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <p><strong>Ensuite, votre e-mail est la clé.</strong> Pour vous reconnecter, on vous envoie un message : un bouton à cliquer sur le même appareil, ou un <strong>code à 6 chiffres</strong> à recopier sur un autre.</p>
+          </div>
+          <div class="act-explain-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <p><strong>Plus sûr qu'un mot de passe.</strong> Chaque lien ne sert qu'une fois et expire de lui-même : rien à se faire voler, personne ne peut passer après vous.</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
