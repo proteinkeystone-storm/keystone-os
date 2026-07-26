@@ -122,6 +122,15 @@ KS_ALLOWED_ORIGIN = "https://protein-keystone.com,https://www.protein-keystone.c
 # propre moteur » devient atteignable dès qu'un client dépose une clé.
 BYOK_ROUTING = "on"
 
+# ── AUTH-5 — Email transactionnel SOUVERAIN (Scaleway TEM, fr-par) ──
+# Bascule Resend (US) → Scaleway (FR) du 2026-07-26, cf.
+# HANDOFF_AUTH_DURCISSEMENT.md. Rollback instantané : remettre
+# KS_EMAIL_PROVIDER = "resend" et redéployer. Secret associé :
+# KS_SCW_SECRET_KEY (wrangler secret put, appli IAM keystone-worker).
+KS_EMAIL_PROVIDER = "scaleway"
+KS_SCW_PROJECT_ID = "76d3be67-8f22-44b9-9ef6-3576978b86de"
+KS_EMAIL_FROM     = "Keystone OS <auth@mail.protein-keystone.com>"
+
 # ── PRICING_V2 — refonte tarifaire per-app (HANDOFF_PRICING_REFONTE) ──
 # OFF par défaut : le compteur de conversations garde EXACTEMENT le
 # comportement legacy (quota par plan STARTER/PRO/MAX). Allumé, le quota
