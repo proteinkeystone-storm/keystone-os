@@ -1710,8 +1710,10 @@ html.light-mode .suggest-card[data-palette="indigo"]  { --tool-c:var(--gold); --
   background: var(--navy2);
   border: 1px solid var(--bd);
   border-radius: var(--r);
-  padding: 9px 12px;
-  min-height: 46px;
+  padding: 10px 13px;
+  min-height: 52px;
+  flex: 0 0 auto;
+  min-width: 200px; max-width: 270px;
   display: flex; flex-direction: row; align-items: center; gap: 9px;
   position: relative;
   cursor: pointer;
@@ -1738,10 +1740,23 @@ html.light-mode .suggest-card[data-palette="indigo"]  { --tool-c:var(--gold); --
 .suggest-card:hover .suggest-card-icon { transform: scale(1.06); }
 .suggest-card-icon svg { width: 14px; height: 14px; display: block; }
 
+/* Bloc texte : nom + ligne de bénéfice (vitrine 2026-07-26) */
+.suggest-card-txt {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+
 .suggest-card-name {
   font-size: 12px; font-weight: 600; color: var(--text);
   line-height: 1.3; letter-spacing: -.005em;
-  flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.suggest-card-benefit {
+  font-size: 10.5px; font-weight: 400; color: var(--tx2);
+  line-height: 1.35;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .suggest-card-arrow { display: none; }
@@ -3818,16 +3833,22 @@ html.light-mode .no-api-hint:hover { border-color: rgba(79,70,229,.35); }
     gap: 8px;
   }
   .suggest-card {
-    padding: 14px 12px !important;
-    text-align: center;
+    padding: 12px !important;
     position: relative;
     min-height: 88px;
+    /* Grille 2 colonnes : les bornes desktop créeraient un débordement
+       horizontal (colonnes ~170px < min-width 200px). On laisse la
+       colonne dicter la largeur. */
+    min-width: 0 !important;
+    max-width: none !important;
   }
   .suggest-card-cta { display: none !important; }
   .suggest-card-name {
     font-size: 12px !important;
     line-height: 1.3 !important;
+    white-space: normal !important;
   }
+  .suggest-card-benefit { font-size: 10px !important; }
   /* Flèche discrète en haut-droite : signale la cliquabilité */
   .suggest-card::after {
     content: '↗';

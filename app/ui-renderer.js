@@ -384,6 +384,28 @@ const ART_PAD_DESC = {
     'A-COM-004': 'Formulaire intelligent partageable',
 };
 
+// ── Complémentarités entre pads (barre « Débloquez ») ─────────
+// « Vous utilisez A → B le complète. » Sert à prioriser les
+// suggestions de la vitrine : une app listée ici remonte en tête
+// quand le client possède l'app-clé. Statique et volontairement
+// court — c'est un coup de pouce éditorial, pas un moteur de reco.
+const PAD_AFFINITY = {
+    'A-COM-003': ['A-COM-005', 'O-AGT-001'],   // Brainstorming → Ghost Writer (la chaîne de contenu), Smart Agent (l'invité expert)
+    'A-COM-005': ['O-SOC-001', 'A-COM-003'],   // Ghost Writer → Social Manager, Brainstorming
+    'O-SOC-001': ['A-COM-005', 'A-COM-001'],   // Social Manager → Ghost Writer, Smart Dynamic QR
+    'A-COM-001': ['O-GEO-001', 'O-BRD-001'],   // Smart Dynamic QR → Sentinel (visibilité), Key Brand (design)
+    'O-DSK-001': ['O-BOK-001', 'O-NET-001'],   // desK → booK (la revue devient flipbook), networK (relancer les contributeurs)
+    'O-BOK-001': ['O-DSK-001', 'A-COM-001'],   // booK → desK, Smart Dynamic QR (partage par QR)
+    'O-NET-001': ['O-SEC-001', 'A-COM-004'],   // networK → Missive (transmettre un secret à un contact), Key Form (collecter)
+    'A-COM-004': ['O-NET-001'],                // Key Form → networK (les réponses deviennent des contacts)
+    'O-BRD-001': ['A-COM-002'],                // Key Brand → Brief Prod (la charte part chez l'imprimeur)
+    'A-COM-002': ['O-BRD-001'],                // Brief Prod → Key Brand
+    'O-AGT-001': ['O-Keyn-001', 'A-COM-003'],  // Smart Agent → Keynapse (capturer le savoir), Brainstorming
+    'O-Keyn-001': ['O-AGT-001'],               // Keynapse → Smart Agent
+    'O-GEO-001': ['O-SOC-001'],                // Sentinel → Social Manager (agir sur la visibilité mesurée)
+    'O-SEC-001': ['O-NET-001'],                // Missive → networK
+};
+
 // ── Jauge "temps gagné potentiel" ─────────────────────────────
 // Estimation indicative : somme des minutes/jour économisées par les
 // outils & artefacts actifs du Dashboard (champ `timeSaved` du catalogue).
@@ -720,34 +742,78 @@ export function renderDashboard() {
         _paintPadReadouts();
     }
 
-    // ── BARRE KEY-STORE — Outils disponibles : nouveautés (NEW) ────────
+    // ── BARRE KEY-STORE — vitrine sobre : 4 suggestions ciblées ────────
     if (artsEl) {
-        // Sprint 4 : la section "Outils disponibles" ne liste QUE les
-        // outils/artefacts portant la pastille NEW (tag `isNew`).
-        const newOnly = [...lockedTools, ...lockedArts].filter(
-            item => !!getCatalogEntry(item.id)?.isNew
-        );
+        // Refonte 2026-07-26 (remplace le filtre NEW du Sprint 4) :
+        // la barre montre AU PLUS 4 cartes, choisies par complémentarité
+        // avec les pads que le client possède (PAD_AFFINITY), en rotation
+        // quotidienne. Une section sans suggestion disparaît entièrement
+        // (titre et badge compris) — une vitrine vide ne s'affiche jamais.
+        // ADMIN se comporte comme un client : tout pad retiré de sa grille
+        // (masqué ou désactivé) redevient une suggestion — dogfood du
+        // tunnel de vente malgré le bypass de possession.
+        let suggestPool = [...lockedTools, ...lockedArts];
+        if (_admin) {
+            suggestPool = [...TOOLS, ...ARTEFACTS].filter(x =>
+                getCatalogEntry(x.id)?.published !== false &&
+                (isPadHidden(x.id) || isPadDeactivated(x.id))
+            );
+        }
 
-        // Cartes compactes — pictogramme + nom (sans CTA)
-        const suggestCards = newOnly.map(item => {
-            const cat    = getCatalogEntry(item.id);
-            const isNew  = !!cat?.isNew;
-            const icon   = ICONS[item.icon] || ICONS['zap'];
-            const label  = item.name || item.title || item.id;
-            const pal    = getToolPalette(item.id);
+        // Vitrine vide → on replie les cartes ET le titre racoleur, mais
+        // la pill Key-Store reste TOUJOURS visible : c'est la seule porte
+        // d'entrée générale du catalogue (les autres accès sont des liens
+        // profonds ponctuels). Le trait + la pill forment une ligne sobre.
+        const suggestSection = artsEl.closest('.suggest-section');
+        const suggestTitle   = suggestSection?.querySelector('.sec-lbl');
+        artsEl.style.display = suggestPool.length ? '' : 'none';
+        if (suggestTitle) suggestTitle.style.display = suggestPool.length ? '' : 'none';
+
+        // Complémentarité : score = nb de pads détenus qui pointent vers
+        // la suggestion dans PAD_AFFINITY. Les complémentaires passent
+        // devant, le reste suit — et chaque groupe tourne d'un cran par
+        // jour (déterministe : stable toute la journée, différent demain).
+        const heldIds = _admin
+            ? [...TOOLS, ...ARTEFACTS].map(x => x.id).filter(id => !suggestPool.some(p => p.id === id))
+            : [...ownedTools, ...ownedArts].map(x => x.id);
+        const _scoreOf = id => heldIds.reduce(
+            (n, held) => n + ((PAD_AFFINITY[held] || []).includes(id) ? 1 : 0), 0);
+
+        const _scored = suggestPool.map(item => ({ item, score: _scoreOf(item.id) }));
+        const _tierA  = _scored.filter(s => s.score > 0)
+                               .sort((a, b) => b.score - a.score)
+                               .map(s => s.item);
+        const _tierB  = _scored.filter(s => s.score === 0).map(s => s.item);
+
+        const _day = Math.floor(Date.now() / 86400000);
+        const _rot = arr => arr.length
+            ? [...arr.slice(_day % arr.length), ...arr.slice(0, _day % arr.length)]
+            : arr;
+        const picks = [..._rot(_tierA), ..._rot(_tierB)].slice(0, 4);
+
+        // Cartes — pictogramme + nom + ligne de bénéfice (langage client)
+        const suggestCards = picks.map(item => {
+            const icon    = ICONS[item.icon] || ICONS['zap'];
+            const label   = item.name || item.title || item.id;
+            const pal     = getToolPalette(item.id);
+            const benefit = getMockApp(item.id)?.punchline
+                || getCatalogEntry(item.id)?.subtitle
+                || item.desc || '';
             return `
             <div class="suggest-card" data-id="${item.id}" data-palette="${pal}"
                  role="button" tabindex="0" aria-label="Découvrir ${label}">
                 <div class="suggest-card-icon">${icon}</div>
-                <div class="suggest-card-name">${label}</div>
-                ${isNew ? '<span class="suggest-card-new">NEW</span>' : ''}
+                <div class="suggest-card-txt">
+                    <div class="suggest-card-name">${label}</div>
+                    ${benefit ? `<div class="suggest-card-benefit">${benefit}</div>` : ''}
+                </div>
             </div>`;
         }).join('');
 
         artsEl.innerHTML = suggestCards;
 
-        // Délégation de clic — Sprint 4 : un clic mène directement à la
-        // fiche individuelle de l'outil dans le Key-Store (pour l'acheter).
+        // Délégation de clic — un clic mène directement à la fiche
+        // individuelle de l'outil dans le Key-Store (pour l'acheter).
         if (!artsEl.dataset.bound) {
             artsEl.dataset.bound = '1';
             artsEl.addEventListener('click', e => {
@@ -758,13 +824,13 @@ export function renderDashboard() {
             });
         }
 
-        // Mise à jour du libellé de la pill Key-Store (le span dédié,
-        // pour ne pas écraser l'icône et la flèche du bouton)
+        // Libellé de la pill Key-Store : nb total d'apps à découvrir
+        // (le pool complet, pas les 4 affichées) — la porte vers l'exhaustif.
         const ksCountEl = document.getElementById('kstore-badge-label');
         if (ksCountEl) {
-            const total = newOnly.length;
-            ksCountEl.textContent = total > 0
-                ? `Key-Store · ${total} nouveauté${total > 1 ? 's' : ''}`
+            const total = suggestPool.length;
+            ksCountEl.textContent = total > 4
+                ? `Key-Store · ${total} à découvrir`
                 : 'Key-Store';
         }
     }
