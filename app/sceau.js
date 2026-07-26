@@ -41,7 +41,7 @@ let _rec = null;           // session MediaRecorder en cours
 let _recTimer = null;
 let _fileSel = null;       // File choisi (mode fichier)
 let _unlockMode = 'code';  // 'code' (passphrase générée) | 'qa' (question/réponse) | 'email'
-let _codeStyle = 'fort';   // 'fort' (16 car. ~80 bits) | 'mots' (4 mots dictables)
+let _codeStyle = 'fort';   // 'fort' (16 car. ~79 bits) | 'mots' (3 mots + nombre, ~30,5 bits)
 let _draft = {};           // valeurs saisies, préservées entre les re-render (bascules de mode)
 
 // Capture les champs du formulaire de création AVANT un re-render (sinon une
@@ -99,10 +99,15 @@ function _genPassphrase() {
   return out; // ex. K7PQ-9XMR-4RTV-8WNH
 }
 
-// Variante « facile à dicter » : 4 mots français + un nombre
-// (ex. tigre-banane-orage-77). Moins d'entropie que le code fort
-// (~39 bits vs ~80) mais le verrou OPRF 3-essais protège l'attaque
-// EN LIGNE — le compromis est assumé et affiché à l'utilisateur.
+// Variante « facile à dicter » : 3 mots français + un nombre
+// (ex. tigre-banane-orage-77).
+// ⚠️ CHIFFRE CORRIGÉ (audit sept. 2026) : ce commentaire annonçait
+// « 4 mots » et « ~39 bits ». La fonction en tire 3, et le compte exact
+// est 3 × log2(256) + log2(90) = 24 + 6,49 = **30,5 bits** — la moitié
+// du plancher de 60 bits fixé par SCEAU_CRYPTO_SPEC.md §1.
+// Ça reste solide EN LIGNE (le verrou des 3 essais tient), mais c'est
+// la seule défense dans le scénario « base + clé maître volées » de la
+// spec §4. Le compromis est désormais AFFICHÉ par la jauge (_secLevel).
 // Mots courts, sans accent, phonétiquement distincts (dictée téléphone).
 const _WORDS = (
   'tigre lion loup ours renard biche lapin chat chien cheval ' +
@@ -132,6 +137,71 @@ const _WORDS = (
   'branche rameau racine feuille bourgeon pollen nectar sillon rose tulipe ' +
   'jasmin lilas violette iris muguet pivoine'
 ).split(' ');
+
+// ── Jauge de niveau de protection (audit sept. 2026) ────────────
+// POURQUOI. Les trois modes de déverrouillage n'offrent PAS la même
+// garantie, mais l'interface les présentait côte à côte comme des
+// options équivalentes — et la promesse « même nous ne pouvons pas
+// la lire » s'affichait au-dessus des trois. Ce n'était vrai que de
+// deux d'entre eux.
+// On ne retire aucun mode : dicter un code au téléphone ou joindre
+// quelqu'un par email sont des besoins réels. On rend simplement le
+// compromis VISIBLE au moment où l'utilisateur choisit.
+// Le texte s'adresse à quelqu'un qui n'y connaît rien : pas de
+// « chiffrement », pas d'« entropie », pas de « serveur aveugle ».
+function _secLevel() {
+  if (_unlockMode === 'email') {
+    return {
+      n: 1,
+      titre: 'Protection réduite',
+      texte: 'Pour vous envoyer le code par email, nous devons le voir passer. '
+           + 'Pendant ces quelques secondes, nous serions techniquement capables '
+           + 'd\'ouvrir le message. Nous ne le conservons pas. '
+           + 'Si vous pouvez transmettre le code autrement — de vive voix, par SMS — préférez-le.',
+    };
+  }
+  if (_unlockMode === 'qa') {
+    return {
+      n: 2,
+      titre: 'Bonne protection, selon votre question',
+      texte: 'La réponse ne quitte jamais votre appareil : nous ne pouvons pas ouvrir le message. '
+           + 'Tout dépend donc de votre question — « le prénom de ma fille » se devine, '
+           + 'contrairement à « le surnom qu\'on donnait au client le 3 mars ».',
+    };
+  }
+  if (_codeStyle === 'mots') {
+    return {
+      n: 2,
+      titre: 'Bonne protection, plus simple à dicter',
+      texte: 'Le code ne passe jamais par nos serveurs : nous ne pouvons pas ouvrir le message. '
+           + 'Il est plus court que le code maximal pour être dicté sans faute au téléphone — '
+           + 'donc un peu plus facile à deviner pour quelqu\'un qui parviendrait à voler nos machines.',
+    };
+  }
+  return {
+    n: 3,
+    titre: 'Protection maximale',
+    texte: 'Le code ne passe jamais par nos serveurs et n\'est écrit nulle part chez nous. '
+         + 'Nous ne pouvons pas ouvrir ce message — même si on nous l\'ordonnait.',
+  };
+}
+
+function _secGaugeHTML() {
+  const s = _secLevel();
+  const pic = s.n === 3 ? 'shield-check' : s.n === 2 ? 'shield' : 'alert-triangle';
+  const barres = [1, 2, 3]
+    .map(i => `<span class="sceau-gauge-bar${i <= s.n ? ' on' : ''}"></span>`)
+    .join('');
+  return `
+    <div class="sceau-gauge lvl${s.n}">
+      <div class="sceau-gauge-head">
+        ${icon(pic, 15)}
+        <strong>${_esc(s.titre)}</strong>
+        <span class="sceau-gauge-bars" role="img" aria-label="Niveau ${s.n} sur 3">${barres}</span>
+      </div>
+      <p class="sceau-gauge-txt">${_esc(s.texte)}</p>
+    </div>`;
+}
 
 function _genWordsPassphrase() {
   // 256 mots pile → 1 octet aléatoire = tirage parfaitement uniforme
@@ -285,7 +355,12 @@ function _renderList(main) {
     <div class="sceau-head">
       <div>
         <h1>Vos missives</h1>
-        <p class="sceau-sub">Une missive scellée se lit une fois, puis s'autodétruit. Même nous ne pouvons pas la lire.</p>
+        <!-- Audit sept. 2026 : cette phrase affirmait « Même nous ne pouvons pas
+             la lire » au-dessus des TROIS modes, alors que le mode « code par
+             email » nous fait voir le code au passage. On ne garde ici que ce
+             qui est vrai dans tous les cas ; le détail par mode est porté par
+             la jauge (_secGaugeHTML), au moment du choix. -->
+        <p class="sceau-sub">Une missive scellée se lit une fois, puis s'autodétruit. Le message est verrouillé sur votre appareil avant de partir.</p>
       </div>
       <button class="sceau-btn primary" data-act="new">${icon('plus', 18)} Nouvelle missive</button>
     </div>
@@ -362,6 +437,7 @@ function _renderCreate(main) {
           <button type="button" class="sceau-mode ${_unlockMode === 'qa' ? 'on' : ''}" data-act="unlock-qa">${icon('help-circle', 15)} Question / réponse</button>
           <button type="button" class="sceau-mode ${_unlockMode === 'email' ? 'on' : ''}" data-act="unlock-email">${icon('mail', 15)} Code par email</button>
         </div>
+        ${_secGaugeHTML()}
         ${_unlockMode === 'code' ? `
           <div class="sceau-modesw" style="margin-top:8px;">
             <button type="button" class="sceau-mode ${_codeStyle === 'fort' ? 'on' : ''}" data-act="code-fort">${icon('lock', 15)} Sécurité maximale</button>

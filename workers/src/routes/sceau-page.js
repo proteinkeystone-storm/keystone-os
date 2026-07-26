@@ -241,9 +241,18 @@ function _page(base, nonce, bundleHref, sri) {
             '<input id="pw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="••••••••"></div>')+
         '<button id="go">Ouvrir le sceau</button>'+
         '<div class="attempts" id="att">'+attemptsLeft+' essai'+(attemptsLeft>1?'s':'')+' restant'+(attemptsLeft>1?'s':'')+'</div>'+
-        '<div class="foot">Chiffré de bout en bout : votre code n’est jamais transmis, et même nous ne pouvons pas lire ce message. '+
+        // Audit sept. 2026 — cette phrase affirmait « votre code n'est jamais
+        // transmis, et même nous ne pouvons pas lire ce message » dans TOUS les
+        // cas. C'est faux quand l'expéditeur a choisi l'envoi du code par email :
+        // le code passe alors par nos serveurs le temps de l'envoi.
+        // La page ne PEUT pas savoir quel mode a servi (rien ne l'enregistre) —
+        // mais le lecteur, lui, sait comment il a reçu son code. On conditionne
+        // donc sur son vécu, ce qui rend la phrase vraie dans tous les cas.
+        '<div class="foot">Ce message a été verrouillé sur l’appareil de l’expéditeur. '+
+        'Nous n’en gardons qu’une version illisible, et le code qui l’ouvre ne se trouve pas chez nous. '+
+        'Une exception : si votre code vous a été envoyé par un email venant de Missive, ce code est passé par nos serveurs le temps de l’envoi — nous ne l’avons pas conservé. '+
         'Au-delà des essais autorisés, la missive s’autodétruit définitivement.<br>'+
-        'Limite honnête : cette page est servie par notre serveur — la sécurité maximale suppose de nous faire confiance pour le code de cette page.</div>'
+        'Limite honnête : cette page vous est servie par notre serveur. Une sécurité totale supposerait de nous faire confiance pour le code de cette page — c’est la limite de tout coffre accessible depuis un navigateur.</div>'
       );
       const pw = document.getElementById('pw'), go = document.getElementById('go'), att = document.getElementById('att');
       pw.focus();
