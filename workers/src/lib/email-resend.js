@@ -48,9 +48,40 @@ async function _logEmail(env, { to, subject, status, provider_id, error }) {
   } catch (_) { /* best-effort */ }
 }
 
-export async function sendEmail(env, { to, subject, html, replyTo, bcc }) {
+// ── AUTH-5 — dispatch fournisseur ──────────────────────────────
+// KS_EMAIL_PROVIDER = 'resend' (défaut) | 'scaleway'
+// Bascule SANS redéploiement : c'est une var d'environnement.
+// Scaleway TEM = souveraineté UE (décision du 26/07/2026, cf.
+// HANDOFF_AUTH_DURCISSEMENT.md) — actif seulement quand le domaine
+// expéditeur est validé chez Scaleway et les secrets posés.
+export async function sendEmail(env, opts) {
+  const provider = (env.KS_EMAIL_PROVIDER || 'resend').toLowerCase();
+  return provider === 'scaleway'
+    ? _sendScaleway(env, opts)
+    : _sendResend(env, opts);
+}
+
+// 'Keystone OS <auth@mail.x.com>' → { name: 'Keystone OS', email: 'auth@mail.x.com' }
+function _parseFrom(raw) {
+  const m = /^(.*?)\s*<([^>]+)>$/.exec((raw || '').trim());
+  if (m) return { name: m[1].trim() || 'Keystone OS', email: m[2].trim() };
+  return { name: 'Keystone OS', email: (raw || '').trim() };
+}
+
+// Texte brut minimal dérivé du HTML (TEM exige un champ text)
+function _htmlToText(html) {
+  return (html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 5000) || ' ';
+}
+
+async function _sendResend(env, { to, subject, html, replyTo, bcc }) {
   if (!env.KS_RESEND_KEY) throw new Error('KS_RESEND_KEY manquant');
-  const from = env.KS_RESEND_FROM || 'Keystone OS <onboarding@resend.dev>';
+  const from = env.KS_EMAIL_FROM || env.KS_RESEND_FROM || 'Keystone OS <onboarding@resend.dev>';
 
   const body = { from, to: Array.isArray(to) ? to : [to], subject, html };
   if (replyTo) body.reply_to = replyTo;
@@ -72,6 +103,65 @@ export async function sendEmail(env, { to, subject, html, replyTo, bcc }) {
   const out = await res.json();
   await _logEmail(env, { to, subject, status: 'sent', provider_id: out?.id });
   return out;
+}
+
+// ── Scaleway TEM (fr-par) ──────────────────────────────────────
+// POST https://api.scaleway.com/transactional-email/v1alpha1/regions/{r}/emails
+// Auth : X-Auth-Token (clé secrète IAM). Secrets requis :
+//   KS_SCW_SECRET_KEY (wrangler secret) · KS_SCW_PROJECT_ID (var)
+//   KS_EMAIL_FROM = 'Keystone OS <auth@mail.protein-keystone.com>'
+async function _sendScaleway(env, { to, subject, html, replyTo, bcc }) {
+  if (!env.KS_SCW_SECRET_KEY) throw new Error('KS_SCW_SECRET_KEY manquant');
+  if (!env.KS_SCW_PROJECT_ID) throw new Error('KS_SCW_PROJECT_ID manquant');
+  const region = env.KS_SCW_REGION || 'fr-par';
+  const from = _parseFrom(env.KS_EMAIL_FROM || env.KS_RESEND_FROM);
+  if (!from.email) throw new Error('KS_EMAIL_FROM manquant');
+
+  const url = `https://api.scaleway.com/transactional-email/v1alpha1/regions/${region}/emails`;
+  const recipients = (Array.isArray(to) ? to : [to]).map(e => ({ email: e }));
+  const body = {
+    from,
+    to: recipients,
+    subject,
+    html,
+    text: _htmlToText(html),
+    project_id: env.KS_SCW_PROJECT_ID,
+  };
+  if (replyTo) body.additional_headers = [{ key: 'Reply-To', value: replyTo }];
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'X-Auth-Token': env.KS_SCW_SECRET_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    await _logEmail(env, { to, subject, status: 'failed', error: `Scaleway ${res.status}: ${txt.slice(0, 200)}` });
+    throw new Error(`Scaleway ${res.status}: ${txt.slice(0, 200)}`);
+  }
+  const out = await res.json();
+  const id = out?.emails?.[0]?.message_id || out?.emails?.[0]?.id || null;
+  await _logEmail(env, { to, subject, status: 'sent', provider_id: id ? `scw:${id}` : 'scw' });
+
+  // BCC : TEM v1alpha1 n'a pas de champ bcc → copie séparée, best-effort
+  // (l'échec de la copie ne casse pas l'envoi principal).
+  if (bcc) {
+    const bccList = Array.isArray(bcc) ? bcc : [bcc];
+    for (const b of bccList) {
+      try {
+        await fetch(url, {
+          method: 'POST',
+          headers: { 'X-Auth-Token': env.KS_SCW_SECRET_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...body, to: [{ email: b }] }),
+        });
+      } catch (_) { /* best-effort */ }
+    }
+  }
+
+  return { id: id ? `scw:${id}` : 'scw', provider: 'scaleway' };
 }
 
 // ── Template HTML : livraison de la clé après paiement ────────

@@ -63,13 +63,19 @@ Conséquences :
 - Throttle **1/60 s par email** + 5/h par email + 20/h par IP. Dépassement → même réponse 200 silencieuse que le cas nominal (le brief exigeait l'indistinguabilité ; le 429 explicite a été retiré).
 - `magic_links` ne reçoit toujours une ligne QUE pour les comptes réels (pas de pollution).
 
-### 🔲 AUTH-5 — Délivrabilité (P3) — CODE PARTIEL, ACTIONS STÉPHANE REQUISES
-Fait ce chantier : table `email_log` (destinataire, sujet, statut, id Resend) alimentée par `sendEmail()` — on peut répondre à « je n'ai rien reçu » sans deviner.
-Reste (actions console/DNS, impossibles sans toi) :
-1. **[DÉCISION D3 + SOUVERAINETÉ]** choisir le fournisseur définitif. ⚠️ Resend = le dernier maillon qui fait sortir de la donnée perso d'UE (cf. mémoire `resend-souverainete-email`, à trancher avant sept.). Candidats UE : Scaleway TEM (FR), Mailjet (FR), Brevo (FR). Si on reste sur Resend : l'assumer au DPA.
-2. Domaine expéditeur dédié `auth@mail.protein-keystone.com` (ou équivalent) : SPF + DKIM + DMARC, 4 enregistrements DNS chez le fournisseur choisi, puis `wrangler secret put`/var `KS_RESEND_FROM`.
-3. Webhook statut fournisseur (bounce/delivered) → route à créer une fois le fournisseur tranché.
-4. Critère : ≥ 9/10 sur mail-tester.com, tests réels Gmail + Outlook + OVH/Orange.
+### 🟡 AUTH-5 — Délivrabilité (P3) — **D3 TRANCHÉE : SCALEWAY TEM** (26/07), code câblé, DNS/console restent
+Fait :
+- Table `email_log` (destinataire, sujet, statut, id fournisseur) alimentée par `sendEmail()`.
+- **Dispatch fournisseur dans `lib/email-resend.js`** : `KS_EMAIL_PROVIDER = 'resend' (défaut) | 'scaleway'` — bascule par VAR, sans redéploiement. Chemin Scaleway = API TEM `fr-par` (`X-Auth-Token`), from décomposé, `text` dérivé du html, Reply-To en `additional_headers`, bcc en copies séparées, ids `scw:` dans `email_log`. Testé unitaire 13/13 (`test/test-email-provider.mjs`).
+- Coût : 300 mails/mois gratuits puis 0,25 €/1000, zéro abonnement — quasi 0 € pendant la beta.
+
+Reste (actions console/DNS Stéphane, puis bascule) :
+1. Console Scaleway : créer le projet (ou réutiliser), activer Transactional Email, **ajouter le domaine `mail.protein-keystone.com`** → Scaleway affiche les enregistrements DNS (SPF include, DKIM, DMARC, MX de retour) à poser chez le registrar de protein-keystone.com.
+2. IAM : créer une clé API avec la permission TEM → `cd workers && npx wrangler secret put KS_SCW_SECRET_KEY`.
+3. Vars wrangler.toml (ou dashboard) : `KS_SCW_PROJECT_ID`, `KS_EMAIL_FROM = "Keystone OS <auth@mail.protein-keystone.com>"`, puis **`KS_EMAIL_PROVIDER = "scaleway"`** une fois le domaine « validé » chez Scaleway.
+4. Rollback instantané : repasser `KS_EMAIL_PROVIDER` à `resend`.
+5. Webhook statut TEM (bounce/delivered) → route à créer après la bascule.
+6. Critère : ≥ 9/10 sur mail-tester.com, tests réels Gmail + Outlook + OVH/Orange.
 
 ### 🔲 AUTH-6 — SSO entreprise (OIDC) — À FAIRE (prochain « go SSO »)
 Décision D4/D5 : pas de mot de passe (le magic link hérite du MFA de la boîte d'entreprise) ; la réponse aux exigences institutionnelles = **SSO**, pas mot de passe.
