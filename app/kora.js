@@ -394,8 +394,11 @@ function _frame(now) {
      ⚠ ces overlays vivent dans le DOM éteints : tester la classe
      d'activation, jamais la présence (leçon lockfix). */
   /* + panneau Réglages : il glisse par-dessus la cc-bar (z 601 < nos
-     100002) — sans ça le galet flotte sur sa croix de fermeture. */
-  const locked = !!document.querySelector('#ks-lockscreen.ls-visible, #ks-fullscreen.open, #settings-panel.open');
+     100002) — sans ça le galet flotte sur sa croix de fermeture.
+     + inspecteur desK (.dk-insp, z 10005) : même géométrie — il recouvre
+     le header d'outil qui héberge le dock, sa croix tombe pile sous le
+     galet (retour Stéphane 26/07, panneaux Nouvel article & Pré-presse). */
+  const locked = !!document.querySelector('#ks-lockscreen.ls-visible, #ks-fullscreen.open, #settings-panel.open, .dk-insp.on');
   _cv.style.visibility = locked ? 'hidden' : 'visible';
   if (locked && _panel.classList.contains('kora-open')) koraClose();
 
