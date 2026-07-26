@@ -377,6 +377,33 @@ export async function handleKeyBrandAssetUpload(request, env, chartId) {
 // le contrôle (anti-SSRF, image only, SVG sanitizé), le stocke en asset logo.
 // Mêmes garde-fous que l'upload manuel — c'est juste la source qui change.
 const KB_LOGO_MIME_OK = ['image/svg+xml', 'image/png', 'image/jpeg', 'image/webp'];
+
+/* ── Servir un SVG sans lui donner le droit de s'exécuter ─────────
+   (audit sept. 2026 · M-2)
+
+   Un SVG n'est pas une image comme les autres : c'est un document XML, et
+   ouvert DIRECTEMENT dans un onglet il exécute son JavaScript. Un client
+   pouvait donc déposer un logo piégé, puis diffuser le lien du fichier :
+   le script s'exécutait sur l'origine du worker.
+
+   Trois en-têtes, appliqués UNIQUEMENT au SVG — un PNG ou un JPEG garde
+   exactement le comportement d'avant, donc zéro risque de régression sur
+   le cas courant :
+     · Content-Disposition: attachment → une navigation directe télécharge
+       au lieu d'afficher. Sans effet sur le rendu : le front récupère ses
+       fichiers en `fetch()` + blob, et un <img> ignore cet en-tête.
+     · CSP sandbox → même ouvert comme document, plus aucun script.
+     · nosniff → le navigateur ne réinterprète pas le type déclaré.
+
+   On ne bloque donc PAS le SVG (il reste un format de logo légitime) :
+   on lui retire seulement le droit de se comporter en page web. */
+function _hardenIfSvg(headers, mime, name) {
+  if (String(mime || '').toLowerCase() !== 'image/svg+xml') return headers;
+  headers['Content-Disposition'] = `attachment; filename="${String(name || 'logo.svg').replace(/"/g, '')}"`;
+  headers['Content-Security-Policy'] = "sandbox; default-src 'none'";
+  headers['X-Content-Type-Options'] = 'nosniff';
+  return headers;
+}
 export async function handleKeyBrandImportLogo(request, env, chartId) {
   const origin = getAllowedOrigin(env, request);
   const gate = await _gate(request, env, origin);
@@ -447,6 +474,7 @@ export async function handleKeyBrandFileServe(request, env, id) {
     'Access-Control-Allow-Origin': origin,
   };
   if (dl) headers['Content-Disposition'] = `attachment; filename="${(row.name || 'fichier').replace(/"/g, '')}"`;
+  _hardenIfSvg(headers, obj.httpMetadata?.contentType || row.mime, row.name);
   return new Response(obj.body, { status: 200, headers });
 }
 
@@ -588,6 +616,7 @@ export async function handleKeyBrandPublicFile(request, env, slug, assetId) {
       'Access-Control-Allow-Origin': origin,
     };
     if (q.get('dl') === '1') headers['Content-Disposition'] = `attachment; filename="${(row.name || 'fichier').replace(/"/g, '')}"`;
+    _hardenIfSvg(headers, obj.httpMetadata?.contentType || row.mime, row.name);
     return new Response(obj.body, { status: 200, headers });
   } catch (e) { return err('Lecture impossible', 500, origin); }
 }

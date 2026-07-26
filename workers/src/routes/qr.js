@@ -164,6 +164,56 @@ async function _authTenant(request, env) {
   return null;
 }
 
+/* ── En-têtes de sécurité des pages HTML publiques ────────────────
+   (audit sept. 2026 · M-8)
+
+   Ces pages sont les plus exposées de tout Keystone : ce sont elles que
+   scannent les clients de nos clients. Le worker ne posait AUCUN en-tête
+   de sécurité — seules `/b/` et les pages Sceau en avaient.
+
+   À décharge, les gabarits sont bien écrits : tout passe par `escHtml`,
+   `safeUrl` (qui refuse `javascript:` et `data:text/html`) et `safeColor`.
+   Cette CSP n'est donc pas un correctif, c'est un FILET — pour l'injection
+   qu'on n'aura pas vue.
+
+   `'unsafe-inline'` reste sur script-src : les douze gabarits embarquent
+   leurs scripts dans la page (jeux, animations). Les remplacer par un
+   nonce est possible ici — le worker génère la page à chaque requête,
+   contrairement au front statique — mais c'est un chantier à part.
+
+   L'essentiel du gain est ailleurs, et il est réel :
+     · `default-src 'none'` — rien n'est autorisé qui ne soit listé
+     · `connect-src` restreint — même en cas d'injection, les données
+       volées n'ont nulle part où partir
+     · `base-uri 'none'` — pas de détournement des URL relatives
+     · `frame-ancestors 'none'` — la page ne peut pas être encadrée
+       (clickjacking sur un QR de paiement ou de fidélité)
+   Les images restent larges (`https:` + `data:`) : logos et visuels sont
+   fournis par le client, ils viennent de n'importe où. */
+const SDQR_CSP = [
+  "default-src 'none'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "font-src 'self' data:",
+  "media-src 'self' data: https:",
+  "connect-src 'self' https://keystone-os-api.keystone-os.workers.dev",
+  "form-action 'self'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+/** En-têtes communs à toute page HTML publique servie par le worker. */
+function _htmlHeaders(cacheControl) {
+  return {
+    'Content-Type':            'text/html; charset=utf-8',
+    'Cache-Control':           cacheControl,
+    'Content-Security-Policy': SDQR_CSP,
+    'X-Content-Type-Options':  'nosniff',
+    'Referrer-Policy':         'strict-origin-when-cross-origin',
+  };
+}
+
 // ══════════════════════════════════════════════════════════════════
 // GET /r/:shortId — redirect public + log scan (cœur SDQR)
 // Sprint SDQR-2.5 : dispatch selon qr_type :
@@ -270,10 +320,7 @@ export async function handleQrRedirect(request, env, shortId) {
   if (type === 'text') {
     return new Response(_renderTextPage(row.encoded_payload || ''), {
       status: 200,
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-store',
-      },
+      headers: _htmlHeaders('no-store'),
     });
   }
 
@@ -1128,10 +1175,7 @@ export async function handlePrivacyPage(request, env) {
   const dpoEmail = env.SDQR_DPO_EMAIL || 'protein.keystone@gmail.com';
   return new Response(_renderPrivacyPage(retentionDays, dpoEmail), {
     status: 200,
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'public, max-age=3600',
-    },
+    headers: _htmlHeaders('public, max-age=3600'),
   });
 }
 
@@ -1312,10 +1356,7 @@ export async function handleSmartQrInterstitial(request, env, shortId, ctx) {
   const html        = template.renderHTML(enrichedQr, scanCtx);
   return new Response(html, {
     status:  200,
-    headers: {
-      'Content-Type':  'text/html; charset=utf-8',
-      'Cache-Control': 'no-store', // contextuel par essence
-    },
+    headers: _htmlHeaders('no-store'),   // contextuel par essence
   });
 }
 
