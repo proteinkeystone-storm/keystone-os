@@ -125,6 +125,26 @@
   }
   .result-meta dd::after { content: ""; display: block; margin-bottom: 6px; }
 
+  /* Remise du lot (audit sept. 2026) — le code reste authentique une fois
+     remis ; on distingue « pas encore remis » de « déjà remis ». */
+  .redeem-btn {
+    width: 100%; margin-top: 14px;
+    padding: 13px 18px; border: 0; border-radius: 12px;
+    background: var(--ok, #34d399); color: #06281c;
+    font: inherit; font-weight: 700; font-size: 14.5px;
+    letter-spacing: -.01em; cursor: pointer;
+  }
+  .redeem-btn:disabled { opacity: .55; cursor: default; }
+  .redeem-note {
+    margin: 12px 0 0; padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(251,191,36,.10);
+    border: 1.5px solid rgba(251,191,36,.45);
+    color: #fbbf24;
+    font-size: 12.5px; line-height: 1.5; font-weight: 600;
+    text-align: center;
+  }
+
   .help {
     margin-top: 24px;
     font-size: 11.5px; color: var(--mut);
@@ -146,7 +166,7 @@
 
   <div class="result" id="result"></div>
 
-  <p class="help">Cette page permet aux commerçants partenaires de confirmer qu'un code WIN-XXXX-XXXX présenté par un client est bien issu d'un vrai gain enregistré. Le code reste valide tant que le QR existe.</p>
+  <p class="help">Cette page permet aux commerçants partenaires de confirmer qu'un code WIN-XXXX-XXXX présenté par un client est bien issu d'un vrai gain enregistré. Vérifier ne consomme rien : vous pouvez le faire autant de fois que nécessaire. Quand vous remettez le lot au client, appuyez sur « Marquer comme utilisé » — le code restera authentique, mais il indiquera désormais la date de remise.</p>
 </div>
 
 <script>
@@ -196,6 +216,9 @@
         const sourceTag  = isLoyalty
           ? '<dt>Type</dt><dd>Carte de fidélité</dd>'
           : '<dt>Type</dt><dd>Jeu (machine à sous / carte à gratter)</dd>';
+        // Audit sept. 2026 : le code reste AUTHENTIQUE une fois remis — on
+        // ne le déclare jamais faux. On affiche l'état, et le commerçant
+        // garde la décision d'honorer ou non.
         showResult(
           '<span class="result-icon">✓</span>' +
           '<p class="result-status">Code authentique</p>' +
@@ -204,9 +227,14 @@
             sourceTag +
             '<dt>' + dateLabel + '</dt><dd>' + fmtDate(data.played_at) + '</dd>' +
             (data.message_gain ? '<dt>' + offreLabel + '</dt><dd>' + data.message_gain + '</dd>' : '') +
-          '</dl>',
+          '</dl>' +
+          (data.redeemed
+            ? '<p class="redeem-note">⚠ Lot déjà remis le ' + fmtDate(data.redeemed_at) + '</p>'
+            : '<button type="button" class="redeem-btn" id="redeem-btn">Marquer comme utilisé</button>'),
           'ok'
         );
+        const rbtn = document.getElementById('redeem-btn');
+        if (rbtn) rbtn.addEventListener('click', () => redeem(code, rbtn));
       } else {
         const reason = data.reason === 'format_invalide' ? 'Format invalide'
                       : data.reason === 'code_inconnu'   ? 'Code inconnu dans notre système'
@@ -218,6 +246,42 @@
     } finally {
       btn.disabled = false;
       btn.textContent = 'Vérifier l\'authenticité';
+    }
+  }
+
+  // Remise du lot — pose redeemed_at côté serveur (audit sept. 2026).
+  // Geste EXPLICITE : vérifier ne consomme rien, seul ce bouton consomme.
+  // Le serveur fait un UPDATE conditionnel, donc deux caisses simultanées
+  // ne peuvent pas honorer le même code deux fois.
+  async function redeem(code, rbtn) {
+    rbtn.disabled = true;
+    rbtn.textContent = '⏳ Enregistrement…';
+    try {
+      const r = await fetch(API_BASE + '/api/smartqr/redeem-win', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code }),
+      });
+      const d = await r.json();
+      const note = document.createElement('p');
+      note.className = 'redeem-note';
+      if (d.ok) {
+        note.textContent = '✓ Lot remis — enregistré le ' + fmtDate(d.redeemed_at);
+      } else if (d.reason === 'deja_utilise') {
+        note.textContent = '⚠ Ce lot avait déjà été remis le ' + fmtDate(d.redeemed_at);
+      } else if (d.reason === 'trop_de_tentatives') {
+        note.textContent = '⚠ Trop de vérifications depuis cet appareil aujourd\'hui.';
+      } else {
+        note.textContent = '⚠ Code introuvable — rien n\'a été enregistré.';
+      }
+      rbtn.replaceWith(note);
+    } catch (e) {
+      rbtn.disabled = false;
+      rbtn.textContent = 'Marquer comme utilisé';
+      const note = document.createElement('p');
+      note.className = 'redeem-note';
+      note.textContent = '⚠ Réseau indisponible — le lot n\'a PAS été marqué. Réessaie.';
+      rbtn.after(note);
     }
   }
 

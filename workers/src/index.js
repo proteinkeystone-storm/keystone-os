@@ -78,7 +78,7 @@ import {
   handlePulsaResponsesList, handlePulsaResponseGet, handlePulsaResponsesCsv,
   handlePulsaResponsesListBySlug, handlePulsaResponsePatch,
 } from './routes/pulsa-responses.js';
-import { handleQrRedirect, handleCreateQr, handleListQr, handleQrOverview, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrLoyaltyStamp, handleSmartQrConcierge } from './routes/qr.js';
+import { handleQrRedirect, handleCreateQr, handleListQr, handleQrOverview, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrRedeemWin, handleSmartQrLoyaltyStamp, handleSmartQrConcierge } from './routes/qr.js';
 import { handleSdqrAsset } from './routes/sdqr-assets.js';
 // ── Sceau — secret usage-unique scellé E2E+OPRF (Pad O-SEC-001 · S1) ──
 // Route publique /s/ DISTINCTE de /r/ (SDQR prod) — on ne touche pas le hot-path QR.
@@ -964,6 +964,11 @@ export default {
       // V4.3 UX (2026-05-26) — Vérification d'authenticité d'un code WIN-XXXX-XXXX
       // par le commerçant. Public, GET avec query ?code=WIN-XXXX-XXXX.
       if (path === '/api/smartqr/verify-win' && method === 'GET') return handleSmartQrVerifyWin(request, env);
+      // Audit sept. 2026 (chantier 7) — « Marquer comme utilisé ». Pose
+      // redeemed_at, qui n'était jamais écrit : un code de gain restait
+      // sinon validable à l'infini. Public comme verify-win (la page
+      // commerçant est statique et sans compte), borné anti-balayage.
+      if (path === '/api/smartqr/redeem-win' && (method === 'POST' || method === 'OPTIONS')) return handleSmartQrRedeemWin(request, env);
       // Smart QR V4.4 (2026-05-26) — endpoint authoritative carte de fidélité.
       // Incrémente le compteur de tampons côté serveur, applique la règle
       // de validité, débloque la récompense au Nᵉ tampon avec code signé.
