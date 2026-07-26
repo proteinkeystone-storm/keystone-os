@@ -61,6 +61,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { json, err, parseBody, generateId, getAllowedOrigin } from '../lib/auth.js';
+import { sendEmail, emailConfigured } from '../lib/email-resend.js';
 import { requireJWT } from '../lib/jwt.js';
 import { presignR2, r2PresignReady } from '../lib/r2-presign.js';
 
@@ -655,7 +656,7 @@ export async function handleIssueGet(request, env, issueId) {
     return json({
       ok: true, issue, pages, slots, articles, rubriques, files, contribs, relances, inbox,
       casier, quota: { used, max: QUOTA_ISSUE },
-      mailer: !!env.KS_RESEND_KEY,
+      mailer: emailConfigured(env),
       email: { domain: env.DK_EMAIL_DOMAIN || null, slug: (pubRow && pubRow.slug) || null },
       now: new Date().toISOString(),
     }, 200, origin);
@@ -1545,7 +1546,7 @@ export async function handleRelanceSend(request, env, artId) {
   const art = await env.DB.prepare(`SELECT ${ART_COLS} FROM dk_articles WHERE id = ?`).bind(artId).first();
   if (!art) return err('Article introuvable', 404, origin);
   if (!['propose', 'attendu'].includes(art.status)) return err('Cet article n\'attend plus de copie — la relance n\'a plus d\'objet', 400, origin);
-  if (!env.KS_RESEND_KEY) {
+  if (!emailConfigured(env)) {
     return err('L\'envoi de relances n\'est pas encore activé sur ce serveur (clé d\'envoi absente). Utilisez « Via ma messagerie » en attendant.', 503, origin);
   }
 
@@ -1569,27 +1570,18 @@ export async function handleRelanceSend(request, env, artId) {
 
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:15px;line-height:1.55;color:#1c1c1e">${esc(text).replace(/\n/g, '<br>')}</div>`;
-  const from = env.KS_RESEND_FROM ? String(env.KS_RESEND_FROM) : 'desK — la rédaction <desk@protein-keystone.com>';
-  const payload = { from, to: [email], subject, html, text };
-  if (u.email) payload.reply_to = u.email;   // les réponses reviennent à la rédactrice
-
-  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 15000);
-  let res, data = {};
+  // Dispatcher souverain (Scaleway/Resend selon KS_EMAIL_PROVIDER) — le
+  // nom d'affichage desK est conservé, l'adresse reste celle du domaine
+  // d'envoi validé. reply_to = la rédactrice.
   try {
-    res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${env.KS_RESEND_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload), signal: ctrl.signal,
+    await sendEmail(env, {
+      to: email, subject, html, text,
+      from: 'desK — la rédaction <desk@protein-keystone.com>',
+      replyTo: u.email || undefined,
     });
-    try { data = await res.json(); } catch (_) {}
   } catch (e) {
-    await revert(); clearTimeout(timer);
-    return err('Envoi impossible : ' + ((e && e.name === 'AbortError') ? 'délai dépassé' : 'réseau'), 502, origin);
-  }
-  clearTimeout(timer);
-  if (!res.ok) {
     await revert();
-    return err('Envoi refusé par le service : ' + String(data.message || data.name || `HTTP ${res.status}`), 502, origin);
+    return err('Envoi refusé par le service : ' + String(e?.message || 'réseau'), 502, origin);
   }
 
   const by = _byName(u);

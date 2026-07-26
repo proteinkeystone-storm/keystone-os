@@ -26,7 +26,7 @@ import {
   requireDevice, requireAdmin,
 } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
-import { sendEmail } from '../lib/email-resend.js';
+import { sendEmail, emailConfigured } from '../lib/email-resend.js';
 
 // ── Auth resolver (mêmes 3 tiers que pulsa-forms) ─────────────
 async function _resolveOwner(request, env) {
@@ -163,7 +163,7 @@ export async function handlePulsaSubmit(request, env, slug) {
 
   // 4. Envoi mail (best-effort)
   let mailStatus = 'skipped';
-  if (recipients.length > 0 && env.KS_RESEND_KEY) {
+  if (recipients.length > 0 && emailConfigured(env)) {
     try {
       const subject = `Nouvelle réponse — ${formRow.title || 'Pulsa'}`;
       const html = _renderResponseEmail({

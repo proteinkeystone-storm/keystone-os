@@ -18,7 +18,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { json, err, requireAdmin, getAllowedOrigin } from '../lib/auth.js';
-import { sendEmail } from '../lib/email-resend.js';
+import { sendEmail, emailConfigured } from '../lib/email-resend.js';
 // Santés appelées EN INTERNE (pas de self-HTTP) — cf. probeInproc ci-dessous.
 import { handleDeskHealth }        from './desk.js';
 import { handleSmartAgentHealth }  from './smart-agent.js';
@@ -162,7 +162,7 @@ export async function runSelfCheck(env, opts = {}) {
 
 // ── E-mail d'alerte / de rétablissement ─────────────────────────
 async function sendAlert(env, { down, checks, failed, consecutive }) {
-  if (!env.KS_RESEND_KEY) { console.warn('[ops-selfcheck] KS_RESEND_KEY absent — pas d\'e-mail'); return; }
+  if (!emailConfigured(env)) { console.warn('[ops-selfcheck] envoi email non configuré — pas d\'e-mail'); return; }
   const subject = down
     ? `⚠ Keystone — anomalie détectée (${failed.join(', ')})`
     : `✓ Keystone — rétabli`;

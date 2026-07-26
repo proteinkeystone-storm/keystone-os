@@ -24,7 +24,7 @@
 import { json, err, parseBody, getAllowedOrigin, requireDevice, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 import { encrypt as encAtRest, decrypt as decAtRest } from '../lib/crypto.js';
-import { sendEmail } from '../lib/email-resend.js';
+import { sendEmail, emailConfigured } from '../lib/email-resend.js';
 import {
   Oprf, VOPRFServer, EvaluationRequest, randomPrivateKey, generatePublicKey,
 } from '@cloudflare/voprf-ts';
@@ -284,7 +284,7 @@ export async function handleSceauEmail(request, env, shortId) {
   const code = typeof body.code === 'string' ? body.code.slice(0, 200) : '';
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return err('Email invalide', 400, origin);
   if (!code) return err('Code requis', 400, origin);
-  if (!env.KS_RESEND_KEY) return err('Service email non configuré', 503, origin);
+  if (!emailConfigured(env)) return err('Service email non configuré', 503, origin);
 
   // SÉCURITÉ : l'email ne porte QUE le code — JAMAIS le lien. La séparation en
   // deux canaux (lien d'un côté, code de l'autre) est le seul intérêt de ce

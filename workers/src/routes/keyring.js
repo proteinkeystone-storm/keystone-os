@@ -20,7 +20,7 @@
 import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
 import { sendPush } from '../lib/webpush.js';
-import { sendEmail } from '../lib/email-resend.js';
+import { sendEmail, emailConfigured } from '../lib/email-resend.js';
 import { escHtml } from './smart-templates/_shared.js';
 
 export const KR_VERSION = 'KR-1';
@@ -193,7 +193,7 @@ export async function handleKeyringRing(request, env) {
   // ne bloque jamais la reponse au visiteur. Envoye si alert_email est renseigne.
   const ae = String(target.td.alert_email || '').trim();
   const alertEmail = (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ae) && !/[<>"'\\]/.test(ae)) ? ae : '';
-  if (alertEmail && env.KS_RESEND_KEY) {
+  if (alertEmail && emailConfigured(env)) {
     const who  = name || 'Quelqu\'un';
     const line = motif ? (who + ' : ' + motif) : (who + ' est a votre porte.');
     // Boutons de reponse 1-clic : chaque lien repond pour CE ring (autorise par

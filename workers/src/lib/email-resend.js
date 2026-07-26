@@ -61,6 +61,17 @@ export async function sendEmail(env, opts) {
     : _sendResend(env, opts);
 }
 
+// L'INTERRUPTEUR unique « peut-on envoyer des emails ? » — à utiliser
+// partout à la place de `!!env.KS_RESEND_KEY` : sinon, révoquer la clé
+// Resend éteindrait silencieusement les emails de modules pourtant
+// passés sur Scaleway (keyring, pulsa, sceau, desK, sentinel, ops).
+export function emailConfigured(env) {
+  const provider = (env.KS_EMAIL_PROVIDER || 'resend').toLowerCase();
+  return provider === 'scaleway'
+    ? !!(env.KS_SCW_SECRET_KEY && env.KS_SCW_PROJECT_ID)
+    : !!env.KS_RESEND_KEY;
+}
+
 // 'Keystone OS <auth@mail.x.com>' → { name: 'Keystone OS', email: 'auth@mail.x.com' }
 function _parseFrom(raw) {
   const m = /^(.*?)\s*<([^>]+)>$/.exec((raw || '').trim());
@@ -79,11 +90,12 @@ function _htmlToText(html) {
     .slice(0, 5000) || ' ';
 }
 
-async function _sendResend(env, { to, subject, html, replyTo, bcc }) {
+async function _sendResend(env, { to, subject, html, text, replyTo, bcc, from: fromOverride }) {
   if (!env.KS_RESEND_KEY) throw new Error('KS_RESEND_KEY manquant');
-  const from = env.KS_EMAIL_FROM || env.KS_RESEND_FROM || 'Keystone OS <onboarding@resend.dev>';
+  const from = fromOverride || env.KS_EMAIL_FROM || env.KS_RESEND_FROM || 'Keystone OS <onboarding@resend.dev>';
 
   const body = { from, to: Array.isArray(to) ? to : [to], subject, html };
+  if (text)    body.text     = text;
   if (replyTo) body.reply_to = replyTo;
   if (bcc)     body.bcc      = Array.isArray(bcc) ? bcc : [bcc];
 
@@ -110,12 +122,18 @@ async function _sendResend(env, { to, subject, html, replyTo, bcc }) {
 // Auth : X-Auth-Token (clé secrète IAM). Secrets requis :
 //   KS_SCW_SECRET_KEY (wrangler secret) · KS_SCW_PROJECT_ID (var)
 //   KS_EMAIL_FROM = 'Keystone OS <auth@mail.protein-keystone.com>'
-async function _sendScaleway(env, { to, subject, html, replyTo, bcc }) {
+async function _sendScaleway(env, { to, subject, html, text, replyTo, bcc, from: fromOverride }) {
   if (!env.KS_SCW_SECRET_KEY) throw new Error('KS_SCW_SECRET_KEY manquant');
   if (!env.KS_SCW_PROJECT_ID) throw new Error('KS_SCW_PROJECT_ID manquant');
   const region = env.KS_SCW_REGION || 'fr-par';
-  const from = _parseFrom(env.KS_EMAIL_FROM || env.KS_RESEND_FROM);
-  if (!from.email) throw new Error('KS_EMAIL_FROM manquant');
+  // ⚠ un from custom DOIT rester sur le domaine validé chez Scaleway :
+  // on garde le nom d'affichage demandé mais l'adresse technique du
+  // domaine souverain (sinon rejet TEM). Ex : « desK — la rédaction ».
+  const envFrom = _parseFrom(env.KS_EMAIL_FROM || env.KS_RESEND_FROM);
+  if (!envFrom.email) throw new Error('KS_EMAIL_FROM manquant');
+  const from = fromOverride
+    ? { name: _parseFrom(fromOverride).name, email: envFrom.email }
+    : envFrom;
 
   const url = `https://api.scaleway.com/transactional-email/v1alpha1/regions/${region}/emails`;
   const recipients = (Array.isArray(to) ? to : [to]).map(e => ({ email: e }));
@@ -124,7 +142,7 @@ async function _sendScaleway(env, { to, subject, html, replyTo, bcc }) {
     to: recipients,
     subject,
     html,
-    text: _htmlToText(html),
+    text: text || _htmlToText(html),
     project_id: env.KS_SCW_PROJECT_ID,
   };
   if (replyTo) body.additional_headers = [{ key: 'Reply-To', value: replyTo }];

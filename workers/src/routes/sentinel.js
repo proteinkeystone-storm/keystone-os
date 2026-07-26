@@ -26,6 +26,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
+import { sendEmail, emailConfigured } from '../lib/email-resend.js';
 import { requireJWT, signJWT, verifyJWT } from '../lib/jwt.js';
 // V2 — Search Console : refresh_token Google chiffré au repos (AES-256-GCM).
 import { encrypt, decrypt } from '../lib/crypto.js';
@@ -775,7 +776,7 @@ export async function handleSitesList(request, env) {
   }
   // email_enabled / geo_enabled : le front n'affiche ces surfaces que si elles
   // sont réellement câblées (clé Resend / clé Gemini) → pas d'UI morte avant activation.
-  const emailEnabled = !!(env && (env.KS_RESEND_KEY || env.RESEND_API_KEY));
+  const emailEnabled = !!(env && emailConfigured(env));
   return json({ sites: rows, count: rows.length, limit: _siteLimit(g.plan), plan: g.plan, email_enabled: emailEnabled, geo_enabled: _geoEnabled(env) }, 200, origin);
 }
 
@@ -1016,7 +1017,7 @@ export async function handleSiteCockpit(request, env, id) {
   return json({ cockpit: {
     site: { id: site.id, url: site.url, label: site.label, platform: site.platform, last_ok: site.last_ok, last_status: site.last_status, last_ms: site.last_ms, last_checked_at: site.last_checked_at, next_check_at: site.next_check_at },
     uptime30d, uptimeTrend, series30d, audit, scoreHistory, scoreTrend, ssl, geo, gsc,
-    email_enabled: !!(env && (env.KS_RESEND_KEY || env.RESEND_API_KEY)),
+    email_enabled: !!(env && emailConfigured(env)),
   } }, 200, origin);
 }
 
@@ -1097,26 +1098,19 @@ const EMAIL_DAILY_LIMIT = 20;
 async function _revertEmailLog(env, tenant, day) {
   await env.DB.prepare("UPDATE sentinel_email_log SET count = MAX(count - 1, 0) WHERE tenant_id = ? AND day = ?").bind(tenant, day).run().catch(() => {});
 }
-// Envoi via Resend. Réutilise la clé Resend EXISTANTE de Keystone (KS_RESEND_KEY,
-// domaine déjà vérifié — sert aux e-mails de licence) ; repli sur RESEND_API_KEY
-// dédié si un jour posé. `from` = chaîne prête (« Nom <email> »). Ne lève jamais.
+// Envoi via le dispatcher souverain de lib/email-resend.js (Scaleway TEM
+// par défaut depuis le 26/07/2026). `from` = chaîne prête (« Nom <email> » —
+// sur Scaleway seul le NOM d'affichage est conservé, l'adresse reste celle
+// du domaine validé). Ne lève jamais.
 async function _sendViaResend(env, { from, to, subject, html, text, replyTo }) {
-  const key = env.KS_RESEND_KEY || env.RESEND_API_KEY;
-  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 15000);
+  // Dispatcher souverain (Scaleway/Resend selon KS_EMAIL_PROVIDER) —
+  // même contrat qu'avant : ne lève JAMAIS, retourne { ok, ... }.
   try {
-    const payload = { from, to: [to], subject, html, text };
-    if (replyTo) payload.reply_to = replyTo;
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload), signal: ctrl.signal,
-    });
-    let data = {}; try { data = await res.json(); } catch (_) {}
-    if (!res.ok) return { ok: false, status: res.status, msg: String((data && (data.message || data.name)) || `HTTP ${res.status}`) };
-    return { ok: true, status: res.status, id: data && data.id };
+    const out = await sendEmail(env, { to, subject, html, text, replyTo, from });
+    return { ok: true, status: 200, id: out && out.id };
   } catch (e) {
-    return { ok: false, status: 0, msg: (e && e.name === 'AbortError') ? 'délai dépassé' : ((e && e.message) || 'réseau') };
-  } finally { clearTimeout(timer); }
+    return { ok: false, status: 0, msg: (e && e.message) || 'réseau' };
+  }
 }
 export async function handleSiteSendReport(request, env, id) {
   const origin = getAllowedOrigin(env, request);
@@ -1131,7 +1125,7 @@ export async function handleSiteSendReport(request, env, id) {
   const replyTo = _validEmail(body && body.replyTo) ? String(body.replyTo).trim() : null;
 
   // Envoi configuré ? (clé Resend présente — partagée avec Keystone). Sinon PDF.
-  if (!(env.KS_RESEND_KEY || env.RESEND_API_KEY)) {
+  if (!emailConfigured(env)) {
     return err("L'envoi par e-mail n'est pas encore activé sur ce serveur. En attendant, exportez le rapport en PDF puis transmettez-le.", 503, origin);
   }
 
