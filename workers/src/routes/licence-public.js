@@ -290,6 +290,41 @@ export async function handleRefresh(request, env) {
   const claims = await requireJWT(request, env);
   if (!claims) return err('JWT invalide ou expiré — re-login requis', 401, origin);
 
+  // ── Revalidation de la licence (audit sept. 2026 · E-1) ────────
+  // Ce point d'entrée re-signait le jeton à partir des SEULS claims, sans
+  // jamais consulter la base. Autrement dit : un client remboursé, un
+  // membre d'équipe révoqué ou une licence expirée pouvait prolonger son
+  // accès indéfiniment, un renouvellement après l'autre. C'était la
+  // machine à blanchir un jeton mort — et elle annulait tout l'intérêt
+  // d'une durée de vie courte.
+  //
+  // On relit donc l'état réel avant de re-signer. Fail-open assumé et
+  // cohérent avec lib/app-access : si la base est muette, on ne coupe pas
+  // une session en cours sur un incident d'infrastructure — mais on le dit.
+  if (claims.sub) {
+    let row;
+    try {
+      row = await env.DB
+        .prepare('SELECT plan, is_active, expires_at FROM licences WHERE lookup_hmac = ? LIMIT 1')
+        .bind(claims.sub).first();
+    } catch (_) {
+      console.warn('[auth/refresh] FAIL-OPEN : base injoignable, renouvellement accordé sans vérification');
+      row = null;
+    }
+    if (row) {
+      if (row.is_active === 0) {
+        return err('Licence inactive — reconnexion requise', 403, origin);
+      }
+      if (row.expires_at && new Date(row.expires_at) < new Date()) {
+        return err('Licence expirée — reconnexion requise', 403, origin);
+      }
+      // Le plan a pu changer depuis l'émission (achat, résiliation d'une
+      // app, passage à l'OS) : on renouvelle sur l'état COURANT, pas sur
+      // celui figé dans l'ancien jeton.
+      if (row.plan) claims.plan = row.plan;
+    }
+  }
+
   // On retire les claims de timing existants ; signJWT recalcule iat/exp.
   const { iat: _iat, exp: _exp, nbf: _nbf, ...payload } = claims;
   const jwt = await signJWT(payload, env);

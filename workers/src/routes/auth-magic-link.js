@@ -454,6 +454,13 @@ async function _consumeAndIssueJwt(request, env, origin, link, { fp, via, finger
     .first();
   if (!licence) return err('Licence introuvable', 404, origin);
   if (!licence.is_active) return err('Licence inactive', 403, origin);
+  // Audit sept. 2026 · E-1 — `is_active` était vérifié, `expires_at` non :
+  // une licence expirée mais restée active en base repartait avec un jeton
+  // tout neuf. Même condition qu'à l'activation (licence-public.js) et à
+  // la validation (licence.js) : expires_at nul = pas d'échéance.
+  if (licence.expires_at && new Date(licence.expires_at) < new Date()) {
+    return err('Licence expirée', 403, origin);
+  }
 
   // Consomme le token — gardé, anti-course.
   const upd = await env.DB

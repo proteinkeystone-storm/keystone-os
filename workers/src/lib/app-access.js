@@ -102,20 +102,43 @@ export async function checkAppAccess(env, { path, claims }) {
 
   let row;
   try {
+    // is_active + expires_at lus DANS LA MÊME requête : la révocation ne
+    // coûte pas un aller-retour de plus.
     row = await env.DB
-      .prepare('SELECT plan, owned_assets FROM licences WHERE lookup_hmac = ? LIMIT 1')
+      .prepare('SELECT plan, owned_assets, is_active, expires_at FROM licences WHERE lookup_hmac = ? LIMIT 1')
       .bind(claims.sub).first();
   } catch (_) {
-    return { allowed: true, appId };      // base muette → on ne coupe personne
+    // Base muette → on ne coupe personne. Mais on le DIT : un fail-open
+    // silencieux, c'est une porte grande ouverte qu'on découvre trop tard.
+    console.warn('[app-access] FAIL-OPEN : base injoignable, accès accordé sans vérification', appId);
+    return { allowed: true, appId };
   }
-  if (!row) return { allowed: true, appId };   // licence inconnue → la route jugera
+  if (!row) {
+    console.warn('[app-access] FAIL-OPEN : licence introuvable, accès laissé à la route', appId);
+    return { allowed: true, appId };
+  }
+
+  // ── Révocation (audit sept. 2026 · E-1) ────────────────────────
+  // Jusqu'ici, une fois le jeton émis, plus rien ne relisait l'état de la
+  // licence : un client remboursé ou un membre d'équipe révoqué gardait
+  // ses applications payantes jusqu'à l'expiration du JWT.
+  // On ferme ici, et seulement sur une CERTITUDE — la ligne existe et dit
+  // explicitement « inactive » ou « expirée ». Le `=== 0` est volontaire :
+  // un is_active null (licence historique) ne doit rien fermer.
+  if (row.is_active === 0) return { allowed: false, appId };
+  if (row.expires_at && new Date(row.expires_at) < new Date()) {
+    return { allowed: false, appId };
+  }
 
   let bag = null;
   if (row.owned_assets) {
     try {
       const parsed = JSON.parse(row.owned_assets);
       bag = Array.isArray(parsed) ? parsed : null;
-    } catch (_) { bag = null; }
+    } catch (_) {
+      console.warn('[app-access] FAIL-OPEN : sac illisible, accès accordé', appId);
+      bag = null;
+    }
   }
 
   return {
