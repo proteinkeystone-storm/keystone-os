@@ -2336,7 +2336,7 @@ function _openPrepress() {
     `<div class="dk-insp-rub">n° ${_esc(_D.issue.num)}${_D.issue.theme ? ' · ' + _esc(_D.issue.theme) : ''} · ${_D.pages.length} pages au chemin de fer</div>`,
     `<div class="dk-sec"><h4>Le PDF final (export InDesign)</h4>
       <p class="dk-note">Confrontez votre PDF au chemin de fer — nombre de pages, articles à leur place. Le fichier ne quitte pas votre appareil.</p>
-      <div class="dk-btn-row">
+      <div class="dk-btn-row" style="margin-top:10px">
         <button class="dk-btn primary" data-act="ppfile">${icon('file-text', 14)} ${_ppFile ? 'Choisir un autre PDF' : 'Choisir le PDF…'}</button>
         <input type="file" data-k="ppfile" accept="application/pdf,.pdf" style="display:none">
       </div>

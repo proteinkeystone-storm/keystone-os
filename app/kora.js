@@ -393,7 +393,9 @@ function _frame(now) {
      galet y flottait orphelin, retour Stéphane 18/07).
      ⚠ ces overlays vivent dans le DOM éteints : tester la classe
      d'activation, jamais la présence (leçon lockfix). */
-  const locked = !!document.querySelector('#ks-lockscreen.ls-visible, #ks-fullscreen.open');
+  /* + panneau Réglages : il glisse par-dessus la cc-bar (z 601 < nos
+     100002) — sans ça le galet flotte sur sa croix de fermeture. */
+  const locked = !!document.querySelector('#ks-lockscreen.ls-visible, #ks-fullscreen.open, #settings-panel.open');
   _cv.style.visibility = locked ? 'hidden' : 'visible';
   if (locked && _panel.classList.contains('kora-open')) koraClose();
 

@@ -1293,7 +1293,12 @@ function _activateKStoreItem(id, btn) {
     // Flag OFF ⇒ ce bloc ne s'exécute pas : comportement beta intact.
     if (isPricingV2() && !isFreeApp(id)) {
         const ownedNow = getOwnedIds();
-        const dejaAcquis = ownedNow === null || ownedNow.includes(id);
+        // MÊME prédicat que l'affichage des cartes (isOwned) : un bouton
+        // « Réinstaller / + Ajouter » (donc possédé aux yeux de l'UI, bypass
+        // ADMIN compris) ne doit JAMAIS router vers le paiement — sinon le
+        // clic « re-télécharger » part en checkout et le spinner ne rend
+        // jamais la main.
+        const dejaAcquis = isAdminUser() || ownedNow === null || ownedNow.includes(id);
         if (!dejaAcquis) {
             const libelle = btn.textContent;
             btn.classList.add('ks-item-btn--loading');
@@ -1343,6 +1348,16 @@ function _activateKStoreItem(id, btn) {
         _renderKStoreItems();
     }, 660);
 }
+
+// Retour de Stripe par le bouton Précédent : le bfcache restaure la page
+// TELLE QUELLE — bouton désactivé + spinner figé pour toujours (le guard
+// --loading bloque même le re-clic). On re-rend les deux surfaces pour
+// rendre leurs boutons à l'utilisateur.
+window.addEventListener('pageshow', (e) => {
+    if (!e.persisted) return;
+    renderDashboard();
+    _renderKStoreItems();
+});
 
 // ── Rendu principal de la vue Key-Store plein écran ────────────
 // Dispatche selon _ksFilter : 'all' | 'cat' | 'sub' | 'plans'
@@ -4385,6 +4400,8 @@ async function _fillAutoReload(el) {
 
     const sauver = async (enabled) => {
         const msg = el.querySelector('#arl-msg');
+        const btn = el.querySelector('#arl-save');
+        if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
         try {
             await post('', {
                 enabled,
@@ -4392,8 +4409,16 @@ async function _fillAutoReload(el) {
                 threshold: Number(el.querySelector('#arl-threshold')?.value),
                 capEur: Number(el.querySelector('#arl-cap')?.value),
             });
-            _fillAutoReload(el);
-        } catch (err2) { if (msg) msg.textContent = err2.message; }
+            // Le re-rendu redessine un bouton neuf (« Enregistrer ») : sans
+            // confirmation, rien ne dit que le réglage a été pris — on
+            // l'écrit dans la ligne de message une fois l'écran à jour.
+            await _fillAutoReload(el);
+            const m2 = el.querySelector('#arl-msg');
+            if (m2) m2.textContent = enabled ? '✓ Réglages enregistrés.' : '✓ Recharge désactivée.';
+        } catch (err2) {
+            if (btn) { btn.disabled = false; btn.textContent = s.enabled ? 'Enregistrer' : 'Activer'; }
+            if (msg) msg.textContent = err2.message;
+        }
     };
     el.querySelector('#arl-save')?.addEventListener('click', () => sauver(true));
     el.querySelector('#arl-off')?.addEventListener('click', () => sauver(false));
