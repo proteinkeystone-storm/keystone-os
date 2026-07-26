@@ -5,11 +5,15 @@
    GET    /api/admin/keys            Admin — liste les providers (sans valeur)
    POST   /api/admin/keys            Admin — sauvegarder/mettre à jour une clé
    DELETE /api/admin/keys            Admin — supprimer une clé
-   GET    /api/keys/:provider        Admin — lire une clé déchiffrée (pour usage serveur)
+
+   Les clés ENTRENT ici et n'en ressortent jamais : aucune route ne renvoie
+   une valeur déchiffrée. Seul lib/llm-router.js la déchiffre, en mémoire,
+   le temps d'appeler le fournisseur. (Audit sept. 2026 · E-3 — la route de
+   relecture GET /api/admin/keys/:provider a été supprimée.)
    ═══════════════════════════════════════════════════════════════ */
 
 import { json, err, requireAdmin, parseBody, generateId, getAllowedOrigin } from '../lib/auth.js';
-import { encrypt, decrypt } from '../lib/crypto.js';
+import { encrypt } from '../lib/crypto.js';
 
 // Providers supportés
 const VALID_PROVIDERS = ['anthropic', 'openai', 'google', 'mistral', 'perplexity', 'grok'];
@@ -101,26 +105,17 @@ export async function handleDeleteKey(request, env) {
   return json({ success: true, provider }, 200, origin);
 }
 
-// ── GET /api/admin/keys/:provider ─────────────────────────────
-// Déchiffre et retourne la valeur brute (usage serveur uniquement).
-export async function handleGetKey(request, env, provider) {
-  const origin   = getAllowedOrigin(env, request);
-  if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
-
-  const url      = new URL(request.url);
-  const tenantId = url.searchParams.get('tenantId') || 'default';
-
-  const row = await env.DB
-    .prepare('SELECT ciphertext, iv FROM api_keys_vault WHERE provider = ? AND tenant_id = ?')
-    .bind(provider, tenantId)
-    .first();
-
-  if (!row) return err(`Clé "${provider}" non configurée`, 404, origin);
-
-  try {
-    const apiKey = await decrypt(row.ciphertext, row.iv, env.KS_ENCRYPTION_KEY);
-    return json({ provider, apiKey }, 200, origin);
-  } catch {
-    return err('Déchiffrement échoué', 500, origin);
-  }
-}
+// ── GET /api/admin/keys/:provider — SUPPRIMÉE (audit sept. 2026 · E-3) ──
+// Elle déchiffrait une clé API tierce et la renvoyait EN CLAIR dans la
+// réponse. C'était la seule route du worker à le faire, et donc le premier
+// arrêt d'un accès admin volé : une requête, et l'attaquant repartait avec
+// des clés dépensables ailleurs, hors de Keystone.
+//
+// Aucun appelant n'existait — ni dans le front, ni dans les scripts, ni dans
+// les bancs — et le propriétaire ne récupère jamais ses clés depuis Keystone :
+// il ne fait que les y déposer. Une porte sans usage ne se ferme pas, elle
+// se mure.
+//
+// Les clés restent déchiffrées côté serveur au moment d'appeler le
+// fournisseur (lib/llm-router.js) : c'est leur seul usage légitime, et il ne
+// les expose à personne.

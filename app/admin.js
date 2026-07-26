@@ -121,7 +121,7 @@ const API_BASE      = _customBase
                       : CF_WORKER_URL;
 
 // ── State ──────────────────────────────────────────────────────
-// `adminToken` porte le jeton ADMIN court (12 h), PAS le secret maître.
+// `adminToken` porte le jeton ADMIN court (24 h), PAS le secret maître.
 //
 // Avant (audit sept. 2026 · E-3), KS_ADMIN_SECRET dormait en clair dans
 // localStorage : permanent, sans expiration, et lisible par n'importe
@@ -4210,7 +4210,7 @@ async function renderSettings(panel) {
       <div class="rgpd-notice">
         Les clés API des moteurs IA sont chiffrées en AES-256-GCM avant stockage.<br>
         Votre secret d'administration n'est jamais enregistré par le navigateur :
-        il est échangé à la connexion contre un jeton valable 12 heures.<br>
+        il est échangé à la connexion contre un jeton valable 24 heures.<br>
         Toutes les communications transitent via HTTPS/TLS 1.3.
       </div>
     </div>

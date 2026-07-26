@@ -39,8 +39,7 @@ import { handleUploadScreenshot, handleGetScreenshot,
          handleDeleteScreenshot, handleListScreenshotsByApp }          from './routes/screenshots.js';
 import { handleHelpMediaUpload, handleHelpMediaInfo,
          handleHelpMediaServe, handleHelpMediaDelete }                 from './routes/help-media.js';
-import { handleListKeys, handleSaveKey, handleDeleteKey,
-         handleGetKey }                                                 from './routes/vault.js';
+import { handleListKeys, handleSaveKey, handleDeleteKey }               from './routes/vault.js';
 import { handleSaveUserKey, handleDeleteUserKey, handleListUserKeys }   from './routes/keys.js';
 import { handleGetAppMode, handleSetAppMode }                          from './routes/app-mode.js';
 import { handleDataDispatch }                                           from './routes/data.js';
@@ -1091,10 +1090,14 @@ export default {
       if (path === '/api/admin/keys'         && method === 'GET')    return handleListKeys(request, env);
       if (path === '/api/admin/keys'         && method === 'POST')   return handleSaveKey(request, env);
       if (path === '/api/admin/keys'         && method === 'DELETE') return handleDeleteKey(request, env);
-      if (path.startsWith('/api/admin/keys/') && method === 'GET') {
-        const provider = path.split('/').pop();
-        return handleGetKey(request, env, provider);
-      }
+      // GET /api/admin/keys/:provider a été SUPPRIMÉE (audit sept. 2026 · E-3).
+      // C'était la seule route de tout le worker qui renvoyait une clé API
+      // tierce EN CLAIR. Aucun appelant nulle part — ni front, ni script, ni
+      // banc — et Stéphane ne récupère jamais ses clés depuis Keystone : il
+      // ne fait que les y déposer. Elle n'offrait donc rien, sinon le premier
+      // arrêt d'un accès admin volé. Les clés restent lisibles par le serveur
+      // au moment d'appeler le fournisseur (lib/llm-router.js), ce qui est
+      // leur seul usage légitime.
 
       // ── Coffre serveur per-tenant des clés BYOK (Phase 3b, user JWT) ──
       if (path === '/api/keys' && method === 'POST') return handleSaveUserKey(request, env);
