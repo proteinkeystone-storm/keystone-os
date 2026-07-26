@@ -39,8 +39,16 @@ const VENDOR = path.join(ROOT, 'app', 'vendor');
 const NM     = path.join(ROOT, 'node_modules');
 
 const copy = (from, to) => {
+  fs.mkdirSync(path.dirname(path.join(VENDOR, to)), { recursive: true });
   fs.copyFileSync(path.join(NM, from), path.join(VENDOR, to));
   return fs.statSync(path.join(VENDOR, to)).size;
+};
+
+/** Plusieurs fichiers d'un même paquet (pdf.js : la lib + son worker). */
+const copyMany = (pairs) => {
+  let total = 0;
+  for (const [from, to] of pairs) total += copy(from, to);
+  return total;
 };
 
 const bundle = (entry, to) => {
@@ -71,6 +79,17 @@ const done = [
   ['jspdf (2.5.2)',    version('jspdf-252'),        bundle('jspdf-252/dist/jspdf.es.min.js', 'jspdf-2.5.2.mjs')],
   ['dexie',            version('dexie'),            copy('dexie/dist/dexie.mjs', 'dexie.mjs')],
   ['pagedjs',          version('pagedjs'),          copy('pagedjs/dist/paged.polyfill.js', 'paged.polyfill.js')],
+  // Audit sept. 2026, chantier 7.2-bis — pdf.js était vendorisé À LA MAIN,
+  // donc ABSENT de package.json, donc INVISIBLE à `npm audit`. C'est
+  // pourtant la seule bibliothèque du front qui PARSE un fichier non
+  // maîtrisé (pré-impression desK, import booK, planches Kortex) : un CVE
+  // sur elle n'aurait déclenché aucune alerte. Elle est désormais suivie.
+  // Parité vérifiée au moment de l'inscription : les deux fichiers déjà
+  // servis en production sont bit pour bit ceux de pdfjs-dist@4.10.38.
+  ['pdf.js',           version('pdfjs-dist'),       copyMany([
+    ['pdfjs-dist/build/pdf.min.mjs',        'pdfjs/pdf.min.mjs'],
+    ['pdfjs-dist/build/pdf.worker.min.mjs', 'pdfjs/pdf.worker.min.mjs'],
+  ])],
 ];
 
 for (const [name, v, size] of done) {
@@ -80,7 +99,12 @@ for (const [name, v, size] of done) {
 // Garde-fou : un import « nu » resté dans un fichier vendorisé casserait la
 // bibliothèque en silence, une fois en production seulement.
 let bad = 0;
-for (const f of fs.readdirSync(VENDOR).filter(f => /^(qrcode-generator|pdf-lib|jspdf|dexie)/.test(f))) {
+const aVerifier = [
+  ...fs.readdirSync(VENDOR).filter(f => /^(qrcode-generator|pdf-lib|jspdf|dexie)/.test(f)),
+  // pdf.js vit dans un sous-dossier : il doit passer le même contrôle.
+  ...['pdfjs/pdf.min.mjs', 'pdfjs/pdf.worker.min.mjs'].filter(f => fs.existsSync(path.join(VENDOR, f))),
+];
+for (const f of aVerifier) {
   const src = fs.readFileSync(path.join(VENDOR, f), 'utf8');
   const nu = src.match(/(?:^|[;}\n])import\s*[^;]*?from\s*["'][^.\/][^"']*["']/g);
   if (nu) { console.error(`  ✗ ${f} : ${nu.length} import(s) non résolu(s) — ${nu[0].trim().slice(0, 60)}`); bad++; }
