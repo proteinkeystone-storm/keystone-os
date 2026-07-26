@@ -50,7 +50,7 @@ const META = [
   { app: 'A-COM-004', slug: 'key-form',
     h1a: 'Des formulaires intelligents,', h1b: 'sans une ligne de code.',
     title: 'Key Form — formulaires intelligents partageables | Keystone OS',
-    desc: 'Construisez des formulaires intelligents partageables par URL : 16 types de champs, logique conditionnelle, e-mails Resend, RGPD natif. La parité Typeform Pro, sans l’abonnement.' },
+    desc: 'Construisez des formulaires intelligents partageables par URL : 16 types de champs, logique conditionnelle, notifications e-mail souveraines, RGPD natif. La parité Typeform Pro, sans l’abonnement.' },
   { app: 'A-COM-005', slug: 'ghost-writer',
     h1a: 'Vos textes,', h1b: 'réécrits dans votre ton.',
     title: 'Ghost Writer — réécriture et correction de vos textes | Keystone OS',

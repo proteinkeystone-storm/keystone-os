@@ -412,7 +412,7 @@ PAGES.push(trustPage({
   slug: 'dpa', crumbLabel: 'DPA & sous-traitants',
   eyebrow: 'Conformité RGPD',
   title: 'Accord de sous-traitance (DPA) & liste des sous-traitants | Keystone OS',
-  desc: 'Accord de sous-traitance RGPD de Keystone OS et liste publique des sous-traitants ultérieurs : Cloudflare (Europe/WEUR), Vercel, Stripe, Resend et moteurs d’IA. Mesures de sécurité incluses.',
+  desc: 'Accord de sous-traitance RGPD de Keystone OS et liste publique des sous-traitants ultérieurs : Cloudflare (Europe/WEUR), Vercel, Stripe, Scaleway (France) et moteurs d’IA. Mesures de sécurité incluses.',
   h1a: 'Sous-traitance', h1b: 'des données, à découvert.',
   lead: 'Quand vous collectez des données via vos outils Keystone, vous en êtes le responsable de traitement et Keystone agit comme sous-traitant. Voici le cadre et la liste complète des sous-traitants ultérieurs.',
   body: `      <h3>Rôles</h3>
@@ -424,7 +424,7 @@ PAGES.push(trustPage({
           <tr><td>Cloudflare, Inc.</td><td>Exécution applicative & stockage (Workers, KV, D1)</td><td>Europe (région WEUR)</td></tr>
           <tr><td>Vercel, Inc.</td><td>Hébergement des pages publiques (front statique)</td><td>USA — pas de données personnelles des clients finaux</td></tr>
           <tr><td>Stripe</td><td>Traitement des paiements (abonnements)</td><td>UE / USA (clauses contractuelles types)</td></tr>
-          <tr><td>Resend</td><td>Envoi d’e-mails transactionnels (formulaires, notifications)</td><td>UE / USA (clauses contractuelles types)</td></tr>
+          <tr><td>Scaleway S.A.S.</td><td>Envoi d’e-mails transactionnels (formulaires, notifications)</td><td>France — données traitées en UE (région fr-par)</td></tr>
           <tr><td>Cloudflare Workers AI</td><td>Modèles d’IA souverains (usage courant)</td><td>Infrastructure Cloudflare</td></tr>
           <tr><td>Moteurs d’IA via votre clé (BYOK)</td><td>Modèles haut de gamme activés à votre initiative (ex. Anthropic)</td><td>Selon l’éditeur du moteur que vous choisissez</td></tr>
         </tbody>
