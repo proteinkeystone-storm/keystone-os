@@ -80,7 +80,14 @@ Reste (actions console/DNS Stéphane, puis bascule) :
 5. Webhook statut TEM (bounce/delivered) → route à créer après la bascule.
 6. Critère : ≥ 9/10 sur mail-tester.com, tests réels Gmail + Outlook + OVH/Orange.
 
-### 🔲 AUTH-6 — SSO entreprise (OIDC) — À FAIRE (prochain « go SSO »)
+### ✅ AUTH-6 — SSO entreprise (OIDC) — **MOTEUR EN PROD (DORMANT), 26/07 nuit**
+`routes/auth-oidc.js` (worker dedb2924, front v5.28.407) : RP OIDC générique zéro dépendance — découverte `.well-known`, PKCE S256, state/nonce usage unique (DELETE gardé anti-rejeu), id_token RS256 vérifié au JWKS (kid/iss/aud/exp/nonce/email_verified), cloisonnement `email_domain`. **Un login SSO débouche sur un magic-link usage unique → page « Confirmer » → JWT** (aucun jeton en URL, réutilise AUTH-1→4). Le SSO authentifie, ne provisionne PAS (`no_account` sinon). Admin : CRUD `/api/admin/sso-connections` (secret AES-256-GCM, jamais renvoyé). Front : bouton « Connexion SSO entreprise » sur `/auth/magic` + messages `sso_error`. Banc `test/test-auth-oidc.mjs` (IdP factice Node RS256) **19/19**.
+**DORMANT tant qu'aucune connexion n'est enregistrée** — activation pour un client :
+1. Enregistrer l'app chez l'IdP (une seule fois par IdP) : redirect URI = `https://keystone-os-api.keystone-os.workers.dev/api/auth/oidc/callback`, scopes openid email profile. Entra : une app multi-tenant sert TOUS les clients Microsoft ; Google : une app OAuth.
+2. `POST /api/admin/sso-connections` (Bearer admin) : `{ email_domain, issuer, client_id, client_secret, licence_key? }`. Entra : issuer = `https://login.microsoftonline.com/<tenant-du-client>/v2.0` (1 connexion par client). Google : issuer = `https://accounts.google.com`.
+3. C'est actif — le bouton du front trouve la connexion via `/api/auth/sso/lookup`.
+
+#### Plan d'origine (archive) :
 Décision D4/D5 : pas de mot de passe (le magic link hérite du MFA de la boîte d'entreprise) ; la réponse aux exigences institutionnelles = **SSO**, pas mot de passe.
 - **OIDC d'abord, SAML jamais en direct.** Microsoft Entra ID + Google Workspace parlent tous deux OIDC → couvre ~95 % des clients entreprise. SAML pur (fédérations exotiques) : hors scope tant qu'aucun client ne l'exige contractuellement.
 - Architecture prévue (tout dans le Worker, zéro dépendance) :
