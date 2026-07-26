@@ -28,6 +28,11 @@ _preview/
 # Sauvegardes/exports de la base PROD (données — jamais dans git)
 _backups/
 
+# Dépendances npm — 166 Mo de code tiers qui n'ont rien à faire dans un
+# dépôt PUBLIC (npm install les régénère ; Vercel n'en dépend pas : aucun
+# buildCommand, aucun fichier servi ne les référence).
+node_modules/
+
 # Secrets de dev local (jamais commit)
 workers/.dev.vars
 .dev.vars
