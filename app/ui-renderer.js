@@ -745,7 +745,7 @@ export function renderDashboard() {
     // ── BARRE KEY-STORE — vitrine sobre : 4 suggestions ciblées ────────
     if (artsEl) {
         // Refonte 2026-07-26 (remplace le filtre NEW du Sprint 4) :
-        // la barre montre AU PLUS 4 cartes, choisies par complémentarité
+        // la barre montre AU PLUS 6 cartes, choisies par complémentarité
         // avec les pads que le client possède (PAD_AFFINITY), en rotation
         // quotidienne. Une section sans suggestion disparaît entièrement
         // (titre et badge compris) — une vitrine vide ne s'affiche jamais.
@@ -789,7 +789,7 @@ export function renderDashboard() {
         const _rot = arr => arr.length
             ? [...arr.slice(_day % arr.length), ...arr.slice(0, _day % arr.length)]
             : arr;
-        const picks = [..._rot(_tierA), ..._rot(_tierB)].slice(0, 4);
+        const picks = [..._rot(_tierA), ..._rot(_tierB)].slice(0, 6);
 
         // Cartes — pictogramme + nom + ligne de bénéfice (langage client)
         const suggestCards = picks.map(item => {
@@ -825,11 +825,11 @@ export function renderDashboard() {
         }
 
         // Libellé de la pill Key-Store : nb total d'apps à découvrir
-        // (le pool complet, pas les 4 affichées) — la porte vers l'exhaustif.
+        // (le pool complet, pas les 6 affichées) — la porte vers l'exhaustif.
         const ksCountEl = document.getElementById('kstore-badge-label');
         if (ksCountEl) {
             const total = suggestPool.length;
-            ksCountEl.textContent = total > 4
+            ksCountEl.textContent = total > 6
                 ? `Key-Store · ${total} à découvrir`
                 : 'Key-Store';
         }

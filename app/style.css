@@ -2072,8 +2072,15 @@ html.light-mode .sec-kstore-badge {
   color: #fff; white-space: nowrap;
 }
 .ksp2-badge--active {
-  background: rgba(192,132,252,.15); color: #c084fc;
+  /* Fond OPAQUE (teinte posée sur --navy) : un fond translucide laisse
+     le contour de la carte se voir à travers la pill. */
+  background: linear-gradient(rgba(192,132,252,.15), rgba(192,132,252,.15)), var(--navy);
+  color: #c084fc;
   border: 1px solid rgba(192,132,252,.4);
+}
+html.light-mode .ksp2-badge--active {
+  background: linear-gradient(rgba(192,132,252,.12), rgba(192,132,252,.12)), #ffffff;
+  color: #9333ea;
 }
 .ksp2-ico {
   width: 44px; height: 44px; border-radius: 12px;
