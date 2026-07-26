@@ -29,7 +29,7 @@
      }
    ═══════════════════════════════════════════════════════════════ */
 
-const QR_CDN = 'https://esm.sh/qrcode-generator@1.4.4';
+const QR_CDN = '/app/vendor/qrcode-generator.mjs';
 let _qrLib = null;
 
 async function _loadQrLib() {

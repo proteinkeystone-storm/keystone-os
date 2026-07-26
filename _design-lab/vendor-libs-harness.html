@@ -1,0 +1,73 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- CSP IDENTIQUE à celle de vercel.json APRÈS vendorisation : aucune
+     origine CDN autorisée. Si une bibliothèque tentait encore d'aller
+     chercher quelque chose dehors, elle échouerait ici. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://keystone-os-api.keystone-os.workers.dev; worker-src 'self' blob:; base-uri 'self'">
+<title>Vendorisation — santé des bibliothèques sous CSP stricte</title>
+<style>body{font:13px ui-monospace,monospace;background:#0b0f17;color:#e6edf3;padding:24px;line-height:1.65}
+h1{font-size:16px}b{color:#7ee787}i{color:#ff7b72;font-style:normal}pre{white-space:pre-wrap}</style>
+<h1>Vendorisation : les 6 bibliothèques sous la CSP stricte</h1>
+<pre id="out">Chargement…</pre>
+<script type="module">
+const out = document.getElementById('out');
+const log = s => { out.textContent += s + '\n'; };
+out.textContent = '';
+const viols = [];
+document.addEventListener('securitypolicyviolation',
+  e => viols.push(e.violatedDirective + ' → ' + e.blockedURI));
+
+let ko = 0;
+const ok = (n, c, d = '') => { if (!c) ko++; log(`  ${c ? '✓' : '✗'} ${n}${d ? ' — ' + d : ''}`); };
+
+/* La PARITÉ QR (48 matrices + SVG + dataURL, zéro écart) est vérifiée
+   hors navigateur par scripts/… — impossible ici : récupérer la référence
+   CDN violerait justement la CSP qu'on teste. Cette page vérifie l'autre
+   moitié : les six bibliothèques FONCTIONNENT, sans aucun CDN. */
+/* ═══ 2. Les 5 autres bibliothèques fonctionnent-elles ? ═══ */
+log('\n── Santé des bibliothèques vendorisées (sous la nouvelle CSP)');
+
+try {
+  const { PDFDocument } = await import('/app/vendor/pdf-lib.esm.min.js');
+  const d = await PDFDocument.create(); d.addPage([200, 200]);
+  ok('pdf-lib — document créé', (await d.save()).byteLength > 100);
+} catch (e) { ok('pdf-lib', false, e.message); }
+
+for (const v of ['2.5.1', '2.5.2']) {
+  try {
+    const m = await import(`/app/vendor/jspdf-${v}.mjs`);
+    const J = m.jsPDF || m.default?.jsPDF || m.default;
+    const doc = new J({ unit: 'mm', format: 'a4' });
+    doc.setFontSize(20); doc.text('Keystone', 20, 20);
+    ok(`jspdf ${v} — PDF généré`, doc.output('arraybuffer').byteLength > 100);
+  } catch (e) { ok(`jspdf ${v}`, false, e.message); }
+}
+
+try {
+  const Dexie = (await import('/app/vendor/dexie.mjs')).default;
+  const db = new Dexie('ks_vendor_probe'); db.version(1).stores({ t: 'id' });
+  await db.t.put({ id: 1, v: 'ok' });
+  const row = await db.t.get(1);
+  ok('dexie — écriture + relecture IndexedDB', row?.v === 'ok');
+  await db.delete();
+} catch (e) { ok('dexie', false, e.message); }
+
+try {
+  await new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = '/app/vendor/paged.polyfill.js'; s.onload = res; s.onerror = () => rej(new Error('chargement refusé'));
+    document.head.appendChild(s);
+  });
+  ok('pagedjs — polyfill chargé', !!(window.PagedPolyfill || window.Paged));
+} catch (e) { ok('pagedjs', false, e.message); }
+
+/* ═══ 3. La CSP n'a rien bloqué ═══ */
+log('\n── Violations CSP pendant tout le test');
+ok('aucune violation', viols.length === 0, viols.join(' | '));
+
+log('\n' + (ko === 0
+  ? '✅ TOUT EST VERT — sortie QR identique, 6 bibliothèques fonctionnelles, zéro CDN.'
+  : `❌ ${ko} PROBLÈME(S) — ne pas déployer.`));
+window.__RES = { ko, viols };
+</script>

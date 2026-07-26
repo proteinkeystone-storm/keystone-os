@@ -832,7 +832,7 @@ async function _handlePdfExport() {
   try {
     _toast('Chargement de l\'outil d\'annotation…');
     let PDFLib;
-    try { PDFLib = await import('https://esm.sh/pdf-lib@1.17.1'); }
+    try { PDFLib = await import('/app/vendor/pdf-lib.esm.min.js'); }
     catch (e) { _toast('Impossible de charger pdf-lib (hors-ligne ?)', true); return; }
     const { PDFDocument, rgb, StandardFonts } = PDFLib;
 

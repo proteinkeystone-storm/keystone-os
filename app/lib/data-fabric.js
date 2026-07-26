@@ -24,7 +24,7 @@
    Debug console : `window.dataFabric` est exposé.
    ═══════════════════════════════════════════════════════════════ */
 
-import Dexie from 'https://unpkg.com/dexie@4/dist/dexie.mjs';
+import Dexie from '/app/vendor/dexie.mjs';
 
 // ── Config ─────────────────────────────────────────────────────
 const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';

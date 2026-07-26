@@ -31,7 +31,7 @@ const TEMPLATES_BASE = new URL('./doc-templates/', import.meta.url).href;
 
 // CDN Paged.js — le polyfill applique les CSS Paged Media et découpe
 // le HTML en pages A4 dans le DOM cible.
-const PAGEDJS_CDN = 'https://unpkg.com/pagedjs@0.4.3/dist/paged.polyfill.js';
+const PAGEDJS_CDN = '/app/vendor/paged.polyfill.js';
 
 // ── Catalogue des templates (extensible) ───────────────────────
 // Pour ajouter un template : déposer le HTML sanctuarisé dans

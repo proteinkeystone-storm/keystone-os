@@ -47,7 +47,7 @@ import { saveForm } from './lib/pulsa-library.js';
 // (renderExperiencePreview, réutilise le renderHTML worker en iframe).
 import { scanPreviewHtml, renderExperiencePreview } from './lib/sdqr-scan-preview.js';
 
-const QR_CDN = 'https://esm.sh/qrcode-generator@1.4.4';
+const QR_CDN = '/app/vendor/qrcode-generator.mjs';
 
 let _qrLib       = null;       // lazy import (legacy createSvgTag fallback)
 let _cachedQrs   = [];         // dernière liste reçue
@@ -4822,7 +4822,7 @@ async function _exportQrPdf(qr, encodedForQr, design, sizePx = 2048) {
     URL.revokeObjectURL(svgUrl);
   }
 
-  const { jsPDF } = await import('https://esm.sh/jspdf@2.5.2');
+  const { jsPDF } = await import('/app/vendor/jspdf-2.5.2.mjs');
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = 210, qrMM = 120, x = (pageW - qrMM) / 2, y = 48;
   pdf.addImage(dataUrl, 'PNG', x, y, qrMM, qrMM);

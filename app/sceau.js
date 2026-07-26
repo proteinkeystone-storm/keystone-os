@@ -547,7 +547,7 @@ function _renderResult(main) {
 
 async function _renderQr(text, el) {
   try {
-    const mod = await import('https://esm.sh/qrcode-generator@1.4.4');
+    const mod = await import('/app/vendor/qrcode-generator.mjs');
     const qrcode = mod.default || mod;
     const qr = qrcode(0, 'M'); qr.addData(text); qr.make();
     el.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 2, scalable: true });
@@ -556,7 +556,7 @@ async function _renderQr(text, el) {
 
 // ── Moteur d'export QR (PNG / SVG / PDF) ────────────────────────
 async function _qrObj(text) {
-  const mod = await import('https://esm.sh/qrcode-generator@1.4.4');
+  const mod = await import('/app/vendor/qrcode-generator.mjs');
   const qrcode = mod.default || mod;
   const qr = qrcode(0, 'M'); qr.addData(text); qr.make();
   return qr;
@@ -594,7 +594,7 @@ async function _exportQr(url, fmt, btn) {
     } else { // pdf
       const c = await _qrCanvas(qr);
       const png = c.toDataURL('image/png');
-      const jspdf = await import('https://esm.sh/jspdf@2.5.1');
+      const jspdf = await import('/app/vendor/jspdf-2.5.1.mjs');
       const JsPDF = jspdf.jsPDF || jspdf.default || (jspdf.default && jspdf.default.jsPDF);
       const doc = new JsPDF({ unit: 'pt', format: 'a4' });
       const pw = doc.internal.pageSize.getWidth();

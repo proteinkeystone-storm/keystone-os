@@ -51,7 +51,8 @@
     "test:free": "node scripts/test-licence-free.mjs",
     "test:reload": "node scripts/test-auto-reload.mjs",
     "test:sweep": "node scripts/test-auto-reload-sweep.mjs",
-    "test:app-mode": "node scripts/test-app-mode.mjs"
+    "test:app-mode": "node scripts/test-app-mode.mjs",
+    "vendor-libs": "node scripts/vendor-libs.mjs"
   },
   "repository": {
     "type": "git",
@@ -63,5 +64,14 @@
   "bugs": {
     "url": "https://github.com/proteinkeystone-storm/keystone-os/issues"
   },
-  "homepage": "https://github.com/proteinkeystone-storm/keystone-os#readme"
+  "homepage": "https://github.com/proteinkeystone-storm/keystone-os#readme",
+  "devDependencies": {
+    "dexie": "^4.4.4",
+    "esbuild": "^0.28.1",
+    "jspdf-251": "npm:jspdf@^2.5.1",
+    "jspdf-252": "npm:jspdf@^2.5.2",
+    "pagedjs": "^0.4.3",
+    "pdf-lib": "^1.17.1",
+    "qrcode-generator": "^1.4.4"
+  }
 }

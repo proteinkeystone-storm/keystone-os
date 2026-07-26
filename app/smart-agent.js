@@ -1192,7 +1192,7 @@ async function _toggleQr() {
     const url = _ag.publish.link?.url;
     if (!url) return;
     try {
-        const mod = await import('https://esm.sh/qrcode-generator@1.4.4');
+        const mod = await import('/app/vendor/qrcode-generator.mjs');
         const qrcode = mod.default || mod;
         const qr = qrcode(0, 'M');
         qr.addData(url); qr.make();

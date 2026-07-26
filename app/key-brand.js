@@ -3401,7 +3401,7 @@ async function _renderPubQr() {
   const el = _root?.querySelector('[data-slot="pub-qr"]');
   if (!el || el.dataset.done) return;
   try {
-    const mod = await import('https://esm.sh/qrcode-generator@1.4.4');
+    const mod = await import('/app/vendor/qrcode-generator.mjs');
     const qrcode = mod.default || mod;
     const qr = qrcode(0, 'M'); qr.addData(_publicUrl()); qr.make();
     el.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
