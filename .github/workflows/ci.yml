@@ -8,7 +8,12 @@
 #   2. unit   — tests unitaires autonomes (sceau, brand-extract), sans worker.
 #   3. e2e    — suites desK + backup + sentinelle contre `wrangler dev --local`.
 #
-# ⚠ package-lock.json est gitignoré → on fait `npm install` (pas `npm ci`).
+# ⚠ Les jobs `unit` et `e2e` tournent dans `workers/`, dont le verrou de
+#   dépendances est versionné : on y fait donc `npm ci`, qui installe
+#   EXACTEMENT les versions du verrou. Une mauvaise version publiée en
+#   amont ne peut plus casser la CI toute seule, et la CI utilise la même
+#   wrangler que les déploiements. (Le verrou de la racine est versionné
+#   lui aussi ; seul `workers/node_modules/` est ignoré.)
 # ⚠ Les vars ci-dessous sont des secrets de TEST (pas les vrais), figés pour
 #   coller aux conventions des suites (JWT dk2-test-secret, admin dk4-admin).
 # ═══════════════════════════════════════════════════════════════
@@ -59,7 +64,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: npm install
+      - run: npm ci
       - name: sceau.test + brand-extract.test
         run: |
           set -e
@@ -83,7 +88,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: npm install
+      - run: npm ci
       - name: Lancer le worker, migrer, jouer les suites
         run: |
           # Worker unifié (mêmes secrets de test pour toutes les suites).
