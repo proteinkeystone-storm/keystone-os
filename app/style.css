@@ -6095,6 +6095,11 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
     transition: background .12s ease, color .12s ease;
 }
 .ksfs-nav-btn:hover { background: rgba(255,255,255,.05); color: #fff; }
+/* Pastille couleur de catégorie (2026-07-26) */
+.ksfs-nav-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    flex-shrink: 0; display: inline-block;
+}
 .ksfs-nav-btn.active {
     background: rgba(99,102,241,.15);
     color: #a5b4fc;
@@ -6458,16 +6463,20 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 .ksfs-app-card[data-palette="indigo"]  { --tool-c:var(--gold2); --tool-bg:rgba(129,140,248,.12); --tool-bd:rgba(129,140,248,.25); }
 .ksfs-app-card[data-palette="violet"]  { --tool-c:#a78bfa; --tool-bg:rgba(167,139,250,.12); --tool-bd:rgba(167,139,250,.25); }
 .ksfs-app-card[data-palette="amber"]   { --tool-c:var(--warn); --tool-bg:rgba(251,191,36,.12);  --tool-bd:rgba(251,191,36,.25); }
+.ksfs-app-card[data-palette="emerald"] { --tool-c:#34d399; --tool-bg:rgba(52,211,153,.12);  --tool-bd:rgba(52,211,153,.25); }
+.ksfs-app-card[data-palette="rose"]    { --tool-c:#fb7185; --tool-bg:rgba(251,113,133,.12); --tool-bd:rgba(251,113,133,.25); }
 
 /* Étiquette catégorie : pilule de verre posée sur la bande colorée. */
 .ksfs-app-cat {
     position: absolute; top: 10px; right: 10px; z-index: 2;
     font-size: 10px; font-weight: 700;
     letter-spacing: .05em; text-transform: uppercase;
-    color: #fff;
-    background: rgba(0,0,0,.30);
+    /* Teinte de la CATÉGORIE (2026-07-26) — sur verre sombre pour rester
+       lisible par-dessus les photos de couverture. */
+    color: var(--tool-c, #fff);
+    background: rgba(0,0,0,.38);
     -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
-    border: 1px solid rgba(255,255,255,.20);
+    border: 1px solid var(--tool-bd, rgba(255,255,255,.20));
     padding: 4px 9px; border-radius: 999px;
     white-space: nowrap;
 }
@@ -6645,6 +6654,8 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
 .ksfs-detail-icon[data-palette="indigo"] { --tool-c:var(--gold2); --tool-bg:rgba(129,140,248,.12); --tool-bd:rgba(129,140,248,.25); }
 .ksfs-detail-icon[data-palette="violet"] { --tool-c:#a78bfa; --tool-bg:rgba(167,139,250,.12); --tool-bd:rgba(167,139,250,.25); }
 .ksfs-detail-icon[data-palette="amber"]  { --tool-c:var(--warn); --tool-bg:rgba(251,191,36,.12);  --tool-bd:rgba(251,191,36,.25); }
+.ksfs-detail-icon[data-palette="emerald"]{ --tool-c:#34d399; --tool-bg:rgba(52,211,153,.12);  --tool-bd:rgba(52,211,153,.25); }
+.ksfs-detail-icon[data-palette="rose"]   { --tool-c:#fb7185; --tool-bg:rgba(251,113,133,.12); --tool-bd:rgba(251,113,133,.25); }
 .ksfs-detail-head-main { min-width: 0; padding-top: 4px; }
 .ksfs-detail-title {
     font-size: 26px; font-weight: 700; color: #fff;

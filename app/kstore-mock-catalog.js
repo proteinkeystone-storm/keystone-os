@@ -18,13 +18,32 @@
 // rester ISOLÉS de la taxonomie legacy du dashboard (IMM/COM/PRD…) — sans
 // ça, le catalog D1 écraserait le rangement (cf. _ksNormalizeD1).
 // On rouvrira d'autres univers quand des apps seront produites.
+// Chaque catégorie porte SA couleur (2026-07-26) — source unique reprise
+// partout : pictos du dashboard, cartes + liseré + fiches du K-Store,
+// pastille sidebar. `palette` = jeton data-palette du design system,
+// `color` = teinte brute (pastilles, landing).
+//   Créer     → violet  (la créativité, l'atelier)
+//   Organiser → ambre   (le classement, la structure)
+//   Diffuser  → vert    (l'émission, le feu vert)
+//   Interagir → rose    (l'humain, la conversation)
+//   Analyser  → bleu    (la mesure, la précision)
 export const KSTORE_CATEGORIES = [
-    { id: 'KS_CREER',     label: 'Créer' },
-    { id: 'KS_ORGANISER', label: 'Organiser' },
-    { id: 'KS_DIFFUSER',  label: 'Diffuser' },
-    { id: 'KS_INTERAGIR', label: 'Interagir' },
-    { id: 'KS_ANALYSER',  label: 'Analyser' },
+    { id: 'KS_CREER',     label: 'Créer',     palette: 'violet',  color: '#a78bfa' },
+    { id: 'KS_ORGANISER', label: 'Organiser', palette: 'amber',   color: '#fbbf24' },
+    { id: 'KS_DIFFUSER',  label: 'Diffuser',  palette: 'emerald', color: '#34d399' },
+    { id: 'KS_INTERAGIR', label: 'Interagir', palette: 'rose',    color: '#fb7185' },
+    { id: 'KS_ANALYSER',  label: 'Analyser',  palette: 'blue',    color: '#38bdf8' },
 ];
+
+// Palette (jeton design system) d'une app d'après SA catégorie.
+// Renvoie null si l'app ou sa catégorie est inconnue (le fallback
+// appartient à l'appelant — getToolPalette garde le sien).
+export function getCategoryPalette(catId) {
+    return KSTORE_CATEGORIES.find(c => c.id === catId)?.palette || null;
+}
+export function getCategoryColor(catId) {
+    return KSTORE_CATEGORIES.find(c => c.id === catId)?.color || null;
+}
 
 // ── Apps du Key-Store ─────────────────────────────────────────
 // Toutes réelles : bouton d'achat actif, référencées par leur id

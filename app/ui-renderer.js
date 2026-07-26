@@ -49,7 +49,7 @@ import { keystoneDocHTML }                                            from './li
 import {
     KSTORE_CATEGORIES, KSTORE_MOCK_APPS, KSTORE_FEATURED_IDS, KSTORE_PROMOS,
     getMockApp, getMockAppsByCategory, getMockAppsBySubcategory,
-    getCategoryLabel, getCategoryPath,
+    getCategoryLabel, getCategoryPath, getCategoryPalette,
 } from './kstore-mock-catalog.js';
 // ── Sprint B (Master Renderer) — module additif, OFF par défaut ──
 // Activation : window.__KS_MASTER_RENDERER__ = true OU
@@ -146,9 +146,14 @@ const _PALETTE_BY_PLAN = {
 };
 function getToolPalette(id) {
     if (!id) return 'indigo';
-    // Artefacts : couleur dédiée (ambre) pour les distinguer des outils
+    // Depuis 2026-07-26 : la couleur suit la CATÉGORIE K-Store de l'app
+    // (Créer=violet, Organiser=ambre, Diffuser=vert, Interagir=rose,
+    // Analyser=bleu — source unique KSTORE_CATEGORIES). Cohérent partout :
+    // pads du dashboard, cartes/fiches K-Store, modales, vitrine.
+    const catPal = getCategoryPalette(getMockApp(id)?.category);
+    if (catPal) return catPal;
+    // Fallback historique (app absente du mock) : palette par plan
     if (id.startsWith('A-')) return 'amber';
-    // Outils : palette basée sur le plan déclaré dans le catalogue
     const cat  = getCatalogEntry(id);
     const plan = (cat?.plan || '').toUpperCase();
     return _PALETTE_BY_PLAN[plan] || 'indigo';
@@ -1157,6 +1162,7 @@ function _buildKStorePanel() {
                             ${c.sub ? `<svg class="ksfs-nav-chev" viewBox="0 0 24 24" fill="none"
                                 stroke="currentColor" stroke-width="2.2"
                                 style="width:10px;height:10px"><polyline points="6 9 12 15 18 9"/></svg>` : ''}
+                            ${c.color ? `<span class="ksfs-nav-dot" style="background:${c.color}"></span>` : ''}
                             <span>${c.label}</span>
                         </button>
                         ${c.sub ? `
