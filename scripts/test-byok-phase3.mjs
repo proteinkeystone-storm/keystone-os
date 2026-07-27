@@ -87,7 +87,9 @@ console.log('\n\x1b[1m▶ Suite 4 — Coffre serveur (keys.js) : sécurité\x1b[
 console.log('\n\x1b[1m▶ Suite 5 — Chat public câblé + garde-fous flagship\x1b[0m');
 {
   const sa = await src('workers/src/routes/smart-agent.js');
-  (/resolveEngineForTenant\(env, tenant\)/.test(sa) ? ok : (e)=>ko('public chat byok', e))('chat public : resolveEngineForTenant(env, tenant)');
+  // P7 (2026-07) : la résolution passe par le mode déclaré per-app
+  // (lib/app-mode.js resolveEngineForApp), qui délègue à resolveEngineForTenant.
+  (/resolveEngineForApp\(env, tenant, SA_APP_ID\)/.test(sa) ? ok : (e)=>ko('public chat byok', e))('chat public : resolveEngineForApp(env, tenant, SA_APP_ID)');
   (/fallbackOnError: true/.test(sa) ? ok : (e)=>ko('public fallback', e))('chat public : repli Mistral si clé proprio échoue (D4)');
   (/!useByok && await isEnforceEnabled\(env, ownerKey\)/.test(sa) ? ok : (e)=>ko('public credit skip', e))('chat public : crédit proprio skippé en BYOK (D3)');
   (/env\.AI\.run\(EMBED_MODEL/.test(sa) ? ok : (e)=>ko('embeddings', e))('embeddings bge-m3 INTACTS (D2)');

@@ -265,8 +265,10 @@ console.log('\n\x1b[1m▶ Suite 11 — câblage worker Concierge SDQR (structure
 {
   const qr = await src('workers/src/routes/qr.js');
   truthy('importe streamLLM', /import\s*\{[^}]*streamLLM[^}]*\}\s*from\s*'\.\.\/lib\/llm-stream\.js'/.test(qr));
-  truthy('importe resolveEngineForTenant', /resolveEngineForTenant/.test(qr));
-  truthy('résout le moteur du proprio (ownerKey)', /resolveEngineForTenant\(env,\s*ownerKey\)/.test(qr));
+  // P7 (2026-07) : le Concierge résout via le mode déclaré per-app
+  // (lib/app-mode.js resolveEngineForApp → resolveEngineForTenant).
+  truthy('importe resolveEngineForApp (app-mode)', /import\s*\{[^}]*resolveEngineForApp[^}]*\}\s*from\s*'\.\.\/lib\/app-mode\.js'/.test(qr));
+  truthy('résout le moteur du proprio (ownerKey)', /resolveEngineForApp\(env,\s*ownerKey,\s*QR_APP_ID\)/.test(qr));
   truthy('appelle streamLLM (vendor)', /await\s+streamLLM\(/.test(qr));
   truthy('repli Mistral préservé (env.AI.run KS_AI_MODEL)', /env\.AI\.run\(KS_AI_MODEL/.test(qr));
   truthy('skip budget/crédits si byok', /if\s*\(\s*!byok\s*\)/.test(qr));

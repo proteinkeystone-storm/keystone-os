@@ -100,8 +100,15 @@ function _hydrate(vault) {
     if (!vault || typeof vault !== 'object') return;
     const api   = vault.api   || {};
     const prefs = vault.prefs || {};
-    Object.entries(api).forEach(([id, val]) => {
+    // Clés API : le blob du COMPTE fait foi (fix 27/07/2026). Avant, on ne
+    // faisait qu'AJOUTER — une clé supprimée sur un appareil ressuscitait
+    // depuis les autres (leur localStorage la re-uploadait au prochain
+    // save). Désormais : présente dans le blob → posée ; absente →
+    // retirée localement. La suppression se propage donc comme l'ajout.
+    PROVIDERS.forEach(id => {
+        const val = api[id];
         if (val) localStorage.setItem('ks_api_' + id, val);
+        else     localStorage.removeItem('ks_api_' + id);
     });
     Object.entries(prefs).forEach(([k, val]) => {
         // On ne réinjecte QUE les clés ACTUELLEMENT synchronisées. Un ancien
@@ -112,6 +119,34 @@ function _hydrate(vault) {
     });
     _lastHydrationTs = Date.now();
     window.dispatchEvent(new CustomEvent('ks-vault-hydrated'));
+}
+
+// ── Purge unique des « clés fantômes » (incident 27/07/2026) ───
+// Des clés API datant de l'ère vault-USB (avril-mai 2026) ressuscitaient
+// à chaque boot via la sync : champs « Configurée » sans saisie récente,
+// et depuis le flip BYOK_ROUTING=on elles partaient réellement chez les
+// vendors (clés mortes → erreurs). Compte ADMIN uniquement — le seul
+// touché ; les clés d'un client réel ne passent jamais ici. S'exécute
+// une fois par appareil (flag local, volontairement HORS PREFS_KEYS),
+// APRÈS _hydrate (sinon le blob les re-poserait aussitôt). À retirer
+// une fois l'assainissement constaté sur tous les appareils.
+async function _purgePhantomAdminKeys() {
+    const FLAG = 'ks_purge_phantom_v1';
+    try {
+        if (localStorage.getItem(FLAG) === '1') return false;
+        const { ksWhoami } = await import('./lib/session-guard.js');
+        const plan = String(ksWhoami()?.plan || '').toUpperCase();
+        if (plan !== 'ADMIN') return false;
+        let removed = false;
+        PROVIDERS.forEach(id => {
+            if (localStorage.getItem('ks_api_' + id) != null) {
+                localStorage.removeItem('ks_api_' + id);
+                removed = true;
+            }
+        });
+        localStorage.setItem(FLAG, '1');
+        return removed;
+    } catch (_) { return false; }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -128,6 +163,12 @@ export async function loadFromCloud() {
         const data = await res.json();
         if (!data.vault) return { hydrated: false, reason: 'empty' };
         _hydrate(data.vault);
+        // Purge fantômes (une fois par appareil) : si des clés ont été
+        // retirées, pousse tout de suite le blob nettoyé — l'hydratation
+        // « le blob fait foi » assainit alors les autres appareils seule.
+        if (await _purgePhantomAdminKeys()) {
+            try { await saveToCloud(); } catch (_) { /* re-tentera au prochain save */ }
+        }
         return { hydrated: true, updatedAt: data.updatedAt };
     } catch (e) {
         console.warn('[CloudVault] load failed:', e.message);
