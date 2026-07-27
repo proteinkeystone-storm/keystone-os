@@ -34,8 +34,12 @@
      - state 32 bytes usage unique (DELETE gardé, anti-rejeu)
      - nonce vérifié dans l'id_token
      - PKCE S256 (verifier jamais exposé)
-     - signature RS256 vérifiée contre le JWKS de l'IdP (par kid)
-     - iss / aud / exp / email_verified contrôlés
+     - signature RS256 vérifiée contre le JWKS de l'IdP (par kid, kty RSA)
+     - iss / aud (+ azp si multiple) / exp / iat / email_verified contrôlés
+     - découverte : redirections refusées, doc.issuer contre-vérifié,
+       endpoints https imposés (le client_secret ne peut pas être
+       détourné par un hôte d'issuer qui se mettrait à rediriger)
+     - /start limité par IP (flood d'écritures D1 borné)
      - l'email DOIT appartenir au domaine de la connexion (un IdP
        compromis ne peut pas se faire passer pour un autre client)
      - l'email doit correspondre à un compte Keystone actif — le SSO
@@ -48,6 +52,11 @@ import { audit } from '../lib/audit.js';
 import { issueMagicLink } from './auth-magic-link.js';
 
 const STATE_TTL_MIN = 10;
+// Départs OIDC par IP sur la fenêtre de vie d'un state (10 min). Les
+// flux menés au bout sortent du compte (le callback supprime le state) :
+// seuls les départs abandonnés s'accumulent. 30 laisse passer un bureau
+// entier derrière une même IP, et borne un flood d'écritures D1.
+const RL_START_PER_IP = 30;
 
 // ── Auto-migration ──────────────────────────────────────────────
 let _schemaReady = false;
@@ -73,9 +82,13 @@ async function _ensureSchema(env) {
       verifier   TEXT NOT NULL,
       conn_id    TEXT NOT NULL,
       expires_at TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      ip_hash    TEXT
     )
   `).run().catch(() => {});
+  // Table déjà créée sans la colonne (prod d'avant l'audit) : ALTER
+  // idempotent, l'échec « duplicate column » est le cas nominal ensuite.
+  await env.DB.prepare('ALTER TABLE oidc_states ADD COLUMN ip_hash TEXT').run().catch(() => {});
   _schemaReady = true;
 }
 
@@ -101,6 +114,19 @@ async function _s256Challenge(verifier) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
   return _b64u(buf);
 }
+// Un endpoint annoncé par la découverte ne doit jamais quitter https
+// (loopback toléré : banc de test local, même exception que l'admin).
+function _urlTrusted(u) {
+  return /^https:\/\//.test(u) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(u);
+}
+// Même hachage RGPD-safe que le magic-link (pas d'IP brute en DB).
+async function _ipHash(env, request) {
+  const ip = (request.headers.get('cf-connecting-ip') || '').slice(0, 64);
+  if (!ip) return null;
+  const pepper = env.KS_LOOKUP_PEPPER || 'ks-default-pepper-do-not-use-in-prod';
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ip + pepper));
+  return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
+}
 
 // Origine front (même logique que le magic-link)
 function _frontBase(env) {
@@ -117,11 +143,20 @@ async function _discover(issuer) {
   const key = issuer.replace(/\/+$/, '');
   const hit = _discoCache.get(key);
   if (hit && hit.exp > Date.now()) return hit.doc;
-  const res = await fetch(`${key}/.well-known/openid-configuration`);
+  // redirect:'manual' (le runtime edge n'a pas 'error') — un hôte
+  // d'issuer qui se met à rediriger (domaine racheté, compromission)
+  // enverrait sinon le client_secret ailleurs ; un 3xx tombe sur !res.ok.
+  const res = await fetch(`${key}/.well-known/openid-configuration`, { redirect: 'manual' });
   if (!res.ok) throw new Error(`discovery ${res.status}`);
   const doc = await res.json();
   if (!doc.authorization_endpoint || !doc.token_endpoint || !doc.jwks_uri) {
     throw new Error('discovery incomplète');
+  }
+  // Le document doit se déclarer au nom de l'issuer configuré (spec OIDC
+  // Discovery §4.3) et chaque endpoint doit rester en https.
+  if ((doc.issuer || '').replace(/\/+$/, '') !== key) throw new Error('issuer du document inattendu');
+  for (const u of [doc.authorization_endpoint, doc.token_endpoint, doc.jwks_uri]) {
+    if (!_urlTrusted(u)) throw new Error('endpoint non https dans la découverte');
   }
   _discoCache.set(key, { doc, exp: Date.now() + 10 * 60 * 1000 });
   return doc;
@@ -136,10 +171,10 @@ async function _verifyIdToken(idToken, { jwksUri, issuer, clientId, nonce }) {
 
   if (header.alg !== 'RS256') throw new Error(`alg ${header.alg} refusé`);
 
-  const jwksRes = await fetch(jwksUri);
+  const jwksRes = await fetch(jwksUri, { redirect: 'manual' });
   if (!jwksRes.ok) throw new Error(`jwks ${jwksRes.status}`);
   const jwks = await jwksRes.json();
-  const jwk = (jwks.keys || []).find(k => k.kid === header.kid && (k.use === 'sig' || !k.use));
+  const jwk = (jwks.keys || []).find(k => k.kid === header.kid && k.kty === 'RSA' && (k.use === 'sig' || !k.use));
   if (!jwk) throw new Error('kid inconnu du JWKS');
 
   const key = await crypto.subtle.importKey(
@@ -159,8 +194,15 @@ async function _verifyIdToken(idToken, { jwksUri, issuer, clientId, nonce }) {
   if (issNorm(payload.iss) !== issNorm(issuer)) throw new Error('iss inattendu');
   const aud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
   if (!aud.includes(clientId)) throw new Error('aud inattendu');
+  // Audience multiple : le jeton doit désigner NOTRE client comme partie
+  // autorisée (spec OIDC Core §3.1.3.7) — sinon un id_token émis pour un
+  // autre client du même IdP qui nous liste en audience passerait.
+  if (aud.length > 1 && payload.azp !== clientId) throw new Error('azp inattendu');
   if (typeof payload.exp !== 'number' || payload.exp < now - 60) throw new Error('id_token expiré');
+  if (typeof payload.iat !== 'number' || payload.iat > now + 300) throw new Error('iat invalide');
   if (payload.nonce !== nonce) throw new Error('nonce inattendu');
+  // `false` explicite = refus. Claim ABSENT accepté : Entra ne l'émet
+  // pas ; le cloisonnement domaine + compte Keystone requis compensent.
   if (payload.email_verified === false) throw new Error('email non vérifié chez l\'IdP');
 
   return payload;
@@ -207,6 +249,17 @@ export async function handleOidcStart(request, env) {
   // Purge opportuniste des états expirés (table petite, pas de cron dédié)
   await env.DB.prepare("DELETE FROM oidc_states WHERE expires_at < datetime('now')").run().catch(() => {});
 
+  // Endpoint public : chaque départ écrit une ligne. Limite par IP sur la
+  // fenêtre de vie des states — un flood ne peut plus gonfler la table ni
+  // brûler le quota d'écritures D1.
+  const ipHash = await _ipHash(env, request);
+  if (ipHash) {
+    const recent = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM oidc_states WHERE ip_hash = ? AND created_at > datetime('now', '-10 minutes')"
+    ).bind(ipHash).first().catch(() => null);
+    if ((recent?.n || 0) >= RL_START_PER_IP) return _redirectFrontError(env, 'rate_limited');
+  }
+
   const state    = generateToken(32);
   const nonce    = generateToken(32);
   const verifier = generateToken(32);
@@ -214,8 +267,8 @@ export async function handleOidcStart(request, env) {
     .toISOString().replace('T', ' ').slice(0, 19);
 
   await env.DB.prepare(
-    'INSERT INTO oidc_states (state, nonce, verifier, conn_id, expires_at) VALUES (?, ?, ?, ?, ?)'
-  ).bind(state, nonce, verifier, conn.id, expiresAt).run();
+    'INSERT INTO oidc_states (state, nonce, verifier, conn_id, expires_at, ip_hash) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(state, nonce, verifier, conn.id, expiresAt, ipHash).run();
 
   const redirectUri = `${url.origin}/api/auth/oidc/callback`;
   const authUrl = new URL(disco.authorization_endpoint);
@@ -380,8 +433,9 @@ export async function handleSsoConnectionsAdmin(request, env) {
     const licenceKey = (body.licence_key || '').toString().trim().toUpperCase() || null;
 
     if (!_domainValid(domain))          return err('email_domain invalide', 400, origin);
-    // https obligatoire — seule exception : loopback (banc de test local)
-    if (!/^https:\/\//.test(issuer) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(issuer)) {
+    // https obligatoire — seule exception : loopback (banc de test local,
+    // chemin toléré pour héberger plusieurs IdP factices sur un même port)
+    if (!/^https:\/\//.test(issuer) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/[\w./-]*)?$/.test(issuer)) {
       return err('issuer doit être en https', 400, origin);
     }
     if (!clientId)                      return err('client_id requis', 400, origin);

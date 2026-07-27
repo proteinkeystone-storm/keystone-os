@@ -13,6 +13,13 @@
      (7) email d'un autre domaine → email_domain_mismatch
      (8) identité OK mais sans compte Keystone → no_account
      (9) admin : la liste ne fuit JAMAIS le client_secret
+    (10) algorithmes faibles refusés : alg none, HS256
+    (11) iss falsifié / aud d'un autre client / id_token expiré /
+         email_verified:false / iat futur → refusés
+    (12) audience multiple : sans azp → refusé ; azp correct → accepté
+    (13) découverte : doc.issuer menteur, réponse en redirection,
+         token_endpoint http non-loopback → tous refusés au /start
+    (14) flood de /start même IP → rate_limited (borne D1)
 
    Lancer le worker AVANT :
      npx wrangler dev --local -c wrangler.dktest.toml --port 8799 \
@@ -47,13 +54,24 @@ const KID = 'bench-1';
 
 const b64u = (buf) => Buffer.from(buf).toString('base64url');
 function makeIdToken({ email, nonce, tamper }) {
-  const header  = b64u(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: KID }));
+  const alg = tamper === 'alg-none' ? 'none' : tamper === 'alg-hs256' ? 'HS256' : 'RS256';
+  const header  = b64u(JSON.stringify({ alg, typ: 'JWT', kid: KID }));
   const now = Math.floor(Date.now() / 1000);
   const payload = b64u(JSON.stringify({
-    iss: IDP, aud: CLIENT, exp: now + 600, iat: now,
+    iss: tamper === 'iss' ? 'https://evil.example' : IDP,
+    aud: tamper === 'aud' ? 'autre-client'
+       : (tamper === 'aud-multi' || tamper === 'aud-multi-azp') ? [CLIENT, 'autre-client'] : CLIENT,
+    ...(tamper === 'aud-multi-azp' ? { azp: CLIENT } : {}),
+    exp: tamper === 'expired' ? now - 3600 : now + 600,
+    iat: tamper === 'iat-future' ? now + 3600 : now,
     nonce: tamper === 'nonce' ? 'wrong-nonce' : nonce,
-    email, email_verified: true,
+    email, email_verified: tamper === 'unverified' ? false : true,
   }));
+  if (tamper === 'alg-none')  return `${header}.${payload}.`;
+  if (tamper === 'alg-hs256') {
+    const mac = crypto.createHmac('sha256', 'nimporte-quoi').update(`${header}.${payload}`).digest();
+    return `${header}.${payload}.${b64u(mac)}`;
+  }
   const signer = tamper === 'sig' ? evilKeys.privateKey : privateKey;
   const sig = crypto.sign('sha256', Buffer.from(`${header}.${payload}`), signer);
   return `${header}.${payload}.${b64u(sig)}`;
@@ -61,6 +79,30 @@ function makeIdToken({ email, nonce, tamper }) {
 
 const idp = http.createServer((req, res) => {
   const send = (obj) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(obj)); };
+  // (13) IdP « menteur » : le doc se déclare au nom d'un AUTRE issuer.
+  if (req.url.startsWith('/lying/.well-known/openid-configuration')) {
+    return send({
+      issuer: IDP, // ≠ IDP/lying configuré → doit être refusé
+      authorization_endpoint: `${IDP}/authorize`,
+      token_endpoint: `${IDP}/token`,
+      jwks_uri: `${IDP}/jwks`,
+    });
+  }
+  // (13) découverte servie via redirection → doit être refusée.
+  if (req.url.startsWith('/redir/.well-known/openid-configuration')) {
+    res.statusCode = 302;
+    res.setHeader('Location', `${IDP}/.well-known/openid-configuration`);
+    return res.end();
+  }
+  // (13) token_endpoint en http non-loopback → doit être refusé.
+  if (req.url.startsWith('/httpep/.well-known/openid-configuration')) {
+    return send({
+      issuer: `${IDP}/httpep`,
+      authorization_endpoint: `${IDP}/authorize`,
+      token_endpoint: 'http://198.51.100.1/token',
+      jwks_uri: `${IDP}/jwks`,
+    });
+  }
   if (req.url.startsWith('/.well-known/openid-configuration')) {
     return send({
       issuer: IDP,
@@ -92,9 +134,12 @@ const idp = http.createServer((req, res) => {
 // ── Helpers banc ────────────────────────────────────────────────
 function d1(sql) {
   const tmp = 'test/.oidc-seed.tmp.sql';
+  // BK_PERSIST : même dossier d'état que le worker lancé avec --persist-to
+  // (campagne locale sur base jetable) ; la CI reste sur l'état par défaut.
+  const persist = process.env.BK_PERSIST ? ` --persist-to "${process.env.BK_PERSIST}"` : '';
   writeFileSync(tmp, sql);
   try {
-    execSync(`npx wrangler d1 execute keystone-os --local -c wrangler.dktest.toml --file="${tmp}" --json`,
+    execSync(`npx wrangler d1 execute keystone-os --local -c wrangler.dktest.toml${persist} --file="${tmp}" --json`,
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   } finally { try { unlinkSync(tmp); } catch {} }
 }
@@ -129,6 +174,12 @@ async function main() {
       invited_by TEXT, invited_at TEXT NOT NULL DEFAULT (datetime('now')),
       activated_at TEXT, revoked_at TEXT
     );
+    CREATE TABLE IF NOT EXISTS oidc_states (
+      state TEXT PRIMARY KEY, nonce TEXT NOT NULL, verifier TEXT NOT NULL,
+      conn_id TEXT NOT NULL, expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), ip_hash TEXT
+    );
+    DELETE FROM oidc_states;
     DELETE FROM licence_emails WHERE email LIKE '%@${DOMAIN}';
     INSERT OR REPLACE INTO licences (key, tenant_id, owner, plan, is_active) VALUES ('${LIC}', 'default', 'Bench SSO', 'PRO', 1);
     INSERT INTO licence_emails (id, licence_key, email, role, status, activated_at) VALUES ('le-sso', '${LIC}', '${USER}', 'owner', 'active', datetime('now'));
@@ -212,6 +263,55 @@ async function main() {
   const conn = (list.connections || []).find(c => c.email_domain === DOMAIN);
   ok(!!conn && !('secret_ct' in conn) && !('secret_iv' in conn) && !JSON.stringify(list).includes('bench-sso-secret'),
     'liste admin : aucun champ secret exposé', JSON.stringify(conn || {}));
+
+  // (10)+(11)+(12) id_tokens hostiles — chaque variante DOIT mourir sur
+  // idtoken_invalid, sauf aud-multi-azp qui est légitime.
+  const hostile = [
+    ['alg-none',   'alg none refusé'],
+    ['alg-hs256',  'alg HS256 refusé'],
+    ['iss',        'iss falsifié refusé'],
+    ['aud',        'aud d\'un autre client refusée'],
+    ['expired',    'id_token expiré refusé'],
+    ['unverified', 'email_verified:false refusé'],
+    ['aud-multi',  'audience multiple sans azp refusée'],
+    ['iat-future', 'iat futur refusé'],
+  ];
+  for (const [tamper, label] of hostile) {
+    f = await freshState();
+    r = await get(`/api/auth/oidc/callback?code=${code({ email: USER, nonce: f.nonce, tamper })}&state=${f.state}`);
+    ok((r.headers.get('location') || '').includes('sso_error=idtoken_invalid'), label, r.headers.get('location'));
+  }
+  // (12) audience multiple AVEC azp correct → chaîne heureuse
+  f = await freshState();
+  r = await get(`/api/auth/oidc/callback?code=${code({ email: USER, nonce: f.nonce, tamper: 'aud-multi-azp' })}&state=${f.state}`);
+  ok((r.headers.get('location') || '').includes('/auth/magic?token='), 'audience multiple avec azp correct → acceptée', r.headers.get('location'));
+
+  // (13) découvertes empoisonnées : la connexion se crée (l'admin ne
+  // sonde pas l'IdP), mais le /start doit refuser idp_unreachable.
+  const poisoned = [
+    ['banc-lying.ks',  `${IDP}/lying`,  'doc.issuer menteur → start refusé'],
+    ['banc-redir.ks',  `${IDP}/redir`,  'découverte en redirection → start refusé'],
+    ['banc-httpep.ks', `${IDP}/httpep`, 'token_endpoint http non-loopback → start refusé'],
+  ];
+  for (const [dom, issuer, label] of poisoned) {
+    const c = await fetch(API + '/api/admin/sso-connections', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + ADMIN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email_domain: dom, issuer, client_id: CLIENT, client_secret: 's' }),
+    });
+    ok(c.status === 200, `connexion ${dom} enregistrée`, c.status);
+    const s = await get(`/api/auth/oidc/start?domain=${dom}`);
+    ok((s.headers.get('location') || '').includes('sso_error=idp_unreachable'), label, s.headers.get('location'));
+  }
+
+  // (14) flood de /start : la limite par IP doit finir par tomber.
+  // EN DERNIER — une fois déclenchée, l'IP du banc est grillée 10 min.
+  let limited = false;
+  for (let i = 0; i < 40 && !limited; i++) {
+    const s = await get(`/api/auth/oidc/start?domain=${DOMAIN}`);
+    limited = (s.headers.get('location') || '').includes('sso_error=rate_limited');
+  }
+  ok(limited, 'flood de /start même IP → rate_limited');
 
   console.log(`\n═══ ${pass} ✓ · ${fail} ✗ ═══`);
   idp.close();
