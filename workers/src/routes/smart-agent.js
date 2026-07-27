@@ -564,11 +564,21 @@ async function _backfillVaults(env) {
 
 // _privateVaultOf : id du coffre privé d'un agent ; le crée à la volée s'il
 // n'existe pas encore (agent né après le backfill, ou course). Idempotent.
+// Audit sept. 2026 (SA-T1) : `agentId` vient du CLIENT sur plusieurs routes
+// (?agent=, body.agent_id). Deux défauts se cachaient ici tant qu'un seul
+// tenant portait des données :
+//   1. l'agent d'un AUTRE tenant n'était pas écarté d'emblée → on lui
+//      fabriquait un coffre orphelin à chaque appel (pollution silencieuse) ;
+//   2. le SELECT de repli n'avait PAS de `tenant_id` → il rendait le
+//      `private_vault_id` d'un agent étranger à l'appelant.
+// Corrigé : un agent qui n'est pas DANS le tenant sort tout de suite avec
+// `null`, avant la moindre écriture. Les appelants traduisent ce null en 404.
 async function _privateVaultOf(env, tenant, agentId) {
   const { results } = await env.DB
     .prepare('SELECT private_vault_id FROM sa_agents WHERE id = ? AND tenant_id = ?')
     .bind(agentId, tenant).all();
-  if (results.length && results[0].private_vault_id) return results[0].private_vault_id;
+  if (!results.length) return null;
+  if (results[0].private_vault_id) return results[0].private_vault_id;
   const vid = generateId();
   await env.DB.prepare(
     "INSERT INTO kortex_vaults (id, tenant_id, folder_id, name, kind) VALUES (?, ?, NULL, 'Coffre privé', 'private')"
@@ -578,7 +588,8 @@ async function _privateVaultOf(env, tenant, agentId) {
   ).bind(vid, agentId, tenant).run();
   if (!up.meta?.changes) {
     const { results: r2 } = await env.DB
-      .prepare('SELECT private_vault_id FROM sa_agents WHERE id = ?').bind(agentId).all();
+      .prepare('SELECT private_vault_id FROM sa_agents WHERE id = ? AND tenant_id = ?')
+      .bind(agentId, tenant).all();
     return r2[0]?.private_vault_id || vid;
   }
   return vid;
@@ -874,12 +885,23 @@ export async function handleKortexUnitsList(request, env) {
   // SA-4.4.2 — soit un coffre explicite (?vault=, ex. partagé d'un dossier),
   // soit le coffre privé de l'agent (?agent=). On lit par vault_id ; fallback
   // agent_id défensif pour les fiches pas encore migrées (transition 4.4.0).
+  // Audit sept. 2026 (SA-T4) : `?vault=` et `?agent=` sont des identifiants
+  // CLIENT. Le `tenant_id = ?` de la requête suffisait déjà à ne rien laisser
+  // fuir (un coffre étranger rendait une liste vide), mais on répondait 200
+  // avec un résultat vide là où `handleKortexUnitCreate` répond 404. Même
+  // contrôle des deux côtés : un identifiant qui n'est pas à nous est
+  // introuvable, il ne « marche » pas à moitié.
   let scope, scopeBinds;
   if (vault) {
+    const { results: vr } = await env.DB
+      .prepare('SELECT id FROM kortex_vaults WHERE id = ? AND tenant_id = ?')
+      .bind(vault, gate.tenant).all();
+    if (!vr.length) return err('Coffre introuvable', 404, origin);
     scope = 'vault_id = ?';
     scopeBinds = [vault];
   } else if (agent) {
     const vaultId = await _privateVaultOf(env, gate.tenant, agent);
+    if (!vaultId) return err('Agent introuvable', 404, origin);
     scope = '(vault_id = ? OR (vault_id IS NULL AND agent_id = ?))';
     scopeBinds = [vaultId, agent];
   } else {
@@ -947,6 +969,9 @@ export async function handleKortexUnitCreate(request, env) {
     vaultId = explicitVault; ownerAgentId = null;
   } else {
     vaultId = await _privateVaultOf(env, gate.tenant, agentId);
+    // null = cet agent n'est pas dans notre tenant (cf. SA-T1). Sans ce
+    // contrôle, la fiche s'écrivait avec le coffre ET l'agent d'un tiers.
+    if (!vaultId) return err('Agent introuvable', 404, origin);
     ownerAgentId = agentId;
   }
 
@@ -1082,10 +1107,17 @@ export async function handleKortexUnitDelete(request, env, unitId) {
     .prepare('DELETE FROM kortex_units WHERE id = ? AND tenant_id = ?')
     .bind(unitId, gate.tenant)
     .run();
+  // Audit sept. 2026 (SA-T2) : le nettoyage de l'index se faisait AVANT de
+  // vérifier que la fiche nous appartenait. Le DELETE D1 ci-dessus est bien
+  // cloisonné et ne touchait rien, mais celui de l'index ne porte que
+  // `unit_id` : avec l'identifiant d'une fiche d'un AUTRE tenant, on la
+  // désindexait de sa propre recherche — sa donnée restait intacte, mais elle
+  // devenait introuvable chez elle. Seul effet cross-tenant réellement
+  // déclenchable du fichier. On ne nettoie plus que ce qu'on a supprimé.
+  if (!res.meta?.changes) return err('Fiche introuvable', 404, origin);
   await env.DB.prepare('DELETE FROM kortex_units_fts_v2 WHERE unit_id = ?').bind(unitId).run();
   await _vectorDelete(env, [unitId]);
 
-  if (!res.meta?.changes) return err('Fiche introuvable', 404, origin);
   return json({ ok: true }, 200, origin);
 }
 
@@ -2058,6 +2090,17 @@ export async function handleGapStructure(request, env, gapId) {
 //    SA-4.4). Retourne des LIGNES brutes (rows D1) + la provenance ;
 //    les handlers façonnent la sortie.
 async function _retrieve(env, tenant, q, { topk = SEARCH_TOPK, vaultIds = [], focusMatches = [] } = {}) {
+  // Audit sept. 2026 (SA-T3) — GARDE D'ENTRÉE. Le filtre `vault_id IN (…)`
+  // est conditionnel plus bas : une liste de coffres VIDE ne restreignait
+  // donc plus rien et la recherche s'élargissait en silence à TOUT le savoir
+  // du tenant, tous agents confondus. Or `vaultIds` vaut [] précisément quand
+  // l'agent demandé n'appartient pas au tenant (_vaultsForAgent, plus haut).
+  // Le canal public est le plus exposé : un visiteur anonyme d'un agent publié
+  // aurait interrogé les coffres des agents NON publiés du propriétaire.
+  // Pas de coffre = pas de recherche. `kortexGroundingForGest` appliquait déjà
+  // cette règle de son côté (reason:'empty-vault') ; elle vit désormais ici,
+  // au seul endroit que TOUS les canaux traversent.
+  if (!vaultIds.length) return { semantic: false, hits: [], degraded: false };
   // ── Liste lexicale (FTS5 v2 — cloisonnée DANS l'index : le top-K est
   //    celui du tenant, et des coffres demandés s'il y en a). La jointure D1
   //    plus bas reste l'autorité finale (statut validé + revérification).
@@ -2395,7 +2438,11 @@ export async function handleKortexSearch(request, env) {
   if (q.length < 2)   return err('Question trop courte', 400, origin);
   if (q.length > 500) return err('Question trop longue (500 caractères max)', 400, origin);
 
+  // Un agent qui n'est pas à nous ne rend pas « aucun résultat » : il est
+  // introuvable (SA-T3 — sans ce 404, la recherche retombait sur TOUS nos
+  // coffres, ce qui donnait l'illusion que l'agent demandé avait répondu).
   const vaultIds = await _vaultsForAgent(env, gate.tenant, agent);
+  if (!vaultIds.length) return err('Agent introuvable', 404, origin);
   const { semantic, hits } = await _retrieve(env, gate.tenant, q, { topk, vaultIds });
   const out = hits.map(h => ({
     unit: _rowToUnit(h.row),

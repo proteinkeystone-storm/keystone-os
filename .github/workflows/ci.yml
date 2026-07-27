@@ -73,7 +73,7 @@ jobs:
 
   # ── 3. Suites E2E contre wrangler dev --local ─────────────────
   e2e:
-    name: E2E (desK, backup, ops, SSO OIDC)
+    name: E2E (desK, backup, ops, SSO OIDC, cloison Smart Agent)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -117,7 +117,7 @@ jobs:
           set -e
           for t in test-desk-dk2 test-desk-dk3 test-desk-dk4 test-desk-dk5-board \
                    test-desk-artcasier test-desk-newsignal \
-                   test-backup-restore test-ops-health test-auth-oidc; do
+                   test-backup-restore test-ops-health test-auth-oidc test-sa-tenant; do
             echo "── $t ──"
             node test/$t.mjs
           done
