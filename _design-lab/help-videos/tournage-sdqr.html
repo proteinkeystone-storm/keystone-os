@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournage — vidéo d'aide Smart Dynamic QR</title>
+  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/workspace.css">
+</head>
+<body>
+  <script>
+    // Stubs API — univers démo du domaine viticole (repris du harnais
+    // notice sdqr-notice-harness.html) + création simulée. Rien ne part
+    // vers le worker de prod pendant le tournage.
+    const QRS = [
+      { id: 'q1', short_id: 'a7Kd2p', name: 'Étiquette Cuvée des Galets 2024',
+        qr_type: 'url', mode: 'dynamic', status: 'active', scans_total: 1284,
+        folder: 'Étiquettes', tags: 'millésime,bouteille',
+        target_url: 'https://domaine-des-galets.fr/cuvee-galets-2024',
+        scans_series: [4,9,12,7,18,26,31,22,19,28,35,41,38,29,33,44,52,47,39,42,55,61,58,49,53,66,71,64,57,60] },
+      { id: 'q2', short_id: 'm3Bq8x', name: 'Salon Vinexpo — stand D14',
+        qr_type: 'url', mode: 'dynamic', status: 'active', scans_total: 342,
+        folder: 'Salons', tags: 'salon,2026',
+        target_url: 'https://domaine-des-galets.fr/rendez-vous-salon',
+        scans_series: [0,0,0,2,5,3,8,64,98,71,42,19,11,7,4,3,2,2,1,1,0,0,0,0,0,0,0,0,0,0] },
+      { id: 'q3', short_id: 'z9Wt4c', name: 'Carte de visite — Élodie Mercier',
+        qr_type: 'vcard', mode: 'static', status: 'active', scans_total: 0,
+        folder: 'Contacts', tags: 'vcard' },
+      { id: 'q4', short_id: 'p5Lr7v', name: 'Wi-Fi caveau de dégustation',
+        qr_type: 'wifi', mode: 'static', status: 'active', scans_total: 0,
+        folder: null, tags: 'caveau' },
+    ];
+
+    let CREATED = null;
+    const _fetch = window.fetch.bind(window);
+    window.fetch = (url, opts = {}) => {
+      const u = String(url);
+      const ok = (data) => Promise.resolve(new Response(JSON.stringify(data),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      if (u.includes('/api/qr')) {
+        if ((opts.method || 'GET') === 'POST' && /\/api\/qr$/.test(u)) {
+          const body = JSON.parse(opts.body || '{}');
+          CREATED = { id: 'q-new', short_id: 'v8Xm3r', status: 'active',
+            scans_total: 0, folder: null,
+            name: body.name, tags: body.tags || '', qr_type: body.type,
+            mode: body.mode, target_url: body.target_url || '',
+            payload: body.payload || {}, design: body.design || null };
+          return ok({ qr: CREATED });
+        }
+        if (u.includes('/stats')) return ok({ mode: 'dynamic',
+          totals: { total: 0, unique: 0, today: 0, week: 0 },
+          byDay: [], heatmap: [], byCountry: [], byDevice: [], byOs: [], meta: {} });
+        if (u.includes('/scans')) return ok({ scans: [] });
+        return ok({ qrs: CREATED ? [CREATED, ...QRS] : QRS });
+      }
+      if (u.includes('/api/')) return ok({});
+      return _fetch(url, opts);
+    };
+  </script>
+  <script type="module">
+    import { openSDQR } from '/app/sdqr.js';
+    import { icon } from '/app/lib/ui-icons.js';
+    import { mountFilm } from '/_design-lab/help-videos/tournage.js';
+    import { steps, meta } from '/_design-lab/help-videos/scenario-sdqr.js';
+
+    openSDQR();
+    setTimeout(() => {
+      document.querySelectorAll('img').forEach(img => {
+        const s = img.getAttribute('src') || '';
+        if (s.startsWith('./LOGOS/')) img.src = s.slice(1);
+      });
+      mountFilm({ steps, meta: { ...meta, iconSvg: icon(meta.iconName, 64) } });
+    }, 900);
+  </script>
+</body>
+</html>
