@@ -16,6 +16,10 @@ const API_BASE = 'https://keystone-os-api.keystone-os.workers.dev';
 // désormais de la source unique app/lib/engines.js — sync clés inchangée.
 export const PREFS_KEYS = [
     'ks_active_engine','ks_user_name',
+    // Interrupteur « utiliser ma clé » (refonte sélecteur 27/07/2026) :
+    // préférence de COMPTE, comme le moteur actif — couper sa clé sur le
+    // Mac doit aussi la couper sur l'iPhone.
+    'ks_byok_enabled',
     // Fix 19/07 — activation de Kora (dogfood) : posée à la console, la clé
     // mourait à chaque purge de données de site (galet disparu, aucun moyen
     // de la reposer sur mobile). Synchronisée, elle suit le COMPTE : activer

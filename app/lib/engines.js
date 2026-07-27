@@ -105,6 +105,12 @@ export const PROVIDERS       = ENGINES.map(e => e.id);
 // Clés localStorage (source unique aussi).
 export const LS_ENGINE = 'ks_active_engine';
 export const LS_PREFIX = 'ks_api_';
+// Interrupteur « utiliser ma clé » (refonte sélecteur 27/07/2026).
+// ON par défaut (absence de flag = ON) : déposer une clé suffit à
+// l'activer, cohérent avec la décision D1 (« la présence d'une clé
+// décide ») — l'interrupteur n'ajoute que la possibilité de REVENIR
+// à l'IA incluse sans effacer ses clés. Synchronisé (PREFS_KEYS).
+export const LS_BYOK_ON = 'ks_byok_enabled';
 
 // ── Résolution d'un record depuis un label (alias + insensible casse) ──
 export function engineRecord(label) {
@@ -158,10 +164,18 @@ export function listEnginesWithKey() {
   }).map(e => e.label);
 }
 
+// Interrupteur « utiliser ma clé » : ON par défaut, OFF = '0' explicite.
+export function byokEnabled() {
+  try { return localStorage.getItem(LS_BYOK_ON) !== '0'; }
+  catch (_) { return true; }
+}
+
 // Champs BYOK à joindre au body d'une requête IA worker : moteur ACTIF (id
-// Worker) + sa clé. Renvoie {} si aucune clé → le worker retombe sur Mistral
-// (le flag BYOK_ROUTING tranche côté serveur). À spreader : { ...byokRequestFields() }.
+// Worker) + sa clé. Renvoie {} si aucune clé OU si l'interrupteur « utiliser
+// ma clé » est OFF → le worker retombe sur Mistral (le flag BYOK_ROUTING
+// tranche côté serveur). À spreader : { ...byokRequestFields() }.
 export function byokRequestFields() {
+  if (!byokEnabled()) return {};
   const label = getActiveEngine();
   const key   = apiKeyForEngine(label);
   return key ? { engine: engineIdForLabel(label), apiKey: key } : {};

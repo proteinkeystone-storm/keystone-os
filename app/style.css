@@ -2807,6 +2807,9 @@ html.light-mode .acc-body { border-top-color: rgba(17,24,39,.06); }
 .engine-select-sub  { font-size: 10px; color: var(--tx3); margin-top: 1px; }
 .engine-select-chk  { color: var(--gold); font-size: 13px; font-weight: 900; opacity: 0; transition: opacity .2s; }
 .engine-select-item.active .engine-select-chk { opacity: 1; }
+/* Interrupteur « utiliser ma clé » OFF : la liste reste visible (on voit
+   ses moteurs à clé) mais éteinte et non cliquable. */
+.engine-select-wrap.engine-select-off { opacity: .45; pointer-events: none; }
 
 /* ── Misc SP rows ── */
 .sp-row {

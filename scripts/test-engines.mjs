@@ -149,6 +149,44 @@ console.log('\n\x1b[1m▶ Suite 4 — Réduction à 5 (Llama + Perplexity masqu�
   else ko("alias 'GPT 5'", JSON.stringify(engineRecord('GPT 5')));
 }
 
+console.log('\n\x1b[1m▶ Suite 5 — Interrupteur « utiliser ma clé » (refonte sélecteur 27/07)\x1b[0m');
+{
+  // Shim localStorage : les helpers lisent PARESSEUSEMENT à l'appel,
+  // on peut donc le poser après l'import.
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+  };
+  const { byokEnabled, byokRequestFields, LS_BYOK_ON } = await import('../app/lib/engines.js');
+
+  if (byokEnabled() === true) ok('flag absent → interrupteur ON (défaut D1 : la clé décide)');
+  else ko('défaut interrupteur', 'attendu true');
+
+  if (JSON.stringify(byokRequestFields()) === '{}') ok('ON sans clé → {} (IA incluse)');
+  else ko('ON sans clé', JSON.stringify(byokRequestFields()));
+
+  store.set('ks_active_engine', 'Claude');
+  store.set('ks_api_anthropic', 'sk-ant-test');
+  const f = byokRequestFields();
+  if (f.engine === 'claude' && f.apiKey === 'sk-ant-test') ok('ON + clé du moteur actif → {engine, apiKey}');
+  else ko('ON + clé', JSON.stringify(f));
+
+  store.set(LS_BYOK_ON, '0');
+  if (JSON.stringify(byokRequestFields()) === '{}') ok('OFF + clé présente → {} (la clé reste, rien ne part)');
+  else ko('OFF + clé', JSON.stringify(byokRequestFields()));
+  if (byokEnabled() === false) ok("OFF = '0' explicite uniquement");
+  else ko('lecture OFF', 'attendu false');
+
+  store.set(LS_BYOK_ON, '1');
+  store.set('ks_active_engine', 'Gemini');   // moteur actif SANS clé
+  if (JSON.stringify(byokRequestFields()) === '{}') ok('ON + moteur actif sans clé → {} (jamais la clé d\'un autre moteur — S2)');
+  else ko('S2 pas de repli multi-clés', JSON.stringify(byokRequestFields()));
+
+  delete globalThis.localStorage;
+}
+
 console.log(`\n\x1b[1m═══ Sommaire ═══\x1b[0m`);
 console.log(`  \x1b[32m${passed} passed\x1b[0m  ·  \x1b[31m${failed} failed\x1b[0m`);
 if (failed > 0) { console.log('\n  \x1b[31mÉchecs :\x1b[0m'); for (const f of failures) console.log(`   - ${f.label}: ${f.error}`); }

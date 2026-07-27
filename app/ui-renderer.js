@@ -8,7 +8,7 @@ import { isPricingV2, isFreeApp, priceForApp } from './lib/pricing.js';
 import { openCheckout }           from './lib/checkout.js';
 import { renderArtifactResult, COMP_ICONS } from './artifact-renderer.js';
 import { ApiHandler } from './api-handler.js';
-import { ENGINES, VISIBLE_ENGINES, byokRequestFields, engineIdForLabel } from './lib/engines.js';
+import { ENGINES, VISIBLE_ENGINES, byokRequestFields, engineIdForLabel, byokEnabled, LS_BYOK_ON } from './lib/engines.js';
 import {
     initGridEngine, getSavedOrder,
     getUserLabel, isPadHidden, restorePad,
@@ -4526,11 +4526,104 @@ async function _fillAutoReload(el) {
     el.querySelector('#arl-off')?.addEventListener('click', () => sauver(false));
 }
 
+// ── Section « Moteur actif » (refonte 27/07/2026) ──────────────
+// Le sélecteur ne se montre plus que si des clés existent : sans clé,
+// choisir un moteur était un placebo (et depuis BYOK_ROUTING=on, un
+// piège — une clé morte partait réellement chez le vendor).
+//   0 clé   → ligne informative « IA incluse », pas de sélecteur.
+//   1 clé   → interrupteur « Utiliser ma clé X » ON/OFF.
+//   2 clés+ → interrupteur + choix parmi les moteurs À CLÉ uniquement
+//             (règle S2 conservée : le coché tranche, jamais de repli
+//             automatique sur une autre clé).
+function _keyedProviders() { return API_PROVIDERS.filter(p => !!loadKey(p.id)); }
+
+// Moteur effectif à surligner : l'actif s'il a une clé, sinon le 1er à clé.
+function _effectiveKeyedLabel(keyed) {
+    const active = getActiveEngine();
+    return keyed.some(p => p.label === active) ? active : (keyed[0]?.label || null);
+}
+
+function _engineSectionHTML() {
+    const keyed = _keyedProviders();
+    if (!keyed.length) {
+        return `<div class="sp-user-form">
+            <div class="sp-user-hint" style="margin:0">
+                Vos outils fonctionnent avec l'<b>IA incluse</b> dans votre licence — rien à régler.
+                Pour utiliser votre propre moteur (Claude, ChatGPT, Gemini…), déposez d'abord
+                sa clé dans « Clés API — Moteurs » juste au-dessus : le choix apparaîtra ici.
+            </div>
+        </div>`;
+    }
+    const on       = byokEnabled();
+    const effLabel = _effectiveKeyedLabel(keyed);
+    const toggleLbl = keyed.length === 1 ? `Utiliser ma clé ${keyed[0].label}` : 'Utiliser mes clés';
+    const hint = on
+        ? `Vos outils passent par votre clé${keyed.length === 1 ? ` ${keyed[0].label}` : ' du moteur coché'} :
+           les appels sont facturés par le fournisseur sur votre compte, et ne touchent pas
+           vos conversations incluses.`
+        : `Vos outils utilisent l'IA incluse dans votre licence. ${keyed.length === 1 ? 'Votre clé reste' : 'Vos clés restent'} enregistrée${keyed.length === 1 ? '' : 's'}.`;
+    const items = keyed.length >= 2 ? `
+        <div class="engine-select-wrap ${on ? '' : 'engine-select-off'}" id="engine-select">
+            ${keyed.map(p => `
+            <div class="engine-select-item ${effLabel === p.label ? 'active' : ''}" data-engine="${p.label}">
+                <div class="engine-select-icon">${_engineLogoHTML(p, 18)}</div>
+                <div class="engine-select-info">
+                    <div class="engine-select-name">${p.label}</div>
+                    <div class="engine-select-sub">${p.name}</div>
+                </div>
+                <div class="engine-select-chk">✓</div>
+            </div>`).join('')}
+        </div>` : '';
+    return `<div class="sp-user-form">
+        <div class="sp-user-row sp-row-toggle">
+            <label class="sp-user-label" for="byok-on-toggle">${toggleLbl}</label>
+            <label class="sp-toggle-wrap">
+                <input type="checkbox" id="byok-on-toggle" ${on ? 'checked' : ''}>
+                <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
+            </label>
+        </div>
+        <div class="sp-user-hint">${hint}</div>
+        ${items}
+    </div>`;
+}
+
+function _wireEngineSection(root) {
+    if (!root) return;
+    root.querySelector('#byok-on-toggle')?.addEventListener('change', (e) => {
+        const on = !!e.target.checked;
+        localStorage.setItem(LS_BYOK_ON, on ? '1' : '0');
+        if (on) {
+            // L'interrupteur ne doit jamais mentir : ON avec un moteur actif
+            // sans clé n'enverrait rien — on cale l'actif sur un moteur à clé.
+            const keyed = _keyedProviders();
+            const eff   = _effectiveKeyedLabel(keyed);
+            if (eff && eff !== getActiveEngine()) { setActiveEngine(eff); _refreshOpenToolForEngine(); }
+        }
+        scheduleAutoSave();
+        _refreshEngineSection();
+    });
+    root.querySelectorAll('.engine-select-item').forEach(item => {
+        item.addEventListener('click', () => {
+            root.querySelectorAll('.engine-select-item').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            setActiveEngine(item.dataset.engine);
+            _refreshOpenToolForEngine();
+        });
+    });
+}
+
+// Re-rend la section en place (après sauvegarde/suppression d'une clé ou
+// bascule de l'interrupteur) sans toucher au reste du panneau.
+function _refreshEngineSection() {
+    const accBody = document.querySelector('#acc-engine .acc-body');
+    if (!accBody) return;
+    accBody.innerHTML = _engineSectionHTML();
+    _wireEngineSection(accBody);
+}
+
 function _renderSettingsBody() {
     const body = document.getElementById('sp-body');
     if (!body) return;
-
-    const activeEngine = getActiveEngine();
 
     const apiRows = API_PROVIDERS.map(p => {
         const saved = loadKey(p.id);
@@ -4552,15 +4645,7 @@ function _renderSettingsBody() {
             </div>`;
     }).join('');
 
-    const engineItems = API_PROVIDERS.map(p => `
-        <div class="engine-select-item ${activeEngine === p.label ? 'active' : ''}" data-engine="${p.label}">
-            <div class="engine-select-icon">${_engineLogoHTML(p, 18)}</div>
-            <div class="engine-select-info">
-                <div class="engine-select-name">${p.label}</div>
-                <div class="engine-select-sub">${p.name}</div>
-            </div>
-            <div class="engine-select-chk">✓</div>
-        </div>`).join('');
+    const engineSection = _engineSectionHTML();
 
     const savedPhoto      = localStorage.getItem(LS_USER_PHOTO) || '';
     const savedName       = localStorage.getItem(LS_USER_NAME)  || '';
@@ -4588,7 +4673,7 @@ function _renderSettingsBody() {
         {
             id: 'acc-engine', icon: ACC_ICONS.engine, title: 'Moteur actif',
             open: false,
-            content: `<div class="engine-select-wrap" id="engine-select">${engineItems}</div>`,
+            content: engineSection,
         },
         {
             id: 'acc-user', icon: ACC_ICONS.user, title: 'Utilisateur',
@@ -4909,19 +4994,22 @@ function _renderSettingsBody() {
             if (stEl) { stEl.textContent = val ? 'Configurée' : 'Vide'; stEl.className = 'api-key-status ' + (val ? 'saved' : 'empty'); }
             btn.textContent = '✓ Sauvé';
             setTimeout(() => { btn.textContent = 'Sauver'; }, 1500);
+            // Refonte sélecteur : le nombre de clés vient de changer → la
+            // section « Moteur actif » se redessine. Et si la clé du moteur
+            // ACTIF vient d'être retirée, on recale l'actif sur un moteur
+            // encore à clé (sinon l'interrupteur ON n'enverrait plus rien).
+            const _keyed = _keyedProviders();
+            if (byokEnabled() && _keyed.length && !_keyed.some(p => p.label === getActiveEngine())) {
+                setActiveEngine(_keyed[0].label);
+                _refreshOpenToolForEngine();
+            }
+            _refreshEngineSection();
             scheduleAutoSave();
         });
     });
 
-    // Wire engine selector
-    body.querySelectorAll('.engine-select-item').forEach(item => {
-        item.addEventListener('click', () => {
-            body.querySelectorAll('.engine-select-item').forEach(i => i.classList.remove('active'));
-            item.classList.add('active');
-            setActiveEngine(item.dataset.engine);
-            _refreshOpenToolForEngine();
-        });
-    });
+    // Wire section « Moteur actif » (interrupteur + sélecteur des moteurs à clé)
+    _wireEngineSection(body.querySelector('#acc-engine .acc-body'));
 
     // Wire user inputs → mise à jour identity zone en temps réel
     body.querySelector('#user-name-input')?.addEventListener('input', e => {
