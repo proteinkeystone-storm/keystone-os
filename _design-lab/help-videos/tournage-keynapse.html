@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournage — vidéo d'aide Keynapse</title>
+  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/workspace.css">
+  <link rel="stylesheet" href="/app/keynapse.css">
+</head>
+<body>
+  <script>
+    // Stubs API — univers « architecte d'intérieur » (repris du harnais
+    // notice keynapse-notice-harness.html), avec un ÉTAT : la bulle créée
+    // pendant le tournage apparaît réellement dans la constellation.
+    localStorage.setItem('ks_jwt', 'demo-jwt-tournage');
+    localStorage.setItem('kn_motion', 'on');
+
+    const ZONES = [
+      { id: 'z1', name: 'Chantiers en cours',   color: '#6366f1' },
+      { id: 'z2', name: 'Inspirations',         color: '#22d3ee' },
+      { id: 'z3', name: 'Administratif',        color: '#fcd34d' },
+    ];
+    const BUBBLES = [
+      { id: 'b1',  title: 'Villa Riou — rénovation',    x: -420, y: -140, zone_id: 'z1', color: null },
+      { id: 'b2',  title: 'Appartement Prado',          x: -250, y: 40,   zone_id: 'z1', color: null },
+      { id: 'b3',  title: 'Maison Cassis',              x: -500, y: 130,  zone_id: 'z1', color: null },
+      { id: 'b4',  title: 'Terrazzo et pierre',         x: 250,  y: -190, zone_id: 'z2', color: null },
+      { id: 'b5',  title: 'Luminaires artisanaux',      x: 440,  y: -60,  zone_id: 'z2', color: null },
+      { id: 'b6',  title: 'Palette ocre et lin',        x: 300,  y: 80,   zone_id: 'z2', color: null },
+      { id: 'b7',  title: 'Devis menuiserie',           x: 60,   y: 260,  zone_id: 'z3', color: null },
+      { id: 'b8',  title: 'Assurance décennale',        x: -130, y: 330,  zone_id: 'z3', color: null },
+      { id: 'b9',  title: 'Salon Maison et Objet',      x: 540,  y: 220,  zone_id: null, color: '#f472b6' },
+      { id: 'b10', title: 'Idée : verrière atelier',    x: 40,   y: -330, zone_id: null, color: '#22c55e' },
+    ];
+    const LINKS = [
+      { id: 'l1', from_bubble: 'b1', to_bubble: 'b4'  },
+      { id: 'l2', from_bubble: 'b1', to_bubble: 'b7'  },
+      { id: 'l3', from_bubble: 'b1', to_bubble: 'b10' },
+      { id: 'l4', from_bubble: 'b4', to_bubble: 'b6'  },
+      { id: 'l5', from_bubble: 'b2', to_bubble: 'b5'  },
+      { id: 'l6', from_bubble: 'b9', to_bubble: 'b5'  },
+    ];
+    const inMs = (ms) => new Date(Date.now() + ms).toISOString();
+    const REMINDERS = [
+      { id: 'r1', bubble_id: 'b1', bubble_title: 'Villa Riou — rénovation', at: inMs(3 * 3600e3),
+        label: '', repeat: '', notified_at: null },
+      { id: 'r2', bubble_id: 'b1', bubble_title: 'Villa Riou — rénovation', at: inMs(5 * 86400e3),
+        label: 'Réception de chantier — Villa Riou', repeat: '', notified_at: null },
+      { id: 'r3', bubble_id: 'b1', bubble_title: 'Villa Riou — rénovation', at: inMs(2 * 86400e3),
+        label: 'Point hebdo artisans', repeat: 'weekly', notified_at: null },
+    ];
+    const DETAIL_B1 = {
+      bubble: { id: 'b1', title: 'Villa Riou — rénovation', zone_id: 'z1', color: null,
+        x: -420, y: -140, created_at: '2026-07-02 09:14:00', updated_at: '2026-07-18 17:40:00' },
+      todos: [
+        { id: 't1', label: 'Valider le plan de la cuisine avec Mme Roux', done: 1 },
+        { id: 't2', label: 'Commander le carrelage terrazzo (réf. TZ-118)', done: 1 },
+        { id: 't3', label: 'Relancer le menuisier pour la verrière', done: 0 },
+        { id: 't4', label: 'Préparer le planning des artisans — semaine 32', done: 0 },
+      ],
+      notes: [
+        { id: 'n1', body: 'Mme Roux préfère finalement le plan de travail en pierre de Cassis — vérifier la disponibilité chez le fournisseur avant vendredi.', created_at: '2026-07-17 11:05:00' },
+        { id: 'n2', body: 'Budget révisé accepté : 48 500 € TTC hors mobilier.', created_at: '2026-07-10 09:30:00' },
+      ],
+      links: [
+        { id: 'l1', from_bubble: 'b1', to_bubble: 'b4'  },
+        { id: 'l2', from_bubble: 'b1', to_bubble: 'b7'  },
+        { id: 'l3', from_bubble: 'b1', to_bubble: 'b10' },
+      ],
+      media: [ { id: 'm1', kind: 'photo' }, { id: 'm2', kind: 'drawing' }, { id: 'm3', kind: 'pdf', body: 'Plan-cuisine-v3.pdf' } ],
+      audios: [ { id: 'a1', transcript: 'Penser à rappeler le carreleur lundi matin.' } ],
+      reminders: REMINDERS,
+    };
+
+    function _photoBlob() {
+      return new Promise((resolve) => {
+        const c = document.createElement('canvas'); c.width = 800; c.height = 520;
+        const x = c.getContext('2d');
+        const g = x.createLinearGradient(0, 0, 800, 520);
+        g.addColorStop(0, '#d9c7a7'); g.addColorStop(1, '#8a99ad');
+        x.fillStyle = g; x.fillRect(0, 0, 800, 520);
+        x.fillStyle = 'rgba(255,255,255,.55)'; x.fillRect(60, 300, 680, 130);
+        x.fillStyle = 'rgba(30,41,59,.35)';
+        x.fillRect(90, 90, 180, 170); x.fillRect(310, 90, 180, 170); x.fillRect(530, 90, 180, 170);
+        c.toBlob((b) => resolve(b), 'image/jpeg', 0.85);
+      });
+    }
+    function _drawingBlob() {
+      return new Promise((resolve) => {
+        const c = document.createElement('canvas'); c.width = 640; c.height = 440;
+        const x = c.getContext('2d');
+        x.fillStyle = '#11151f'; x.fillRect(0, 0, 640, 440);
+        x.lineCap = 'round'; x.lineJoin = 'round'; x.lineWidth = 3;
+        x.strokeStyle = '#f8fafc'; x.strokeRect(120, 90, 400, 260);
+        x.beginPath(); x.moveTo(120, 220); x.lineTo(520, 220); x.stroke();
+        x.strokeStyle = '#fcd34d';
+        x.beginPath(); x.moveTo(320, 90); x.lineTo(320, 220); x.stroke();
+        x.strokeStyle = '#22d3ee';
+        x.beginPath(); x.arc(220, 300, 42, 0, Math.PI * 2); x.stroke();
+        c.toBlob((b) => resolve(b), 'image/png');
+      });
+    }
+    const MEDIA_MAKERS = { m1: [_photoBlob, 'image/jpeg'], m2: [_drawingBlob, 'image/png'] };
+
+    const _fetch = window.fetch.bind(window);
+    window.fetch = async (url, opts = {}) => {
+      const u = String(url);
+      const ok = (data) => new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      if (u.includes('/api/keynapse')) {
+        const mMedia = u.match(/\/api\/keynapse\/media\/([^/?]+)/);
+        if (mMedia) {
+          const mk = MEDIA_MAKERS[mMedia[1]];
+          if (!mk) return new Response('', { status: 404 });
+          const blob = await mk[0]();
+          return new Response(blob, { status: 200, headers: { 'Content-Type': mk[1] } });
+        }
+        // Création pendant le tournage : la bulle rejoint VRAIMENT l'état.
+        if ((opts.method || 'GET') === 'POST' && /\/api\/keynapse\/bubbles(\?|$)/.test(u)) {
+          const body = JSON.parse(opts.body || '{}');
+          BUBBLES.push({ id: 'bnew', title: body.title || 'Nouvelle bulle', x: 120, y: -30, zone_id: null, color: '#a78bfa' });
+          return ok({ bubble: BUBBLES[BUBBLES.length - 1] });
+        }
+        if (u.includes('/api/keynapse/state'))     return ok({ zones: ZONES, bubbles: BUBBLES, links: LINKS });
+        if (u.includes('/api/keynapse/reminders')) return ok({ reminders: REMINDERS });
+        if (/\/api\/keynapse\/bubbles\/b1(\?|$)/.test(u)) return ok(DETAIL_B1);
+        if (u.match(/\/api\/keynapse\/bubbles\/([^/?]+)(\?|$)/)) {
+          const id = u.match(/\/api\/keynapse\/bubbles\/([^/?]+)/)[1];
+          const b = BUBBLES.find((x) => x.id === id) || BUBBLES[0];
+          return ok({ bubble: { ...b, created_at: '2026-07-05 10:00:00', updated_at: '2026-07-18 09:00:00' },
+            todos: [], notes: [], links: [], media: [], audios: [], reminders: [] });
+        }
+        return ok({});
+      }
+      if (u.includes('/api/')) return ok({});
+      return _fetch(url, opts);
+    };
+  </script>
+  <script type="module">
+    import { openKeynapse } from '/app/keynapse.js';
+    import { icon } from '/app/lib/ui-icons.js';
+    import { mountFilm } from '/_design-lab/help-videos/tournage.js';
+    import { steps, meta } from '/_design-lab/help-videos/scenario-keynapse.js';
+
+    openKeynapse();
+    setTimeout(() => {
+      document.querySelectorAll('img').forEach(img => {
+        const s = img.getAttribute('src') || '';
+        if (s.startsWith('./LOGOS/')) img.src = s.slice(1);
+      });
+      mountFilm({ steps, meta: { ...meta, iconSvg: icon(meta.iconName, 64) } });
+    }, 1100);
+  </script>
+</body>
+</html>
