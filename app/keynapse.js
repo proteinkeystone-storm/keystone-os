@@ -286,25 +286,38 @@ async function _load() {
 // synchronisé plutôt qu'un marqueur d'appareil. Le second verrou est
 // l'appelant : on n'entre ici que si la constellation est réellement
 // vide, donc un drapeau perdu ne peut pas créer de doublon.
+// ⚠ TITRES : le moteur tronque à 14 caractères (`truncate(n.title, 14)`
+// dans lib/keynapse-engine.js) — au-delà, la bulle affiche « Commencez par… »
+// et ça fait sale. Aucun titre d'exemple ne doit dépasser 14 signes.
+//
+// Le scénario est un VRAI cas de travail, pas une explication de l'outil :
+// un client rencontré en salon, et le devis qu'il attend. Les deux fiches
+// sont remplies comme on les remplirait vraiment — le contexte, les tâches
+// (dont une déjà faite) et la note qu'on prend en raccrochant. Une fiche
+// vide n'apprend rien ; une fiche vivante montre à quoi sert une bulle.
 const KYN_SAMPLE = {
-  zone: { name: 'Bienvenue', color: '#6366f1' },
+  zone: { name: 'Clients', color: '#6366f1' },
   bubbles: [
-    { key: 'start', x: 0, y: -170,
-      title: 'Commencez par ici',
-      description: "Cette petite constellation est un exemple : elle vous appartient. Modifiez-la, videz-la, ou gardez-la le temps de prendre vos marques.\n\nChaque cercle est une bulle — une idée, une note, un rappel. Ouvrez celle-ci d'un clic pour voir ce qu'une bulle peut contenir." },
-    { key: 'one', x: -250, y: 40,
-      title: 'Une bulle, une idée',
-      description: "N'essayez pas de tout ranger d'un coup. Posez l'idée telle qu'elle vient : un titre suffit.\n\nVous l'enrichirez plus tard — du texte, une photo, une note dictée à la voix, une liste de choses à faire, ou un rappel qui viendra vous chercher au bon moment." },
-    { key: 'link', x: 250, y: 40,
-      title: 'Reliez ce qui va ensemble',
-      description: "Deux bulles qui se répondent peuvent être reliées par un trait.\n\nC'est là que Keynapse cesse d'être une liste : au lieu de faire défiler, vous voyez d'un seul coup d'œil ce qui tient ensemble — et ce qui est resté seul dans son coin." },
-    { key: 'zone', x: 0, y: 230,
-      title: 'Les zones regroupent',
-      description: "Ces quatre bulles vivent dans une zone : le halo coloré autour d'elles, appelé « Bienvenue ».\n\nUne zone rassemble ce qui appartient au même sujet — un projet, un client, un chantier. Créez la vôtre quand vous saurez de quoi elle parlera." },
+    { key: 'client', x: -170, y: 0,
+      title: 'Client Duval',                       // 12 signes
+      description: "Rencontré au salon de Toulon. Veut refaire toute sa signalétique avant l'ouverture de sa deuxième boutique, en septembre.\n\nBudget évoqué : 4 000 €, à confirmer une fois les dimensions connues.",
+      todos: [
+        { label: 'Récupérer son logo en vectoriel', done: true },
+        { label: 'Demander les dimensions de la vitrine' },
+        { label: 'Envoyer le devis signalétique' },
+      ],
+      note: "Au téléphone : préfère être appelé le matin, jamais le vendredi.",
+    },
+    { key: 'devis', x: 170, y: 0,
+      title: 'Devis à faire',                      // 13 signes
+      description: "Trois postes : enseigne lumineuse, vitrophanie de la vitrine, deux panneaux intérieurs.\n\nReprendre le modèle du chantier précédent et ajuster les quantités.",
+      todos: [
+        { label: "Chiffrer l'enseigne lumineuse" },
+        { label: 'Relire les conditions de vente avant envoi' },
+      ],
+    },
   ],
-  // Étoile depuis « Commencez par ici », plus un lien latéral qui montre
-  // qu'une bulle peut en toucher plusieurs.
-  links: [['start', 'one'], ['start', 'link'], ['start', 'zone'], ['one', 'link']],
+  links: [['client', 'devis']],
 };
 
 async function _maybeSeedSample() {
@@ -323,7 +336,22 @@ async function _maybeSeedSample() {
         zone_id: zoneId, x: b.x, y: b.y,     // x/y explicites : omis, le serveur tire au hasard
       } });
       const id = r?.bubble?.id || r?.id;
-      if (id) ids[b.key] = id;
+      if (!id) continue;
+      ids[b.key] = id;
+      // Ce qui fait la différence entre une bulle et une fiche vivante :
+      // des tâches (dont une déjà cochée, sinon la liste a l'air neuve et
+      // morte) et la note qu'on prend après un appel.
+      for (const t of (b.todos || [])) {
+        try {
+          const tr = await _api(`/bubbles/${encodeURIComponent(id)}/todos`, { method: 'POST', body: { label: t.label } });
+          const tid = tr?.todo?.id || tr?.id;
+          if (t.done && tid) await _api(`/todos/${encodeURIComponent(tid)}`, { method: 'PATCH', body: { done: true } });
+        } catch (_) { /* une tâche en moins ne vaut pas d'abandonner l'exemple */ }
+      }
+      if (b.note) {
+        try { await _api(`/bubbles/${encodeURIComponent(id)}/notes`, { method: 'POST', body: { body: b.note } }); }
+        catch (_) { /* idem */ }
+      }
     }
     for (const [a, z] of KYN_SAMPLE.links) {
       if (!ids[a] || !ids[z]) continue;

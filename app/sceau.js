@@ -348,8 +348,14 @@ async function _load() {
 // Deux précautions pour que l'essai ne tourne pas mal :
 //   · la question CONTIENT la réponse — personne ne doit brûler ses
 //     essais sur son propre exemple, ni le voir s'autodétruire ;
-//   · cinq essais au lieu de trois, et sept jours de validité : passé
-//     ce délai elle disparaît d'elle-même, sans rien laisser traîner.
+//   · cinq essais au lieu de trois.
+//
+// SANS EXPIRATION, à dessein : cette missive sert de démonstration lors
+// des démarches commerciales, parfois des mois après l'inscription. Une
+// échéance en ferait un exemple périmé le jour où il servirait vraiment.
+// Elle reste donc jusqu'à ce qu'on l'ouvre ou qu'on la supprime — et
+// l'ouvrir la consomme, puisque c'est précisément ce qu'on démontre : le
+// bouton « Remettre l'exemple » de la liste vide permet d'en refaire une.
 //
 // Le scellage réutilise mot pour mot la chaîne de _create (même OPRF,
 // même dérivation, même preuve de lecture) : aucune recette parallèle
@@ -367,29 +373,32 @@ Ce texte n'existait en clair nulle part. Il vient d'être reconstitué ici, à p
 
 À votre tour. Un mot de passe, un code, un document : le lien d'un côté, la question de l'autre.`;
 
+// Le scellage seul — appelé au premier lancement, et rejoué par le bouton
+// « Remettre la missive d'exemple » quand celle-ci a été consommée.
+async function _seedSample() {
+  const V = await _voprf();
+  const SUITE = V.Oprf.Suite.P256_SHA256;
+  const init = await _api('/init', { method: 'POST', body: { label: SEC_SAMPLE_LABEL } });
+  const client = new V.VOPRFClient(SUITE, _b64d(init.oprf_pub));
+  const [fin, ereq] = await client.blind([_enc.encode(_normAnswer(SEC_SAMPLE_ANSWER))]);
+  const ev = await _api(`/${init.short_id}/eval`, { method: 'POST', body: { blinded: _b64e(ereq.serialize()) } });
+  const [output] = await client.finalize(fin, V.Evaluation.deserialize(SUITE, _b64d(ev.evaluation)));
+  const key = await _aesKey(output);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, _enc.encode(SEC_SAMPLE_TEXT)));
+  const receipt = await _readReceipt(output);
+  await _api(`/${init.short_id}/seal`, { method: 'POST', body: {
+    ciphertext: _b64e(ct), iv: _b64e(iv), kind: 'text', mime: null,
+    question: SEC_SAMPLE_QUESTION, max_attempts: 5, expires_at: null,
+    label: SEC_SAMPLE_LABEL, kdf_v: KDF_V, read_receipt: receipt,
+  } });
+  markSampleSeeded('sceau');
+}
+
 async function _maybeSeedSample() {
   if (sampleSeeded('sceau')) return;
-  try {
-    const V = await _voprf();
-    const SUITE = V.Oprf.Suite.P256_SHA256;
-    const init = await _api('/init', { method: 'POST', body: { label: SEC_SAMPLE_LABEL } });
-    const client = new V.VOPRFClient(SUITE, _b64d(init.oprf_pub));
-    const [fin, ereq] = await client.blind([_enc.encode(_normAnswer(SEC_SAMPLE_ANSWER))]);
-    const ev = await _api(`/${init.short_id}/eval`, { method: 'POST', body: { blinded: _b64e(ereq.serialize()) } });
-    const [output] = await client.finalize(fin, V.Evaluation.deserialize(SUITE, _b64d(ev.evaluation)));
-    const key = await _aesKey(output);
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, _enc.encode(SEC_SAMPLE_TEXT)));
-    const receipt = await _readReceipt(output);
-    await _api(`/${init.short_id}/seal`, { method: 'POST', body: {
-      ciphertext: _b64e(ct), iv: _b64e(iv), kind: 'text', mime: null,
-      question: SEC_SAMPLE_QUESTION, max_attempts: 5,
-      expires_at: new Date(Date.now() + 7 * 86400 * 1000).toISOString(),
-      label: SEC_SAMPLE_LABEL, kdf_v: KDF_V, read_receipt: receipt,
-    } });
-    markSampleSeeded('sceau');
-    await _load();
-  } catch (_) { /* pas d'exemple : le pad reste parfaitement utilisable */ }
+  try { await _seedSample(); await _load(); }
+  catch (_) { /* pas d'exemple : le pad reste parfaitement utilisable */ }
 }
 async function _loadTokens() {
   _loading = true; _error = null; _render();
@@ -460,7 +469,12 @@ function _renderList(main) {
       </div>
       <button class="sceau-btn primary" data-act="new">${icon('plus', 18)} Nouvelle missive</button>
     </div>
-    ${_items.length ? `<div class="sceau-list">${rows}</div>` : `<div class="sceau-empty">${icon('shield-check', 40)}<p>Aucune missive pour l'instant.</p><button class="sceau-btn primary" data-act="new">${icon('plus', 18)} Créer la première</button></div>`}
+    ${_items.length ? `<div class="sceau-list">${rows}</div>` : `<div class="sceau-empty">${icon('shield-check', 40)}<p>Aucune missive pour l'instant.</p><button class="sceau-btn primary" data-act="new">${icon('plus', 18)} Créer la première</button>${
+      // Une missive d'exemple se consomme dès qu'on l'ouvre — c'est ce
+      // qu'elle démontre. Ce bouton la refait, pour la prochaine fois
+      // qu'on veut montrer le principe à quelqu'un.
+      sampleSeeded('sceau') ? `<button class="sceau-btn" data-act="resample">${icon('refresh', 16)} Remettre la missive d'exemple</button>` : ''
+    }</div>`}
     <div id="sceau-qrslot"></div>
   `;
 }
@@ -833,6 +847,7 @@ function _onClick(e) {
   if (act === 'qr')     return _toggleRowQr(`${API_BASE}/s/${id}`, id);
   if (act === 'burn')   return _burn(id, t);
   if (act === 'remove') return _remove(id);
+  if (act === 'resample') { t.disabled = true; return _seedSample().then(() => _load()).catch(() => { t.disabled = false; _toast('Impossible de remettre l\'exemple.'); }); }
   if (act === 'copyurl')  return _copy(_result?.url, t);
   if (act === 'copypass') return _copy(_result?.passphrase, t);
   if (act === 'nfc')    return _writeNfc(t);
