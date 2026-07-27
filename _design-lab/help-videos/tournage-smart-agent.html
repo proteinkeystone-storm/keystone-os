@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournage — vidéo d'aide Smart Agent</title>
+  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/workspace.css">
+  <link rel="stylesheet" href="/app/smart-agent.css">
+</head>
+<body>
+  <script>
+    // Stubs API — univers « Atelier Lumen » (repris du harnais notice
+    // sa-notice-harness.html) + chat de test simulé en SSE. Rien ne part
+    // vers le worker de prod pendant le tournage.
+    const AGENTS = [
+      { id: 'ag1', name: 'Conseillère boutique — Atelier Lumen', status: 'published',
+        gaps_open: 3, gaps_week: 2, folder_id: 'f1',
+        config: { identity: { role: 'Vendeuse en boutique de luminaires', opening: 'Bonjour ! Je suis la conseillère de l’Atelier Lumen. Une question sur nos lampes, nos délais ou nos réparations ?' } } },
+      { id: 'ag2', name: 'Concierge — Résidence du Parc', status: 'paused',
+        gaps_open: 0, gaps_week: 0, folder_id: null,
+        config: { identity: { role: 'Concierge d’accueil', opening: 'Bienvenue à la Résidence du Parc.' } } },
+    ];
+    const UNITS = [
+      { id: 'u1', type: 'fact', title: 'Horaires d’ouverture de la boutique', status: 'validated',
+        body: { statement: 'La boutique est ouverte du mardi au samedi, de 10h à 19h. Fermée dimanche et lundi.' } },
+      { id: 'u2', type: 'qa', title: 'Réparation de lampes anciennes', status: 'validated',
+        body: { question: 'Réparez-vous les lampes anciennes ?', answer: 'Oui — atelier sur place, devis gratuit sous 48h, délai moyen 10 jours.' } },
+      { id: 'u3', type: 'procedure', title: 'Retour ou échange d’un article', status: 'validated',
+        body: { steps: '1. Présenter le ticket. 2. Vérifier le délai de 30 jours. 3. Échange ou avoir.' } },
+      { id: 'u4', type: 'rule', title: 'Ne jamais annoncer de remise sans validation', status: 'validated',
+        body: { rule: 'Aucune remise n’est annoncée par l’agent : renvoyer vers l’équipe en boutique.', why: 'Les remises sont décidées au cas par cas.' } },
+      { id: 'u5', type: 'fact', title: 'Tarifs de l’abat-jour sur mesure (été 2026)', status: 'validated',
+        body: { statement: 'À partir de 85 € — grille détaillée en boutique.' } },
+    ];
+    const GAPS = [
+      { id: 'g1', hits: 7, question: 'Livrez-vous en Belgique ?', last_asked_at: '2026-07-26 10:12:00' },
+      { id: 'g2', hits: 3, question: 'Peut-on privatiser la boutique pour un événement ?', last_asked_at: '2026-07-25 18:40:00' },
+      { id: 'g3', hits: 1, question: 'Avez-vous des ampoules E14 vintage en stock ?', last_asked_at: '2026-07-12 09:05:00' },
+    ];
+
+    const REPLY = 'Oui, tout à fait ! Notre atelier répare les lampes anciennes sur place : le devis est gratuit, sous 48 heures, et le délai moyen est de 10 jours. Vous pouvez déposer votre lampe directement en boutique, du mardi au samedi.';
+    const sse = () => {
+      const words = REPLY.split(' ');
+      let out = '';
+      for (let i = 0; i < words.length; i += 6) {
+        out += 'data: ' + JSON.stringify({ type: 'chunk', text: words.slice(i, i + 6).join(' ') + ' ' }) + '\n';
+      }
+      out += 'data: ' + JSON.stringify({ type: 'done', reply: REPLY, gapped: false,
+        citations: [{ unit_id: 'u2', n: 1, title: 'Réparation de lampes anciennes' }],
+        session_id: 'demo' }) + '\n';
+      return new Response(out, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+    };
+
+    const _fetch = window.fetch.bind(window);
+    window.fetch = (url, opts = {}) => {
+      const u = String(url);
+      const ok = (data) => Promise.resolve(new Response(JSON.stringify(data),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      if (u.includes('/api/smart-agent')) {
+        const p = u.split('/api/smart-agent')[1] || '';
+        if (p.includes('/chat')) return Promise.resolve(sse());
+        if (p.startsWith('/health')) return ok({ ok: true, version: 'v5.28' });
+        if (p.startsWith('/agents') && p.includes('/golden')) return ok({ golden: [] });
+        if (p.startsWith('/agents') && p.includes('/links'))  return ok({ links: [] });
+        if (p.startsWith('/agents'))                          return ok({ agents: AGENTS });
+        if (p.startsWith('/folders'))                         return ok({ folders: [{ id: 'f1', name: 'Atelier Lumen — Lyon' }] });
+        if (p.startsWith('/kortex/units'))                    return ok({ units: UNITS, counts: { total: UNITS.length, validated: 5 } });
+        if (p.startsWith('/gaps'))                            return ok({ gaps: GAPS, count: GAPS.length });
+        if (p.startsWith('/vaults'))                          return ok({ vaults: [] });
+        return ok({});
+      }
+      if (u.includes('/api/')) return ok({});
+      return _fetch(url, opts);
+    };
+  </script>
+  <script type="module">
+    import { openSmartAgent } from '/app/smart-agent.js';
+    import { icon } from '/app/lib/ui-icons.js';
+    import { mountFilm } from '/_design-lab/help-videos/tournage.js';
+    import { steps, meta } from '/_design-lab/help-videos/scenario-smart-agent.js';
+
+    openSmartAgent();
+    setTimeout(() => {
+      document.querySelectorAll('img').forEach(img => {
+        const s = img.getAttribute('src') || '';
+        if (s.startsWith('./LOGOS/')) img.src = s.slice(1);
+      });
+      mountFilm({ steps, meta: { ...meta, iconSvg: icon(meta.iconName, 64) } });
+    }, 900);
+  </script>
+</body>
+</html>
