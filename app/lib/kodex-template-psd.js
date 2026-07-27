@@ -102,27 +102,22 @@ function _rasterizeTechLayer(spec) {
     return { w, h, idx };
   }
 
-  // Traits de coupe (noir, fins)
-  for (const m of spec.cropMarks) {
-    _line(idx, w, h, px(m.x1), px(m.y1), px(m.x2), px(m.y2), Math.max(1, strokePx - 1), BLACK);
-  }
-  // Cadres : cyan (fond perdu) / rouge (coupe) / vert (sécurité)
+  // Cadres : cyan (fond perdu, au bord de la page — standard 2026 :
+  // pas de traits de coupe) / rouge (coupe) / vert (sécurité)
   const b = spec.bleedBox, tB = spec.trimBox, s = spec.safeBox;
   _strokeRect(idx, w, h, px(b.x), px(b.y), px(b.w), px(b.h), strokePx, CYAN);
   _strokeRect(idx, w, h, px(tB.x), px(tB.y), px(tB.w), px(tB.h), strokePx, RED);
   if (s.w > 0 && s.h > 0) _strokeRect(idx, w, h, px(s.x), px(s.y), px(s.w), px(s.h), strokePx, GREEN);
 
-  // Traits de plis : pointillés magenta dans les MARGES uniquement
-  // (usage imprimeur — jamais sur la zone de création)
+  // Traits de plis : pointillés magenta TRAVERSANTS (modèle gabarit
+  // Exaprint 2026 — le calque technique part avant export)
   if (spec.folds) {
     const dash = px(2);                              // 2 mm on / 2 mm off
     for (const fx of spec.folds.vertical) {
-      _dashedLine(idx, w, h, px(fx), px(2), px(fx), px(b.y - 2), strokePx, MAGENTA, dash);
-      _dashedLine(idx, w, h, px(fx), px(b.y + b.h + 2), px(fx), px(spec.canvas_mm.h - 2), strokePx, MAGENTA, dash);
+      _dashedLine(idx, w, h, px(fx), 0, px(fx), px(spec.canvas_mm.h), strokePx, MAGENTA, dash);
     }
     for (const fy of spec.folds.horizontal) {
-      _dashedLine(idx, w, h, px(2), px(fy), px(b.x - 2), px(fy), strokePx, MAGENTA, dash);
-      _dashedLine(idx, w, h, px(b.x + b.w + 2), px(fy), px(spec.canvas_mm.w - 2), px(fy), strokePx, MAGENTA, dash);
+      _dashedLine(idx, w, h, 0, px(fy), px(spec.canvas_mm.w), px(fy), strokePx, MAGENTA, dash);
     }
   }
 
@@ -454,15 +449,17 @@ export function renderInfoOverlay(spec, doc = globalThis.document) {
       y += fontPx * 1.4;
     }
   } else if (spec.kind === 'print') {
-    // Titre dans la marge haute + infos dans la marge basse
-    const x = (spec.trimBox.x + 2) * pxPerMm;
+    // Standard 2026 : plus de marges autour de la page — le titre et
+    // les infos vivent dans la zone de sécurité, comme le roll-up
+    // (le calque « Infos techniques » est masqué avant export).
+    const x = (spec.safeBox.x + 2) * pxPerMm;
+    let y = (spec.safeBox.y + 5) * pxPerMm;
     ctx.font = `bold ${Math.round(fontPx * 1.25)}px Helvetica, Arial, sans-serif`;
-    ctx.fillText(`${spec.productLabel}${spec.face ? (spec.face === 'verso' ? ' — Verso' : ' — Recto') : ''} · ${spec.dimsLabel}`,
-      x, (spec.marksMargin - 4) * pxPerMm);
+    ctx.fillText(`${spec.productLabel}${spec.face ? (spec.face === 'verso' ? ' — Verso' : ' — Recto') : ''} · ${spec.dimsLabel}`, x, y);
+    y += fontPx * 1.6;
     ctx.font = `${fontPx}px Helvetica, Arial, sans-serif`;
     const lines = templateInfoLines(spec).slice(1);
-    let y = (spec.canvas_mm.h - spec.marksMargin + 4) * pxPerMm;
-    for (const line of lines.slice(0, 3)) {
+    for (const line of lines.slice(0, 4)) {
       ctx.fillText(line, x, y);
       y += fontPx * 1.25;
     }

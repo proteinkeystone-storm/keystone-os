@@ -47,10 +47,8 @@ function _printSVG(spec, maxW, maxH) {
       </svg>`;
   }
 
-  const marks = spec.cropMarks.map(m => `
-    <line x1="${m.x1}" y1="${m.y1}" x2="${m.x2}" y2="${m.y2}"
-          stroke="${C.mark}" stroke-width="${sw * 0.75}" opacity="0.55"/>`).join('');
-
+  // Standard 2026 : plus de traits de coupe — la page fait la taille
+  // du fond perdu, exactement comme les fichiers du kit.
   const safe = (spec.safeBox.w > 0 && spec.safeBox.h > 0) ? rect(spec.safeBox, C.safe, `${sw * 3} ${sw * 2}`) : '';
 
   // Plis : pointillés magenta traversants (dans les fichiers du kit,
@@ -70,7 +68,6 @@ function _printSVG(spec, maxW, maxH) {
          xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Aperçu du gabarit ${_esc(spec.dimsLabel)}">
       <rect x="${spec.bleedBox.x}" y="${spec.bleedBox.y}" width="${spec.bleedBox.w}" height="${spec.bleedBox.h}"
             fill="${C.paper}" stroke="none"/>
-      ${marks}
       ${folds}
       ${rect(spec.bleedBox, C.bleed)}
       ${rect(spec.trimBox, C.trim)}

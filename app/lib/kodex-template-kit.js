@@ -52,7 +52,13 @@ export async function buildTemplateKit(params) {
     for (const face of faces) {
       const spec = buildTemplateSpec(standard, { ...baseOpts, face });
       const overlay = renderInfoOverlay(spec, doc);
-      files.push({ name: kitFileName(spec, 'pdf'), data: buildTemplatePdf(spec) });
+      // Roll-up : le PDF sort à l'échelle 1:1 (exigence Exaprint 2026 —
+      // « fichier à l'échelle 1:1 ») ; le PSD reste le fichier de
+      // TRAVAIL à l'échelle réduite (limite raisonnable de pixels).
+      const pdfSpec = spec.rollup
+        ? buildTemplateSpec(standard, { ...baseOpts, face, workScale: 1 })
+        : spec;
+      files.push({ name: kitFileName(pdfSpec, 'pdf'), data: buildTemplatePdf(pdfSpec) });
       files.push({ name: kitFileName(spec, 'psd'), data: buildTemplatePsd(spec, { overlayRGBA: overlay }) });
     }
   } else {
@@ -113,20 +119,30 @@ export function buildReadme(spec, { vendor = null, twoSided = false } = {}) {
   L.push('');
 
   if (spec.kind === 'print' && spec.rollup) {
+    const asym = spec.rollup.safe_top_mm != null;
     L.push('COMMENT UTILISER LE GABARIT ROLL-UP');
     L.push('1. Créez votre visuel SOUS le calque « Infos techniques »');
     L.push('   (PSD) ou sur un calque à part (PDF ouvert dans Illustrator).');
     L.push('2. TOUTE la surface doit être imprimée : couvrez le canevas');
-    L.push('   entier, y compris les zones cyan (amorces).');
-    L.push(`3. Zone d'amorce basse (${spec.rollup.amorce_bottom_mm} mm) : avalée par le mécanisme.`);
-    L.push('   Prolongez-y le FOND de votre visuel, jamais de contenu.');
+    L.push(`   entier${asym ? '' : ', y compris les zones cyan (amorces)'}.`);
+    if (asym) {
+      L.push(`3. Le bas (${spec.rollup.safe_bottom_mm} mm sous le cadre vert) est avalé par le`);
+      L.push('   mécanisme : prolongez-y le FOND du visuel, jamais de contenu.');
+    } else {
+      L.push(`3. Zone d'amorce basse (${spec.rollup.amorce_bottom_mm} mm) : avalée par le mécanisme.`);
+      L.push('   Prolongez-y le FOND de votre visuel, jamais de contenu.');
+    }
     L.push('4. Gardez textes et logos DANS le cadre vert (zone tranquille).');
     L.push('5. Avant export : masquez ou supprimez le calque');
-    L.push(`   « Infos techniques », puis exportez en ${spec.exportFormat}.`);
+    L.push(`   « Infos techniques », puis exportez en ${spec.exportFormat},`);
+    L.push('   sans trait de coupe.');
     L.push('');
-    L.push("ATTENTION — document à l'échelle 1/4 :");
-    L.push(`la surface totale réelle est ${spec.dimsLabel}. Travaillez dans ce`);
-    L.push("fichier tel quel, l'imprimeur agrandit à la sortie.");
+    L.push('ÉCHELLES — lisez bien :');
+    L.push(`- Le gabarit PDF est à l'ÉCHELLE 1:1 (${spec.dimsLabel}) : c'est le`);
+    L.push("  format exigé par l'imprimeur pour le fichier final.");
+    L.push(`- Le gabarit PSD est un fichier de TRAVAIL à l'échelle 1/4 :`);
+    L.push("  travaillez dedans tel quel, puis exportez votre PDF final à");
+    L.push(`  l'échelle 1:1 (${spec.dimsLabel}).`);
     L.push('');
   } else if (spec.kind === 'print') {
     L.push('COMMENT UTILISER LE GABARIT');
@@ -146,7 +162,8 @@ export function buildReadme(spec, { vendor = null, twoSided = false } = {}) {
       }
     }
     L.push(`${spec.folds ? '5' : '4'}. Avant export : masquez ou supprimez le calque`);
-    L.push(`   « Infos techniques », puis exportez en ${spec.exportFormat}.`);
+    L.push(`   « Infos techniques », puis exportez en ${spec.exportFormat},`);
+    L.push('   sans trait de coupe (la page fait déjà la taille du fond perdu).');
     if (spec.scale.label) {
       L.push('');
       L.push(`ATTENTION — document à l'${spec.scale.label.toLowerCase()} :`);

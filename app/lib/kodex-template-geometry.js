@@ -27,13 +27,12 @@
 
 import { OUTPUT_DPI, computeScaleFactor, formatScaleLabel } from './kodex-scale.js';
 
-// Zone de repères autour du fond perdu (traits de coupe + labels).
-// Non mise à l'échelle : c'est du confort de document de travail,
-// pas de la surface d'impression. (L'exemple Exaprint utilise 12,5 mm.)
-const MARKS_MARGIN_MM = 12;
-
-// Longueur des traits de coupe et retrait par rapport au fond perdu.
-const CROP_MARK_GAP_MM = 2;     // le trait démarre 2 mm après le fond perdu
+// Standard Exaprint 2026 (constaté sur les gabarits officiels de juillet
+// 2026) : la page fait EXACTEMENT la taille du fond perdu — plus de marge
+// à repères, plus de traits de coupe d'angle (« Enregistrez le pdf en
+// haute qualité sans trait de coupe »). Les guides sont des cadres pleins
+// et les plis des pointillés traversants. L'ancienne bande de 12 mm avec
+// traits de coupe a été retirée le 2026-07-27.
 
 export function mmToPx(mm, dpi = OUTPUT_DPI) {
   return Math.round(mm / 25.4 * dpi);
@@ -84,18 +83,22 @@ function _digitalSpec(std, opts) {
 
 // ── Roll-up (P3b) — anatomie spécifique, modèle gabarits Exaprint ──
 // Pas de fond perdu ni de traits de coupe : TOUTE la surface s'imprime
-// et se coupe au bord du canevas. En revanche :
-//   - zones d'AMORCE (cyan PLEIN) : avalées par le mécanisme (surtout
-//     en bas), invisibles mais à recouvrir par le fond du visuel ;
-//   - zone VISIBLE (cadre rouge) = surface totale moins les amorces ;
-//   - zone TRANQUILLE (cadre vert) : retrait de sécurité dans le visible.
-// Échelle de travail 1/4 systématique.
+// et se coupe au bord du canevas. Deux modèles cohabitent :
+//   - NOUVEAU (gabarit officiel 2026, ex. 84×204) : plus d'amorces
+//     dessinées, une seule zone TRANQUILLE ASYMÉTRIQUE (cadre vert,
+//     safe_top/bottom/side_mm — le bas plus large avale le mécanisme) ;
+//   - LEGACY (supports jamais re-mesurés) : zones d'AMORCE cyan pleines
+//     + zone visible (cadre rouge) + retrait tranquille uniforme.
+// Échelle de travail 1/4 (PSD) ; le PDF du kit se génère à l'échelle 1:1
+// (exigence Exaprint 2026) via opts.workScale — cf. kodex-template-kit.
 function _rollupSpec(std, opts) {
   const r = std.rollup;
-  const factor = r.work_scale || 0.25;
+  const workScale = r.work_scale || 0.25;
+  const factor = opts.workScale || workScale;
   const total = r.total_mm || { w: std.format_fini.width_mm, h: std.format_fini.height_mm };
 
   const at = r.amorce_top_mm || 0, ab = r.amorce_bottom_mm || 0, as = r.amorce_side_mm || 0;
+  const asym = (r.safe_top_mm != null || r.safe_bottom_mm != null || r.safe_side_mm != null);
   const safeInset = r.safe_inset_mm ?? 20;
 
   const canvasW = _r2(total.w * factor);
@@ -106,8 +109,14 @@ function _rollupSpec(std, opts) {
     x: _r2(as * factor), y: _r2(at * factor),
     w: _r2((total.w - 2 * as) * factor), h: _r2((total.h - at - ab) * factor),
   };
-  const s = safeInset * factor;
-  const safeBox = { x: _r2(visibleBox.x + s), y: _r2(visibleBox.y + s), w: _r2(visibleBox.w - 2 * s), h: _r2(visibleBox.h - 2 * s) };
+  let safeBox;
+  if (asym) {
+    const st = (r.safe_top_mm ?? 0) * factor, sb = (r.safe_bottom_mm ?? 0) * factor, ss = (r.safe_side_mm ?? 0) * factor;
+    safeBox = { x: _r2(ss), y: _r2(st), w: _r2(canvasW - 2 * ss), h: _r2(canvasH - st - sb) };
+  } else {
+    const s = safeInset * factor;
+    safeBox = { x: _r2(visibleBox.x + s), y: _r2(visibleBox.y + s), w: _r2(visibleBox.w - 2 * s), h: _r2(visibleBox.h - 2 * s) };
+  }
 
   const amorces = [];
   if (at) amorces.push({ x: 0, y: 0, w: canvasW, h: _r2(at * factor) });
@@ -140,9 +149,14 @@ function _rollupSpec(std, opts) {
       amorces,
       amorce_top_mm: at, amorce_bottom_mm: ab, amorce_side_mm: as,
       safe_inset_mm: safeInset,
+      // Modèle 2026 : zone tranquille asymétrique (null = modèle legacy)
+      safe_top_mm: asym ? (r.safe_top_mm ?? 0) : null,
+      safe_bottom_mm: asym ? (r.safe_bottom_mm ?? 0) : null,
+      safe_side_mm: asym ? (r.safe_side_mm ?? 0) : null,
+      work_scale: workScale,
     },
-    scale: { factor, label: 'Échelle 1/4' },
-    real: { w_mm: total.w, h_mm: total.h, bleed_mm: 0, safe_mm: safeInset },
+    scale: { factor, label: factor < 1 ? formatScaleLabel(factor) : null },
+    real: { w_mm: total.w, h_mm: total.h, bleed_mm: 0, safe_mm: asym ? (r.safe_side_mm ?? 0) : safeInset },
     colorProfile: std.color_profile || 'CMJN (FOGRA39 ou équivalent)',
     exportFormat: std.export_format || 'PDF/X-4 ou TIFF haute définition',
     notes: std.notes || '',
@@ -168,12 +182,13 @@ function _printSpec(std, opts) {
   const bleed = _r2(realBleed * factor);
   const safe  = _r2(realSafe * factor);
 
-  const canvasW = _r2(trimW + 2 * bleed + 2 * MARKS_MARGIN_MM);
-  const canvasH = _r2(trimH + 2 * bleed + 2 * MARKS_MARGIN_MM);
+  // Standard 2026 : la page = la taille du fond perdu, rien autour.
+  const canvasW = _r2(trimW + 2 * bleed);
+  const canvasH = _r2(trimH + 2 * bleed);
 
   // Boîtes en coordonnées canevas (mm, origine haut-gauche).
-  const bleedBox = { x: MARKS_MARGIN_MM, y: MARKS_MARGIN_MM, w: _r2(trimW + 2 * bleed), h: _r2(trimH + 2 * bleed) };
-  const trimBox  = { x: _r2(MARKS_MARGIN_MM + bleed), y: _r2(MARKS_MARGIN_MM + bleed), w: trimW, h: trimH };
+  const bleedBox = { x: 0, y: 0, w: canvasW, h: canvasH };
+  const trimBox  = { x: bleed, y: bleed, w: trimW, h: trimH };
   const safeBox  = { x: _r2(trimBox.x + safe), y: _r2(trimBox.y + safe), w: _r2(trimW - 2 * safe), h: _r2(trimH - 2 * safe) };
 
   const dpi = OUTPUT_DPI;             // jamais dégradé (cf. kodex-scale)
@@ -213,9 +228,9 @@ function _printSpec(std, opts) {
     canvas_px: { w: mmToPx(canvasW, dpi), h: mmToPx(canvasH, dpi) },
     // Zones (mm de travail, origine haut-gauche du canevas)
     bleedBox, trimBox, safeBox,
-    cropMarks: _cropMarks(trimBox, bleedBox, canvasW, canvasH),
+    cropMarks: [],            // standard 2026 : « sans trait de coupe »
     folds,
-    marksMargin: MARKS_MARGIN_MM,
+    marksMargin: 0,
     // Échelle de travail (grand format) — silencieuse côté UI
     scale: {
       factor,
@@ -228,30 +243,6 @@ function _printSpec(std, opts) {
     notes: std.notes || '',
     generatedAt: opts.generatedAt || new Date(),
   };
-}
-
-// ── Traits de coupe ───────────────────────────────────────────
-// 8 segments : 2 par coin, alignés sur le TRIM (la coupe), démarrant
-// CROP_MARK_GAP_MM après le fond perdu et filant vers le bord du
-// canevas (moins 1 mm). Format : {x1,y1,x2,y2} en mm canevas.
-function _cropMarks(trim, bleedB, canvasW, canvasH) {
-  const marks = [];
-  const gapL = bleedB.x - CROP_MARK_GAP_MM;                     // fin côté gauche
-  const gapT = bleedB.y - CROP_MARK_GAP_MM;                     // fin côté haut
-  const gapR = bleedB.x + bleedB.w + CROP_MARK_GAP_MM;          // départ côté droit
-  const gapB = bleedB.y + bleedB.h + CROP_MARK_GAP_MM;          // départ côté bas
-  const xL = trim.x, xR = trim.x + trim.w;
-  const yT = trim.y, yB = trim.y + trim.h;
-
-  for (const x of [xL, xR]) {
-    marks.push({ x1: x, y1: 1, x2: x, y2: gapT });              // vers le haut
-    marks.push({ x1: x, y1: gapB, x2: x, y2: canvasH - 1 });    // vers le bas
-  }
-  for (const y of [yT, yB]) {
-    marks.push({ x1: 1, y1: y, x2: gapL, y2: y });              // vers la gauche
-    marks.push({ x1: gapR, y1: y, x2: canvasW - 1, y2: y });    // vers la droite
-  }
-  return marks;
 }
 
 function _r2(n) {
@@ -362,13 +353,20 @@ export function templateInfoLines(spec) {
   if (spec.kind === 'print' && spec.rollup) {
     const r = spec.rollup;
     lines.push(`TOUTE la surface doit être imprimée (pas de fond perdu, coupe au bord)`);
-    if (r.amorce_bottom_mm) lines.push(`Zone d'amorce basse : ${r.amorce_bottom_mm} mm (cyan plein — masquée par le mécanisme, prolongez-y votre fond)`);
-    if (r.amorce_top_mm) lines.push(`Zone d'amorce haute : ${r.amorce_top_mm} mm (cyan plein)`);
-    if (r.amorce_side_mm) lines.push(`Amorces latérales : ${r.amorce_side_mm} mm de chaque côté (cyan plein)`);
-    lines.push(`Zone visible : cadre rouge`);
-    lines.push(`Zone tranquille : ${r.safe_inset_mm} mm (cadre vert — textes et logos à l'intérieur)`);
+    if (r.safe_top_mm != null) {
+      // Modèle 2026 : une seule zone tranquille, asymétrique
+      lines.push(`Zone tranquille (cadre vert) : ${r.safe_side_mm} mm latérales · ${r.safe_top_mm} mm en haut · ${r.safe_bottom_mm} mm en bas`);
+      lines.push(`Le bas est avalé par le mécanisme : prolongez-y le fond, jamais de contenu`);
+    } else {
+      if (r.amorce_bottom_mm) lines.push(`Zone d'amorce basse : ${r.amorce_bottom_mm} mm (cyan plein — masquée par le mécanisme, prolongez-y votre fond)`);
+      if (r.amorce_top_mm) lines.push(`Zone d'amorce haute : ${r.amorce_top_mm} mm (cyan plein)`);
+      if (r.amorce_side_mm) lines.push(`Amorces latérales : ${r.amorce_side_mm} mm de chaque côté (cyan plein)`);
+      lines.push(`Zone visible : cadre rouge`);
+      lines.push(`Zone tranquille : ${r.safe_inset_mm} mm (cadre vert — textes et logos à l'intérieur)`);
+    }
     lines.push(`Résolution : ${spec.dpi} DPI · ${spec.colorProfile}`);
-    lines.push(`Document à l'échelle 1/4 — l'imprimeur agrandit à la sortie`);
+    if (spec.scale.label) lines.push(`Document à l'${spec.scale.label.toLowerCase()} — l'imprimeur agrandit à la sortie`);
+    else lines.push(`Document à l'échelle 1:1 (exigence imprimeur)`);
     if (spec.vendorLabel) lines.push(`Imprimeur : ${spec.vendorLabel}`);
     lines.push(`Export attendu : ${spec.exportFormat}`);
     return lines;

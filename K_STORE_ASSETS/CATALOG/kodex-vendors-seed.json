@@ -1,6 +1,6 @@
 {
-  "version": "3.1",
-  "last_updated": "2026-05-20",
+  "version": "3.2",
+  "last_updated": "2026-07-27",
   "_notice": "Catalogue Kodex vendor-aware (v3). Trois entités liées : SUPPORTS universels × VENDORS (Exaprint/Vistaprint/Pixartprinting/Autre) × SPECS (jonction vendor × support). Quand l'utilisateur choisit un couple support×vendor, Kodex hydrate le standard avec les specs précises du couple. Sinon (vendor=other ou couple inconnu), fallback sur les defaults catégorie. Compatible briefs D1 existants via le snapshot standard_snapshot. | P1b juil. 2026 : rules vendor×catégorie pour dimensions libres (médianes des specs). | P3b juil. 2026 : blocs rollup (amorces mesurées sur gabarits Exaprint 84x204 & 200x300, échelle 1/4).",
   "categories": [
     {
@@ -77,14 +77,16 @@
         "zone tranquille / zona tranquila"
       ],
       "highlights": [
-        "22 gabarits IDML sourcés en interne",
-        "Calques bilingues FR/ES",
-        "Échelle 1/10 standardisée dès les très grands formats"
+        "Gabarits officiels 2026 : page à la taille du fond perdu, sans trait de coupe",
+        "Fond perdu 1 mm sur flyers et dépliants, 2 mm sur les cartes",
+        "Tolérance de façonnage ± 1 mm"
       ],
       "preparation_steps": [
         "Polices vectorisées avant export",
-        "Calques bilingues nommés exactement comme dans le gabarit",
-        "Échelle 1/10 + 1000 DPI obligatoire pour les formats > 5 m"
+        "Fichier PDF haute qualité à l'échelle 1:1, SANS trait de coupe",
+        "Textes noirs en noir seul 100 % (évite les défauts de repérage)",
+        "Épaisseur minimum des traits 0,2 pt · corps de texte minimum 7 pts",
+        "Calques séparés conservés pour les finitions spéciales"
       ],
       "supports": [
         "card-business-85x55",
@@ -499,10 +501,12 @@
           "w": 840,
           "h": 2040
         },
-        "amorce_top_mm": 20,
-        "amorce_bottom_mm": 40,
+        "amorce_top_mm": 0,
+        "amorce_bottom_mm": 0,
         "amorce_side_mm": 0,
-        "safe_inset_mm": 20,
+        "safe_top_mm": 40,
+        "safe_bottom_mm": 70,
+        "safe_side_mm": 20,
         "work_scale": 0.25
       }
     },
@@ -650,25 +654,26 @@
     {
       "vendor_id": "exaprint",
       "support_id": "flyer-a4",
-      "bleed_mm": 2,
+      "bleed_mm": 1,
       "safe_margin_mm": 3,
       "dpi": 300,
-      "notes": "Échelle 1:1. CMJN FOGRA39. Calques bilingues FR/ES dans le gabarit officiel."
+      "notes": "Fond perdu 1 mm (standard Exaprint 2026 : commande 14,8x21 = fichier 15x21,4). PDF final échelle 1:1, sans trait de coupe."
     },
     {
       "vendor_id": "exaprint",
       "support_id": "flyer-a5",
-      "bleed_mm": 2,
+      "bleed_mm": 1,
       "safe_margin_mm": 3,
       "dpi": 300,
-      "notes": "Échelle 1:1. CMJN FOGRA39. Disponible recto seul ou recto-verso."
+      "notes": "Fond perdu 1 mm (standard Exaprint 2026 : commande 14,8x21 = fichier 15x21,4). PDF final échelle 1:1, sans trait de coupe."
     },
     {
       "vendor_id": "exaprint",
       "support_id": "flyer-a6",
-      "bleed_mm": 2,
+      "bleed_mm": 1,
       "safe_margin_mm": 3,
-      "dpi": 300
+      "dpi": 300,
+      "notes": "Fond perdu 1 mm (standard Exaprint 2026 : commande 14,8x21 = fichier 15x21,4). PDF final échelle 1:1, sans trait de coupe."
     },
     {
       "vendor_id": "exaprint",
@@ -681,18 +686,18 @@
     {
       "vendor_id": "exaprint",
       "support_id": "folded-leaflet-a5",
-      "bleed_mm": 2,
+      "bleed_mm": 1,
       "safe_margin_mm": 3,
       "dpi": 300,
-      "notes": "Dépliant 210×148 mm Exaprint. 3 pliages disponibles : central, accordéons, roulés. Précisez le pliage dans le brief."
+      "notes": "Fond perdu 1 mm (standard Exaprint 2026). PDF final échelle 1:1, sans trait de coupe. Dépliant 210x148 — pliages : central, accordéons, roulés."
     },
     {
       "vendor_id": "exaprint",
       "support_id": "folded-leaflet-a4",
-      "bleed_mm": 2,
+      "bleed_mm": 1,
       "safe_margin_mm": 3,
       "dpi": 300,
-      "notes": "Dépliant A4 ouvert Exaprint. Plusieurs configurations de pliage — préciser dans le brief."
+      "notes": "Fond perdu 1 mm (standard Exaprint 2026). PDF final échelle 1:1, sans trait de coupe. Dépliant A4 ouvert — plusieurs pliages, préciser dans le brief."
     },
     {
       "vendor_id": "exaprint",
@@ -756,7 +761,7 @@
       "bleed_mm": 25,
       "safe_margin_mm": 100,
       "dpi": 300,
-      "notes": "Roll-up Exaprint 84×204. Échelle 1/4 systématique. Marges asymétriques — zone basse masquée par le mécanisme. Format à imprimer ≠ format produit commercial (rabattage)."
+      "notes": "Roll-up Exaprint 84x204. Gabarit officiel 2026 à l'échelle 1:1, sans fond perdu ni trait de coupe. Zone tranquille asymétrique : 20 mm latérales, 40 mm en haut, 70 mm en bas (mécanisme)."
     },
     {
       "vendor_id": "exaprint",

@@ -5,15 +5,19 @@
    (kodex-template-geometry.js). PDF écrit à la main, zéro
    dépendance — le contenu est simple (rectangles, traits, texte).
 
-   Conforme aux usages imprimeur (modèle : gabarit Exaprint) :
+   Conforme aux usages imprimeur (modèle : gabarits Exaprint 2026) :
      - MediaBox / BleedBox / TrimBox RÉELLES → le document s'ouvre
        aux bonnes cotes dans Illustrator, InDesign, Photoshop
+     - la page fait EXACTEMENT la taille du fond perdu — SANS trait
+       de coupe (« Enregistrez le pdf en haute qualité sans trait de
+       coupe ») ni marge à repères
      - couleurs des repères en DeviceCMYK pur :
          cyan  (1 0 0 0) = fond perdu
          rouge (0 1 1 0) = ligne de coupe / format fini
          vert  (1 0 1 0) = zone de sécurité
-     - traits de coupe noirs aux 4 coins
-     - légende + infos techniques dans la marge basse
+     - plis en pointillés magenta TRAVERSANTS
+     - légende + infos techniques dans la zone de sécurité (le calque
+       gabarit est supprimé par le graphiste avant export)
 
    API : buildTemplatePdf(spec) → Uint8Array (ou null si digital —
    le kit digital se compose de PSD + PNG, pas de PDF).
@@ -53,74 +57,80 @@ export function buildTemplatePdf(spec) {
   // (pas de traits de coupe ni de fond perdu — toute la surface
   // s'imprime et se coupe au bord, cf. gabarits Exaprint)
   if (spec.rollup) {
+    // Le PDF roll-up sort à l'échelle 1:1 (exigence Exaprint 2026,
+    // spec construite avec workScale 1 par le kit) : les tailles de
+    // texte et de trait, pensées pour la page 1/4, sont regonflées
+    // d'autant pour rester proportionnées.
+    const k = _n((spec.scale.factor || 1) / (spec.rollup.work_scale || spec.scale.factor || 1));
     for (const a of spec.rollup.amorces) {
       const [x1, y1, x2, y2] = boxToPdf(a);
       ops.push(`${INK.bleed} k ${x1} ${y1} ${_n(x2 - x1)} ${_n(y2 - y1)} re f`);
     }
-    frame(spec.rollup.visibleBox, INK.trim);
-    if (spec.safeBox.w > 0 && spec.safeBox.h > 0) frame(spec.safeBox, INK.safe);
+    ops.push(`${INK.trim} K ${_n(0.5 * k)} w`);
+    {
+      const [x1, y1, x2, y2] = boxToPdf(spec.rollup.visibleBox);
+      ops.push(`${x1} ${y1} ${_n(x2 - x1)} ${_n(y2 - y1)} re S`);
+    }
+    if (spec.safeBox.w > 0 && spec.safeBox.h > 0) {
+      const [x1, y1, x2, y2] = boxToPdf(spec.safeBox);
+      ops.push(`${INK.safe} K ${_n(0.5 * k)} w ${x1} ${y1} ${_n(x2 - x1)} ${_n(y2 - y1)} re S`);
+    }
 
     // Légende à l'intérieur de la zone tranquille (le calque gabarit
     // est ignoré/supprimé par le graphiste avant export — Exaprint
     // place la sienne au milieu du visuel, on fait pareil en haut)
-    const lx = X(spec.safeBox.x + 4);
-    let lyR = Y(spec.safeBox.y + 8);
-    ops.push(_text(`${spec.productLabel} · ${spec.dimsLabel}`, lx, lyR, 'F2', 11, INK.black));
-    lyR -= 13;
-    ops.push(_text(`Gabarit généré par Brief Prod · Keystone OS · ${_frDate(spec.generatedAt)}`, lx, lyR, 'F1', 7, INK.gray));
-    lyR -= 13;
+    const lx = X(spec.safeBox.x + 4 * k);
+    let lyR = Y(spec.safeBox.y + 8 * k);
+    ops.push(_text(`${spec.productLabel} · ${spec.dimsLabel}`, lx, lyR, 'F2', 11 * k, INK.black));
+    lyR -= 13 * k;
+    ops.push(_text(`Gabarit généré par Brief Prod · Keystone OS · ${_frDate(spec.generatedAt)}`, lx, lyR, 'F1', 7 * k, INK.gray));
+    lyR -= 13 * k;
     // slice(1) : la 1re ligne (nom du produit) est déjà dans le titre
     for (const line of templateInfoLines(spec).slice(1)) {
       const ink = /amorce/i.test(line) ? INK.bleed : (/visible/.test(line) ? INK.trim : (/tranquille/i.test(line) ? INK.safe : INK.black));
-      ops.push(_text(line, lx, lyR, 'F1', 7, ink));
-      lyR -= 9.5;
+      ops.push(_text(line, lx, lyR, 'F1', 7 * k, ink));
+      lyR -= 9.5 * k;
     }
     return _assemblePdf(spec, W, H, ops.join('\n'), boxToPdf);
   }
 
-  // ── Traits de coupe (noir, 0.25 pt) ─────────────────────────
-  ops.push(`${INK.black} K 0.25 w`);
-  for (const m of spec.cropMarks) {
-    ops.push(`${X(m.x1)} ${Y(m.y1)} m ${X(m.x2)} ${Y(m.y2)} l S`);
-  }
-
   // ── Cadres bleed / trim / safe (0.5 pt) ─────────────────────
+  // Standard 2026 : pas de traits de coupe (« sans trait de coupe »),
+  // la page fait la taille du fond perdu, les guides sont des cadres.
   frame(spec.bleedBox, INK.bleed);
   frame(spec.trimBox,  INK.trim);
   if (spec.safeBox.w > 0 && spec.safeBox.h > 0) frame(spec.safeBox, INK.safe);
 
-  // ── Traits de plis (magenta, pointillés, dans les MARGES) ───
-  // Usage imprimeur (modèle Exaprint) : les plis se marquent hors
-  // zone de création — segments haut/bas pour les plis verticaux,
-  // gauche/droite pour les horizontaux.
+  // ── Traits de plis (magenta, pointillés TRAVERSANTS) ────────
+  // Modèle gabarit Exaprint 2026 : le pli se marque d'un pointillé
+  // qui traverse toute la page (le calque gabarit part avant export).
   if (spec.folds) {
-    const b = spec.bleedBox;
     ops.push(`${INK.fold} K 0.6 w [2 2] 0 d`);
     for (const x of spec.folds.vertical) {
-      ops.push(`${X(x)} ${Y(2)} m ${X(x)} ${Y(b.y - 2)} l S`);
-      ops.push(`${X(x)} ${Y(b.y + b.h + 2)} m ${X(x)} ${Y(spec.canvas_mm.h - 2)} l S`);
+      ops.push(`${X(x)} ${Y(0)} m ${X(x)} ${Y(spec.canvas_mm.h)} l S`);
     }
     for (const y of spec.folds.horizontal) {
-      ops.push(`${X(2)} ${Y(y)} m ${X(b.x - 2)} ${Y(y)} l S`);
-      ops.push(`${X(b.x + b.w + 2)} ${Y(y)} m ${X(spec.canvas_mm.w - 2)} ${Y(y)} l S`);
+      ops.push(`${X(0)} ${Y(y)} m ${X(spec.canvas_mm.w)} ${Y(y)} l S`);
     }
     ops.push('[] 0 d');
   }
 
-  // ── Marge haute : produit + généré par ──────────────────────
-  // Textes calés après le trait de coupe vertical gauche pour ne pas
-  // le chevaucher.
-  const textX = X(spec.trimBox.x + 2);
-  const topY = Y(spec.marksMargin - 6);
+  // ── Titre + légende DANS la zone de sécurité ────────────────
+  // Plus de marges autour de la page (standard 2026) : comme pour le
+  // roll-up, le texte vit dans la zone tranquille — le calque gabarit
+  // est supprimé par le graphiste avant export, il ne gêne rien.
+  const textX = X(spec.safeBox.x + 2);
   const face = spec.face ? (spec.face === 'verso' ? ' — Verso' : ' — Recto') : '';
-  ops.push(_text(`${spec.productLabel}${face} · ${spec.dimsLabel}`, textX, topY, 'F2', 8, INK.black));
+  let ly = Y(spec.safeBox.y + 6);
+  ops.push(_text(`${spec.productLabel}${face} · ${spec.dimsLabel}`, textX, ly, 'F2', 8, INK.black));
+  ly -= 8;
   ops.push(_text(`Gabarit généré par Brief Prod · Keystone OS · ${_frDate(spec.generatedAt)}`,
-    textX, topY - 8, 'F1', 5.5, INK.gray));
+    textX, ly, 'F1', 5.5, INK.gray));
+  ly -= 9;
 
-  // ── Marge basse : légende colorée + specs ───────────────────
   const legends = [];
   if (spec.real.bleed_mm) {
-    legends.push([INK.bleed, `Cadre cyan — fond perdu ${spec.real.bleed_mm} mm : étirez le visuel jusqu'à ce cadre, il part à la coupe.`]);
+    legends.push([INK.bleed, `Cadre cyan — fond perdu ${spec.real.bleed_mm} mm : étirez le visuel jusqu'au bord de la page, il part à la coupe.`]);
   }
   legends.push([INK.trim, `Cadre rouge — ligne de coupe : format fini ${spec.dimsLabel}.`]);
   if (spec.real.safe_mm) {
@@ -130,13 +140,11 @@ export function buildTemplatePdf(spec) {
     const panels = spec.folds.panels.map(p => Number.isInteger(p) ? p : String(p).replace('.', ',')).join(' / ');
     legends.push([INK.fold, `Traits magenta — ${spec.folds.label.toLowerCase()} : volets ${panels} mm${spec.folds.asymmetric ? ' (rentrant plus court, verso en miroir)' : ''}.`]);
   }
-  const specBits = [`${spec.dpi} DPI`, spec.colorProfile, `export ${spec.exportFormat}`];
+  const specBits = [`${spec.dpi} DPI`, spec.colorProfile, `export ${spec.exportFormat} sans trait de coupe`];
   if (spec.scale.label) specBits.push(`document à l'${spec.scale.label.toLowerCase()} (l'imprimeur agrandit à la sortie)`);
   legends.push([INK.black, specBits.join(' · ')]);
 
-  // Jusqu'à 5 lignes (pliage inclus) doivent tenir dans la marge basse
   const lineH = 5.5;
-  let ly = Y(spec.canvas_mm.h - spec.marksMargin + 1.2) - 5;
   for (const [ink, txt] of legends) {
     ops.push(_text(txt, textX, ly, 'F1', 5, ink));
     ly -= lineH;
