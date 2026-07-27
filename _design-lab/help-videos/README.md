@@ -10,8 +10,13 @@ admin (hébergement R2) — les MP4 ne se committent PAS ici.
 
 ```bash
 cd _design-lab/help-videos
-python3 film.py tournage-missive.html /tmp/Aide_Missive.mp4
+python3 film.py tournage-missive.html \
+  "$HOME/Desktop/Videos_Aide_Keystone/Aide_Missive.mp4"
 ```
+
+Convention : les MP4 finaux vont dans
+`~/Desktop/Videos_Aide_Keystone/` — c'est là que Stéphane les
+récupère pour l'upload admin.
 
 Dépendances (une fois) : `pip3 install websocket-client imageio-ffmpeg`
 (ffmpeg est embarqué par imageio-ffmpeg — rien à installer d'autre).
