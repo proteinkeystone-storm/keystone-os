@@ -115,6 +115,13 @@ async function _reapIfExpired(env, shortId, row) {
 // FAIL-OPEN assumé : si la base est muette, on laisse passer — couper un
 // destinataire légitime sur un incident d'infra serait pire.
 const SEC_RATE_CAP = 60;
+// Envois d'e-mails par compte et par jour (audit applicatif 27/07). La route
+// /email fait partir un message DEPUIS notre domaine vers une adresse choisie
+// par l'appelant, avec 200 caractères qu'il contrôle : sans plafond, un compte
+// gratuit en fait un relais, et c'est la RÉPUTATION D'EXPÉDITEUR du domaine
+// qui trinque (donc la délivrabilité des liens de connexion de tout le monde).
+// 20/jour : très au-dessus d'un usage réel, très en-dessous d'un envoi en masse.
+const SEC_EMAIL_CAP = 20;
 
 /** Comparaison à temps constant (pas de fuite par la durée). */
 function _safeEqStr(a, b) {
@@ -149,24 +156,28 @@ async function _secDevice(request) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
 }
 
-/** true = requête ADMISE (et comptée). false = plafond atteint. */
-async function _secRateOk(request, env) {
+/** Compteur journalier générique. true = ADMIS (et compté). false = plafond. */
+async function _rateOkFor(env, bucket, cap) {
   await _ensureSecRate(env);
   const day = new Date().toISOString().slice(0, 10);
-  const dev = await _secDevice(request);
   try {
     const row = await env.DB
       .prepare('SELECT count FROM sec_public_usage WHERE day = ? AND device_hash = ?')
-      .bind(day, dev).first();
-    if ((row?.count ?? 0) >= SEC_RATE_CAP) return false;
+      .bind(day, bucket).first();
+    if ((row?.count ?? 0) >= cap) return false;
     await env.DB.prepare(`
       INSERT INTO sec_public_usage (day, device_hash, count, updated_at)
       VALUES (?, ?, 1, datetime('now'))
       ON CONFLICT(day, device_hash) DO UPDATE SET
         count = count + 1, updated_at = datetime('now')
-    `).bind(day, dev).run();
+    `).bind(day, bucket).run();
   } catch (_) { /* base muette → on laisse passer */ }
   return true;
+}
+
+/** true = requête ADMISE (et comptée). false = plafond atteint. */
+async function _secRateOk(request, env) {
+  return _rateOkFor(env, await _secDevice(request), SEC_RATE_CAP);
 }
 
 // Réponse publique no-store (jamais en cache : sinon le chiffré "ressuscite").
@@ -387,6 +398,13 @@ export async function handleSceauEmail(request, env, shortId) {
   const code = typeof body.code === 'string' ? body.code.slice(0, 200) : '';
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return err('Email invalide', 400, origin);
   if (!code) return err('Code requis', 400, origin);
+  // Plafond par COMPTE (pas par appareil : c'est le compte qui engage notre
+  // domaine expéditeur). Placé APRÈS les validations d'entrée — une faute de
+  // frappe sur l'adresse ne doit pas consommer le quota — mais AVANT le test
+  // de configuration, pour que la garde soit vérifiable sans secrets d'envoi.
+  if (!(await _rateOkFor(env, `email:${tenant}`, SEC_EMAIL_CAP))) {
+    return err('Trop d’envois aujourd’hui, réessayez demain', 429, origin);
+  }
   if (!emailConfigured(env)) return err('Service email non configuré', 503, origin);
 
   // SÉCURITÉ : l'email ne porte QUE le code — JAMAIS le lien. La séparation en
@@ -467,6 +485,15 @@ export async function handleSceauMeta(request, env, shortId) {
 // POST /s/:id/eval → eval OPRF de LECTURE. COMPTÉE. Tue la clé au max.
 export async function handleSceauEval(request, env, shortId) {
   const origin = getAllowedOrigin(env, request);
+  // Audit applicatif 27/07 — CETTE ROUTE N'AVAIT AUCUN PLAFOND, alors que
+  // /meta, /blob et /opened en avaient un. C'était le trou : `/eval` est
+  // précisément la route qui CONSOMME les essais, donc un inconnu tenant le
+  // lien détruisait la missive en 3 requêtes, avant que le destinataire
+  // légitime l'ouvre — prouvé au banc. Le plafond ne rend pas la chose
+  // impossible (3 requêtes suffisent) mais borne les dégâts, et c'est ce que
+  // la spec promettait (« compté ET rate-limité »). La détection reste le
+  // vrai filet : une missive morte sans lecture s'affiche « interceptée ».
+  if (!(await _secRateOk(request, env))) return _publicJson({ error: 'Trop de demandes, réessayez demain' }, 429, origin);
   const body = await parseBody(request);
   if (typeof body.blinded !== 'string' || body.blinded.length > 1024) return _publicJson({ error: 'blinded invalide' }, 400, origin);
 
@@ -737,10 +764,11 @@ export async function sweepExpiredSecrets(env) {
             destroyed_at = datetime('now')
       WHERE status IN ('init','scelle') AND expires_at IS NOT NULL AND expires_at < ?`
   ).bind(now).run();
-  // RGPD : purge des lignes mortes (lu/détruit/expiré) > 90 j — ne garde aucune
-  // métadonnée résiduelle au-delà de la fenêtre. Le matériel sensible est déjà NULL.
-  // Trace courte : un secret mort (lu/détruit/expiré) sert d'accusé de réception
-  // ~24 h puis disparaît (liste propre + minimisation RGPD).
+  // RGPD : purge des lignes mortes (lu/détruit/expiré) après ~24 h. Le matériel
+  // sensible est déjà NULL ; ce qui part ici, c'est la dernière métadonnée.
+  // Un secret mort sert d'accusé de réception une journée, puis disparaît.
+  // (Le commentaire annonçait « > 90 j », vestige d'avant le passage à 24 h
+  //  du 30/06 — le code, lui, a toujours purgé à la fenêtre ci-dessous.)
   const purge = await env.DB.prepare(
     `DELETE FROM sec_secrets
       WHERE status IN ('lu','detruit','expire')

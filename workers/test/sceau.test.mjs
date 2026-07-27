@@ -649,5 +649,61 @@ env.DB = makeD1();
   ok(!v1Ouvre, 'la recette v1 n\'ouvre PAS une missive v2 (les deux sont bien distinctes)');
 }
 
+console.log('\nQ. Plafonds de débit (audit applicatif 27/07)');
+env.DB = makeD1(); env.HELP_MEDIA = makeR2();
+{
+  // La table du compteur est créée UNE fois par le worker (drapeau au niveau
+  // du module). Ici on remplace la base à chaque bloc : sans re-création, les
+  // requêtes échouent, le fail-open laisse tout passer, et on mesurerait un
+  // plafond absent alors qu'il est bien là. On la pose donc explicitement.
+  const mkRate = () => env.DB._db.exec(`CREATE TABLE IF NOT EXISTS sec_public_usage (
+    day TEXT NOT NULL, device_hash TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (day, device_hash))`);
+  mkRate();
+  // ── Q1. /s/:id/eval était la SEULE route publique sans plafond ────────
+  // Or c'est celle qui CONSOMME les essais : un inconnu tenant le lien
+  // détruisait la missive en 3 requêtes, avant lecture. Le plafond ne rend
+  // pas la chose impossible (3 < 60) mais borne les dégâts — et c'est ce
+  // que la spec promettait. Ce test garde la porte fermée.
+  const { shortId } = await createSealed('msg', PASS, { label: 'plafond' });
+  let evalLimited = false, evalPassed = 0;
+  for (let i = 0; i < 80; i++) {
+    const r = await callEval(handleSceauEval, shortId, 'AAAA', false);
+    if (r.status === 429) { evalLimited = true; break; }
+    evalPassed++;
+  }
+  ok(evalLimited, `/s/:id/eval est plafonné (429 apres ${evalPassed} appels)`);
+
+  // Un lecteur légitime ne consomme que ~6 requêtes : le plafond ne doit
+  // jamais tomber avant ses 3 essais. On vérifie l'ordre de grandeur.
+  ok(evalPassed >= 10, 'le plafond laisse largement passer un lecteur légitime');
+
+  // ── Q2. /api/sceau/:id/email : relais d'e-mails ───────────────────────
+  // La route fait partir un message DEPUIS notre domaine vers une adresse
+  // choisie par l'appelant. Sans plafond, un compte en fait un relais et
+  // c'est la réputation d'expéditeur (donc la délivrabilité des liens de
+  // connexion de TOUS les clients) qui trinque.
+  env.DB = makeD1(); env.HELP_MEDIA = makeR2(); mkRate();
+  const em = await createSealed('msg2', PASS, { label: 'mail' });
+  const emailReq2 = (body) => new Request('https://x.test/api/sceau/x/email',
+    { method: 'POST', headers: auth, body: JSON.stringify(body) });
+  let mailLimited = false, mailPassed = 0;
+  for (let i = 0; i < 40; i++) {
+    const r = await handleSceauEmail(emailReq2({ to: `c${i}@exemple.fr`, code: 'X' }), env, em.shortId);
+    if (r.status === 429) { mailLimited = true; break; }
+    mailPassed++;
+  }
+  ok(mailLimited, `/api/sceau/:id/email est plafonné (429 apres ${mailPassed} envois)`);
+
+  // Une adresse mal formée ne doit PAS consommer le quota du jour.
+  env.DB = makeD1(); env.HELP_MEDIA = makeR2(); mkRate();
+  const em2 = await createSealed('msg3', PASS, {});
+  for (let i = 0; i < 30; i++) {
+    await handleSceauEmail(emailReq2({ to: 'pasunemail', code: 'X' }), env, em2.shortId);
+  }
+  const apresFautes = await handleSceauEmail(emailReq2({ to: 'ok@exemple.fr', code: 'X' }), env, em2.shortId);
+  ok(apresFautes.status !== 429, 'une faute de frappe sur l\'adresse ne brûle pas le quota');
+}
+
 console.log(`\n=== RÉSULTAT : ${pass} OK, ${fail} KO ===`);
 process.exit(fail === 0 ? 0 : 1);
