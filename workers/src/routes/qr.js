@@ -1620,7 +1620,14 @@ export async function handleSmartQrGamePlay(request, env) {
   // Code de gain signé (uniquement si gain)
   let codeWon = '';
   if (isWin) {
-    const ts = Date.now().toString();
+    // Audit sept. 2026 — la graine était (short_id | appareil | Date.now()).
+    // Deux parties tombant dans la MÊME milliseconde depuis le même appareil
+    // produisaient donc le MÊME code : deux clients avec le même bon en
+    // caisse. Repéré par le banc, qui l'a rencontré pour de vrai en jouant
+    // deux parties d'affilée. On ajoute du hasard : deux gains ne peuvent
+    // plus se retrouver avec le même code, quelle que soit la cadence.
+    const rnd = crypto.getRandomValues(new Uint8Array(8));
+    const ts = Date.now().toString() + '|' + Array.from(rnd).map(b => b.toString(16).padStart(2, '0')).join('');
     codeWon = await _generateWinCode(env, shortId, deviceH, ts);
   }
 

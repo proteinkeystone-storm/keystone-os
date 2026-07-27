@@ -81,6 +81,94 @@ function _expired(row) {
   return !!row.expires_at && new Date(row.expires_at).getTime() <= Date.now();
 }
 
+// ── Destruction paresseuse à l'échéance (audit sept. 2026) ─────
+// AVANT : seul `/eval` détruisait un secret échu ; `/meta` et `/blob` se
+// contentaient de répondre 410 en LAISSANT le chiffré et la clé OPRF en
+// base jusqu'au cron de 3 h. Un secret que l'utilisateur croit mort
+// pouvait donc survivre ~24 h — précisément la fenêtre qui compte dans le
+// scénario « base + clé maître volées » de la spec §4.
+// MAINTENANT : n'importe quel passage sur le secret l'efface. Le cron
+// reste le filet pour ceux que personne ne consulte plus.
+// UPDATE conditionnel sur `status='scelle'` : deux requêtes simultanées
+// ne peuvent pas se marcher dessus, et un secret déjà mort n'est pas
+// « re-tué » (destroyed_at conserve la première date).
+async function _reapIfExpired(env, shortId, row) {
+  if (!row || row.status !== 'scelle' || !_expired(row)) return false;
+  await env.DB.prepare(
+    `UPDATE sec_secrets SET status='expire', ciphertext=NULL, blob_key=NULL,
+            oprf_key_enc=NULL, oprf_key_iv=NULL, destroyed_at=datetime('now')
+      WHERE short_id = ? AND status='scelle'`
+  ).bind(shortId).run();
+  await _destroyBlob(env, row.blob_key);
+  return true;
+}
+
+// ── Plafond de débit sur les routes publiques (audit sept. 2026) ──
+// La spec l'annonce deux fois (« compté + rate-limité ») ; il n'existait
+// pas. Ce n'était PAS un trou de force brute — le plafond de 3 essais
+// tient — mais un trou de disponibilité : `/blob` se téléchargeait en
+// boucle, ce qui faisait accessoirement de Missive un hébergeur anonyme
+// de 8 Mo, et n'importe qui pouvait griller les essais d'un tiers en
+// rafale.
+// GÉNÉREUX à dessein : un lecteur légitime consomme ~6 requêtes (meta +
+// quelques essais + blob + accusé). 60/jour/appareil ne gêne personne.
+// FAIL-OPEN assumé : si la base est muette, on laisse passer — couper un
+// destinataire légitime sur un incident d'infra serait pire.
+const SEC_RATE_CAP = 60;
+
+/** Comparaison à temps constant (pas de fuite par la durée). */
+function _safeEqStr(a, b) {
+  const x = String(a || ''), y = String(b || '');
+  if (x.length !== y.length) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
+  return diff === 0;
+}
+
+let _secRateReady = false;
+async function _ensureSecRate(env) {
+  if (_secRateReady) return;
+  try {
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS sec_public_usage (
+        day         TEXT NOT NULL,
+        device_hash TEXT NOT NULL,
+        count       INTEGER NOT NULL DEFAULT 0,
+        updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (day, device_hash)
+      )
+    `).run();
+    _secRateReady = true;
+  } catch (e) { /* non bloquant : le fail-open ci-dessous prend le relais */ }
+}
+
+async function _secDevice(request) {
+  const ua = request.headers.get('User-Agent') || '?';
+  const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || '?';
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ua + '|' + ip));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+}
+
+/** true = requête ADMISE (et comptée). false = plafond atteint. */
+async function _secRateOk(request, env) {
+  await _ensureSecRate(env);
+  const day = new Date().toISOString().slice(0, 10);
+  const dev = await _secDevice(request);
+  try {
+    const row = await env.DB
+      .prepare('SELECT count FROM sec_public_usage WHERE day = ? AND device_hash = ?')
+      .bind(day, dev).first();
+    if ((row?.count ?? 0) >= SEC_RATE_CAP) return false;
+    await env.DB.prepare(`
+      INSERT INTO sec_public_usage (day, device_hash, count, updated_at)
+      VALUES (?, ?, 1, datetime('now'))
+      ON CONFLICT(day, device_hash) DO UPDATE SET
+        count = count + 1, updated_at = datetime('now')
+    `).bind(day, dev).run();
+  } catch (_) { /* base muette → on laisse passer */ }
+  return true;
+}
+
 // Réponse publique no-store (jamais en cache : sinon le chiffré "ressuscite").
 function _publicJson(data, status, origin) {
   const r = json(data, status, origin);
@@ -198,6 +286,19 @@ export async function handleSceauSeal(request, env, shortId) {
   const question = typeof body.question === 'string' && body.question.trim()
     ? body.question.trim().slice(0, 200) : null;
 
+  // Audit sept. 2026 — deux champs opaques déposés par le client :
+  //  · kdf_v : quelle recette de fabrication de clé il a employée, pour que
+  //    la page de lecture applique la même. On n'accepte que des valeurs
+  //    connues (1 ou 2) : un client bogué ne peut pas rendre le secret
+  //    illisible en annonçant une recette qui n'existe pas.
+  //  · read_receipt : empreinte que seul un lecteur ayant VRAIMENT déchiffré
+  //    saura reproduire. Le serveur ne peut pas la calculer (il ignore le
+  //    code) — il se contente de comparer plus tard. C'est ce qui remplace
+  //    l'effacement public « sur simple appel ».
+  const kdfV = body.kdf_v === 2 ? 2 : 1;
+  const receipt = typeof body.read_receipt === 'string' && /^[A-Za-z0-9+/=]{16,128}$/.test(body.read_receipt)
+    ? body.read_receipt : null;
+
   // Texte petit → inline D1 (atomique). Audio/fichier ou volumineux → R2.
   let inlineCt = ciphertext, blobKey = null;
   if (kind !== 'text' || ciphertext.length > SEC_INLINE_MAX) {
@@ -209,10 +310,10 @@ export async function handleSceauSeal(request, env, shortId) {
   await env.DB.prepare(
     `UPDATE sec_secrets
         SET ciphertext = ?, blob_key = ?, iv = ?, kind = ?, mime = ?, question = ?, max_attempts = ?, attempts = 0,
-            expires_at = ?, label = COALESCE(?, label),
+            expires_at = ?, label = COALESCE(?, label), kdf_v = ?, read_receipt = ?,
             status = 'scelle', sealed_at = datetime('now')
       WHERE short_id = ? AND status = 'init'`
-  ).bind(inlineCt, blobKey, iv, kind, mime, question, max, expiresAt, label, shortId).run();
+  ).bind(inlineCt, blobKey, iv, kind, mime, question, max, expiresAt, label, kdfV, receipt, shortId).run();
 
   return json({ ok: true, short_id: shortId, status: 'scelle', kind, max_attempts: max, expires_at: expiresAt }, 200, origin);
 }
@@ -337,8 +438,9 @@ function _escHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;'
 // GET /s/:id/meta → de quoi blinder côté client, ou 410 si mort.
 export async function handleSceauMeta(request, env, shortId) {
   const origin = getAllowedOrigin(env, request);
+  if (!(await _secRateOk(request, env))) return _publicJson({ error: 'Trop de demandes, réessayez demain' }, 429, origin);
   const row = await env.DB.prepare(
-    `SELECT status, oprf_pub, attempts, max_attempts, oprf_key_enc, ciphertext, blob_key, kind, mime, question, expires_at
+    `SELECT status, oprf_pub, attempts, max_attempts, oprf_key_enc, ciphertext, blob_key, kind, mime, question, expires_at, kdf_v
        FROM sec_secrets WHERE short_id = ?`
   ).bind(shortId).first();
 
@@ -347,7 +449,8 @@ export async function handleSceauMeta(request, env, shortId) {
 
   const hasBlob = row.ciphertext || row.blob_key;
   const dead = row.status !== 'scelle' || !row.oprf_key_enc || !hasBlob || _expired(row);
-  if (dead) return _publicJson({ status: 'detruit' }, 410, origin);
+  // Échu : on EFFACE au passage au lieu d'attendre le cron (audit sept. 2026).
+  if (dead) { await _reapIfExpired(env, shortId, row); return _publicJson({ status: 'detruit' }, 410, origin); }
 
   return _publicJson({
     status: 'scelle',
@@ -356,6 +459,8 @@ export async function handleSceauMeta(request, env, shortId) {
     mime: row.mime || null,
     question: row.question || null,
     attempts_left: Math.max(0, row.max_attempts - row.attempts),
+    // Quelle recette de clé appliquer côté lecteur (1 = historique, 2 = PBKDF2 lent).
+    kdf_v: row.kdf_v || 1,
   }, 200, origin);
 }
 
@@ -424,6 +529,7 @@ export async function handleSceauEval(request, env, shortId) {
 // GET /s/:id/blob → le chiffré (opaque, inexploitable sans l'eval). no-store.
 export async function handleSceauBlob(request, env, shortId) {
   const origin = getAllowedOrigin(env, request);
+  if (!(await _secRateOk(request, env))) return _publicJson({ error: 'Trop de demandes, réessayez demain' }, 429, origin);
   const row = await env.DB.prepare(
     `SELECT status, ciphertext, blob_key, iv, kind, mime, oprf_key_enc, expires_at FROM sec_secrets WHERE short_id = ?`
   ).bind(shortId).first();
@@ -431,7 +537,8 @@ export async function handleSceauBlob(request, env, shortId) {
   if (!row) return _publicJson({ error: 'Introuvable' }, 404, origin);
   const hasBlob = row.ciphertext || row.blob_key;
   const dead = row.status !== 'scelle' || !hasBlob || !row.oprf_key_enc || _expired(row);
-  if (dead) return _publicJson({ status: 'detruit' }, 410, origin);
+  // Échu : on EFFACE au passage au lieu d'attendre le cron (audit sept. 2026).
+  if (dead) { await _reapIfExpired(env, shortId, row); return _publicJson({ status: 'detruit' }, 410, origin); }
 
   // Chiffré : inline D1, ou récupéré de R2 (audio/fichier).
   let ct = row.ciphertext;
@@ -450,7 +557,33 @@ export async function handleSceauBlob(request, env, shortId) {
 // RGPD : aucune PII, juste un horodatage. Best-effort (un attaquant ne l'émet pas).
 export async function handleSceauOpened(request, env, shortId) {
   const origin = getAllowedOrigin(env, request);
-  const pre = await env.DB.prepare('SELECT blob_key FROM sec_secrets WHERE short_id = ?').bind(shortId).first();
+  if (!(await _secRateOk(request, env))) return _publicJson({ error: 'Trop de demandes' }, 429, origin);
+
+  // Audit sept. 2026 — CETTE ROUTE EFFAÇAIT SUR SIMPLE APPEL.
+  // N'importe qui connaissant le lien détruisait donc la missive avant que
+  // le destinataire l'ait lue, et la spec l'interdit nommément (« Pas de
+  // burn public »). On exige désormais une PREUVE DE LECTURE : une
+  // empreinte dérivée de la sortie OPRF, déposée au scellage, que seul
+  // quelqu'un ayant réellement déchiffré sait reproduire.
+  // Le serveur ne peut pas la fabriquer (il ignore le code) — il compare,
+  // en temps constant, et n'efface que sur correspondance. Il reste aveugle.
+  const pre = await env.DB
+    .prepare('SELECT blob_key, read_receipt FROM sec_secrets WHERE short_id = ?')
+    .bind(shortId).first();
+  if (!pre) return _publicJson({ ok: false }, 404, origin);
+
+  // Pas d'empreinte enregistrée (missive scellée par un client antérieur) :
+  // on n'efface RIEN. Refuser est le comportement sûr — au pire la missive
+  // vit jusqu'à l'épuisement de ses essais ou son échéance, ce que la spec
+  // décrit déjà comme la vraie garantie.
+  if (!pre.read_receipt) return _publicJson({ ok: false, reason: 'preuve_absente' }, 400, origin);
+
+  const body = await parseBody(request);
+  const given = typeof body?.receipt === 'string' ? body.receipt : '';
+  if (!_safeEqStr(given, pre.read_receipt)) {
+    return _publicJson({ ok: false, reason: 'preuve_invalide' }, 403, origin);
+  }
+
   await env.DB.prepare(
     `UPDATE sec_secrets
         SET read_at = COALESCE(read_at, datetime('now')),

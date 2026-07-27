@@ -77,11 +77,47 @@ function _packFile(name, type, bytes) {
 // Cap dur côté serveur = 8 Mo de b64 (SEC_SEAL_MAX). On garde une marge pour l'en-tête
 // nom + le tag AES-GCM : ~5,8 Mo de fichier brut.
 const SEC_FILE_MAX = 5_800_000;
-async function _aesKey(output) {
-  const ikm = await crypto.subtle.importKey('raw', output, 'HKDF', false, ['deriveKey']);
+// ── Fabrication de la clé (audit sept. 2026) ────────────────────
+// v1 (historique) : HKDF seul. Rapide — donc un attaquant qui aurait volé
+// À LA FOIS la base ET la clé maître pouvait essayer des codes à la chaîne
+// pour presque rien (cf. SCEAU_CRYPTO_SPEC.md §4).
+// v2 : PBKDF2 à 600 000 tours par-dessus la sortie OPRF. Chaque essai coûte
+// alors ~0,3 s de calcul. Pour le destinataire c'est indolore — il n'ouvre
+// qu'une fois ; pour celui qui essaie des millions de codes, c'est
+// rédhibitoire. C'est la parade la plus efficace au code « facile à dicter »,
+// qui ne peut pas être rallongé sans cesser d'être dictable.
+// ⚠️ CETTE RECETTE DOIT RESTER IDENTIQUE côté page de lecture
+// (workers/src/routes/sceau-page.js) — sinon le destinataire ne peut plus
+// ouvrir. La version employée voyage avec la missive (colonne kdf_v).
+const KDF_V = 2;
+const PBKDF2_ROUNDS = 600_000;
+const PBKDF2_SALT = _enc.encode('sceau/kdf/v2');
+
+async function _aesKey(output, v = KDF_V) {
+  if (v === 1) {
+    const ikm = await crypto.subtle.importKey('raw', output, 'HKDF', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'HKDF', hash: 'SHA-256', salt: HKDF_SALT, info: HKDF_INFO },
+      ikm, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  const ikm = await crypto.subtle.importKey('raw', output, 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey(
-    { name: 'HKDF', hash: 'SHA-256', salt: HKDF_SALT, info: HKDF_INFO },
+    { name: 'PBKDF2', hash: 'SHA-256', salt: PBKDF2_SALT, iterations: PBKDF2_ROUNDS },
     ikm, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+
+// Preuve de lecture : empreinte de la sortie OPRF, distincte de la clé (autre
+// domaine), déposée au scellage. Seul quelqu'un qui a réellement déchiffré
+// peut la reproduire — c'est ce qui empêche un tiers d'effacer la missive
+// d'un simple appel. Le serveur ne peut pas la calculer : il ignore le code.
+// ⚠️ DOIT rester identique côté page de lecture.
+async function _readReceipt(output) {
+  const tag = _enc.encode('sceau/receipt');
+  const seed = new Uint8Array(output.length + tag.length);
+  seed.set(output, 0);
+  seed.set(tag, output.length);
+  const h = await crypto.subtle.digest('SHA-256', seed);
+  return btoa(String.fromCharCode(...new Uint8Array(h)));
 }
 // Normalisation de la réponse (mode question/réponse) — DOIT être IDENTIQUE
 // côté lecture (sceau-page.js), sinon le destinataire échoue au dernier essai.
@@ -204,10 +240,14 @@ function _secGaugeHTML() {
 }
 
 function _genWordsPassphrase() {
-  // 256 mots pile → 1 octet aléatoire = tirage parfaitement uniforme
-  const b = crypto.getRandomValues(new Uint8Array(4));
-  const num = 10 + (b[3] % 90);
-  return `${_WORDS[b[0]]}-${_WORDS[b[1]]}-${_WORDS[b[2]]}-${num}`; // ex. tigre-banane-orage-77
+  // 256 mots pile → 1 octet aléatoire = tirage parfaitement uniforme.
+  // Audit sept. 2026 : passé de 3 à 4 mots (30,5 → 38,5 bits). Un 5e mot
+  // cesserait d'être dictable au téléphone ; le reste du chemin est couvert
+  // par la fabrication de clé lente (_aesKey v2), qui rend chaque essai
+  // d'un attaquant hors ligne des centaines de milliers de fois plus cher.
+  const b = crypto.getRandomValues(new Uint8Array(5));
+  const num = 10 + (b[4] % 90);
+  return `${_WORDS[b[0]]}-${_WORDS[b[1]]}-${_WORDS[b[2]]}-${_WORDS[b[3]]}-${num}`;
 }
 
 // ── API ─────────────────────────────────────────────────────────
@@ -812,7 +852,11 @@ async function _create() {
     const key = await _aesKey(output);
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, payload));
-    await _api(`/${init.short_id}/seal`, { method: 'POST', body: { ciphertext: _b64e(ct), iv: _b64e(iv), kind, mime, question, max_attempts: max, expires_at, label } });
+    // kdf_v : quelle recette de clé la page de lecture devra appliquer.
+    // read_receipt : la preuve qu'il faudra présenter pour effacer la missive
+    // (sans elle, n'importe qui pouvait la détruire d'un simple appel).
+    const receipt = await _readReceipt(output);
+    await _api(`/${init.short_id}/seal`, { method: 'POST', body: { ciphertext: _b64e(ct), iv: _b64e(iv), kind, mime, question, max_attempts: max, expires_at, label, kdf_v: KDF_V, read_receipt: receipt } });
 
     let url = `${API_BASE}/s/${init.short_id}`;
     if (_tokenTarget) {

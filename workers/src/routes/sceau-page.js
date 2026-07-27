@@ -214,11 +214,39 @@ function _page(base, nonce, bundleHref, sri) {
     const normAnswer = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
     const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+    // Audit sept. 2026 — deux recettes de clé coexistent, la missive dit
+    // laquelle (kdf_v, renvoyé par /meta). v1 = HKDF seul (historique).
+    // v2 = PBKDF2 600 000 tours : indolore pour vous (une ouverture), mais
+    // il rend ruineuse l'attaque de quelqu'un qui essaierait des millions
+    // de codes après avoir volé nos machines.
+    // ⚠️ CES CONSTANTES DOIVENT RESTER IDENTIQUES à app/sceau.js.
+    const PBKDF2_ROUNDS = 600000;
+    const PBKDF2_SALT = enc.encode('sceau/kdf/v2');
+    let KDF_V = 1;
+
     async function aesKey(output){
-      const ikm = await crypto.subtle.importKey('raw', output, 'HKDF', false, ['deriveKey']);
+      if (KDF_V === 1) {
+        const ikm = await crypto.subtle.importKey('raw', output, 'HKDF', false, ['deriveKey']);
+        return crypto.subtle.deriveKey(
+          { name:'HKDF', hash:'SHA-256', salt:HKDF_SALT, info:HKDF_INFO },
+          ikm, { name:'AES-GCM', length:256 }, false, ['decrypt']);
+      }
+      const ikm = await crypto.subtle.importKey('raw', output, 'PBKDF2', false, ['deriveKey']);
       return crypto.subtle.deriveKey(
-        { name:'HKDF', hash:'SHA-256', salt:HKDF_SALT, info:HKDF_INFO },
+        { name:'PBKDF2', hash:'SHA-256', salt:PBKDF2_SALT, iterations:PBKDF2_ROUNDS },
         ikm, { name:'AES-GCM', length:256 }, false, ['decrypt']);
+    }
+
+    // Preuve de lecture — DOIT rester identique à app/sceau.js (_readReceipt).
+    // Seul quelqu'un qui a réellement déchiffré peut la produire ; c'est ce
+    // qui autorise l'effacement, et qui empêche un tiers de détruire la
+    // missive avant vous d'un simple appel.
+    async function readReceipt(output){
+      const tag = enc.encode('sceau/receipt');
+      const seed = new Uint8Array(output.length + tag.length);
+      seed.set(output, 0); seed.set(tag, output.length);
+      const h = await crypto.subtle.digest('SHA-256', seed);
+      return btoa(String.fromCharCode.apply(null, new Uint8Array(h)));
     }
 
     function dead(msg){
@@ -297,7 +325,11 @@ function _page(base, nonce, bundleHref, sri) {
           }
           // Accusé de lecture (S5) — best-effort, esprit Snap : informe le créateur
           // que le sceau a été ouvert, et consomme le secret (lu une fois).
-          fetch(BASE+'/opened', { method:'POST', cache:'no-store' }).catch(()=>{});
+          readReceipt(output).then(rc => fetch(BASE+'/opened', {
+            method:'POST', cache:'no-store',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({ receipt: rc }),
+          })).catch(()=>{});
           if(blob.kind==='audio'){ revealAudio(URL.createObjectURL(new Blob([buf], { type: blob.mime || 'audio/webm' }))); }
           else if(blob.kind==='file'){ revealFile(unpackFile(buf), blob.mime); }
           else { reveal(dec.decode(buf)); }
@@ -390,6 +422,8 @@ function _page(base, nonce, bundleHref, sri) {
         if(r.status===410){ return dead('Cette missive s’est autodétruite ou a expiré.'); }
         if(!r.ok){ return dead('Cette missive n’est pas disponible.'); }
         const m = await r.json();
+        // Recette de clé annoncée par la missive (1 = historique, 2 = lente).
+        KDF_V = (m.kdf_v === 2) ? 2 : 1;
         renderForm(m.attempts_left, m.oprf_pub, m.question);
       }catch{ dead('Connexion impossible.'); }
     })();

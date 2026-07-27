@@ -1,0 +1,36 @@
+-- ═══════════════════════════════════════════════════════════════
+-- KEYSTONE OS — Migration 013 · SCEAU durcissement (audit sept. 2026)
+-- Deux colonnes, deux défauts d'audit fermés.
+--
+--   kdf_v : version de la fabrication de clé côté client.
+--           1 = HKDF seul (rapide) — l'historique.
+--           2 = PBKDF2 lent par-dessus l'OPRF.
+--           POURQUOI : la spec §4 reconnaît qu'un attaquant qui vole À LA
+--           FOIS la base ET la clé maître peut rejouer l'OPRF hors ligne et
+--           essayer des codes à la chaîne. La seule défense restante est
+--           alors le coût de chaque essai. Avec HKDF, un essai est
+--           quasi gratuit. Avec PBKDF2 à 600 000 tours, chaque essai coûte
+--           ~0,3 s de calcul — ce qui rend l'attaque des centaines de
+--           milliers de fois plus chère, sans rien changer pour le
+--           destinataire légitime (il n'ouvre qu'une fois).
+--           La colonne existe pour que la page de lecture sache quelle
+--           recette appliquer, et pour qu'un changement futur reste possible.
+--
+--   read_receipt : empreinte que SEUL un lecteur ayant réellement déchiffré
+--           peut produire (dérivée de la sortie OPRF, jamais transmise en
+--           clair). POURQUOI : `POST /s/:id/opened` effaçait la missive sur
+--           simple appel, sans aucune preuve — n'importe qui connaissant le
+--           lien pouvait donc la détruire avant que le destinataire la lise.
+--           La spec l'interdit nommément (« Pas de burn public »).
+--           Le serveur ne peut pas fabriquer cette empreinte lui-même sans
+--           connaître le code : il reste aveugle.
+--
+-- Sûr à appliquer : la table est VIDE en production (0 missive créée à ce
+-- jour, vérifié le 27/07/2026), donc aucune reprise de données.
+--
+-- Application :
+--   wrangler d1 execute keystone-os --remote --file=./migrations/013_sceau_durcissement.sql
+-- ═══════════════════════════════════════════════════════════════
+
+ALTER TABLE sec_secrets ADD COLUMN kdf_v INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE sec_secrets ADD COLUMN read_receipt TEXT;

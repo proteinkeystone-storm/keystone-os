@@ -31,6 +31,7 @@ function makeD1() {
   db.exec(readFileSync(join(__dir, '../migrations/009_sceau_tokens.sql'), 'utf8'));
   db.exec(readFileSync(join(__dir, '../migrations/010_sceau_blob.sql'), 'utf8'));
   db.exec(readFileSync(join(__dir, '../migrations/011_sceau_question.sql'), 'utf8'));
+  db.exec(readFileSync(join(__dir, '../migrations/013_sceau_durcissement.sql'), 'utf8'));
   return {
     _db: db,
     prepare(sql) {
@@ -91,9 +92,21 @@ async function createSealed(plaintext, passphrase, opts = {}) {
   const key = await aesKeyFromOprf(output);
   const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
   const ct = new Uint8Array(await subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext)));
-  const sealRes = await handleSceauSeal(req('POST', { ciphertext: b64e(ct), iv: b64e(iv), max_attempts: opts.max ?? 3, expires_at: opts.expires_at, label: opts.label }), env, shortId);
+  // Preuve de lecture (audit sept. 2026) — le vrai client la dépose au
+  // scellage ; sans elle, plus personne ne peut effacer la missive.
+  const receipt = await readReceiptFromOprf(output);
+  const sealRes = await handleSceauSeal(req('POST', { ciphertext: b64e(ct), iv: b64e(iv), max_attempts: opts.max ?? 3, expires_at: opts.expires_at, label: opts.label, read_receipt: receipt }), env, shortId);
   ok(sealRes.status === 200, `seal -> 200 (${shortId})`);
-  return { shortId, oprfPub };
+  return { shortId, oprfPub, receipt };
+}
+
+// Doit rester IDENTIQUE à app/sceau.js (_readReceipt) et sceau-page.js.
+async function readReceiptFromOprf(output) {
+  const tag = enc.encode('sceau/receipt');
+  const seed = new Uint8Array(output.length + tag.length);
+  seed.set(output, 0); seed.set(tag, output.length);
+  const h = await subtle.digest('SHA-256', seed);
+  return b64e(new Uint8Array(h));
 }
 
 // Lecture : eval (compté) + blob + déchiffrement. Renvoie {ok, plaintext|null, evalStatus}
@@ -202,9 +215,22 @@ env.DB = makeD1();
   env.DB._db.prepare("UPDATE sec_secrets SET expires_at=? WHERE short_id=?").run(past, shortId);
   const meta = await handleSceauMeta(pubReq('GET'), env, shortId);
   ok(meta.status === 410, 'secret échu -> meta 410 (expiration paresseuse)');
+  // Audit sept. 2026 — AVANT, /meta se contentait de répondre 410 en laissant
+  // le chiffré et la clé en base jusqu'au cron de 3 h : un secret que
+  // l'utilisateur croyait mort survivait ~24 h. MAINTENANT, le simple passage
+  // l'efface. C'est la propriété qu'on verrouille ici.
+  const afterMeta = env.DB._db.prepare('SELECT status, ciphertext, oprf_key_enc FROM sec_secrets WHERE short_id=?').get(shortId);
+  ok(afterMeta.status === 'expire' && !afterMeta.ciphertext && !afterMeta.oprf_key_enc,
+     'échu : /meta EFFACE au passage (plus d\'attente du cron)');
   const swept = await sweepExpiredSecrets(env);
-  ok(swept.expired >= 1, `sweep cron purge ${swept.expired} expiré(s)`);
-  const rowRaw = env.DB._db.prepare('SELECT oprf_key_enc, status FROM sec_secrets WHERE short_id=?').get(shortId);
+  ok(swept.expired === 0, 'le cron ne trouve plus rien à expirer — la destruction a déjà eu lieu');
+
+  // Le cron reste le filet pour un secret que PLUS PERSONNE ne consulte.
+  const orphan = await createSealed('Orphelin', PASS);
+  env.DB._db.prepare("UPDATE sec_secrets SET expires_at=? WHERE short_id=?").run(past, orphan.shortId);
+  const swept2 = await sweepExpiredSecrets(env);
+  ok(swept2.expired >= 1, `cron : filet toujours actif sur un secret jamais rouvert (${swept2.expired})`);
+  const rowRaw = env.DB._db.prepare('SELECT oprf_key_enc, status FROM sec_secrets WHERE short_id=?').get(orphan.shortId);
   ok(rowRaw.oprf_key_enc === null && rowRaw.status === 'expire', 'après sweep: clé effacée, status expire');
 }
 
@@ -290,8 +316,19 @@ env.DB = makeD1();
   const s = await createSealed(SECRET, PASS, { max: 3 });
   const r = await readSecret(s.shortId, s.oprfPub, PASS);
   ok(r.ok, 'lecture bon code OK avant accusé');
-  const op = await handleSceauOpened(pubReq('POST'), env, s.shortId);
-  ok(op.status === 200, 'POST /opened -> 200');
+  // Audit sept. 2026 — l'effacement n'est plus public : il exige la PREUVE
+  // de lecture. On verrouille les trois cas, l'ordre compte (les refus
+  // AVANT le succès, sinon la missive est déjà consommée).
+  // Sans preuve fournie = preuve invalide -> 403. (Le 400 « preuve_absente »
+  // ne vise que les missives scellées AVANT ce chantier, qui n'en ont pas.)
+  const opNo = await handleSceauOpened(pubReq('POST'), env, s.shortId);
+  ok(opNo.status === 403, 'POST /opened SANS preuve -> 403 (plus d\'effacement public)');
+  const opBad = await handleSceauOpened(pubReq('POST', { receipt: b64e(new Uint8Array(32)) }), env, s.shortId);
+  ok(opBad.status === 403, 'POST /opened avec une preuve FAUSSE -> 403');
+  const rowAlive = env.DB._db.prepare('SELECT status, ciphertext FROM sec_secrets WHERE short_id=?').get(s.shortId);
+  ok(rowAlive.status === 'scelle' && !!rowAlive.ciphertext, 'après 2 tentatives sans preuve : la missive est INTACTE');
+  const op = await handleSceauOpened(pubReq('POST', { receipt: s.receipt }), env, s.shortId);
+  ok(op.status === 200, 'POST /opened avec la BONNE preuve -> 200');
   const row = env.DB._db.prepare('SELECT status, read_at, ciphertext, oprf_key_enc FROM sec_secrets WHERE short_id=?').get(s.shortId);
   ok(row.status === 'lu' && row.read_at && !row.ciphertext && !row.oprf_key_enc, 'accusé -> status lu, read_at posé, matériel effacé (lu une fois)');
   ok((await handleSceauMeta(pubReq('GET'), env, s.shortId)).status === 410, 'après accusé -> meta 410 (consommé)');
@@ -311,7 +348,7 @@ env.DB = makeD1();
   const tk = await (await handleTokenCreate(req('POST', { label: 'T' }), env)).json();
   const s3 = await createSealed('Via jeton', PASS);
   await handleTokenPoint(req('POST', { short_id: s3.shortId }), env, tk.token_id);
-  await handleTokenOpened(pubReq('POST'), env, tk.token_id);
+  await handleTokenOpened(pubReq('POST', { receipt: s3.receipt }), env, tk.token_id);
   const row3 = env.DB._db.prepare('SELECT status FROM sec_secrets WHERE short_id=?').get(s3.shortId);
   ok(row3.status === 'lu', 'accusé via jeton -> secret courant consommé');
 }
@@ -522,6 +559,94 @@ env.DB = makeD1(); env.HELP_MEDIA = makeR2();
   // Le code N'EST PAS stocké en base
   const raw = env.DB._db.prepare('SELECT * FROM sec_secrets WHERE short_id=?').get(shortId);
   ok(!Object.values(raw).some(v => typeof v === 'string' && v.includes(PASS)), 'le code n\'est JAMAIS stocké en base');
+}
+
+// ══════════════════════════════════════════════════════════════
+// O. La recette de clé est-elle la MÊME des deux côtés ? (audit sept. 2026)
+// ──────────────────────────────────────────────────────────────
+// LE risque de ce module : la fabrication de la clé est écrite DEUX FOIS —
+// dans le pad (app/sceau.js) et dans la page de lecture
+// (workers/src/routes/sceau-page.js). Si l'une dérive de l'autre, plus
+// aucune missive ne s'ouvre, et RIEN dans les tests fonctionnels ne le voit
+// (chacun teste son propre côté).
+// On compare donc les constantes qui DOIVENT coïncider, dans les fichiers
+// réels. Un futur changement d'un seul côté casse ici, immédiatement.
+// ══════════════════════════════════════════════════════════════
+console.log('\nO. Recette de clé identique pad ↔ page de lecture');
+{
+  const root = join(__dir, '../..');
+  const pad    = readFileSync(join(root, 'app/sceau.js'), 'utf8');
+  const reader = readFileSync(join(root, 'workers/src/routes/sceau-page.js'), 'utf8');
+
+  const rounds = s => (s.match(/PBKDF2_ROUNDS\s*=\s*([0-9_]+)/) || [])[1]?.replace(/_/g, '');
+  const salt   = s => (s.match(/PBKDF2_SALT\s*=\s*[_a-z]*enc\.encode\('([^']+)'\)/) || [])[1];
+  const tag    = s => (s.match(/enc\.encode\('(sceau\/receipt)'\)/) || [])[1];
+
+  ok(rounds(pad) && rounds(pad) === rounds(reader),
+     `nombre de tours PBKDF2 identique (${rounds(pad)})`);
+  ok(salt(pad) && salt(pad) === salt(reader),
+     `sel PBKDF2 identique (« ${salt(pad)} »)`);
+  ok(tag(pad) && tag(pad) === tag(reader),
+     'étiquette de la preuve de lecture identique');
+  // Les deux doivent aussi savoir traiter l'ancienne recette : une missive
+  // scellée avant ce chantier (kdf_v = 1) doit rester lisible.
+  ok(/sceau\/v1/.test(pad) && /sceau\/v1/.test(reader),
+     'la recette historique (v1) reste gérée des deux côtés');
+}
+
+// ══════════════════════════════════════════════════════════════
+// P. Recette LENTE (kdf_v = 2) de bout en bout
+// ──────────────────────────────────────────────────────────────
+// Le reste du banc scelle en v1 (recette historique). Sans cette suite,
+// la recette v2 — celle que tous les NOUVEAUX secrets emploient — ne
+// serait jamais réellement exercée : on saurait que les constantes
+// coïncident, pas qu'elles produisent une missive lisible.
+// ══════════════════════════════════════════════════════════════
+console.log('\nP. Fabrication de clé lente (kdf_v=2) — chiffrer puis déchiffrer');
+env.DB = makeD1();
+{
+  const PBKDF2_SALT = enc.encode('sceau/kdf/v2');
+  const aesKeyV2 = async (output) => {
+    const ikm = await subtle.importKey('raw', output, 'PBKDF2', false, ['deriveKey']);
+    return subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt: PBKDF2_SALT, iterations: 600000 },
+      ikm, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  };
+
+  // Scellage façon vrai client, mais en v2.
+  const init = await (await handleSceauInit(req('POST', { label: 'v2' }), env)).json();
+  const shortId = init.short_id;
+  const client = new VOPRFClient(SUITE, b64d(init.oprf_pub));
+  const [fin, ereq] = await client.blind([enc.encode(PASS)]);
+  const ev = await (await callEval(handleSceauEvalCreate, shortId, b64e(ereq.serialize()), true)).json();
+  const [output] = await client.finalize(fin, Evaluation.deserialize(SUITE, b64d(ev.evaluation)));
+  const key = await aesKeyV2(output);
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode('Secret v2')));
+  const sealRes = await handleSceauSeal(req('POST', {
+    ciphertext: b64e(ct), iv: b64e(iv), kdf_v: 2, read_receipt: await readReceiptFromOprf(output),
+  }), env, shortId);
+  ok(sealRes.status === 200, 'seal en v2 -> 200');
+
+  // La missive ANNONCE sa recette, sinon le lecteur applique la mauvaise.
+  const meta = await (await handleSceauMeta(pubReq('GET'), env, shortId)).json();
+  ok(meta.kdf_v === 2, '/meta annonce kdf_v = 2 (le lecteur saura quoi appliquer)');
+
+  // Lecture façon vrai destinataire.
+  const blob = await (await handleSceauBlob(pubReq('GET'), env, shortId)).json();
+  const c2 = new VOPRFClient(SUITE, b64d(init.oprf_pub));
+  const [fin2, ereq2] = await c2.blind([enc.encode(PASS)]);
+  const ev2 = await (await callEval(handleSceauEval, shortId, b64e(ereq2.serialize()), false)).json();
+  const [out2] = await c2.finalize(fin2, Evaluation.deserialize(SUITE, b64d(ev2.evaluation)));
+  const pt = await subtle.decrypt({ name: 'AES-GCM', iv: b64d(blob.iv) }, await aesKeyV2(out2), b64d(blob.ciphertext));
+  ok(decd.decode(pt) === 'Secret v2', 'lecture v2 -> le clair est restitué');
+
+  // Et la mauvaise recette NE doit pas ouvrir (preuve que v2 est bien actif).
+  let v1Ouvre = false;
+  try {
+    await subtle.decrypt({ name: 'AES-GCM', iv: b64d(blob.iv) }, await aesKeyFromOprf(out2), b64d(blob.ciphertext));
+    v1Ouvre = true;
+  } catch { /* attendu */ }
+  ok(!v1Ouvre, 'la recette v1 n\'ouvre PAS une missive v2 (les deux sont bien distinctes)');
 }
 
 console.log(`\n=== RÉSULTAT : ${pass} OK, ${fail} KO ===`);
