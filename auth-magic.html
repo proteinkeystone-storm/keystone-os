@@ -543,12 +543,24 @@
       }
     }
 
+    // Couvre TOUS les codes que le worker peut renvoyer (auth-oidc.js) —
+    // un code inconnu tombe sur le message générique plus bas.
     const SSO_ERRORS = {
       no_account:            'Votre identité entreprise est vérifiée, mais aucun compte Keystone n\'y est associé. Contactez votre administrateur.',
       no_sso:                'Aucune connexion SSO n\'est configurée pour ce domaine.',
       idp_denied:            'La connexion a été refusée par votre fournisseur d\'identité.',
       state_expired:         'La session SSO a expiré. Recommencez la connexion.',
       email_domain_mismatch: 'Le compte utilisé n\'appartient pas au domaine attendu.',
+      bad_domain:            'L\'adresse saisie ne ressemble pas à un domaine d\'entreprise. Vérifiez votre email professionnel.',
+      idp_unreachable:       'Le service de connexion de votre entreprise ne répond pas. Réessayez dans quelques minutes, ou utilisez le lien reçu par email.',
+      bad_callback:          'Le retour de connexion est incomplet. Recommencez la connexion depuis le début.',
+      state_unknown:         'Cette tentative de connexion n\'est plus reconnue — elle a peut-être déjà servi. Recommencez la connexion.',
+      state_replayed:        'Cette tentative de connexion a déjà été utilisée. Recommencez la connexion.',
+      conn_disabled:         'La connexion entreprise de votre société est désactivée. Contactez votre administrateur.',
+      token_exchange:        'Le dialogue avec le service de connexion de votre entreprise a échoué. Réessayez, ou utilisez le lien reçu par email.',
+      idtoken_invalid:       'La preuve d\'identité renvoyée par votre entreprise n\'a pas pu être vérifiée. Réessayez, ou utilisez le lien reçu par email.',
+      no_email_claim:        'Votre entreprise n\'a pas transmis votre adresse email. Contactez votre administrateur.',
+      rate_limited:          'Trop de tentatives de connexion en peu de temps. Patientez une dizaine de minutes puis réessayez.',
     };
 
     // ─── Main — AUCUNE action réseau ici, juste l'affichage ──────
