@@ -87,6 +87,88 @@ Reste (actions console/DNS Stéphane, puis bascule) :
 2. `POST /api/admin/sso-connections` (Bearer admin) : `{ email_domain, issuer, client_id, client_secret, licence_key? }`. Entra : issuer = `https://login.microsoftonline.com/<tenant-du-client>/v2.0` (1 connexion par client). Google : issuer = `https://accounts.google.com`.
 3. C'est actif — le bouton du front trouve la connexion via `/api/auth/sso/lookup`.
 
+---
+
+### 🔴 SSO — VALIDÉ EN RÉEL LE 27/07/2026 · LIRE AVANT SEPTEMBRE
+
+**La chaîne complète a tourné en production avec un VRAI fournisseur d'identité (Google).**
+Preuve en base (`audit_logs`) : `oidc_login` puis `magic_link_consume` à 3 s d'écart,
+sur le compte ADMIN de Protein Studio, JWT émis. Ce n'est plus une hypothèse :
+**le SSO fonctionne de bout en bout.**
+
+La connexion de test (`gmail.com`) a été **SUPPRIMÉE** juste après (gmail.com n'est pas
+un domaine d'entreprise — le laisser ouvert n'aurait aucun sens). Vérifié : lookup
+`sso:false`, start `sso_error=no_sso`. Le SSO est de nouveau dormant, proprement.
+
+#### L'app Google est créée et reste valable — RIEN à refaire
+⚠️ **Ce fichier est versionné dans un dépôt PUBLIC** : ni identifiants, ni ID de
+projet ici. Tout se retrouve dans la console Google Cloud, projet **« Keystone SSO »**
+(créé exprès à côté de `pks-sentinel` pour ne PAS toucher l'écran de consentement de
+Sentinel — cet écran est partagé par tout un projet, c'est un piège) :
+Google Auth Platform → **Clients** → client `Keystone OS SSO` → ID client + code secret.
+- URI de redirection déjà déclaré dans cette app :
+  `https://keystone-os-api.keystone-os.workers.dev/api/auth/oidc/callback`
+- Le secret ne sort de la console que pour être posté à l'API admin, qui le range
+  chiffré en AES-256-GCM et ne le renvoie jamais.
+
+#### Client sur Google Workspace → 2 minutes
+Réutiliser l'app ci-dessus. Un seul POST (Bearer = jeton admin de `/admin`,
+clé `ks_admin_jwt` du localStorage) :
+```
+POST /api/admin/sso-connections
+{ "email_domain":"<domaine-du-client>.fr",
+  "issuer":"https://accounts.google.com",
+  "client_id":"<repris dans la console Google>",
+  "client_secret":"<repris dans la console Google>" }
+```
+
+#### Client sur Microsoft Entra → C'EST LE CLIENT QUI CRÉE L'APP
+**Ne pas essayer de créer un tenant Entra côté Protein Studio** — tenté le 27/07,
+impasse : un compte Microsoft personnel n'a PAS de répertoire, Microsoft interdit
+d'y inscrire une app, et créer un vrai répertoire réclame une carte bancaire.
+C'est sans importance : le client entreprise a **déjà** son tenant. Il crée l'app
+chez lui, ce qui est la voie normale pour un éditeur — et plus souveraine, puisqu'il
+garde la main et peut révoquer seul.
+
+À lui demander (10 min pour son informaticien) :
+1. Entra → Inscriptions d'applications → Nouvelle inscription, nom `Keystone OS`
+2. Comptes : **ce répertoire uniquement** (single-tenant, suffisant)
+3. URI de redirection, type Web :
+   `https://keystone-os-api.keystone-os.workers.dev/api/auth/oidc/callback`
+4. Certificats & secrets → nouveau secret client → **copier la Valeur tout de suite**
+5. **Configuration du jeton → ajouter la revendication facultative `email`**
+   ⚠️ SANS CETTE ÉTAPE LE LOGIN ÉCHOUE sur `sso_error=no_email_claim` : notre code
+   exige le claim `email`, et Entra ne l'émet pas par défaut.
+6. Il nous transmet : **ID d'application (client)**, **secret**, **ID de locataire**
+
+Puis, côté Keystone :
+```
+POST /api/admin/sso-connections
+{ "email_domain":"<domaine-du-client>.fr",
+  "issuer":"https://login.microsoftonline.com/<ID-de-locataire>/v2.0",
+  "client_id":"<ID d'application>", "client_secret":"<secret>" }
+```
+Une connexion par client Microsoft (l'`issuer` porte son tenant → le contrôle `iss`
+strict reste valable et cloisonne les clients entre eux).
+
+#### Vérifier qu'une activation a réussi (3 commandes, aucune manip)
+```
+curl -s ".../api/auth/sso/lookup?domain=<domaine>"          → {"sso":true}
+curl -s -o /dev/null -w "%{redirect_url}\n" ".../api/auth/oidc/start?domain=<domaine>"
+                                                            → une URL de l'IdP
+wrangler d1 execute keystone-os --remote --command \
+  "SELECT * FROM audit_logs WHERE action='oidc_login' ORDER BY id DESC LIMIT 1"
+```
+
+#### Notes de terrain (constatées le 27/07, à ne pas redécouvrir)
+- `fingerprint_match:false` au `magic_link_consume` issu du SSO est **normal et voulu** :
+  le lien est émis par l'IdP, pas demandé depuis un appareil, donc il ne porte aucune
+  empreinte. Le refus 403 sur empreinte ne concerne que les liens demandés par mail.
+- `login_hint=@gmail.com` est envoyé par le worker ; Google l'ignore sans broncher.
+  Aucune conséquence.
+- L'écran de consentement Google se configure UNE fois par projet et vaut pour tous
+  ses clients OAuth → toujours un projet dédié au SSO.
+
 #### Plan d'origine (archive) :
 Décision D4/D5 : pas de mot de passe (le magic link hérite du MFA de la boîte d'entreprise) ; la réponse aux exigences institutionnelles = **SSO**, pas mot de passe.
 - **OIDC d'abord, SAML jamais en direct.** Microsoft Entra ID + Google Workspace parlent tous deux OIDC → couvre ~95 % des clients entreprise. SAML pur (fédérations exotiques) : hors scope tant qu'aucun client ne l'exige contractuellement.
