@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournage — vidéo d'aide Missive</title>
+  <!-- Import map : détourne le module voprf vers le faux (tournage
+       uniquement) — le code de l'application n'est pas modifié. -->
+  <script type="importmap">
+  { "imports": { "/app/vendor/sceau-voprf.esm.js": "/_design-lab/help-videos/fake-voprf.js" } }
+  </script>
+  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/workspace.css">
+  <link rel="stylesheet" href="/app/sceau.css">
+  <style>
+    /* Scène de tournage : pas de barre de défilement visible */
+    ::-webkit-scrollbar { display: none; }
+  </style>
+</head>
+<body>
+  <script>
+    // Stubs API sceau : liste vide (→ vue création), création simulée.
+    // Rien ne part vers le worker de prod pendant le tournage.
+    const SID = 'k7Fd2q9w';
+    const _fetch = window.fetch.bind(window);
+    const _json = (obj) => Promise.resolve(new Response(JSON.stringify(obj),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    window.fetch = (url, opts) => {
+      const u = String(url);
+      if (u.includes('/api/sceau')) {
+        if (u.endsWith('/init'))  return _json({ short_id: SID, oprf_pub: btoa('tournage-fake-pub-key-32-bytes!!') });
+        if (u.endsWith('/eval'))  return _json({ evaluation: btoa('tournage-fake-evaluation-bytes!') });
+        if (u.endsWith('/seal'))  return _json({ ok: true });
+        return _json({ secrets: [], tokens: [], items: [] });
+      }
+      return _fetch(url, opts);
+    };
+    // Le clic « copier » du scénario ne doit pas dépendre des
+    // permissions presse-papiers du headless.
+    try {
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: () => Promise.resolve() }, configurable: true,
+      });
+    } catch (_) {}
+  </script>
+  <script type="module">
+    import { openSceau } from '/app/sceau.js';
+    import { icon } from '/app/lib/ui-icons.js';
+    import { mountFilm } from '/_design-lab/help-videos/tournage.js';
+    import { steps, meta } from '/_design-lab/help-videos/scenario-missive.js';
+
+    openSceau();
+    // Laisse le pad se peindre (liste vide → vue création) avant de
+    // poser le décor de tournage par-dessus.
+    setTimeout(() => {
+      // Le shell du pad référence ses logos en RELATIF (./LOGOS/…) —
+      // servi depuis /_design-lab/help-videos/, ça 404. On recale.
+      document.querySelectorAll('img').forEach(img => {
+        const s = img.getAttribute('src') || '';
+        if (s.startsWith('./LOGOS/')) img.src = s.slice(1);
+      });
+      mountFilm({ steps, meta: { ...meta, iconSvg: icon(meta.iconName, 64) } });
+    }, 400);
+  </script>
+</body>
+</html>
