@@ -1453,6 +1453,19 @@ async function _generateWinCode(env, shortId, deviceHash, ts) {
   return `WIN-${hex.slice(0, 4)}-${hex.slice(4, 8)}`;
 }
 
+// Tirage DÉCISIONNEL — celui qui décide si un vrai lot part chez un vrai
+// client. `Math.random()` n'est pas conçu pour ça : la spécification ne lui
+// demande aucune imprévisibilité, seulement une bonne répartition. Pour un
+// jeu qui engage des lots (et la confiance du commerçant), on prend la même
+// source que le reste de Keystone. La distribution est identique — un entier
+// 32 bits divisé par 2³² est uniforme sur [0,1) — donc les taux de gain
+// configurés par le propriétaire restent EXACTEMENT ce qu'il a réglé.
+// (Le tirage des symboles affichés, lui, reste sur Math.random : il est
+//  cosmétique, le résultat est déjà tranché quand il s'exécute.)
+function _rand01() {
+  return crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
+}
+
 function _pickRandomSymbols(symbols, isWin) {
   // symbols : array de 5-10 symboles/emojis fournis par le proprio
   // Si gain : 3 fois le même
@@ -1574,7 +1587,7 @@ export async function handleSmartQrGamePlay(request, env) {
     // Bandes de probabilité cumulées, dans l'ordre des lots. Un lot dont le
     // plafond est atteint conserve sa bande mais ne paie plus → le tirage y
     // tombe en "perdu" (le lot est épuisé). Les probas restent donc fixes.
-    const draw = Math.random() * 100;
+    const draw = _rand01() * 100;
     let cumul = 0;
     for (const lot of lots) {
       const lo = cumul, hi = cumul + lot.proba;
@@ -1608,7 +1621,7 @@ export async function handleSmartQrGamePlay(request, env) {
         if (Number(winsRow?.n || 0) >= lotsMax) stockEpuise = true;
       } catch (e) { /* on continue */ }
     }
-    isWin = !stockEpuise && (Math.random() * 100) < tauxGain;
+    isWin = !stockEpuise && (_rand01() * 100) < tauxGain;
     if (isWin) wonLabel = td.message_gain || 'Bravo, tu as gagné !';
   }
 
@@ -1673,6 +1686,7 @@ export async function handleSmartQrVerifyWin(request, env) {
   const origin = '*';
   await _ensureSmartGameTable(env);
   await _ensureSmartLoyaltyTable(env);
+  await _ensureConciergeUsage(env);
 
   const url  = new URL(request.url);
   const code = (url.searchParams.get('code') || '').trim().toUpperCase();
@@ -1680,6 +1694,28 @@ export async function handleSmartQrVerifyWin(request, env) {
   if (!/^WIN-[0-9A-F]{4}-[0-9A-F]{4}$/.test(code)) {
     return json({ valid: false, reason: 'format_invalide' }, 200, origin);
   }
+
+  // Audit sept. 2026 (gabarits de jeu) — CETTE ROUTE N'AVAIT AUCUN PLAFOND,
+  // alors que `redeem-win` en a un, posé explicitement « anti-balayage : le
+  // code fait 32 bits, il ne faut pas qu'on puisse l'énumérer ». Or les deux
+  // répondent la MÊME chose (ce code existe-t-il ?) : protéger la seconde en
+  // laissant la première ouverte ne protégeait rien. Pire, c'est celle-ci
+  // l'oracle le plus commode — elle rend aussi le contexte de la campagne.
+  // Même compteur, même plafond que la remise : un commerçant vérifie
+  // quelques codes par jour, jamais soixante.
+  // Le comptage vient APRÈS le contrôle de format : une saisie erronée à la
+  // caisse ne doit pas grignoter le quota de la journée.
+  const vDev = await _deviceHash(request);
+  const vDay = new Date().toISOString().slice(0, 10);
+  try {
+    const n = await env.DB
+      .prepare('SELECT count FROM smartqr_concierge_usage WHERE short_id = ? AND day = ? AND device_hash = ?')
+      .bind('__verify__', vDay, vDev).first();
+    if ((n?.count ?? 0) >= REDEEM_CAP_DEVICE) {
+      return json({ valid: false, reason: 'trop_de_tentatives' }, 429, origin);
+    }
+  } catch (_) { /* fail-open : un incident D1 ne doit pas bloquer une caisse */ }
+  await _conciergeRateBump(env, '__verify__', vDev);
 
   // V4.4 (2026-05-26) : un même code peut provenir soit d'un gain jeu
   // (machine à sous, carte à gratter), soit d'une récompense fidélité
