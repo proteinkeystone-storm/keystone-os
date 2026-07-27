@@ -407,6 +407,12 @@
     function persistAuth(data) {
       if (!data) return;
       if (data.jwt)         localStorage.setItem('ks_jwt',           data.jwt);
+      // Changement de compte → le « exemples déjà posés » du compte
+      // précédent ne vaut plus (même raison qu'à l'activation : le drapeau
+      // suit le compte, le localStorage suit le navigateur).
+      if (data.licence_key && localStorage.getItem('ks_licence_key') !== data.licence_key) {
+        localStorage.removeItem('ks_samples_seeded');
+      }
       if (data.licence_key) localStorage.setItem('ks_licence_key',   data.licence_key);
       if (data.plan)        localStorage.setItem('ks_licence_plan',  data.plan);
       if (data.owner)       localStorage.setItem('ks_licence_owner', data.owner);

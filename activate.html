@@ -1959,6 +1959,14 @@ async function activateLicence() {
     // Note : la clé n'est pas plus sensible ici qu'elle ne l'était dans
     // le DOM 100ms avant — l'attaque "JS tiers lit ks_licence_key"
     // suppose un attaquant same-origin, contexte déjà perdu.
+    // Changement de compte → le « exemples déjà posés » du compte précédent
+    // ne vaut plus. Sans cette purge, ouvrir un second compte sur le même
+    // navigateur le prive de ses contenus d'exemple : la clé est bien
+    // synchronisée par compte, mais le localStorage, lui, reste celui du
+    // navigateur, et _hydrate n'efface jamais une clé absente du coffre.
+    if (localStorage.getItem('ks_licence_key') !== key) {
+      localStorage.removeItem('ks_samples_seeded');
+    }
     localStorage.setItem('ks_licence_key',  key);
     // Nettoyage : si une ancienne version stockait la clé sous l'ancien nom
     localStorage.removeItem('ks_licence');
