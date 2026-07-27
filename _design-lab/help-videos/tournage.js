@@ -49,14 +49,16 @@ export function mountFilm({ steps, meta = {} }) {
 
   const band = doc.createElement('div');
   band.id = 'film-band';
+  // Bandeau VIOLET bien visible + grande police (retour Stéphane 28/07).
   Object.assign(band.style, {
-    position: 'fixed', left: '0', right: '0', bottom: '0', height: '58px',
+    position: 'fixed', left: '0', right: '0', bottom: '0', height: '72px',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'rgba(8,11,25,.86)', backdropFilter: 'blur(10px)',
+    background: 'linear-gradient(180deg, #5B54F0 0%, #4F46E5 100%)',
+    boxShadow: '0 -4px 18px rgba(79,70,229,.45)',
     zIndex: Z, pointerEvents: 'none',
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    fontSize: '17px', fontWeight: '600', letterSpacing: '-0.02em',
-    color: '#fff', opacity: '0',
+    fontSize: '24px', fontWeight: '700', letterSpacing: '-0.02em',
+    color: '#fff', opacity: '0', textShadow: '0 1px 2px rgba(0,0,0,.25)',
   });
   const bandText = doc.createElement('span');
   band.appendChild(bandText);
