@@ -95,6 +95,7 @@ jobs:
           npx wrangler dev --local -c wrangler.dktest.toml --port 8799 --test-scheduled \
             --var KS_JWT_SECRET:dk2-test-secret --var "KS_ALLOWED_ORIGIN:*" \
             --var KS_ADMIN_SECRET:dk4-admin --var DK_EMAIL_IA:off --var DK_CASIER_GRACE_DAYS:0 \
+            --var KS_LOOKUP_PEPPER:dk-pepper \
             --var KS_ENCRYPTION_KEY:ci-encryption-key-32-chars-minimum-00 > /tmp/wrangler.log 2>&1 &
           WPID=$!
 

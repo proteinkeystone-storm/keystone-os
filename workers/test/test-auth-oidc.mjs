@@ -224,7 +224,11 @@ async function main() {
   });
   const consumed = await consume.json();
   ok(consume.status === 200 && !!consumed.jwt, 'consume du token SSO → 200 + JWT', consume.status);
-  const payload = JSON.parse(Buffer.from(consumed.jwt.split('.')[1], 'base64url').toString());
+  // Un consume raté ne doit pas crasher la suite : les scénarios
+  // suivants doivent quand même s'exécuter et compter leurs échecs.
+  const payload = consumed.jwt
+    ? JSON.parse(Buffer.from(consumed.jwt.split('.')[1], 'base64url').toString())
+    : {};
   ok(payload.email === USER && payload.plan === 'PRO', 'JWT : bon email, bon plan', JSON.stringify({ email: payload.email, plan: payload.plan }));
 
   // (4) rejeu du state (déjà consommé par le callback heureux)
