@@ -16,6 +16,7 @@ import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 import { createConstellation }                from './lib/keynapse-engine.js';
+import { sampleSeeded, markSampleSeeded }     from './lib/samples.js';
 import { hasPaidApp }                         from './lib/pricing.js';
 import { getOwnedIds, isAdminUser }           from './pads-loader.js';
 
@@ -270,8 +271,70 @@ async function _load() {
   try {
     const r = await _api('/state');
     _state = { zones: r.zones || [], bubbles: r.bubbles || [], links: r.links || [] };
+    if (!_state.bubbles.length) await _maybeSeedSample();
   } catch (e) { _error = e.message || 'Chargement impossible.'; }
   finally { _loading = false; _render(); }
+}
+
+// ── Constellation d'exemple (premier lancement) ─────────────────
+// Un canevas vide ne dit pas ce qu'on peut y faire : on y pose quatre
+// bulles reliées, dans une zone, qui expliquent Keynapse en le montrant.
+// L'utilisateur les modifie ou les supprime comme les siennes, et elles
+// ne reviennent pas (cf. lib/samples.js pour le drapeau synchronisé).
+//
+// ⚠ Ici les données vivent côté SERVEUR, par compte — d'où le drapeau
+// synchronisé plutôt qu'un marqueur d'appareil. Le second verrou est
+// l'appelant : on n'entre ici que si la constellation est réellement
+// vide, donc un drapeau perdu ne peut pas créer de doublon.
+const KYN_SAMPLE = {
+  zone: { name: 'Bienvenue', color: '#6366f1' },
+  bubbles: [
+    { key: 'start', x: 0, y: -170,
+      title: 'Commencez par ici',
+      description: "Cette petite constellation est un exemple : elle vous appartient. Modifiez-la, videz-la, ou gardez-la le temps de prendre vos marques.\n\nChaque cercle est une bulle — une idée, une note, un rappel. Ouvrez celle-ci d'un clic pour voir ce qu'une bulle peut contenir." },
+    { key: 'one', x: -250, y: 40,
+      title: 'Une bulle, une idée',
+      description: "N'essayez pas de tout ranger d'un coup. Posez l'idée telle qu'elle vient : un titre suffit.\n\nVous l'enrichirez plus tard — du texte, une photo, une note dictée à la voix, une liste de choses à faire, ou un rappel qui viendra vous chercher au bon moment." },
+    { key: 'link', x: 250, y: 40,
+      title: 'Reliez ce qui va ensemble',
+      description: "Deux bulles qui se répondent peuvent être reliées par un trait.\n\nC'est là que Keynapse cesse d'être une liste : au lieu de faire défiler, vous voyez d'un seul coup d'œil ce qui tient ensemble — et ce qui est resté seul dans son coin." },
+    { key: 'zone', x: 0, y: 230,
+      title: 'Les zones regroupent',
+      description: "Ces quatre bulles vivent dans une zone : le halo coloré autour d'elles, appelé « Bienvenue ».\n\nUne zone rassemble ce qui appartient au même sujet — un projet, un client, un chantier. Créez la vôtre quand vous saurez de quoi elle parlera." },
+  ],
+  // Étoile depuis « Commencez par ici », plus un lien latéral qui montre
+  // qu'une bulle peut en toucher plusieurs.
+  links: [['start', 'one'], ['start', 'link'], ['start', 'zone'], ['one', 'link']],
+};
+
+async function _maybeSeedSample() {
+  if (sampleSeeded('keynapse')) return;
+  try {
+    let zoneId = null;
+    try {
+      const z = await _api('/zones', { method: 'POST', body: KYN_SAMPLE.zone });
+      zoneId = z?.zone?.id || z?.id || null;
+    } catch (_) { /* sans zone, les bulles restent libres : dégradation acceptable */ }
+
+    const ids = {};
+    for (const b of KYN_SAMPLE.bubbles) {
+      const r = await _api('/bubbles', { method: 'POST', body: {
+        title: b.title, description: b.description,
+        zone_id: zoneId, x: b.x, y: b.y,     // x/y explicites : omis, le serveur tire au hasard
+      } });
+      const id = r?.bubble?.id || r?.id;
+      if (id) ids[b.key] = id;
+    }
+    for (const [a, z] of KYN_SAMPLE.links) {
+      if (!ids[a] || !ids[z]) continue;
+      try {
+        await _api(`/bubbles/${encodeURIComponent(ids[a])}/links`, { method: 'POST', body: { to_bubble: ids[z] } });
+      } catch (_) { /* un lien manquant ne vaut pas d'abandonner l'exemple */ }
+    }
+    markSampleSeeded('keynapse');
+    const r2 = await _api('/state');
+    _state = { zones: r2.zones || [], bubbles: r2.bubbles || [], links: r2.links || [] };
+  } catch (_) { /* pas d'exemple : le canevas vide reste parfaitement utilisable */ }
 }
 
 // ── Rendu canevas ───────────────────────────────────────────────

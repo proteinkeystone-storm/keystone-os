@@ -50,6 +50,12 @@ export const PREFS_KEYS = [
     'ks_is_demo',
     'ks_demo_started_at',
     'ks_demo_last_switch',
+    // Contenus d'exemple des apps gratuites (Missive, booK, Keynapse) :
+    // « déjà posé une fois » suit le COMPTE, pas l'appareil. Sinon celui
+    // qui supprime l'exemple sur son ordinateur le retrouve sur son
+    // téléphone — et comme Keynapse/Missive rangent côté serveur, il
+    // revient ensuite sur l'ordinateur. Même motif que ks_is_demo.
+    'ks_samples_seeded',
     // ⚠ ks_living_layer_on VOLONTAIREMENT ABSENT (retiré 2026-06-17).
     // C'est une préférence d'AFFICHAGE par-appareil, pas une donnée à
     // synchroniser. Le synchroniser provoquait un bug : revenir au dashboard

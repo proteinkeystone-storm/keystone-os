@@ -23,6 +23,7 @@ import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 import { buildStandaloneHTML, newEdition, BK_FORMAT } from './lib/book-export.js';
 import { ensurePersistence, storageState, formatUsage } from './lib/storage-guard.js';
+import { sampleSeeded, markSampleSeeded }     from './lib/samples.js';
 
 const WORKSPACE_META = { id: 'O-BOK-001', name: 'booK' };
 
@@ -125,6 +126,29 @@ function _markSeen() {
   try { localStorage.setItem(BK_LAST_SEEN, String(Date.now())); } catch (_) {}
 }
 
+// ── Flipbook d'exemple (premier lancement) ──────────────────────
+// Une étagère vide n'apprend rien : on y pose la notice de booK, faite
+// EN booK — on découvre l'objet en le feuilletant. Supprimable comme
+// n'importe quel autre flipbook (carte → corbeille), et il ne revient
+// pas (cf. lib/samples.js pour le pourquoi du drapeau synchronisé).
+//
+// Deux verrous, pas un : le drapeau (« déjà posé pour ce compte ») ET
+// l'étagère réellement vide. Le second est ce qui garantit qu'on ne
+// pose jamais de doublon si le drapeau se perd — voir samples.js.
+async function _maybeSeedSample() {
+  try {
+    if (sampleSeeded('book')) return;
+    const list = await _libAll();
+    if (list && list.length) { markSampleSeeded('book'); return; }
+    const { bookSample } = await import('./book-sample.js');
+    const ed = bookSample();
+    ed.sizeMo = _estimateMo(ed);
+    await _libPut(ed);
+    markSampleSeeded('book');
+    if (_root && !_ed) _renderShelf();
+  } catch (_) { /* pas de contenu d'exemple : l'app s'ouvre quand même */ }
+}
+
 // ── Ouverture / fermeture du workspace ──────────────────────────
 export function openBook(opts = {}) {
   if (_root) return;
@@ -189,6 +213,10 @@ export function openBook(opts = {}) {
   ensurePersistence().then(() => { if (_root && !_ed) _renderShelf(); }).catch(() => {});
 
   _renderShelf();
+  // Étagère vide au tout premier passage → on y pose la notice de booK,
+  // en booK. L'étagère se re-rend quand elle est rangée (le module pèse
+  // ~650 Ko, on ne fait pas attendre l'ouverture pour ça).
+  _maybeSeedSample();
 
   // Réception inter-pads (ex. desK DK-6 : « Créer l'édition numérique ») :
   // démarrer un nouveau flipbook depuis un PDF déjà en main (File), titre

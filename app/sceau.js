@@ -16,6 +16,7 @@ import { icon }                               from './lib/ui-icons.js';
 import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
+import { sampleSeeded, markSampleSeeded }     from './lib/samples.js';
 
 const WORKSPACE_META = { id: 'O-SEC-001', name: 'Missive' };
 // Prod par défaut ; surchargé par window.__KS_API_BASE__ en dev local (cf. brainstorming.js).
@@ -334,6 +335,61 @@ async function _load() {
   try { const d = await _api(''); _items = d.items || []; }
   catch (e) { _error = e.message; }
   _loading = false; _render();
+  if (!_error && !_items.length) _maybeSeedSample();
+}
+
+// ── Missive d'exemple (premier lancement) ───────────────────────
+// Une liste vide n'explique pas ce qu'est une missive — et c'est le genre
+// d'idée qu'on ne comprend qu'en l'ayant vue fonctionner. On en scelle
+// donc une VRAIE, ouvrable pour de bon : le lien s'ouvre, la question se
+// pose, le message se reconstitue, puis tout s'efface. C'est la seule
+// façon honnête de montrer le principe.
+//
+// Deux précautions pour que l'essai ne tourne pas mal :
+//   · la question CONTIENT la réponse — personne ne doit brûler ses
+//     essais sur son propre exemple, ni le voir s'autodétruire ;
+//   · cinq essais au lieu de trois, et sept jours de validité : passé
+//     ce délai elle disparaît d'elle-même, sans rien laisser traîner.
+//
+// Le scellage réutilise mot pour mot la chaîne de _create (même OPRF,
+// même dérivation, même preuve de lecture) : aucune recette parallèle
+// à maintenir — c'est exactement le piège de divergence que ce pad
+// redoute le plus.
+const SEC_SAMPLE_ANSWER   = 'bonjour';
+const SEC_SAMPLE_QUESTION = 'Pour l’essai, la réponse à taper est simplement : bonjour';
+const SEC_SAMPLE_LABEL    = 'Exemple — ouvrez-la pour comprendre';
+// Court À DESSEIN : la page de lecture affiche le message en chasse fixe
+// et centré — elle est faite pour des mots de passe. Un long paragraphe y
+// devient pénible ; trois phrases y sonnent juste.
+const SEC_SAMPLE_TEXT = `Voilà — vous venez d'ouvrir une missive.
+
+Ce texte n'existait en clair nulle part. Il vient d'être reconstitué ici, à partir du mot que vous avez tapé. Rechargez la page : il aura disparu.
+
+À votre tour. Un mot de passe, un code, un document : le lien d'un côté, la question de l'autre.`;
+
+async function _maybeSeedSample() {
+  if (sampleSeeded('sceau')) return;
+  try {
+    const V = await _voprf();
+    const SUITE = V.Oprf.Suite.P256_SHA256;
+    const init = await _api('/init', { method: 'POST', body: { label: SEC_SAMPLE_LABEL } });
+    const client = new V.VOPRFClient(SUITE, _b64d(init.oprf_pub));
+    const [fin, ereq] = await client.blind([_enc.encode(_normAnswer(SEC_SAMPLE_ANSWER))]);
+    const ev = await _api(`/${init.short_id}/eval`, { method: 'POST', body: { blinded: _b64e(ereq.serialize()) } });
+    const [output] = await client.finalize(fin, V.Evaluation.deserialize(SUITE, _b64d(ev.evaluation)));
+    const key = await _aesKey(output);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, _enc.encode(SEC_SAMPLE_TEXT)));
+    const receipt = await _readReceipt(output);
+    await _api(`/${init.short_id}/seal`, { method: 'POST', body: {
+      ciphertext: _b64e(ct), iv: _b64e(iv), kind: 'text', mime: null,
+      question: SEC_SAMPLE_QUESTION, max_attempts: 5,
+      expires_at: new Date(Date.now() + 7 * 86400 * 1000).toISOString(),
+      label: SEC_SAMPLE_LABEL, kdf_v: KDF_V, read_receipt: receipt,
+    } });
+    markSampleSeeded('sceau');
+    await _load();
+  } catch (_) { /* pas d'exemple : le pad reste parfaitement utilisable */ }
 }
 async function _loadTokens() {
   _loading = true; _error = null; _render();
