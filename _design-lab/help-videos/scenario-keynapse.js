@@ -1,9 +1,11 @@
 /* ═══════════════════════════════════════════════════════════════
-   Vidéo d'aide — KEYNAPSE (pad O-Keyn-001) · scénario
+   Vidéo d'aide — KEYNAPSE (pad O-Keyn-001) · scénario v2
    ─────────────────────────────────────────────────────────────
-   ~27 s : constellation → créer une bulle (≤ 14 caractères, le
-   moteur tronque les titres longs) → ouvrir une fiche (notes,
-   captures, tâches, rappels).
+   Retour Stéphane (28/07) : 3 bulles suffisent, moins de
+   mouvement, laisser le temps de LIRE la fiche. L'animation
+   ambiante est coupée dans la scène (kn_motion=off) et les zooms
+   se font PENDANT le carton d'intro (invisibles à l'écran).
+   ~31 s, rythme posé.
    ═══════════════════════════════════════════════════════════════ */
 
 export const meta = {
@@ -15,33 +17,28 @@ export const meta = {
 export const steps = [
   { at: 0,     intro: { dur: 3000 } },
 
-  // Zoom sémantique : les titres n'apparaissent qu'au-delà de k=0.95
-  { at: 3050,  run: (d) => d.querySelector('[data-act="kyn-zoom-in"]')?.click() },
-  { at: 3350,  run: (d) => d.querySelector('[data-act="kyn-zoom-in"]')?.click() },
+  // Avec 3 bulles, le cadrage automatique zoome déjà assez pour
+  // afficher les titres — AUCUN zoom manuel (ça débordait).
+  { at: 3050,  caption: 'Chaque idée est une bulle — reliée, rangée dans sa zone' },
+  { at: 3300,  moveTo: 'g.kyn-bubble[data-bubble-id="b4"]', dur: 1400 },
 
-  { at: 3450,  caption: 'Chaque idée est une bulle — reliées, rangées en zones' },
-  { at: 3650,  moveTo: 'g.kyn-bubble[data-bubble-id="b4"]', dur: 1000 },
+  { at: 7000,  caption: 'Une idée qui passe ? Une bulle.' },
+  { at: 7300,  moveTo: '[data-act="kyn-compose"]', dur: 1000 },
+  { at: 8400,  click: '[data-act="kyn-compose"]' },
+  { at: 8700,  click: '#kyn-new-title' },
+  { at: 8900,  type: { sel: '#kyn-new-title', text: 'Idée mezzanine', cps: 10 } },
+  { at: 10500, moveTo: '.kyn-composer [data-act="kyn-create"]', dur: 800 },
+  { at: 11400, click: '.kyn-composer [data-act="kyn-create"]' },
+  { at: 11500, waitFor: 'g.kyn-bubble[data-bubble-id="bnew"]' },
 
-  { at: 6100,  caption: 'Une idée qui passe ? Une bulle.' },
-  { at: 6300,  moveTo: '[data-act="kyn-compose"]', dur: 900 },
-  { at: 7300,  click: '[data-act="kyn-compose"]' },
-  { at: 7600,  click: '#kyn-new-title' },
-  { at: 7800,  type: { sel: '#kyn-new-title', text: 'Idée mezzanine', cps: 12 } },
-  { at: 9200,  moveTo: '.kyn-composer [data-act="kyn-create"]', dur: 700 },
-  { at: 10000, click: '.kyn-composer [data-act="kyn-create"]' },
-  { at: 10100, waitFor: 'g.kyn-bubble[data-bubble-id="bnew"]' },
-  { at: 10200, run: (d) => d.querySelector('[data-act="kyn-zoom-in"]')?.click() },
+  { at: 12000, caption: 'Posée. Glissez-la où vous voulez, reliez-la aux autres' },
+  { at: 12300, moveTo: 'g.kyn-bubble[data-bubble-id="bnew"]', dur: 1200 },
 
-  { at: 10600, caption: 'Posée. Glissez-la où vous voulez, reliez-la aux autres' },
-  { at: 10800, moveTo: 'g.kyn-bubble[data-bubble-id="bnew"]', dur: 1000 },
-
-  { at: 13300, caption: 'Ouvrez une bulle : sa fiche contient tout' },
-  { at: 13500, moveTo: 'g.kyn-bubble[data-bubble-id="b1"]', dur: 1000 },
-  { at: 14600, click: 'g.kyn-bubble[data-bubble-id="b1"]' },
-  { at: 14700, waitFor: '.kyn-panel' },
-
-  // L'ordre DOM des sections ≠ ordre visuel → on marque par TITRE.
-  { at: 15200, run: (d) => {
+  { at: 15600, caption: 'Ouvrez une bulle : sa fiche contient tout' },
+  { at: 15900, moveTo: 'g.kyn-bubble[data-bubble-id="b1"]', dur: 1200 },
+  { at: 17200, click: 'g.kyn-bubble[data-bubble-id="b1"]' },
+  { at: 17300, waitFor: '.kyn-panel' },
+  { at: 17400, run: (d) => {
       [...d.querySelectorAll('.kyn-panel .kyn-sec-h')].forEach(h => {
         const t = h.textContent.trim(), s = h.closest('.kyn-sec');
         if (!s) return;
@@ -49,15 +46,17 @@ export const steps = [
         if (t.startsWith('Rappels'))  s.id = 'film-sec-rappels';
       });
     } },
-  { at: 15400, caption: 'Notes, photos, croquis, mémos vocaux, tâches…' },
-  { at: 15600, scrollTo: '#film-sec-captures' },
-  { at: 15800, moveTo: '#film-sec-captures .kyn-sec-h', dur: 900 },
 
-  { at: 18800, caption: '…et des rappels : Keynapse vous prévient au bon moment' },
-  { at: 19000, scrollTo: '#film-sec-rappels' },
-  { at: 19200, moveTo: '#film-sec-rappels .kyn-sec-h', dur: 900 },
+  // Temps de LECTURE : la fiche reste immobile, le curseur se pose
+  { at: 18000, caption: 'Ses tâches et ses notes' },
 
-  { at: 22200, caption: 'Vos idées restent vivantes — plus jamais perdues' },
+  { at: 22000, caption: 'Ses photos, croquis et mémos vocaux' },
+  { at: 22300, scrollTo: '#film-sec-captures' },
+  { at: 22500, moveTo: '#film-sec-captures .kyn-sec-h', dur: 900 },
 
-  { at: 24200, outro: { dur: 2600 } },
+  { at: 26500, caption: 'Et ses rappels — Keynapse vous prévient au bon moment' },
+  { at: 26800, scrollTo: '#film-sec-rappels' },
+  { at: 27000, moveTo: '#film-sec-rappels .kyn-sec-h', dur: 900 },
+
+  { at: 31000, outro: { dur: 2600 } },
 ];

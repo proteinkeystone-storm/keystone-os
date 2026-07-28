@@ -15,7 +15,7 @@
     // notice keynapse-notice-harness.html), avec un ÉTAT : la bulle créée
     // pendant le tournage apparaît réellement dans la constellation.
     localStorage.setItem('ks_jwt', 'demo-jwt-tournage');
-    localStorage.setItem('kn_motion', 'on');
+    localStorage.setItem('kn_motion', 'off');
 
     const ZONES = [
       { id: 'z1', name: 'Chantiers en cours',   color: '#6366f1' },
@@ -23,52 +23,32 @@
       { id: 'z3', name: 'Administratif',        color: '#fcd34d' },
     ];
     const BUBBLES = [
-      { id: 'b1',  title: 'Villa Riou — rénovation',    x: -420, y: -140, zone_id: 'z1', color: null },
-      { id: 'b2',  title: 'Appartement Prado',          x: -250, y: 40,   zone_id: 'z1', color: null },
-      { id: 'b3',  title: 'Maison Cassis',              x: -500, y: 130,  zone_id: 'z1', color: null },
-      { id: 'b4',  title: 'Terrazzo et pierre',         x: 250,  y: -190, zone_id: 'z2', color: null },
-      { id: 'b5',  title: 'Luminaires artisanaux',      x: 440,  y: -60,  zone_id: 'z2', color: null },
-      { id: 'b6',  title: 'Palette ocre et lin',        x: 300,  y: 80,   zone_id: 'z2', color: null },
-      { id: 'b7',  title: 'Devis menuiserie',           x: 60,   y: 260,  zone_id: 'z3', color: null },
-      { id: 'b8',  title: 'Assurance décennale',        x: -130, y: 330,  zone_id: 'z3', color: null },
-      { id: 'b9',  title: 'Salon Maison et Objet',      x: 540,  y: 220,  zone_id: null, color: '#f472b6' },
-      { id: 'b10', title: 'Idée : verrière atelier',    x: 40,   y: -330, zone_id: null, color: '#22c55e' },
+      { id: 'b1', title: 'Villa Riou', x: -260, y: -60, zone_id: 'z1', color: null },
+      { id: 'b4', title: 'Terrazzo',           x: 180,  y: -150, zone_id: 'z2', color: null },
+      { id: 'b7', title: 'Devis artisan',      x: 60,   y: 170,  zone_id: 'z3', color: null },
     ];
     const LINKS = [
-      { id: 'l1', from_bubble: 'b1', to_bubble: 'b4'  },
-      { id: 'l2', from_bubble: 'b1', to_bubble: 'b7'  },
-      { id: 'l3', from_bubble: 'b1', to_bubble: 'b10' },
-      { id: 'l4', from_bubble: 'b4', to_bubble: 'b6'  },
-      { id: 'l5', from_bubble: 'b2', to_bubble: 'b5'  },
-      { id: 'l6', from_bubble: 'b9', to_bubble: 'b5'  },
+      { id: 'l1', from_bubble: 'b1', to_bubble: 'b4' },
+      { id: 'l2', from_bubble: 'b1', to_bubble: 'b7' },
     ];
     const inMs = (ms) => new Date(Date.now() + ms).toISOString();
     const REMINDERS = [
-      { id: 'r1', bubble_id: 'b1', bubble_title: 'Villa Riou — rénovation', at: inMs(3 * 3600e3),
+      { id: 'r1', bubble_id: 'b1', bubble_title: 'Villa Riou', at: inMs(3 * 3600e3),
         label: '', repeat: '', notified_at: null },
-      { id: 'r2', bubble_id: 'b1', bubble_title: 'Villa Riou — rénovation', at: inMs(5 * 86400e3),
-        label: 'Réception de chantier — Villa Riou', repeat: '', notified_at: null },
-      { id: 'r3', bubble_id: 'b1', bubble_title: 'Villa Riou — rénovation', at: inMs(2 * 86400e3),
-        label: 'Point hebdo artisans', repeat: 'weekly', notified_at: null },
+      { id: 'r2', bubble_id: 'b1', bubble_title: 'Villa Riou', at: inMs(5 * 86400e3),
+        label: 'Réception de chantier', repeat: '', notified_at: null },
     ];
     const DETAIL_B1 = {
-      bubble: { id: 'b1', title: 'Villa Riou — rénovation', zone_id: 'z1', color: null,
+      bubble: { id: 'b1', title: 'Villa Riou', zone_id: 'z1', color: null,
         x: -420, y: -140, created_at: '2026-07-02 09:14:00', updated_at: '2026-07-18 17:40:00' },
       todos: [
-        { id: 't1', label: 'Valider le plan de la cuisine avec Mme Roux', done: 1 },
-        { id: 't2', label: 'Commander le carrelage terrazzo (réf. TZ-118)', done: 1 },
-        { id: 't3', label: 'Relancer le menuisier pour la verrière', done: 0 },
-        { id: 't4', label: 'Préparer le planning des artisans — semaine 32', done: 0 },
+        { id: 't1', label: 'Commander le carrelage terrazzo', done: 1 },
+        { id: 't2', label: 'Relancer le menuisier pour la verrière', done: 0 },
       ],
       notes: [
-        { id: 'n1', body: 'Mme Roux préfère finalement le plan de travail en pierre de Cassis — vérifier la disponibilité chez le fournisseur avant vendredi.', created_at: '2026-07-17 11:05:00' },
-        { id: 'n2', body: 'Budget révisé accepté : 48 500 € TTC hors mobilier.', created_at: '2026-07-10 09:30:00' },
+        { id: 'n1', body: 'Budget révisé accepté : 48 500 € TTC hors mobilier.', created_at: '2026-07-10 09:30:00' },
       ],
-      links: [
-        { id: 'l1', from_bubble: 'b1', to_bubble: 'b4'  },
-        { id: 'l2', from_bubble: 'b1', to_bubble: 'b7'  },
-        { id: 'l3', from_bubble: 'b1', to_bubble: 'b10' },
-      ],
+      links: [ { id: 'l1', from_bubble: 'b1', to_bubble: 'b4' } ],
       media: [ { id: 'm1', kind: 'photo' }, { id: 'm2', kind: 'drawing' }, { id: 'm3', kind: 'pdf', body: 'Plan-cuisine-v3.pdf' } ],
       audios: [ { id: 'a1', transcript: 'Penser à rappeler le carreleur lundi matin.' } ],
       reminders: REMINDERS,
