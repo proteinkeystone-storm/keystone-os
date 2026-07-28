@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournage — vidéo d'aide networK</title>
+  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/workspace.css">
+  <link rel="stylesheet" href="/app/network.css">
+</head>
+<body>
+  <script>
+    // Stub API : données de démonstration réalistes pour les captures de la
+    // notice PDF — AUCUN backend requis. Même technique que ms/sa-notice-harness.
+    // Métier fictif : atelier de communication qui gère clients, fournisseurs,
+    // partenaires, équipe et presse. Domaines fictifs → le favicon DuckDuckGo
+    // renvoie son placeholder, retiré par le code : les initiales restent.
+
+    // networK lit un cache localStorage (nk_cache_v1) avant l'API, et
+    // getOwnedIds() lit ks_owned_assets (absent = tout possédé → les raccourcis
+    // « Continuer avec… » s'affichent en mode possédé). On repart de zéro.
+    localStorage.removeItem('nk_cache_v1');
+    // Tournage : circulation permanente coupée (fl:0) — elle sature Chrome
+    // headless (connexion CDP réinitialisée) et « ça bouge trop » à l'écran.
+    localStorage.setItem('nk_anim', JSON.stringify({ dur: 550, stag: 45, ov: 25, cur: 45, pd: 65, ease: 'expo', fl: 0 }));
+    localStorage.removeItem('ks_owned_assets');
+
+    const D = (days) => {                      // date ISO relative à aujourd'hui
+      const d = new Date(Date.now() + days * 86400000);
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    };
+
+    const CATEGORIES = [
+      { id: 'c1', label: 'Clients',         icon: 'users' },
+      { id: 'c2', label: 'Fournisseurs',    icon: 'briefcase' },
+      { id: 'c3', label: 'Partenaires',     icon: 'handshake' },
+      { id: 'c4', label: 'Équipe',          icon: 'users' },
+      { id: 'c5', label: 'Presse & médias', icon: 'newspaper' },
+    ];
+    const CONTACTS = [
+      // ── Clients (c1) — la catégorie dépliée dans les captures ──
+      { id: 'p1', name: 'Claire Fontanel', kind: 'person', category_id: 'c1',
+        company: 'Domaine des Aubiers', title: 'Gérante',
+        email: 'claire.fontanel@domaine-aubiers.fr', phone: '04 75 61 28 40', phone2: '06 42 18 90 33',
+        website: 'https://domaine-aubiers.fr', address: '',
+        vat_intra: 'FR46 512847390',
+        socials: [{ type: 'linkedin', url: 'https://linkedin.com/in/claire-fontanel' },
+                  { type: 'instagram', url: 'https://instagram.com/domainedesaubiers' }],
+        tags: ['vin', 'coffrets', 'prioritaire'], roles: [],
+        birthday: '1981-03-12', birthday_remind: 1,
+        relance_at: D(3), relance_note: 'Relancer sur le devis coffrets',
+        brand_id: 'b1',
+        notes: 'Préfère être appelée le matin. Deux gammes : domaine et coffrets cadeaux. Salon des vignerons en novembre — prévoir le kit salon.' },
+      { id: 'p2', name: 'Marc Estève', kind: 'person', category_id: 'c1',
+        company: 'Librairie du Théâtre', title: 'Libraire',
+        email: 'contact@librairie-du-theatre.fr', phone: '04 75 33 08 12', phone2: '',
+        website: 'https://librairie-du-theatre.fr', socials: [], tags: ['papeterie'], roles: [], notes: '' },
+      { id: 'p3', name: 'Sophie Lambert-Rey', kind: 'person', category_id: 'c1',
+        company: 'Hôtel Le Belvédère', title: 'Directrice',
+        email: 'direction@hotel-belvedere-vercors.fr', phone: '04 76 95 21 07', phone2: '06 71 44 02 58',
+        website: 'https://hotel-belvedere-vercors.fr',
+        address: '12 route des Crêtes, 38250 Villard-de-Lans',
+        socials: [{ type: 'instagram', url: 'https://instagram.com/hotelbelvedere' }],
+        tags: ['tourisme'], roles: [], notes: '' },
+      { id: 'p4', name: 'Antoine Perrin', kind: 'person', category_id: 'c1',
+        company: 'Fromagerie Perrin & Fils', title: 'Co-gérant',
+        email: 'antoine@fromagerie-perrin.fr', phone: '04 75 02 66 31', phone2: '',
+        website: '', socials: [], tags: ['marchés'], roles: [], notes: '' },
+      { id: 'p5', name: 'Cabinet Cherif Architecture', kind: 'company', category_id: 'c1',
+        company: '', title: '',
+        email: 'agence@cherif-architecture.fr', phone: '04 76 12 90 45', phone2: '',
+        website: 'https://cherif-architecture.fr', socials: [], tags: ['appels d’offres'], roles: [], notes: '' },
+      // ── Fournisseurs (c2) ──
+      { id: 'p6', name: 'Julien Roche', kind: 'person', category_id: 'c2',
+        company: 'Imprimerie des Monts', title: 'Chargé de fabrication',
+        email: 'j.roche@imprimerie-des-monts.fr', phone: '04 75 40 18 22', phone2: '06 09 83 51 27',
+        website: 'https://imprimerie-des-monts.fr', socials: [], tags: ['print'], roles: [], notes: '' },
+      { id: 'p7', name: 'Papeterie Valloire', kind: 'company', category_id: 'c2',
+        company: '', title: '',
+        email: 'commandes@papeterie-valloire.fr', phone: '04 79 59 03 18', phone2: '',
+        website: '', socials: [], tags: [], roles: [], notes: '' },
+      // ── Partenaires (c3) ──
+      { id: 'p8', name: 'Élodie Vasseur', kind: 'person', category_id: 'c3',
+        company: 'Studio Grand Angle', title: 'Photographe',
+        email: 'elodie@studio-grandangle.fr', phone: '', phone2: '06 52 77 14 90',
+        website: 'https://studio-grandangle.fr',
+        socials: [{ type: 'instagram', url: 'https://instagram.com/studiograndangle' }],
+        tags: ['photo'], roles: [], notes: '' },
+      { id: 'p9', name: 'Atelier Web Ardèche', kind: 'company', category_id: 'c3',
+        company: '', title: '',
+        email: 'bonjour@atelierweb-ardeche.fr', phone: '04 75 88 30 12', phone2: '',
+        website: 'https://atelierweb-ardeche.fr', socials: [], tags: ['sites web'], roles: [], notes: '' },
+      // ── Équipe (c4) ──
+      { id: 'p10', name: 'Camille Bonnard', kind: 'person', category_id: 'c4',
+        company: '', title: 'Graphiste indépendante',
+        email: 'camille.bonnard@gmail.com', phone: '', phone2: '06 33 48 12 76',
+        website: '', socials: [], tags: [], roles: [], notes: '' },
+      // ── Presse & médias (c5) ──
+      { id: 'p11', name: 'Hugo Delmas', kind: 'person', category_id: 'c5',
+        company: 'Le Dauphiné Libéré', title: 'Journaliste économie locale',
+        email: 'h.delmas@ledauphine.com', phone: '', phone2: '06 18 25 90 41',
+        website: '', socials: [{ type: 'x', url: 'https://x.com/hdelmas' }],
+        tags: ['presse locale'], roles: [], notes: '' },
+    ];
+    const ACTIVITY = [
+      { id: 'a1', contact_id: 'p1', type: 'call',    label: 'Appel de suivi sur le devis',        happened_at: D(-1) },
+      { id: 'a2', contact_id: 'p1', type: 'quote',   label: 'Devis coffrets d’automne envoyé',    happened_at: D(-3) },
+      { id: 'a3', contact_id: 'p1', type: 'meeting', label: 'RDV dégustation au domaine',         happened_at: D(-4) },
+      { id: 'a4', contact_id: 'p1', type: 'email',   label: 'Envoi des maquettes d’étiquettes',   happened_at: D(-9) },
+      { id: 'a5', contact_id: 'p1', type: 'doc',     label: 'Reçu la charte des appellations',    happened_at: D(-16) },
+      { id: 'a6', contact_id: 'p6', type: 'call',    label: 'Calage du planning d’impression',    happened_at: D(-2) },
+      { id: 'a7', contact_id: 'p3', type: 'meeting', label: 'Visite de l’hôtel — brief refonte',  happened_at: D(-6) },
+    ];
+
+    const _fetch = window.fetch.bind(window);
+    window.fetch = (url, opts) => {
+      const u = String(url);
+      const ok = (data) => Promise.resolve(new Response(JSON.stringify(data),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      if (u.includes('/api/network')) {
+        if (u.includes('/bootstrap')) return ok({ categories: CATEGORIES, contacts: CONTACTS, activity: ACTIVITY });
+        return ok({ ok: true });     // mutations éventuelles (non utilisées en capture)
+      }
+      if (u.includes('/api/keybrand/charts')) return ok({ items: [{ id: 'b1', name: 'Charte Domaine des Aubiers' }] });
+      if (u.includes('/api/')) return ok({});
+      return _fetch(url, opts);
+    };
+  </script>
+  <script type="module">
+    import { openNetwork } from '/app/network.js';
+    import { icon } from '/app/lib/ui-icons.js';
+    import { mountFilm } from '/_design-lab/help-videos/tournage.js';
+    import { steps, meta } from '/_design-lab/help-videos/scenario-network.js';
+
+    openNetwork();
+    setTimeout(() => {
+      document.querySelectorAll('img').forEach(img => {
+        const s = img.getAttribute('src') || '';
+        if (s.startsWith('./LOGOS/')) img.src = s.slice(1);
+      });
+      mountFilm({ steps, meta: { ...meta, iconSvg: icon(meta.iconName, 64) } });
+    }, 1000);
+  </script>
+</body>
+</html>
