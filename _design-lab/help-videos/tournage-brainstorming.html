@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournage — vidéo d'aide Brainstorming</title>
+  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/workspace.css">
+  <link rel="stylesheet" href="/app/brainstorming.css">
+</head>
+<body>
+  <script>
+    // ── Seed AVANT l'import du module ─────────────────────────────
+    // Brainstorming lit localStorage au boot : bibliothèque des séances
+    // (ks_brainstorming_sessions) + préférence de comité (ks_brainstorming_roster).
+    // Démo réaliste : lancement d'une gamme de fromages d'alpage (mode Lancement,
+    // comité auto = strategic + growth + creative + data + devil).
+    const NOW = Date.now();
+    const HISTORY = [
+      { agent_id: 'strategic', content: "La vraie tension : une gamme d'alpage bio arrive sur un marché saturé de promesses « artisanales » — la différence doit se prouver, pas se proclamer. L'angle à explorer d'abord : la traçabilité radicale, du pré à l'étal. Creative Director, ton angle ?", timestamp: NOW - 9 * 60000 },
+      { agent_id: 'creative',  content: "On ouvre sur un plan des alpages à 1 800 mètres, et la carte d'identité de la meule imprimée sur l'étiquette : nom de l'alpage, altitude, semaine d'affinage. Chaque fromage devient un lieu qu'on achète. L'épicier ne vend plus un produit, il raconte une montagne.", timestamp: NOW - 8 * 60000 },
+      { agent_id: 'growth',    content: "Concret : 30 épiceries d'ici Noël, c'est 8 signatures par mois dès septembre. Le levier, c'est le kit dégustation envoyé aux cavistes-épiciers avec un QR vers la fiche d'alpage — coût maîtrisé, transformation mesurable. KPI : rendez-vous obtenus sur kits envoyés.", timestamp: NOW - 7 * 60000 },
+      { agent_id: 'user',      content: "Plus premium — on assume un prix haut de gamme et on ne vise que les meilleures adresses.", timestamp: NOW - 6 * 60000 },
+      { agent_id: 'data',      content: "Ordre de grandeur : le bio fromager progresse mais reste une niche en épicerie fine — un panier moyen crédible se situe entre 12 et 15 euros la pièce, pas au-delà. L'hypothèse non vérifiée : que vos trentenaires urbains achètent en épicerie fine et pas en AMAP. À tester avant d'imprimer quoi que ce soit.", timestamp: NOW - 5 * 60000 },
+      { agent_id: 'devil',     content: "Tout le monde raconte la montagne — Beaufort, Abondance et le reblochon fermier le font depuis trente ans avec de vrais alpages. Qu'est-ce qui empêche un concurrent de copier votre étiquette en trois semaines ? Si la réponse est « rien », la traçabilité est un habillage, pas une différenciation.", timestamp: NOW - 4 * 60000 },
+    ];
+    const BRIEF = "Lancement d'une gamme de fromages d'alpage bio pour la Fromagerie Valmont (Annecy). Pour les trentenaires urbains amateurs de circuits courts. Objectif : être présent dans 30 épiceries fines d'ici Noël. Contrainte : budget de lancement serré, pas de publicité payante.";
+    const SYNTHESIS = {
+      ideation: {
+        top: [
+          { label: "La Carte d'Alpage", rationale: "Chaque meule porte le nom de son alpage, son altitude et sa semaine d'affinage — la traçabilité devient l'histoire que l'épicier raconte à ses clients." },
+          { label: "Le kit dégustation cavistes", rationale: "8 signatures par mois dès septembre : le kit avec QR vers la fiche d'alpage est le levier le plus mesurable pour tenir les 30 points de vente sans publicité payante." },
+        ],
+        groups: [
+          { direction: "Noms de gamme", items: ["Ligne d'Alpage", "1 800 mètres", "Les Estives", "Valmont d'En-Haut"] },
+          { direction: "Preuves à afficher", items: ["Nom de l'alpage", "Altitude de pâture", "Semaine d'affinage", "Portrait de l'alpagiste"] },
+        ],
+      },
+      positioning: "La gamme qui vend un lieu, pas un label : chaque fromage est rattaché à un alpage nommé, daté et photographié — une traçabilité radicale qui justifie le positionnement premium en épicerie fine.",
+      opportunities: [
+        "Le kit dégustation cavistes : acquisition mesurable, alignée sur l'objectif de 30 points de vente avant Noël.",
+        "L'étiquette « carte d'identité » transforme chaque meule en support de récit pour l'épicier.",
+        "Le récit d'alpage se décline naturellement en contenu social sans budget média.",
+      ],
+      risks: [
+        "La montagne est déjà racontée par les AOP historiques — l'étiquette seule se copie en quelques semaines.",
+        "Hypothèse non vérifiée : les trentenaires urbains visés achètent-ils en épicerie fine plutôt qu'en AMAP ?",
+      ],
+      next_actions: [
+        { action: "Interroger 20 clients cibles sur leur circuit d'achat réel (épicerie fine ou AMAP)", deadline: "2026-08-15" },
+        { action: "Prototyper l'étiquette « carte d'alpage » sur 3 références", deadline: "2026-09-01" },
+        { action: "Envoyer les 15 premiers kits dégustation aux épiceries d'Annecy et Genève", deadline: "2026-09-15" },
+      ],
+    };
+    const SESSIONS = [
+      { id: 'wr-demo-synthese', brief: BRIEF, mode: 'launch',
+        started_at: NOW - 10 * 60000, updated_at: NOW - 2 * 60000,
+        history: HISTORY, synthesis: SYNTHESIS, synthesizedAt: NOW - 2 * 60000 },
+      { id: 'wr-demo-launch', brief: BRIEF, mode: 'launch',
+        started_at: NOW - 10 * 60000, updated_at: NOW - 4 * 60000,
+        history: HISTORY, synthesis: null, synthesizedAt: null },
+    ];
+    localStorage.setItem('ks_brainstorming_sessions', JSON.stringify(SESSIONS));
+    // Préf comité : Auto + Gest invité, branché sur un Smart Agent maison.
+    localStorage.setItem('ks_brainstorming_roster', JSON.stringify({
+      mode: 'auto', manualRoster: null, inviteGest: true, gestAgentId: 'sa-fromagerie',
+    }));
+
+    // ── Stub API : aucune requête ne part vers le Worker ──────────
+    const _fetch = window.fetch.bind(window);
+    window.fetch = (url, opts) => {
+      const u = String(url);
+      const ok = (data) => Promise.resolve(new Response(JSON.stringify(data),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      // Picker « Savoir maison à convoquer » (Gest invité)
+      if (u.includes('/api/smart-agent/agents')) {
+        return ok({ agents: [{ id: 'sa-fromagerie', name: 'Conseiller Fromagerie Valmont' }] });
+      }
+      // Widget notation (bindRatingButton) + tout autre endpoint Worker
+      if (u.includes('/api/')) return ok({});
+      // Assets locaux (HELP json, icônes…) : passthrough
+      return _fetch(url, opts);
+    };
+  </script>
+  <script type="module">
+    import { openBrainstorming } from '/app/brainstorming.js';
+    import { icon } from '/app/lib/ui-icons.js';
+    import { mountFilm } from '/_design-lab/help-videos/tournage.js';
+    import { steps, meta } from '/_design-lab/help-videos/scenario-brainstorming.js';
+
+    openBrainstorming();
+    setTimeout(() => {
+      document.querySelectorAll('img').forEach(img => {
+        const s = img.getAttribute('src') || '';
+        if (s.startsWith('./LOGOS/')) img.src = s.slice(1);
+      });
+      mountFilm({ steps, meta: { ...meta, iconSvg: icon(meta.iconName, 64) } });
+    }, 3400);   // allumage progressif des 9 pictos (~2,9 s)
+  </script>
+</body>
+</html>
