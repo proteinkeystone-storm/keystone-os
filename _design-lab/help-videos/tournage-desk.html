@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournage — vidéo d'aide desK</title>
+  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/workspace.css">
+  <link rel="stylesheet" href="/app/desk.css">
+</head>
+<body>
+  <script>
+    // ── Harnais notice desK (O-DSK-001) ────────────────────────────
+    // Charge la VRAIE UI de prod avec un numéro de démonstration servi par
+    // un stub complet de /api/desk/* (bootstrap + issue). Aucun appel réel.
+    // Démo : une revue de randonnée, « Sentiers » n° 47, 48 pages.
+    localStorage.setItem('ks_jwt', 'harness-demo-jwt');
+    localStorage.removeItem('dk_last_pub');
+    localStorage.removeItem('dk_last_issue');
+    localStorage.removeItem('dk_cache');
+
+    const PUB_ID = 'pub-sentiers', ISSUE_ID = 'iss-47';
+    const day = (n) => {                       // date ISO décalée de n jours
+      const d = new Date('2026-07-19T12:00:00Z');
+      d.setDate(d.getDate() + n);
+      return d.toISOString().slice(0, 10);
+    };
+
+    const RUBRIQUES = [
+      { id: 'r-terrain',  pub_id: PUB_ID, name: 'Terrain',        color: '#4cc38a', position: 0 },
+      { id: 'r-portrait', pub_id: PUB_ID, name: 'Portraits',      color: '#C9A227', position: 1 },
+      { id: 'r-materiel', pub_id: PUB_ID, name: 'Matériel',       color: '#6d8ce8', position: 2 },
+      { id: 'r-dossier',  pub_id: PUB_ID, name: 'Grand dossier',  color: '#e5484d', position: 3 },
+      { id: 'r-pratique', pub_id: PUB_ID, name: 'Carnet pratique', color: '#9b7fd4', position: 4 },
+    ];
+
+    const CONTRIBS = [
+      { id: 'c1', pub_id: PUB_ID, name: 'Hélène Marchand', email: 'helene.marchand@exemple.fr', n_remises: 14, total_delay: 6 },
+      { id: 'c2', pub_id: PUB_ID, name: 'Yannick OllivierRos', email: 'y.ollivier@exemple.fr', n_remises: 9, total_delay: 22 },
+      { id: 'c3', pub_id: PUB_ID, name: 'Salomé Ferrand', email: 'salome.ferrand@exemple.fr', n_remises: 21, total_delay: 2 },
+      { id: 'c4', pub_id: PUB_ID, name: 'Bruno Kacem', email: 'bruno.kacem@exemple.fr', n_remises: 5, total_delay: 11 },
+    ];
+
+    // ── Articles ─────────────────────────────────────────────────
+    // Statuts réels : propose · commande · remis · relu · maquette · publie.
+    const A = (id, title, rub, contrib, status, dueOffset, extra = {}) => ({
+      id, pub_id: PUB_ID, title, rub_id: rub, contrib,
+      status, due: dueOffset == null ? null : day(dueOffset),
+      fresh: 'intemporel', perime: null, notes: '', histo: '[]',
+      created_at: '2026-06-20 09:00:00', updated_at: '2026-07-18 16:00:00', ...extra,
+    });
+    const ARTICLES = [
+      A('a1',  'Le GR20 hors saison — huit jours en octobre', 'r-dossier',  'Hélène Marchand', 'remis',   -4),
+      A('a2',  'Portrait : la dernière bergère du Mercantour', 'r-portrait', 'Salomé Ferrand',  'relu',    -6),
+      A('a3',  'Chaussures de trail : dix modèles au banc',    'r-materiel', 'Yannick Ollivier','commande', 2),
+      A('a4',  'Traversée des Écrins par le refuge du Pigeonnier','r-terrain','Bruno Kacem',    'commande', 5),
+      A('a5',  'Bivouac : ce que dit vraiment la réglementation','r-pratique','Hélène Marchand','remis',   -2),
+      A('a6',  'Les sentiers oubliés du Vercors',              'r-terrain',  'Salomé Ferrand',  'maquette',-9),
+      A('a7',  'Réparer sa tente sur le terrain',              'r-pratique', 'Bruno Kacem',     'propose', null),
+      A('a8',  'Cartographie : lire une carte au 1/25 000',    'r-pratique', 'Yannick Ollivier','propose', null),
+      A('a9',  'Le refuge qui refuse de fermer',               'r-portrait', 'Hélène Marchand', 'propose', null),
+      A('a10', 'Trois cols en Chartreuse, sans voiture',       'r-terrain',  'Salomé Ferrand',  'remis',   -12),
+    ];
+
+    // ── Pages du numéro (48 p.) ──────────────────────────────────
+    // kind : 'fixe' (couverture, pub vendue, ours…) | 'person' (article) | 'vide'
+    const PAGES = [];
+    const SLOTS = [];
+    const fixe = (n, tag, title) => ({ n, kind: 'fixe', fixe_tag: tag, fixe_title: title });
+    const plan = new Map([
+      [1,  fixe(1,  'couv',  'Couverture')],
+      [2,  fixe(2,  'pub',   'Pleine page — Vieux Campeur')],
+      [3,  fixe(3,  'edito', 'Édito')],
+      [4,  fixe(4,  'ours',  'Ours et sommaire')],
+      [30, fixe(30, 'pub',   'Pleine page vendue — figée')],
+      [47, fixe(47, 'pub',   'Quatrième de couverture intérieure')],
+      [48, fixe(48, 'couv',  '4e de couverture')],
+    ]);
+    // Répartition des articles sur les pages courantes
+    const POSE = {
+      5:  'a2',  6: 'a2',  7: 'a2',
+      9:  'a6', 10: 'a6',
+      12: 'a10', 13: 'a10',
+      15: 'a5',
+      17: 'a1', 18: 'a1', 19: 'a1', 20: 'a1', 21: 'a1', 22: 'a1',
+      25: 'a3', 26: 'a3', 27: 'a3',
+      33: 'a4', 34: 'a4',
+      40: 'a7',
+      43: 'a8',
+    };
+    for (let n = 1; n <= 48; n++) {
+      const id = 'p' + n;
+      if (plan.has(n)) { PAGES.push({ id, issue_id: ISSUE_ID, pub_id: PUB_ID, banc: '[]', ...plan.get(n) }); continue; }
+      const artId = POSE[n] || null;
+      PAGES.push({ id, issue_id: ISSUE_ID, pub_id: PUB_ID, n,
+        kind: artId ? 'person' : 'vide', fixe_tag: null, fixe_title: null,
+        art_id: artId, banc: '[]', updated_at: '2026-07-18 16:00:00', updated_by: 'demo' });
+      if (artId) SLOTS.push({ id: 's' + n, page_id: id, pub_id: PUB_ID, position: 0, art_id: artId, banc: '[]' });
+    }
+
+    const ISSUE = {
+      id: ISSUE_ID, pub_id: PUB_ID, num: '47', theme: 'Sentiers d\'altitude',
+      status: 'preparation',
+      jalons: JSON.stringify({
+        bouclage:  day(6),    // dans 6 jours
+        maquette:  day(13),
+        imprimeur: day(20),
+        parution:  day(34),
+      }),
+      created_at: '2026-06-01 09:00:00',
+    };
+
+    const FILES = [
+      { id: 'f1', pub_id: PUB_ID, issue_id: ISSUE_ID, page_id: 'p17', art_id: 'a1',
+        name: 'gr20-octobre-texte.docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: 48211, r2_key: 'demo/f1', status: 'ok', uploaded_by: 'Hélène Marchand', created_at: '2026-07-15 10:12:00' },
+      { id: 'f2', pub_id: PUB_ID, issue_id: ISSUE_ID, page_id: 'p17', art_id: 'a1',
+        name: 'gr20-photos-selection.zip', mime: 'application/zip',
+        size: 6421553, r2_key: 'demo/f2', status: 'ok', uploaded_by: 'Hélène Marchand', created_at: '2026-07-15 10:20:00' },
+      { id: 'f3', pub_id: PUB_ID, issue_id: ISSUE_ID, page_id: 'p5', art_id: 'a2',
+        name: 'bergere-mercantour.docx', mime: 'application/msword',
+        size: 31980, r2_key: 'demo/f3', status: 'ok', uploaded_by: 'Salomé Ferrand', created_at: '2026-07-12 18:40:00' },
+    ];
+
+    const RELANCES = [
+      { id: 'rl1', pub_id: PUB_ID, art_id: 'a3', email: 'y.ollivier@exemple.fr',
+        subject: 'Sentiers n° 47 — banc d\'essai chaussures', sent_by: 'demo', sent_at: '2026-07-16 09:05:00' },
+    ];
+
+    const INBOX = [
+      { id: 'in1', pub_id: PUB_ID, from_email: 'bruno.kacem@exemple.fr', from_name: 'Bruno Kacem',
+        subject: 'Écrins — première partie du texte', body: 'Bonjour, voici les 6 000 signes annoncés pour la traversée des Écrins. Les photos suivent demain.',
+        suggestion: JSON.stringify({ art_id: 'a4', rub_id: 'r-terrain', confidence: 0.82 }),
+        attachments: JSON.stringify([{ name: 'ecrins-partie1.docx', size: 27400 }]),
+        status: 'pending', received_at: '2026-07-19 08:12:00' },
+      { id: 'in2', pub_id: PUB_ID, from_email: 'marie.dubost@exemple.fr', from_name: 'Marie Dubost',
+        subject: 'Proposition de sujet — les cabanes pastorales du Queyras', body: 'Bonjour, je vous propose un reportage photo sur les cabanes pastorales encore en usage dans le Queyras.',
+        suggestion: JSON.stringify({ art_id: null, rub_id: 'r-terrain', confidence: 0.45 }),
+        attachments: '[]',
+        status: 'pending', received_at: '2026-07-18 17:30:00' },
+    ];
+
+    const ISSUE_PAYLOAD = {
+      ok: true, issue: ISSUE, pages: PAGES, slots: SLOTS, articles: ARTICLES,
+      rubriques: RUBRIQUES, files: FILES, contribs: CONTRIBS, relances: RELANCES,
+      inbox: INBOX, casier: [], quota: { used: 3, max: 40 },
+      mailer: { address: 'redaction-sentiers@redaction-pks.com', enabled: true },
+    };
+
+    const BOOTSTRAP = {
+      ok: true,
+      me: { sub: 'demo-user', name: 'Camille' },
+      publications: [{
+        id: PUB_ID, name: 'Sentiers', slug: 'sentiers', owner: true,
+        first_folio: 1, cover_unnumbered: false,
+        issues: [
+          { id: ISSUE_ID, num: '47', theme: 'Sentiers d\'altitude', status: 'preparation' },
+          { id: 'iss-46', num: '46', theme: 'Le fil de l\'eau', status: 'imprime' },
+        ],
+      }],
+    };
+
+    // ── Stub réseau : rien ne sort ────────────────────────────────
+    const _fetch = window.fetch.bind(window);
+    window.fetch = (url, opts) => {
+      const u = String(url);
+      const ok = (data) => Promise.resolve(new Response(JSON.stringify(data),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      if (u.includes('/api/desk/bootstrap')) return ok(BOOTSTRAP);
+      if (u.includes('/api/desk/issue/'))    return ok(ISSUE_PAYLOAD);
+      if (u.includes('/api/'))               return ok({ ok: true });
+      return _fetch(url, opts);
+    };
+  </script>
+  <script type="module">
+    import { openDesk } from '/app/desk.js';
+    import { icon } from '/app/lib/ui-icons.js';
+    import { mountFilm } from '/_design-lab/help-videos/tournage.js';
+    import { steps, meta } from '/_design-lab/help-videos/scenario-desk.js';
+
+    openDesk();
+    setTimeout(() => {
+      document.querySelectorAll('img').forEach(img => {
+        const s = img.getAttribute('src') || '';
+        if (s.startsWith('./LOGOS/')) img.src = s.slice(1);
+      });
+      mountFilm({ steps, meta: { ...meta, iconSvg: icon(meta.iconName, 64) } });
+    }, 1500);
+  </script>
+</body>
+</html>
