@@ -355,8 +355,14 @@ function _moduleShape(shape, x, y, cell, ctx) {
   const lf = !!(ctx && ctx.left), rt = !!(ctx && ctx.right);
   switch (shape) {
     case 'dot': {
-      // cercle inscrit avec léger inset pour aération
-      const r = cell * 0.42;
+      // 2026-07-28 — le rayon était à 0.42 (« aération ») : chaque module
+      // laissait 16 % de blanc de part et d'autre, ce qui donnait au code un
+      // aspect mité et le laissait sans marge. ZXing (le moteur des scanners
+      // de téléphone) le lisait encore, mais jsQR décrochait sur le PNG 1024 —
+      // la taille d'export — et à 300 px sous cadre : la combinaison la plus
+      // fragile du catalogue (banc _design-lab/sdqr/scan-two-decoders.html).
+      // 0.50 = points jointifs : même look, marge rétablie.
+      const r = cell * 0.5;
       return `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r)}"/>`;
     }
     case 'fluid': {
@@ -397,8 +403,10 @@ function _moduleShape(shape, x, y, cell, ctx) {
       return `<path d="M ${f(cx)} ${f(y)} L ${f(x + cell)} ${f(cy)} L ${f(cx)} ${f(y + cell)} L ${f(x)} ${f(cy)} Z"/>`;
     }
     case 'cross': {
-      // croix pleine (deux barres au centre) — centre couvert
-      const aw  = cell * 0.52;
+      // croix pleine (deux barres au centre) — centre couvert.
+      // 2026-07-28 — barres élargies (0.52 -> 0.74) : trop maigres, jsQR
+      // décrochait sur le PNG 1024 (ZXing tenait). Marge rétablie.
+      const aw  = cell * 0.74;
       const off = (cell - aw) / 2;
       return `<rect x="${f(x + off)}" y="${f(y)}" width="${f(aw)}" height="${f(cell)}"/>`
            + `<rect x="${f(x)}" y="${f(y + off)}" width="${f(cell)}" height="${f(aw)}"/>`;
