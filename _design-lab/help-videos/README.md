@@ -53,9 +53,11 @@ Dépendances (une fois) : `pip3 install websocket-client imageio-ffmpeg`
 - `navigator.clipboard` est stubbé dans la scène (pas de permission
   en headless — le clic « copier » doit montrer son ✓).
 
-## Les 14 applications (une vidéo à la fois)
+## Les 14 applications — SÉRIE COMPLÈTE ✓
 
-Missive ✓ · Smart Dynamic QR ✓ · Brief Prod ✓ · Brainstorming ✓ ·
-Key Form ✓ · Social Manager ✓ · Smart Agent ✓ · Keynapse ✓ · Sentinel ✓ ·
-Ghost Writer ✓ · booK ✓ · desK ✓ · networK ✓ · Key Brand
+Missive · Smart Dynamic QR · Brief Prod · Brainstorming · Key Form ·
+Social Manager · Smart Agent · Keynapse · Sentinel · Ghost Writer ·
+booK · desK · networK · Key Brand — les 14 tournées (28/07/2026).
+
+Régénérer l'une d'elles : `python3 film.py tournage-<app>.html <sortie.mp4>`.
 (Kora : pas de notice dans l'OS — exclu, décision Stéphane 28/07/2026.)

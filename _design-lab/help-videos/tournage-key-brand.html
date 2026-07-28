@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournage — vidéo d'aide Key Brand</title>
+  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/workspace.css">
+  <link rel="stylesheet" href="/app/key-brand.css">
+</head>
+<body>
+  <script>
+    // ── Harnais notice Key Brand (O-BRD-001) ───────────────────────
+    // Même technique que key-brand-harness.html (API /api/keybrand mockée
+    // en mémoire) mais avec UNE CHARTE COMPLÈTE pré-remplie : la notice a
+    // besoin d'écrans garnis, pas d'un état vide.
+    // Démo : une maison de thé, « Maison Sorel ».
+    window.__KS_API_BASE__ = 'https://mock.local';
+    localStorage.setItem('ks_jwt', 'mock-jwt');
+
+    const KIT = {
+      meta: {
+        name: 'Maison Sorel',
+        baseline: 'Thés rares, gestes justes.',
+        credit: null,
+      },
+      logo: {
+        // L'onglet Règles ne génère les interdits QUE si un logo existe :
+        // la variante pointe sur un asset servi par le mock (SVG inline).
+        variants: [
+          { id: 'lv1', label: 'Logo principal', usage: 'Fond clair', kind: 'color',
+            assetId: 'asset-logo', ext: 'svg', mime: 'image/svg+xml', name: 'maison-sorel.svg' },
+          { id: 'lv2', label: 'Sceau seul', usage: 'Petites tailles', kind: 'mono',
+            assetId: 'asset-seal', ext: 'svg', mime: 'image/svg+xml', name: 'maison-sorel-sceau.svg' },
+        ],
+        protection: { unit: 'x-height', factor: 1 },
+        minSizes: { print_mm: 18, screen_px: 96 },
+      },
+      colors: {
+        palette: [
+          { id: 'c1', name: 'Vert Sorel',   hex: '#1F4A3C', role: 'primary',
+            cmyk: '90 / 45 / 72 / 45', pantone: '3435 C',
+            story: 'La couleur des feuilles fraîchement roulées.', nightHex: '#2E6B57' },
+          { id: 'c2', name: 'Or pâle',      hex: '#C9A961', role: 'secondary',
+            cmyk: '20 / 32 / 72 / 4', pantone: '4515 C',
+            story: "L'infusion après trois minutes.", nightHex: null },
+          { id: 'c3', name: 'Encre',        hex: '#14161A', role: 'extra',
+            cmyk: '70 / 60 / 55 / 70', pantone: 'Neutral Black C', story: null, nightHex: null },
+          { id: 'c4', name: 'Papier de riz', hex: '#F6F2E8', role: 'extra',
+            cmyk: '3 / 3 / 9 / 0', pantone: null, story: null, nightHex: null },
+          { id: 'c5', name: 'Terre cuite',  hex: '#A8543A', role: 'extra',
+            cmyk: '25 / 78 / 85 / 15', pantone: '7599 C', story: null, nightHex: null },
+        ],
+        dark: null,
+      },
+      typography: {
+        fonts: [
+          { id: 'f1', role: 'title', source: 'google', family: 'Cormorant Garamond', axis: '500;600;700', buyUrl: null },
+          { id: 'f2', role: 'body',  source: 'google', family: 'Inter', axis: '400;500;600', buyUrl: null },
+        ],
+      },
+      rules: {
+        interdits: ['distort', 'tilt', 'recolor', 'invert', 'shadow', 'busybg', 'crowd'],
+        custom: [
+          { id: 'r1', title: 'Toujours laisser respirer le sceau',
+            text: "Le sceau ne se pose jamais à moins d'une hauteur de caractère du bord du support." },
+          { id: 'r2', title: 'Jamais de vert sur terre cuite',
+            text: 'Le Vert Sorel et la Terre cuite ne se superposent pas : contraste insuffisant à petite taille.' },
+        ],
+      },
+      branding: {
+        motion: 'none',
+        symbolism: [
+          { id: 's1', title: 'Le sceau', text: "Emprunté aux marques de fabrique des maisons de thé, il signe sans crier." },
+          { id: 's2', title: 'Le vide', text: 'Les marges larges disent le calme : ne jamais les combler.' },
+        ],
+        photo: null,
+      },
+      identity: {
+        mission: "Faire connaître des thés de petits producteurs sans folklore ni ésotérisme.",
+        values: ['Sobriété', 'Précision', 'Patience'],
+        voice: { reg: 'posee', dos: ['Nommer le producteur et le jardin', 'Donner la température et le temps'],
+                 donts: ['Promettre des vertus thérapeutiques', 'Employer un vocabulaire mystique'] },
+      },
+      icons: { stroke: 'fin', corners: 'arrondis', weight: 'regulier', items: [] },
+      supports: {
+        domain: 'maison-sorel.fr',
+        card: { name: 'Camille Sorel', role: 'Maître de thé', tel: '+33 4 91 00 00 00', email: 'camille@maison-sorel.fr' },
+        enabled: { card: true, social: true, signage: true, packaging: true, web: true },
+        gallery: [],
+      },
+      settings: { footer: 'Réalisé par Protein Keystone Studio' },
+    };
+
+    const CHART = {
+      id: 'c1', slug: 'maison-sorel', name: 'Maison Sorel',
+      status: 'published', access: 'unlisted', version: 4,
+      created_at: '2026-05-14T09:00:00.000Z', updated_at: '2026-07-18T15:40:00.000Z',
+      draft: KIT, published: KIT,
+    };
+    const CHART2 = {
+      id: 'c2', slug: 'atelier-brun', name: 'Atelier Brun — menuiserie',
+      status: 'draft', access: 'unlisted', version: 0,
+      created_at: '2026-07-02T09:00:00.000Z', updated_at: '2026-07-10T11:00:00.000Z',
+      draft: { meta: { name: 'Atelier Brun — menuiserie', baseline: '' },
+               colors: { palette: [{ id: 'b1', name: 'Noyer', hex: '#5B3A29', role: 'primary' }] },
+               typography: { fonts: [] }, rules: { interdits: [], custom: [] },
+               branding: { motion: 'none', symbolism: [], photo: null },
+               settings: {} },
+    };
+
+    const _db = { charts: [CHART, CHART2], seq: 2 };
+    const _now = () => new Date().toISOString();
+    const _slug = () => Math.random().toString(36).slice(2, 16);
+    const _realFetch = window.fetch.bind(window);
+    window.fetch = async (url, opts = {}) => {
+      const u = String(url);
+      if (!u.startsWith('https://mock.local/api/keybrand')) return _realFetch(url, opts);
+      const path = u.replace('https://mock.local/api/keybrand', '').split('?')[0];
+      const method = (opts.method || 'GET').toUpperCase();
+      const body = (typeof opts.body === 'string') ? JSON.parse(opts.body) : {};
+      const R = (data, status = 200) => new Response(JSON.stringify(data),
+        { status, headers: { 'Content-Type': 'application/json' } });
+
+      // Fichiers : le module les charge en blob authentifié (_assetBlob).
+      // On sert un logo SVG de démonstration — un sceau de maison de thé.
+      if (path.startsWith('/file/')) {
+        const seal = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 120">
+          <rect x="6" y="6" width="108" height="108" rx="14" fill="none" stroke="#1F4A3C" stroke-width="6"/>
+          <circle cx="60" cy="60" r="30" fill="none" stroke="#C9A961" stroke-width="6"/>
+          <path d="M60 34 C46 50 46 70 60 86 C74 70 74 50 60 34 Z" fill="#1F4A3C"/>
+          <text x="132" y="58" font-family="Georgia,serif" font-size="30" fill="#1F4A3C">Maison</text>
+          <text x="132" y="94" font-family="Georgia,serif" font-size="30" fill="#1F4A3C">Sorel</text>
+        </svg>`;
+        const icon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+          <rect x="6" y="6" width="108" height="108" rx="14" fill="none" stroke="#1F4A3C" stroke-width="6"/>
+          <circle cx="60" cy="60" r="30" fill="none" stroke="#C9A961" stroke-width="6"/>
+          <path d="M60 34 C46 50 46 70 60 86 C74 70 74 50 60 34 Z" fill="#1F4A3C"/>
+        </svg>`;
+        const svg = path.includes('seal') ? icon : seal;
+        return new Response(svg, { status: 200, headers: { 'Content-Type': 'image/svg+xml' } });
+      }
+      const primaryHex = c => {
+        const p = c.draft?.colors?.palette || [];
+        return (p.find(x => x.role === 'primary') || p[0])?.hex || null;
+      };
+      if (path === '/charts' && method === 'GET')
+        return R({ items: _db.charts.map(c => ({ id: c.id, slug: c.slug, name: c.name,
+          status: c.status, version: c.version, updated_at: c.updated_at, primary_hex: primaryHex(c) })), max: 30 });
+      const m = path.match(/^\/charts\/([\w-]+)$/);
+      if (m) {
+        const c = _db.charts.find(x => x.id === m[1]);
+        if (!c) return R({ error: 'Charte introuvable' }, 404);
+        if (method === 'GET') return R({ chart: c });
+        if (method === 'PUT') { if (body.draft) c.draft = body.draft; c.updated_at = _now(); return R({ ok: true }); }
+      }
+      return R({ ok: true });
+    };
+  </script>
+  <script type="module">
+    import { openKeyBrand } from '/app/key-brand.js';
+    import { icon } from '/app/lib/ui-icons.js';
+    import { mountFilm } from '/_design-lab/help-videos/tournage.js';
+    import { steps, meta } from '/_design-lab/help-videos/scenario-key-brand.js';
+
+    openKeyBrand();
+    setTimeout(() => {
+      document.querySelectorAll('img').forEach(img => {
+        const s = img.getAttribute('src') || '';
+        if (s.startsWith('./LOGOS/')) img.src = s.slice(1);
+      });
+      mountFilm({ steps, meta: { ...meta, iconSvg: icon(meta.iconName, 64) } });
+    }, 1200);
+  </script>
+</body>
+</html>
