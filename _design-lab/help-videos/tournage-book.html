@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournage — vidéo d'aide booK</title>
+  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/workspace.css">
+  <link rel="stylesheet" href="/app/book.css">
+</head>
+<body>
+  <script>
+    // Stub API : booK est 100 % local (zéro worker), mais les widgets
+    // partagés (notes, aide) peuvent toucher /api/ — on neutralise.
+    const _fetch = window.fetch.bind(window);
+    window.fetch = (url, opts) => {
+      const u = String(url);
+      const ok = (data) => Promise.resolve(new Response(JSON.stringify(data),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      if (u.includes('/api/')) return ok({});
+      return _fetch(url, opts);
+    };
+
+    // ── Fabrique de pages de démo (canvas → data URI, aucun asset) ──
+    // Données réalistes et françaises : un atelier de céramique, un
+    // bistrot, un domaine viticole. AUCUN emoji, aucun lorem ipsum.
+    const W = 620, H = 877;
+    const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    function shade(hex, f) {           // éclaircit (f>0) / assombrit (f<0) une teinte hex
+      const n = parseInt(hex.slice(1), 16);
+      const c = v => Math.max(0, Math.min(255, Math.round(v + (f > 0 ? (255 - v) * f : v * f))));
+      return 'rgb(' + c(n >> 16 & 255) + ',' + c(n >> 8 & 255) + ',' + c(n & 255) + ')';
+    }
+    function rr(x, gx, gy, gw, gh, r) {
+      x.beginPath();
+      x.moveTo(gx + r, gy);
+      x.arcTo(gx + gw, gy, gx + gw, gy + gh, r);
+      x.arcTo(gx + gw, gy + gh, gx, gy + gh, r);
+      x.arcTo(gx, gy + gh, gx, gy, r);
+      x.arcTo(gx, gy, gx + gw, gy, r);
+      x.closePath();
+    }
+    function toURI(c) {
+      let u = c.toDataURL('image/webp', 0.82);
+      if (!u.startsWith('data:image/webp')) u = c.toDataURL('image/jpeg', 0.85);
+      return u;
+    }
+    function pgCover(tint, title, subtitle, foot) {
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const x = c.getContext('2d');
+      const g = x.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, shade(tint, 0.08)); g.addColorStop(1, shade(tint, -0.25));
+      x.fillStyle = g; x.fillRect(0, 0, W, H);
+      x.strokeStyle = 'rgba(255,255,255,.55)'; x.lineWidth = 2;
+      x.strokeRect(36, 36, W - 72, H - 72);
+      x.textAlign = 'center'; x.fillStyle = '#ffffff';
+      x.font = '900 46px ' + FONT;
+      const words = title.split(' ');
+      if (words.length > 2) {
+        const mid = Math.ceil(words.length / 2);
+        x.fillText(words.slice(0, mid).join(' '), W / 2, H * 0.42);
+        x.fillText(words.slice(mid).join(' '), W / 2, H * 0.42 + 56);
+      } else {
+        x.fillText(title, W / 2, H * 0.44);
+      }
+      x.fillStyle = 'rgba(255,255,255,.85)'; x.font = '500 22px ' + FONT;
+      x.fillText(subtitle, W / 2, H * 0.56);
+      x.fillStyle = 'rgba(255,255,255,.65)'; x.font = '600 15px ' + FONT;
+      x.fillText(foot, W / 2, H - 76);
+      x.fillRect(W / 2 - 26, H * 0.60, 52, 3);
+      return toURI(c);
+    }
+    function pgSection(tint, kicker, title, items, num) {
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const x = c.getContext('2d');
+      x.fillStyle = '#fbfaf7'; x.fillRect(0, 0, W, H);
+      x.fillStyle = tint; x.fillRect(0, 0, W, 7);
+      x.textAlign = 'left';
+      x.fillStyle = shade(tint, -0.2); x.font = '700 14px ' + FONT;
+      x.fillText(kicker.toUpperCase(), 54, 78);
+      x.fillStyle = '#171b22'; x.font = '900 32px ' + FONT;
+      x.fillText(title, 54, 118);
+      // « photo » : bandeau illustratif en dégradé de la teinte
+      const g = x.createLinearGradient(0, 150, 0, 396);
+      g.addColorStop(0, shade(tint, 0.55)); g.addColorStop(1, shade(tint, 0.15));
+      rr(x, 54, 150, W - 108, 246, 12); x.fillStyle = g; x.fill();
+      x.fillStyle = 'rgba(255,255,255,.35)';
+      x.beginPath(); x.arc(W - 170, 330, 90, 0, Math.PI * 2); x.fill();
+      x.beginPath(); x.arc(150, 250, 46, 0, Math.PI * 2); x.fill();
+      // items : nom (gras), prix à droite, description grise
+      let y = 452;
+      for (const it of items) {
+        x.fillStyle = '#20242b'; x.font = '750 18px ' + FONT;
+        x.fillText(it.n, 54, y);
+        if (it.p) {
+          x.textAlign = 'right'; x.fillStyle = shade(tint, -0.25); x.font = '800 17px ' + FONT;
+          x.fillText(it.p, W - 54, y);
+          x.textAlign = 'left';
+        }
+        if (it.d) {
+          x.fillStyle = '#6d7480'; x.font = '400 14px ' + FONT;
+          x.fillText(it.d, 54, y + 24);
+        }
+        x.strokeStyle = 'rgba(0,0,0,.08)'; x.lineWidth = 1;
+        x.beginPath(); x.moveTo(54, y + 44); x.lineTo(W - 54, y + 44); x.stroke();
+        y += 78;
+      }
+      x.textAlign = 'center'; x.fillStyle = '#9aa1ab'; x.font = '500 13px ' + FONT;
+      x.fillText(String(num), W / 2, H - 40);
+      return toURI(c);
+    }
+    function estimateMo(ed) {
+      let bytes = 60000;
+      for (const p of ed.pages) bytes += p.src.length;
+      if (ed.cover && ed.cover.src) bytes += ed.cover.src.length;
+      return Math.round(bytes / 1048576 * 10) / 10;
+    }
+    function buildEditions() {
+      const T1 = '#2A9D8F', T2 = '#C9A227', T3 = '#4A6FA5';
+      const ed1 = {
+        format: 'bk-edition', format_version: 1, id: 'bkdemo1',
+        title: 'Catalogue — Été 2026', subtitle: 'Céramiques faites main',
+        author: 'Atelier Céladon',
+        created: '2026-06-02T09:00:00.000Z', updated: '2026-07-18T09:30:00.000Z',
+        theme: { tint: T1, stage: 'dark' }, options: { doublePage: true }, cover: null,
+        pages: [
+          { src: pgCover(T1, 'Atelier Céladon', 'Catalogue — Été 2026', 'Céramiques faites main · Aubagne'), alt: 'Couverture' },
+          { src: pgSection(T1, 'Collection été', 'Les bols', [
+              { n: 'Bol nervuré — grès blanc', p: '38 €', d: 'Tourné main, émail mat, passe au lave-vaisselle' },
+              { n: 'Bol calade — émail céladon', p: '42 €', d: 'Pièce signée, intérieur brillant' },
+              { n: 'Bol à céréales — porcelaine', p: '34 €', d: 'Bord fin, deux coloris' },
+            ], 2), alt: 'Les bols' },
+          { src: pgSection(T1, 'Collection été', 'Les vases', [
+              { n: 'Vase colonne — grès chamotté', p: '89 €', d: 'Hauteur 32 cm, pièce tournée' },
+              { n: 'Vase boule — émail satiné', p: '74 €', d: 'Diamètre 18 cm' },
+              { n: 'Soliflore méplat', p: '46 €', d: 'Idéal fleurs séchées' },
+            ], 3), alt: 'Les vases' },
+          { src: pgSection(T1, 'Collection été', 'Tasses et mugs', [
+              { n: 'Tasse à thé — anse pincée', p: '24 €', d: 'Contenance 25 cl' },
+              { n: 'Mug cannelé', p: '26 €', d: 'Grès brun, émail intérieur blanc' },
+              { n: 'Duo espresso', p: '39 €', d: 'Deux tasses et leurs soucoupes' },
+            ], 4), alt: 'Tasses et mugs' },
+          { src: pgSection(T1, 'Collection été', "L'art de la table", [
+              { n: 'Assiette plate — 27 cm', p: '28 €', d: 'Bord irrégulier, émail moucheté' },
+              { n: 'Assiette creuse — 21 cm', p: '26 €', d: 'Assortie à la plate' },
+              { n: 'Plat de service ovale', p: '64 €', d: 'Longueur 36 cm' },
+            ], 5), alt: "L'art de la table" },
+          { src: pgSection(T1, 'Sur commande', 'Les pièces uniques', [
+              { n: 'Grand plat calade', p: '180 €', d: 'Pièce unique, certificat joint' },
+              { n: 'Lampe boule — abat-jour lin', p: '240 €', d: 'Montage électrique compris' },
+            ], 6), alt: 'Les pièces uniques' },
+          { src: pgSection(T1, 'Pratique', 'Commander', [
+              { n: "L'atelier", p: '', d: '12 chemin des Fours, 13400 Aubagne' },
+              { n: 'Sur rendez-vous', p: '', d: 'Du mardi au samedi, 10 h à 18 h' },
+              { n: 'Expédition soignée', p: '', d: 'France et Europe, emballage renforcé' },
+            ], 7), alt: 'Commander' },
+          { src: pgCover(T1, 'Atelier Céladon', 'Grès et porcelaine — depuis 2011', 'atelier-celadon.fr'), alt: 'Quatrième de couverture' },
+        ],
+      };
+      const ed2 = {
+        format: 'bk-edition', format_version: 1, id: 'bkdemo2',
+        title: "La carte de l'été", subtitle: 'Bistrot des Halles',
+        author: 'Bistrot des Halles',
+        created: '2026-06-20T09:00:00.000Z', updated: '2026-07-15T17:05:00.000Z',
+        theme: { tint: T2, stage: 'light' }, options: { doublePage: true }, cover: null,
+        pages: [
+          { src: pgCover(T2, 'Bistrot des Halles', "La carte de l'été 2026", 'Cuisine de marché · Lyon'), alt: 'Couverture' },
+          { src: pgSection(T2, 'Pour commencer', 'Entrées', [
+              { n: 'Gaspacho de tomates anciennes', p: '9 €', d: 'Huile de basilic, croûtons' },
+              { n: 'Burrata et pêches rôties', p: '12 €', d: 'Jambon cru, roquette' },
+              { n: 'Œuf mayonnaise des Halles', p: '6 €', d: 'Le classique de la maison' },
+            ], 2), alt: 'Entrées' },
+          { src: pgSection(T2, 'À suivre', 'Plats', [
+              { n: 'Quenelle de brochet, bisque', p: '19 €', d: 'Riz pilaf' },
+              { n: "Onglet de bœuf, échalotes", p: '23 €', d: 'Frites maison, salade' },
+              { n: 'Daurade entière au fenouil', p: '26 €', d: 'Citron confit, pommes grenaille' },
+            ], 3), alt: 'Plats' },
+          { src: pgSection(T2, 'Pour finir', 'Desserts', [
+              { n: 'Tarte aux pralines', p: '8 €', d: 'Crème épaisse' },
+              { n: 'Pavlova aux abricots', p: '9 €', d: 'Verveine du jardin' },
+              { n: 'Assiette de fromages affinés', p: '7 €', d: 'Sélection de la Mère Richard' },
+            ], 4), alt: 'Desserts' },
+        ],
+      };
+      const ed3 = {
+        format: 'bk-edition', format_version: 1, id: 'bkdemo3',
+        title: 'Plaquette du domaine', subtitle: 'Vins de Provence',
+        author: 'Domaine de Roquebrune',
+        created: '2026-05-11T09:00:00.000Z', updated: '2026-07-08T11:20:00.000Z',
+        theme: { tint: T3, stage: 'dark' }, options: { doublePage: true }, cover: null,
+        pages: [
+          { src: pgCover(T3, 'Domaine de Roquebrune', 'Vins de Provence — 2026', 'Vignoble familial depuis 1952'), alt: 'Couverture' },
+          { src: pgSection(T3, 'Notre histoire', 'Le domaine', [
+              { n: '32 hectares en coteaux', p: '', d: 'Sols argilo-calcaires, exposition sud' },
+              { n: 'Agriculture biologique', p: '', d: 'Certifié AB depuis 2019' },
+              { n: 'Vendanges manuelles', p: '', d: 'Tri à la parcelle' },
+            ], 2), alt: 'Le domaine' },
+          { src: pgSection(T3, 'La gamme', 'Les cuvées', [
+              { n: 'Rosé « Pierres Blanches »', p: '11 €', d: 'Grenache, cinsault — l’été en bouteille' },
+              { n: 'Rouge « Restanque »', p: '14 €', d: 'Syrah, mourvèdre — élevage 12 mois' },
+              { n: 'Blanc « Calanque »', p: '13 €', d: 'Rolle — frais et salin' },
+            ], 3), alt: 'Les cuvées' },
+          { src: pgSection(T3, 'Venir nous voir', "L'œnotourisme", [
+              { n: 'Visite de cave et dégustation', p: '12 €', d: "Sur réservation, d'avril à octobre" },
+              { n: 'Pique-nique vigneron', p: '28 €', d: 'Produits locaux, table sous les oliviers' },
+            ], 4), alt: "L'œnotourisme" },
+          { src: pgSection(T3, 'Pratique', 'Nous trouver', [
+              { n: 'Le caveau', p: '', d: 'Route des Crêtes, 83740 La Cadière' },
+              { n: 'Ouvert du lundi au samedi', p: '', d: '9 h 30 à 12 h 30 — 14 h 30 à 19 h' },
+            ], 5), alt: 'Nous trouver' },
+        ],
+      };
+      for (const e of [ed1, ed2, ed3]) e.sizeMo = estimateMo(e);
+      return [ed1, ed2, ed3];
+    }
+
+    // ── Seed IndexedDB bk_library AVANT l'import du module ──────────
+    // (booK lit la bibliothèque au premier rendu de l'étagère.)
+    // ⚠ IndexedDB ne répond JAMAIS dans un Chrome headless éphémère :
+    // indexedDB.open() reste muet (ni onsuccess ni onerror), ce qui gèle le
+    // harnais. On substitue donc une implémentation EN MÉMOIRE, suffisante
+    // pour la couche _db()/_tx() de book.js (open, createObjectStore,
+    // transaction, getAll, put, delete, clear). Les captures montrent la
+    // vraie UI ; seul le magasin de persistance est simulé.
+    window.__seedBk = () => {
+      const rows = new Map();
+      buildEditions().forEach(e => rows.set(e.id, e));
+      const soon = (fn) => setTimeout(fn, 0);
+      const store = {
+        // result rempli TOUT DE SUITE : book.js lit `out.result` dans
+        // tx.oncomplete, il doit déjà être là (sinon _libAll renvoie
+        // undefined et le rendu de l'étagère casse en silence).
+        getAll() { return { result: [...rows.values()] }; },
+        put(v)   { rows.set(v.id, v); return {}; },
+        delete(k){ rows.delete(k); return {}; },
+        clear()  { rows.clear(); return {}; },
+      };
+      const db = {
+        objectStoreNames: { contains: () => true },
+        createObjectStore: () => store,
+        transaction() {
+          const tx = { objectStore: () => store, oncomplete: null, onerror: null };
+          soon(() => tx.oncomplete && tx.oncomplete());
+          return tx;
+        },
+        close() {},
+      };
+      // ⚠ window.indexedDB est en LECTURE SEULE : une affectation simple est
+      // ignorée en silence (le vrai IDBFactory reste en place et ne répond
+      // jamais). defineProperty est le seul moyen de le remplacer.
+      Object.defineProperty(window, 'indexedDB', {
+        configurable: true,
+        value: { open() {
+          const rq = { result: db, onsuccess: null, onerror: null, onupgradeneeded: null };
+          soon(() => rq.onsuccess && rq.onsuccess());
+          return rq;
+        } },
+      });
+      return Promise.resolve();
+    };
+  </script>
+  <script type="module">
+    import { openBook } from '/app/book.js';
+    import { icon } from '/app/lib/ui-icons.js';
+    import { mountFilm } from '/_design-lab/help-videos/tournage.js';
+    import { steps, meta } from '/_design-lab/help-videos/scenario-book.js';
+
+    await window.__seedBk();
+    openBook();
+    setTimeout(() => {
+      document.querySelectorAll('img').forEach(img => {
+        const s = img.getAttribute('src') || '';
+        if (s.startsWith('./LOGOS/')) img.src = s.slice(1);
+      });
+      mountFilm({ steps, meta: { ...meta, iconSvg: icon(meta.iconName, 64) } });
+    }, 1200);
+  </script>
+</body>
+</html>
