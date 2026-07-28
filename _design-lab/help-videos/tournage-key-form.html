@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournage — vidéo d'aide Key Form</title>
+  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/workspace.css">
+  <link rel="stylesheet" href="/app/pulsa.css">
+</head>
+<body>
+  <script>
+    // ── Harnais notice Key Form (A-COM-004) ──────────────────────────
+    // ATTENTION : Key Form est EN PRODUCTION (formulaire artistes).
+    // Ce harnais ne touche JAMAIS le vrai worker : stub complet de fetch
+    // + seed localStorage AVANT l'import du module (bibliothèque locale).
+    // Même technique que ms/sa-notice-harness.
+
+    // 1) Seed de la bibliothèque locale (ks_pulsa_library) — données de
+    //    démonstration réalistes et françaises. Pas de ks_pulsa_current :
+    //    l'app s'ouvre sur la vue bibliothèque.
+    localStorage.removeItem('ks_pulsa_current');
+    localStorage.removeItem('ks_pulsa_draft');
+    localStorage.removeItem('ks_jwt');           // pas de pull serveur (_hydrateFromServer skip)
+    localStorage.removeItem('ks_admin_token');
+    localStorage.removeItem('ks_licence_plan');  // pas de bloc admin « Livrer à un client »
+
+    const now = Date.now();
+    const NETWORKS = [
+      { id: 'instagram', label: 'Instagram', placeholder: '@compte ou URL',   enabled: true },
+      { id: 'facebook',  label: 'Facebook',  placeholder: 'URL du profil',    enabled: true },
+      { id: 'linkedin',  label: 'LinkedIn',  placeholder: 'URL du profil',    enabled: true },
+      { id: 'x',         label: 'X (Twitter)', placeholder: '@compte ou URL', enabled: false },
+      { id: 'tiktok',    label: 'TikTok',    placeholder: '@compte ou URL',   enabled: false },
+      { id: 'youtube',   label: 'YouTube',   placeholder: 'URL de la chaîne', enabled: false },
+      { id: 'behance',   label: 'Behance',   placeholder: 'URL du portfolio', enabled: false },
+      { id: 'pinterest', label: 'Pinterest', placeholder: 'URL du compte',    enabled: false },
+      { id: 'vimeo',     label: 'Vimeo',     placeholder: 'URL de la chaîne', enabled: false },
+    ];
+    const FLD = (id, type, label, options, extra = {}) => ({
+      id, type, label, help: '', required: false, width: 'full',
+      options, visible_if: null, required_if: null, compute_from: null, ...extra,
+    });
+
+    const FORM_FESTIVAL = {
+      id: 'pul_demo1',
+      created_at: now - 21 * 86400000,
+      updated_at: now - 2 * 3600000,
+      meta: {
+        title: 'Appel à candidatures — Festival Lumières d’Automne 2026',
+        slug: 'lumieres-automne-2026',
+        logo_data_url: null, logo_url: null,
+        brand_color: '#0a2741',
+        brand_gradient: 'linear-gradient(135deg, #0a2741 0%, #1c4870 100%)',
+        brand_accent: '#c9b48a',
+        anonymous: true,
+        intro: 'Le festival investit le centre ancien du 15 au 18 octobre 2026. Présentez votre projet d’installation lumineuse : le comité artistique répond sous trois semaines.',
+        ttl_days: 180,
+        access_code: null,
+      },
+      sections: [
+        {
+          id: 'sec_ident', title: 'Identité de l’artiste',
+          subtitle: 'Qui êtes-vous ? Où voir votre travail ?', visible_if: null,
+          fields: [
+            FLD('fld_nom', 'text-short', 'Nom d’artiste ou de collectif',
+              { placeholder: 'Votre réponse', max_chars: 120 }, { required: true, width: '1/2' }),
+            FLD('fld_email', 'email', 'Adresse email de contact',
+              { placeholder: 'prenom.nom@exemple.fr' }, { required: true, width: '1/2' }),
+            FLD('fld_site', 'website', 'Site web',
+              { placeholder: 'https://votre-site.com' }),
+            FLD('fld_rs', 'social-links', 'Vos réseaux', { networks: NETWORKS }),
+          ],
+        },
+        {
+          id: 'sec_projet', title: 'Votre proposition',
+          subtitle: 'Le projet que vous présentez au comité', visible_if: null,
+          fields: [
+            FLD('fld_disc', 'chips', 'Discipline principale', {
+              choices: [
+                { id: 'installation', label: 'Installation lumineuse' },
+                { id: 'mapping',      label: 'Vidéo-mapping' },
+                { id: 'performance',  label: 'Performance' },
+                { id: 'sculpture',    label: 'Sculpture' },
+              ],
+            }, { required: true }),
+            FLD('fld_demarche', 'text-long', 'Votre démarche artistique',
+              { placeholder: 'Votre réponse détaillée', max_chars: 800, rows: 4, strict: true },
+              { required: true }),
+            FLD('fld_portfolio', 'url-external', 'Dossier artistique (lien HD)',
+              { placeholder: 'https://wetransfer.com/…',
+                providers_hint: 'WeTransfer · Google Drive · Dropbox · Vimeo · YouTube' }),
+          ],
+        },
+        {
+          id: 'sec_pratique', title: 'Aspects pratiques',
+          subtitle: '', visible_if: null,
+          fields: [
+            FLD('fld_budget', 'amount', 'Budget de production demandé',
+              { currency: 'EUR', min: 0, max: null, decimals: 2 }, { width: '1/2' }),
+            FLD('fld_dispo', 'date', 'Date d’arrivée possible sur site',
+              { min: null, max: null }, { width: '1/2' }),
+            FLD('fld_montage', 'yes-no', 'Serez-vous présent au montage ?',
+              { yes_label: 'Oui', no_label: 'Non' }, { required: true }),
+          ],
+        },
+      ],
+      delivery: {
+        recipients: ['direction@lumieres-automne.fr', 'programmation@lumieres-automne.fr'],
+        notification_subject: 'Nouvelle candidature — Festival Lumières d’Automne 2026',
+      },
+      output: {
+        status: 'published',
+        published_url: location.origin + '/f/lumieres-automne-2026',
+        last_response_at: null,
+      },
+    };
+
+    const FORM_ENQUETE = {
+      id: 'pul_demo2',
+      created_at: now - 6 * 86400000,
+      updated_at: now - 26 * 3600000,
+      meta: {
+        title: 'Enquête de satisfaction — Ateliers Terre & Feu',
+        slug: 'satisfaction-terre-et-feu',
+        logo_data_url: null, logo_url: null,
+        brand_color: '#131826', brand_gradient: null, brand_accent: '#a5b4fc',
+        anonymous: true,
+        intro: 'Trois minutes pour nous aider à améliorer les ateliers de céramique.',
+        ttl_days: 90, access_code: null,
+      },
+      sections: [
+        {
+          id: 'sec_nps', title: 'Votre expérience', subtitle: '', visible_if: null,
+          fields: [
+            FLD('fld_nps', 'nps', 'Recommanderiez-vous nos ateliers ?',
+              { low_label: 'Pas du tout probable', high_label: 'Extrêmement probable' },
+              { required: true }),
+            FLD('fld_accord', 'likert', 'Le rythme des séances me convient', {
+              choices: [
+                { id: 'lk1', label: 'Pas du tout d’accord' },
+                { id: 'lk2', label: 'Plutôt pas d’accord' },
+                { id: 'lk3', label: 'Neutre' },
+                { id: 'lk4', label: 'Plutôt d’accord' },
+                { id: 'lk5', label: 'Tout à fait d’accord' },
+              ],
+            }),
+            FLD('fld_avis', 'text-long', 'Qu’améliorer en priorité ?',
+              { placeholder: 'Votre réponse détaillée', max_chars: 500, rows: 4, strict: true }),
+          ],
+        },
+      ],
+      delivery: { recipients: [], notification_subject: '' },
+      output: { status: 'draft', published_url: null, last_response_at: null },
+    };
+
+    const FORM_FOURNISSEUR = {
+      id: 'pul_demo3',
+      created_at: now - 3 * 86400000,
+      updated_at: now - 40 * 60000,
+      meta: {
+        title: 'Onboarding fournisseur — Maison Ravel Traiteur',
+        slug: '',
+        logo_data_url: null, logo_url: null,
+        brand_color: '#0a2741', brand_gradient: null, brand_accent: '#c9b48a',
+        anonymous: false,
+        intro: 'Référencement de nos producteurs partenaires : quelques informations avant le premier bon de commande.',
+        ttl_days: 365, access_code: null,
+      },
+      sections: [
+        {
+          id: 'sec_societe', title: 'Votre société', subtitle: '', visible_if: null,
+          fields: [
+            FLD('fld_raison', 'text-short', 'Raison sociale',
+              { placeholder: 'Votre réponse', max_chars: 120 }, { required: true }),
+            FLD('fld_mail', 'email', 'Email de facturation',
+              { placeholder: 'prenom.nom@exemple.fr' }, { required: true }),
+            FLD('fld_fam', 'chips', 'Famille de produits', {
+              choices: [
+                { id: 'primeur',  label: 'Primeur' },
+                { id: 'maree',    label: 'Marée' },
+                { id: 'crererie', label: 'Crèmerie' },
+                { id: 'cave',     label: 'Cave' },
+              ],
+            }),
+            FLD('fld_franco', 'amount', 'Franco de port',
+              { currency: 'EUR', min: 0, max: null, decimals: 2 }, { width: '1/2' }),
+          ],
+        },
+      ],
+      delivery: { recipients: ['achats@maison-ravel.fr'], notification_subject: '' },
+      output: { status: 'draft', published_url: null, last_response_at: null },
+    };
+
+    localStorage.setItem('ks_pulsa_library', JSON.stringify({
+      forms: [FORM_FESTIVAL, FORM_ENQUETE, FORM_FOURNISSEUR],
+    }));
+
+    // 2) Réponses de démo servies par le stub (vue « Réponses reçues »).
+    //    created_at = format D1 UTC sans suffixe ('YYYY-MM-DD HH:MM:SS').
+    const d = (offsetH) => new Date(now - offsetH * 3600000).toISOString().slice(0, 19).replace('T', ' ');
+    const RESPONSES = [
+      {
+        id: 'resp_003', created_at: d(5),
+        responses: {
+          fld_nom: 'Collectif Lux Minor', fld_email: 'contact@luxminor.fr',
+          fld_site: 'https://luxminor.fr',
+          fld_rs: { instagram: '@collectif.luxminor', linkedin: 'https://linkedin.com/company/lux-minor' },
+          fld_disc: 'mapping',
+          fld_demarche: 'Nous projetons des architectures de lumière sur les façades du centre ancien : chaque bâtiment devient l’écran de sa propre histoire, reconstituée à partir des archives municipales.',
+          fld_portfolio: 'https://wetransfer.com/downloads/luxminor-dossier-2026',
+          fld_budget: 8400, fld_dispo: '2026-10-12', fld_montage: 'yes',
+        },
+      },
+      {
+        id: 'resp_002', created_at: d(31),
+        responses: {
+          fld_nom: 'Élise Vandame', fld_email: 'elise.vandame@orange.fr',
+          fld_site: 'https://elisevandame-sculpture.fr',
+          fld_rs: { instagram: '@elise.vandame' },
+          fld_disc: 'sculpture',
+          fld_demarche: 'Sculptures de verre soufflé rétroéclairées, pensées pour les cours intérieures : la lumière traverse la matière et dessine des ombres colorées sur les murs.',
+          fld_portfolio: 'https://drive.google.com/drive/folders/vandame-lumieres',
+          fld_budget: 5200, fld_dispo: '2026-10-14', fld_montage: 'yes',
+        },
+      },
+      {
+        id: 'resp_001', created_at: d(78),
+        responses: {
+          fld_nom: 'Compagnie du Phare', fld_email: 'diffusion@ciephare.org',
+          fld_site: '',
+          fld_rs: { facebook: 'https://facebook.com/compagnieduphare' },
+          fld_disc: 'performance',
+          fld_demarche: 'Déambulation nocturne portée par quatre danseurs équipés de costumes lumineux autonomes, en dialogue avec les spectateurs munis de lanternes distribuées au départ du parcours.',
+          fld_portfolio: 'https://vimeo.com/ciephare/traversee',
+          fld_budget: 11600, fld_dispo: '2026-10-15', fld_montage: 'no',
+        },
+      },
+    ];
+
+    // 3) Stub COMPLET de fetch AVANT l'import du module : aucune requête
+    //    ne part vers le vrai worker (Key Form est en prod réelle).
+    const _fetch = window.fetch.bind(window);
+    window.fetch = (url, opts) => {
+      const u = String(url);
+      const ok = (data) => Promise.resolve(new Response(JSON.stringify(data),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      if (u.includes('/api/pulsa/responses.csv')) {
+        return Promise.resolve(new Response('demo;csv', { status: 200, headers: { 'Content-Type': 'text/csv' } }));
+      }
+      if (u.includes('/api/pulsa/responses')) return ok({ responses: RESPONSES });
+      if (u.includes('/api/pulsa/forms'))     return ok({ forms: [] });
+      if (u.includes('/api/pulsa/public/'))   return ok({ form: FORM_FESTIVAL });
+      if (u.includes('/api/'))                return ok({});
+      return _fetch(url, opts);   // assets statiques locaux (HELP json, icônes…)
+    };
+  </script>
+  <script type="module">
+    import { openPulsa } from '/app/pulsa.js';
+    import { icon } from '/app/lib/ui-icons.js';
+    import { mountFilm } from '/_design-lab/help-videos/tournage.js';
+    import { steps, meta } from '/_design-lab/help-videos/scenario-key-form.js';
+
+    openPulsa();
+    setTimeout(() => {
+      document.querySelectorAll('img').forEach(img => {
+        const s = img.getAttribute('src') || '';
+        if (s.startsWith('./LOGOS/')) img.src = s.slice(1);
+      });
+      // le module compose l'URL publique depuis location.origin
+      const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      const hits = []; while (w.nextNode()) if (w.currentNode.nodeValue.includes('localhost:3000')) hits.push(w.currentNode);
+      hits.forEach(n => { n.nodeValue = n.nodeValue.replace(/localhost:3000/g, 'protein-keystone.com'); });
+      mountFilm({ steps, meta: { ...meta, iconSvg: icon(meta.iconName, 64) } });
+    }, 1200);
+  </script>
+</body>
+</html>
