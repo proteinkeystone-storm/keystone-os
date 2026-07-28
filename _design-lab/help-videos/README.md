@@ -57,5 +57,5 @@ Dépendances (une fois) : `pip3 install websocket-client imageio-ffmpeg`
 
 Missive ✓ · Smart Dynamic QR ✓ · Brief Prod · Brainstorming ·
 Key Form · Social Manager · Smart Agent ✓ · Keynapse ✓ · Sentinel ✓ ·
-Ghost Writer · booK · desK ✓ · networK · Key Brand
+Ghost Writer ✓ · booK · desK ✓ · networK · Key Brand
 (Kora : pas de notice dans l'OS — exclu, décision Stéphane 28/07/2026.)

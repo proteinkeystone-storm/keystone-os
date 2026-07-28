@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournage — vidéo d'aide Ghost Writer</title>
+  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/workspace.css">
+</head>
+<body>
+  <script>
+    // ── Seed localStorage AVANT l'import des modules ──────────────
+    // Le studio lit son brouillon (ks_ghostwriter_studio_draft), le
+    // correcteur le sien (ks_gw_proof_draft), la bibliothèque et le
+    // panneau Ω leurs clés — tout doit être en place avant openGhostwriterStudio().
+    localStorage.setItem('ks_jwt', 'harness-demo-jwt');
+    localStorage.setItem('ks_ghostwriter', '1');
+
+    // Brouillon Réécriture : relance client réaliste (atelier de vitraux).
+    localStorage.setItem('ks_ghostwriter_studio_draft', JSON.stringify({
+      mode: 'email',
+      data: {
+        text: "Bonjour Madame Delorme,\n\nJe reviens vers vous au sujet du devis pour la restauration des trois vitraux de la cage d'escalier. Nous avons bien reçu vos photos et les mesures. Le devis est prêt depuis lundi, je voulais savoir si vous avez eu le temps de le regarder.\n\nPour information, notre planning d'atelier se remplit vite avant l'automne, donc si vous souhaitez que l'intervention ait lieu avant octobre, il faudrait valider assez rapidement.\n\nN'hésitez pas si vous avez des questions.\n\nCordialement,\nJulien Roche — Atelier Verrière",
+        action: 'improve',
+        tone: '',
+        audience: 'client',
+        intent: '',
+        lengthTarget: ''
+      }
+    }));
+
+    // Brouillon Correcteur (mode Texte) : texte avec quelques fautes visibles.
+    localStorage.setItem('ks_gw_proof_draft', JSON.stringify({
+      mode: 'texte',
+      text: "Madame, Monsieur,\n\nSuite a votre demande, veuillez trouvez ci-joint le devis pour la restauration des vitraux de la chapelle. Les panneaux seront déposé en atelier durant trois semaine, puis reposés avec des baguettes de plomb neuve.\n\nNous restons à votre disposition pour tout complément d'information.\n\nBien cordialement,\nAtelier Verrière"
+    }));
+
+    // Bibliothèque : 2 réécritures déjà enregistrées (compteur réaliste).
+    localStorage.setItem('ks_ghostwriter_library', JSON.stringify([
+      {
+        uid: 'gw_demo1', label: 'Directe', modeLabel: 'Email pro',
+        text: "Bonjour Madame Delorme,\n\nVotre devis pour la restauration des trois vitraux est prêt. Notre planning d'atelier se remplit vite avant l'automne : pour une intervention avant octobre, une validation cette semaine serait idéale.\n\nJe reste à votre écoute.\n\nJulien Roche — Atelier Verrière",
+        sourceText: 'Relance devis vitraux cage d\'escalier',
+        criteria: { action: 'improve', tone: 'concis direct', audience: 'client', intent: '', lengthTarget: '' },
+        date: '2026-07-17T10:24:00.000Z'
+      },
+      {
+        uid: 'gw_demo2', label: 'Chaleureuse', modeLabel: 'Comm interne',
+        text: "Bonjour à tous,\n\nGrande nouvelle : la commande de la chapelle Saint-Roch est confirmée. Merci à chacun pour le travail sur le dossier — on cale le planning de dépose jeudi matin.\n\nJulien",
+        sourceText: 'Annonce interne commande chapelle',
+        criteria: { action: 'improve', tone: 'chaleureux empathique', audience: 'peer', intent: 'motiver', lengthTarget: '' },
+        date: '2026-07-15T16:02:00.000Z'
+      }
+    ]));
+
+    // Panneau Ω : favoris + récents pour une ouverture non vide.
+    localStorage.setItem('ks_symbols_fav', JSON.stringify(['→', '✓', '—', '§']));
+    localStorage.setItem('ks_symbols_recent', JSON.stringify(['•', '№', '«', '»', '€']));
+
+    // ── Stub API : aucun backend requis ───────────────────────────
+    // Endpoints réellement appelés : GET /api/ghostwriter/quota (à
+    // l'ouverture du studio et du correcteur), POST /api/ghostwriter/rewrite
+    // (bouton « Réécrire en 3 variantes »). Tout autre /api/ → {}.
+    const QUOTA_BEFORE = { plan: 'STARTER', used: 1, max: 3, remaining: 2, unlimited: false, period: 'day' };
+    const QUOTA_AFTER  = { plan: 'STARTER', used: 2, max: 3, remaining: 1, unlimited: false, period: 'day' };
+    const VARIANTS = [
+      { label: 'Fidèle et fluide',
+        text: "Bonjour Madame Delorme,\n\nJe me permets de revenir vers vous au sujet du devis pour la restauration des trois vitraux de votre cage d'escalier, prêt depuis lundi. Avez-vous eu l'occasion d'en prendre connaissance ?\n\nNotre planning d'atelier se remplit rapidement avant l'automne : pour une intervention avant octobre, une validation dans les prochains jours serait préférable.\n\nJe reste bien entendu à votre disposition pour toute question.\n\nCordialement,\nJulien Roche — Atelier Verrière" },
+      { label: 'Concise',
+        text: "Bonjour Madame Delorme,\n\nVotre devis pour les trois vitraux de la cage d'escalier vous attend depuis lundi. Pour garantir une intervention avant octobre, il faudrait le valider rapidement — notre planning d'automne se remplit vite.\n\nUne question ? Je suis joignable au fil de la journée.\n\nCordialement,\nJulien Roche — Atelier Verrière" },
+      { label: 'Chaleureuse',
+        text: "Bonjour Madame Delorme,\n\nJ'espère que vous allez bien. Le devis pour la restauration de vos trois vitraux est prêt depuis lundi et je serais ravi d'avoir votre retour : c'est un bel ensemble, et nous aimerions lui redonner tout son éclat avant l'automne.\n\nNotre atelier affiche vite complet à cette période ; si vous souhaitez une intervention avant octobre, un accord dans les prochains jours nous permettrait de vous réserver le créneau.\n\nAu plaisir de vous lire,\nJulien Roche — Atelier Verrière" },
+    ];
+    const _fetch = window.fetch.bind(window);
+    window.fetch = (url, opts) => {
+      const u = String(url);
+      const ok = (data) => Promise.resolve(new Response(JSON.stringify(data),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      if (u.includes('/api/ghostwriter/quota'))   return ok(QUOTA_BEFORE);
+      if (u.includes('/api/ghostwriter/rewrite')) return ok({ variants: VARIANTS, model: 'mistral', quota: QUOTA_AFTER });
+      if (u.includes('/api/')) return ok({});
+      return _fetch(url, opts);
+    };
+  </script>
+  <script type="module">
+    import { openGhostwriterStudio } from '/app/ghostwriter-studio.js';
+    import { icon } from '/app/lib/ui-icons.js';
+    import { mountFilm } from '/_design-lab/help-videos/tournage.js';
+    import { steps, meta } from '/_design-lab/help-videos/scenario-ghostwriter.js';
+
+    openGhostwriterStudio();
+    setTimeout(() => {
+      document.querySelectorAll('img').forEach(img => {
+        const s = img.getAttribute('src') || '';
+        if (s.startsWith('./LOGOS/')) img.src = s.slice(1);
+      });
+      mountFilm({ steps, meta: { ...meta, iconSvg: icon(meta.iconName, 64) } });
+    }, 1100);
+  </script>
+</body>
+</html>
