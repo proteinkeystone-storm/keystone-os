@@ -1448,11 +1448,12 @@ function _renderTypeCards(root) {
         _creating.type            = 'url';   // #sdqr-form-fields = destination (masquée si page terminale)
         _creating.template_data   = {};
         _creating._templatePicked = true;
-        // Page terminale (réseaux / carte de visite) : pas de redirection. Le
-        // Worker exige quand même un target_url valide -> URL neutre jamais
-        // affichée ni utilisée par le rendu (cf. noDestination).
-        _creating.payload = getTemplate(_creating.template_id)?.noDestination
-          ? { url: 'https://protein-keystone.com' } : {};
+        // Page terminale (QR Ring / réseaux / carte de visite) : pas de
+        // redirection, donc aucune destination à saisir. L'URL neutre exigée
+        // par le Worker est posée AU SAVE (_handleCreate), jamais dans le
+        // payload — sinon elle réapparaît préremplie si on revient sur un
+        // modèle qui, lui, a une vraie destination.
+        _creating.payload = {};
         _creView = 'phone';
         _renderTypeCards(root);
         _renderModePick(root);
@@ -1502,12 +1503,22 @@ function _renderModePick(root) {
   _toggleSmartBriefVisibility(root);
 }
 
+// Page terminale : le visiteur trouve tout sur la page hébergée et n'est
+// renvoyé nulle part ensuite (QR Ring, réseaux sociaux, carte de visite).
+// Aucune « destination » à demander — mais le Worker exige un target_url pour
+// toute redirection /r/SHORTID : on lui donne cette URL neutre au save, jamais
+// affichée au visiteur ni utilisée par le rendu (cf. noDestination).
+const SMART_NO_DEST_URL = 'https://protein-keystone.com';
+function _creIsNoDest() {
+  return _creating.mode === 'smart' && !!getTemplate(_creating.template_id)?.noDestination;
+}
+
 // SDQR Smart — Affiche les champs "Titre + Message" + V2 le sélecteur
 // de template + ses fields uniquement en mode 'smart'.
 function _toggleSmartBriefVisibility(root) {
   const isSmart = _creating.mode === 'smart';
-  // Page terminale (réseaux sociaux / carte de visite) : pas de « destination ».
-  const noDest  = isSmart && !!getTemplate(_creating.template_id)?.noDestination;
+  // Page terminale (QR Ring / réseaux sociaux / carte de visite) : pas de « destination ».
+  const noDest  = _creIsNoDest();
 
   const textWrap     = root.querySelector('#sdqr-smart-text-wrap');
   const templateWrap = root.querySelector('#sdqr-smart-template-wrap');
@@ -1697,7 +1708,12 @@ function _renderTemplateCards(root) {
       }
       _creating._templatePicked = true;
       _renderTemplateCards(root);
-      _renderTemplateFields(root);
+      // _toggleSmartBriefVisibility (et non _renderTemplateFields seul) : le
+      // bloc « Destination après l'expérience » doit suivre le modèle choisi.
+      // Sans ça, un modèle terminal (QR Ring…) gardait un champ URL affiché ET
+      // obligatoire, qui ne sert à rien pour lui. Il rend déjà les champs.
+      _toggleSmartBriefVisibility(root);
+      _creRenderPreview(root);
     });
   });
 
@@ -2113,7 +2129,7 @@ function _cgLogoWidget(key, label, opts) {
   opts  = opts  || {};
   const maxBytes = opts.maxBytes || 12000;
   const maxDim   = opts.maxDim   || 800;
-  const kb       = Math.round(maxBytes / 1024);
+  const kb       = Math.round((maxBytes * 0.75) / 1024);   // poids de FICHIER (base64 ≈ 1,33×)
   return `<div class="sdqr-field sdqr-field--full">
     <span class="sdqr-field-lbl">${label}</span>
     <div class="sdqr-image-widget" data-maxbytes="${maxBytes}" data-maxdim="${maxDim}">
@@ -2124,7 +2140,7 @@ function _cgLogoWidget(key, label, opts) {
         <button type="button" class="sdqr-image-btn sdqr-image-btn--ghost sdqr-image-clear" hidden>Effacer</button>
       </div>
       <details class="sdqr-image-url-fallback"><summary>ou utiliser une URL externe</summary><input type="url" class="sdqr-input sdqr-image-url" placeholder="https://…" value=""></details>
-      <p class="sdqr-image-help">Compressée auto à ${kb} Ko (PNG/JPEG redimensionnés à ${maxDim}px max). SVG/GIF/WebP gardés tels quels s'ils sont assez légers.</p>
+      <p class="sdqr-image-help">Prenez votre image telle quelle : JPG, PNG et WebP sont allégés automatiquement (jusqu'à ${maxDim} px de large). Seuls les fichiers SVG et GIF doivent déjà être légers (${kb} Ko max).</p>
       <p class="sdqr-image-err" hidden></p>
     </div>
   </div>`;
@@ -3047,10 +3063,33 @@ function _renderFormFields(root) {
   });
 }
 
-// V4.1 (2026-05-26) — Compresse une image (File) en data URI base64 sous
-// la limite maxBytes. PNG/JPEG redimensionnés via canvas + qualité dégradée
-// itérativement. SVG/GIF/WebP retournés tels quels si déjà sous la limite.
-// Lance une exception explicite si impossible.
+// Le navigateur sait-il ENCODER en WebP ? (Chromium depuis toujours, Safari
+// depuis la 14.) WebP pèse ~30 % de moins que le JPEG à qualité égale ET garde
+// la transparence : à budget d'octets identique, l'image rendue est nettement
+// meilleure. Testé une seule fois, mémorisé.
+let _canEncodeWebp = null;
+function _webpEncodeOk() {
+  if (_canEncodeWebp !== null) return _canEncodeWebp;
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 1;
+    _canEncodeWebp = c.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+  } catch (_) { _canEncodeWebp = false; }
+  return _canEncodeWebp;
+}
+
+// V4.1 (2026-05-26) — Compresse une image (File) en data URI base64 sous la
+// limite maxBytes.
+// 2026-07-28 — Deux défauts corrigés (QR Ring inutilisable) :
+//   1. le WebP était classé « non recompressible » avec le SVG et le GIF : un
+//      WebP au-dessus de la limite était REFUSÉ, alors que c'est un simple
+//      bitmap qui se recompresse comme un JPEG. Seuls SVG (vectoriel) et GIF
+//      (animé) restent en passe-plat.
+//   2. la boucle divisait les dimensions par 0,8 À CHAQUE tour en même temps
+//      qu'elle baissait la qualité : l'image devenait floue bien avant d'avoir
+//      épuisé le budget d'octets. On épuise maintenant la qualité à pleine
+//      taille d'abord, puis on réduit par petits paliers.
+// Lance une exception explicite si vraiment impossible.
 async function _compressImageToDataUri(file, maxBytes = 12000, maxDimStart = 800) {
   const initial = await new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -3058,17 +3097,21 @@ async function _compressImageToDataUri(file, maxBytes = 12000, maxDimStart = 800
     r.onerror = () => reject(new Error('Lecture du fichier impossible.'));
     r.readAsDataURL(file);
   });
-  const limitKb = Math.round(maxBytes / 1024);
+  // maxBytes se mesure sur le TEXTE base64, ~1,33× le poids du fichier : un
+  // plafond « 88 Ko » refusait en réalité les fichiers de plus de 66 Ko. On
+  // parle donc à l'utilisateur en poids de FICHIER, le seul qu'il voit.
+  const limitKb = Math.round((maxBytes * 0.75) / 1024);
 
-  // SVG, GIF, WebP : non recompressibles (perdrait l'anim / le vectoriel).
-  // On accepte si déjà sous la limite, sinon on refuse explicitement.
-  if (/^data:image\/(svg\+xml|gif|webp)/i.test(initial)) {
+  // SVG (vectoriel) et GIF (animé) : recompresser détruirait le fichier.
+  // On accepte s'ils tiennent déjà dans le budget, sinon on refuse en disant
+  // quoi faire.
+  if (/^data:image\/(svg\+xml|gif)/i.test(initial)) {
     if (initial.length <= maxBytes) return initial;
-    const kb = Math.round(initial.length / 1024);
-    throw new Error(`Image trop lourde (${kb} Ko, max ${limitKb} Ko). Convertis-la en PNG/JPEG (compression auto) ou utilise une URL externe.`);
+    const kb = Math.round((file.size || initial.length * 0.75) / 1024);
+    throw new Error(`Ce fichier ${/gif/i.test(initial) ? 'GIF' : 'SVG'} est trop lourd (${kb} Ko, max ${limitKb} Ko). Enregistrez-le en JPG, PNG ou WebP : ces formats-là sont allégés automatiquement, quel que soit leur poids.`);
   }
 
-  // PNG, JPEG : compression itérative via canvas
+  // PNG, JPEG, WebP, HEIC… : bitmap → canvas.
   const img = await new Promise((resolve, reject) => {
     const i = new Image();
     i.onload  = () => resolve(i);
@@ -3076,22 +3119,39 @@ async function _compressImageToDataUri(file, maxBytes = 12000, maxDimStart = 800
     i.src = initial;
   });
 
-  let maxDim  = maxDimStart;
-  let quality = 0.88;
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+  // Déjà dans le budget et pas surdimensionnée : on garde le fichier D'ORIGINE,
+  // sans aucune perte (et sans écraser une transparence PNG).
+  if (initial.length <= maxBytes && Math.max(img.width, img.height) <= maxDimStart * 1.05) {
+    return initial;
+  }
+
+  const mime = _webpEncodeOk() ? 'image/webp' : 'image/jpeg';
+  const draw = (dim, quality) => {
+    const scale = Math.min(1, dim / Math.max(img.width, img.height));
     const w = Math.max(1, Math.round(img.width  * scale));
     const h = Math.max(1, Math.round(img.height * scale));
     const canvas = document.createElement('canvas');
     canvas.width  = w;
     canvas.height = h;
-    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-    const out = canvas.toDataURL('image/jpeg', quality);
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL(mime, quality);
+  };
+
+  // [facteur de taille, qualité] — la qualité tombe d'abord (invisible à l'œil),
+  // les pixels ensuite, par paliers doux.
+  const PLAN = [
+    [1, 0.92], [1, 0.85], [1, 0.78], [1, 0.70], [1, 0.62],
+    [0.85, 0.72], [0.85, 0.62],
+    [0.70, 0.68], [0.70, 0.58],
+    [0.55, 0.62], [0.45, 0.58], [0.35, 0.55],
+  ];
+  for (const [dimFactor, quality] of PLAN) {
+    const out = draw(Math.round(maxDimStart * dimFactor), quality);
     if (out.length <= maxBytes) return out;
-    maxDim  = Math.round(maxDim * 0.8);
-    quality = Math.max(0.45, quality - 0.1);
   }
-  throw new Error(`Image impossible à compresser sous ${limitKb} Ko. Essaie une image plus simple ou utilise une URL externe.`);
+  throw new Error(`Cette image ne rentre pas sous ${limitKb} Ko même très compressée. Recadrez-la (moins de détails) ou utilisez une URL externe.`);
 }
 
 // V4.1 (2026-05-26) — Binde tous les widgets image présents dans `wrap`
@@ -3388,7 +3448,7 @@ function _renderField(f, store) {
         <summary>ou utiliser une URL externe</summary>
         <input type="url" class="sdqr-input sdqr-image-url" placeholder="https://…" value="${urlVal}">
       </details>
-      <p class="sdqr-image-help">Compressée auto à ${Math.round(imgMaxB / 1024)} Ko (PNG/JPEG redimensionnés à ${imgMaxD}px max). SVG/GIF/WebP gardés tels quels s'ils sont assez légers.</p>
+      <p class="sdqr-image-help">Prenez votre image telle quelle : JPG, PNG et WebP sont allégés automatiquement (jusqu'à ${imgMaxD} px de large). Seuls les fichiers SVG et GIF doivent déjà être légers (${Math.round(imgMaxB * 0.75 / 1024)} Ko max).</p>
       <p class="sdqr-image-err" hidden></p>
     </div>`;
     return `<div class="sdqr-field${span}">
@@ -3511,15 +3571,20 @@ async function _handleCreate(panel) {
   if (!_creating.name?.trim()) {
     return _showMsg(msg, 'Le nom interne est obligatoire.', 'err');
   }
-  for (const f of def.fields) {
-    if (f.required && !(_creating.payload[f.id] || '').toString().trim()) {
-      return _showMsg(msg, `Champ obligatoire : ${f.label}`, 'err');
+  // Page terminale (QR Ring…) : le champ « destination » est masqué — on ne
+  // peut donc pas l'exiger. L'URL neutre est injectée plus bas pour le Worker.
+  const noDest = _creIsNoDest();
+  if (!noDest) {
+    for (const f of def.fields) {
+      if (f.required && !(_creating.payload[f.id] || '').toString().trim()) {
+        return _showMsg(msg, `Champ obligatoire : ${f.label}`, 'err');
+      }
     }
-  }
-  // URL : « https:// » est pré-rempli pour gagner du temps — on refuse un
-  // schéma SEUL (sinon le Worker renvoie « target_url invalide » plus tard).
-  if (_creating.type === 'url' && /^https?:\/\/$/i.test((_creating.payload.url || '').trim())) {
-    return _showMsg(msg, "Complétez l'adresse après « https:// ».", 'err');
+    // URL : « https:// » est pré-rempli pour gagner du temps — on refuse un
+    // schéma SEUL (sinon le Worker renvoie « target_url invalide » plus tard).
+    if (_creating.type === 'url' && /^https?:\/\/$/i.test((_creating.payload.url || '').trim())) {
+      return _showMsg(msg, "Complétez l'adresse après « https:// ».", 'err');
+    }
   }
 
   // V2 — Validation des fields du template Smart (en plus du type QR)
@@ -3600,7 +3665,10 @@ async function _handleCreate(panel) {
     // (smart utilise la même mécanique short_id que dynamic côté backend)
     const needsRedirect = (_creating.mode === 'dynamic' || _creating.mode === 'smart');
     if (needsRedirect && _creating.type === 'url') {
-      body.target_url = _creating.payload.url || '';
+      // Page terminale : URL neutre (jamais servie au visiteur) — le Worker
+      // exige un target_url valide pour ouvrir la ligne qr_redirects.
+      body.target_url = noDest ? SMART_NO_DEST_URL : (_creating.payload.url || '');
+      body.payload    = noDest ? { url: SMART_NO_DEST_URL } : _creating.payload;
     }
     // Mode dynamic/smart non-URL : pre-encode côté client (le Worker stocke
     // dans qr_redirects.encoded_payload pour servir le bon contenu au scan).
@@ -3695,6 +3763,9 @@ async function _openQrDetail(panel, qr) {
   const isDynamic    = (qr.mode || 'dynamic') === 'dynamic';
   const isSmart      = qr.mode === 'smart';
   const isRedirected = isDynamic || isSmart; // les 2 modes passent par /r/SHORTID
+  // Page terminale (QR Ring / réseaux / carte de visite) : rien après la page,
+  // donc aucune « URL de destination » à éditer ni à convertir en redirection.
+  const isNoDest     = isSmart && !!getTemplate(qr.template_id)?.noDestination;
   const typeDef      = QR_TYPES[qr.qr_type] || QR_TYPES.url;
   const redirectUrl  = qr.short_id ? `${CF_API}/r/${qr.short_id}` : '';
   // Ce qui est encodé dans les pixels :
@@ -3781,7 +3852,13 @@ async function _openQrDetail(panel, qr) {
         </div>
         ` : ''}
 
-        ${isRedirected && qr.qr_type === 'url' ? `
+        ${isNoDest ? `
+        <div class="sdqr-detail-notice">
+          <strong>Page finale :</strong> ce QR ouvre directement la page ${_esc(getTemplate(qr.template_id)?.label || 'hébergée')}.
+          Le visiteur y fait tout sur place — il n'est renvoyé vers aucun autre site ensuite.
+          Il n'y a donc aucune adresse de destination à renseigner.
+        </div>
+        ` : isRedirected && qr.qr_type === 'url' ? `
         <label class="sdqr-field sdqr-field--inline">
           <span class="sdqr-field-lbl">URL de destination</span>
           <input type="url" id="sdqr-edit-url" class="sdqr-input" value="${_esc(qr.target_url || '')}">

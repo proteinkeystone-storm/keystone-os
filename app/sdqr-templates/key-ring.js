@@ -24,7 +24,11 @@ const TEMPLATE = {
   fields: [
     { id: 'place_name', type: 'text',     label: 'Nom du lieu', required: true, placeholder: 'Le Portail', span: 'full' },
     { id: 'subtitle',   type: 'text',     label: 'Sous-titre', placeholder: 'Comment souhaitez-vous prévenir ?', span: 'full' },
-    { id: 'hero_url',   type: 'image',    label: 'Image (haut de page) — WebP, PNG ou JPG', maxBytes: 90000, maxDim: 1100, span: 'full' },
+    // Budget image relevé le 28/07 : 90 Ko/1100 px imposaient une photo si
+    // dégradée qu'elle était inutilisable — et dépassaient déjà le plafond de
+    // 64 Ko du Worker. 240 Ko/1600 px + encodage WebP (cf. sdqr.js), sous le
+    // nouveau plafond de 320 Ko côté Worker.
+    { id: 'hero_url',   type: 'image',    label: 'Image (haut de page) — WebP, PNG ou JPG', maxBytes: 240000, maxDim: 1600, span: 'full' },
     { id: 'notice',     type: 'text',     label: 'Message sur l\'image (optionnel)', placeholder: 'Attention au chien', span: 'full' },
     { id: 'phone',      type: 'tel',      label: 'Téléphone (Appeler / SMS)', placeholder: '06 00 00 00 00' },
     { id: 'whatsapp',   type: 'tel',      label: 'WhatsApp (format international)', placeholder: '33 6 00 00 00 00' },

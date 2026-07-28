@@ -75,6 +75,13 @@ function parseUA(ua = '') {
   return { device, os };
 }
 
+// Plafond du blob template_data (JSON sérialisé) d'un QR Smart. Il porte aussi
+// les images en data URI (bannière, photo, image de page hébergée) : 64 Ko
+// forçaient des visuels dégradés au point d'être inutilisables (QR Ring, 28/07).
+// 320 Ko reste très en dessous de la limite D1 (2 Mo par valeur) et le plafond
+// réel de chaque image est fixé, champ par champ, côté front (maxBytes).
+const TEMPLATE_DATA_MAX = 320 * 1024;
+
 // Validation simple URL (Worker n'a pas le navigateur URL global mais bien `new URL`).
 function isValidUrl(s) {
   try { const u = new URL(s); return u.protocol === 'http:' || u.protocol === 'https:'; }
@@ -419,7 +426,7 @@ export async function handleCreateQr(request, env) {
   //   'keyform'         : submission générique du gabarit studio SDQR adaptée ICI.
   const concierge_source = (body.concierge_source || '').toString().trim().toLowerCase();
   // template_data : blob JSON libre (schéma défini par chaque template).
-  // Limité à 32 KB pour éviter les abus / quotas D1.
+  // Plafonné (TEMPLATE_DATA_MAX) pour éviter les abus / quotas D1.
   let template_data = null;
   if (mode === 'smart' && template_id === 'concierge' && concierge_source === 'vefa') {
     // Adaptation source -> bloc canonique au save (cf. concierge-schema.js).
@@ -437,8 +444,8 @@ export async function handleCreateQr(request, env) {
       ? body.template_data : null;
     if (template_data_raw) {
       const json_str = JSON.stringify(template_data_raw);
-      if (json_str.length > 64 * 1024) {
-        return err('template_data trop volumineux (max 64 KB)', 400, origin);
+      if (json_str.length > TEMPLATE_DATA_MAX) {
+        return err(`template_data trop volumineux (max ${Math.round(TEMPLATE_DATA_MAX / 1024)} KB)`, 400, origin);
       }
       template_data = template_data_raw;
     }
@@ -774,7 +781,7 @@ export async function handleUpdateQr(request, env, qrId) {
   // qui n'éditent pas template_data via PATCH). Symétrique du create :
   //   'vefa'    : programme « à plat » de VEFA Studio ré-adapté au save ;
   //   'keyform' : submission générique du gabarit studio ré-adaptée au save ;
-  //   sinon     : template_data canonique verbatim (cap 32 KB).
+  //   sinon     : template_data canonique verbatim (cap TEMPLATE_DATA_MAX).
   // Absent (ni source vefa/keyform ni template_data) => bloc existant intact.
   if (entity.template_id === 'concierge') {
     const upd_source = (body.concierge_source || '').toString().trim().toLowerCase();
@@ -790,8 +797,8 @@ export async function handleUpdateQr(request, env, qrId) {
       entity.concierge_source = 'keyform';
     } else if (body.template_data !== undefined && typeof body.template_data === 'object') {
       const json_str = JSON.stringify(body.template_data);
-      if (json_str.length > 64 * 1024) {
-        return err('template_data trop volumineux (max 64 KB)', 400, origin);
+      if (json_str.length > TEMPLATE_DATA_MAX) {
+        return err(`template_data trop volumineux (max ${Math.round(TEMPLATE_DATA_MAX / 1024)} KB)`, 400, origin);
       }
       entity.template_data    = body.template_data;
       entity.concierge_source = upd_source || entity.concierge_source || 'inline';
