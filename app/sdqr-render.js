@@ -505,6 +505,32 @@ export function anchorPreviewSvg(outer, inner, size = 44, color = '#1b2a4a', inn
   return `<svg viewBox="0 0 ${size} ${size}" aria-hidden="true"><g fill="${color}">${a.ring}</g><g fill="${ic}">${a.inner}</g></svg>`;
 }
 
+// ── Géométrie du rendu (pour les rasteriseurs) ─────────────────
+// 2026-07-28 — Avec un cadre, le SVG produit N'EST PAS carré : le bandeau
+// d'accroche ajoute de la hauteur. Les exports PNG/PDF dessinaient pourtant
+// ce SVG dans un canevas carré sizePx × sizePx → l'image était ÉCRASÉE
+// verticalement (avec le cadre « plaque » : 1126×1249 aplati en 1024×1024,
+// soit -9 % en largeur et -18 % en hauteur). Modules ovales, pas de module
+// différent horizontalement et verticalement : le code sortait déformé et
+// difficile à lire. Cette fonction publie les dimensions RÉELLES ainsi que
+// la position du QR dans le canevas, pour que les exports rasterisent juste.
+export function qrLayout(design, sizePx = 280) {
+  const d = mergeDesign(design);
+  if (d.frame?.style === 'custom' && d.frame.customVB && d.frame.customSlot) {
+    const s = d.frame.customSlot;
+    return { W: d.frame.customVB.w, H: d.frame.customVB.h, qrX: s.x, qrY: s.y, qrSize: s.w };
+  }
+  const fr = (d.frame && d.frame.style && d.frame.style !== 'none')
+    ? _frameGeometry(d.frame.style, sizePx, d.frame.color || '#1B2A4A', d.frame.text)
+    : null;
+  const padX = fr ? fr.padX : 0, padTop = fr ? fr.padTop : 0, padBottom = fr ? fr.padBottom : 0;
+  return {
+    W: sizePx + 2 * padX,
+    H: sizePx + padTop + padBottom,
+    qrX: padX, qrY: padTop, qrSize: sizePx,
+  };
+}
+
 // ── Rendu principal ────────────────────────────────────────────
 
 export async function renderQrCustom(text, design, sizePx = 280) {

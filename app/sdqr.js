@@ -23,7 +23,7 @@ import { QR_TYPES, encodePayload, previewSummary } from './sdqr-types.js';
 // Smart QR V2 — registry de templates programmables (cf. ./sdqr-templates/)
 import { listTemplates, getTemplate, isKnownTemplate } from './sdqr-templates/index.js';
 import { getTemplateIconSvg } from './sdqr-template-icons.js';
-import { renderQrCustom, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLevel, FRAME_OPTS, anchorPreviewSvg, sanitizeFrameSvg } from './sdqr-render.js';
+import { renderQrCustom, qrLayout, mergeDesign, DEFAULT_DESIGN, contrastRatio, contrastLevel, FRAME_OPTS, anchorPreviewSvg, sanitizeFrameSvg } from './sdqr-render.js';
 // Logos/pictos prets a poser comme logo central (marques couleur + services +
 // apps Keystone). Genere par scripts/gen-sdqr-logo-assets.mjs (data URLs SVG).
 import { LOGO_BRANDS, LOGO_SERVUTILS, LOGO_KEYSTONE } from './sdqr-logo-assets.js';
@@ -4809,17 +4809,22 @@ async function _exportQrPng(qr, encodedForQr, design, sizePx = 1024) {
       i.src = svgUrl;
     });
 
+    // Avec un cadre, le SVG n'est PAS carré (le bandeau d'accroche ajoute de la
+    // hauteur). Forcer un canevas carré ÉCRASAIT l'image — modules ovales, pas
+    // de module différent en largeur et en hauteur, code déformé et dur à lire.
+    // On rasterise donc aux dimensions RÉELLES du SVG (cf. qrLayout).
+    const L = qrLayout(design, sizePx);
     const canvas = document.createElement('canvas');
-    canvas.width  = sizePx;
-    canvas.height = sizePx;
+    canvas.width  = Math.round(L.W);
+    canvas.height = Math.round(L.H);
     const ctx = canvas.getContext('2d');
     // Fond blanc explicite si le design demande transparent — beaucoup
     // d'imprimeurs n'acceptent pas le transparent en PNG.
     if (!design?.bg || design.bg === 'transparent') {
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, sizePx, sizePx);
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
-    ctx.drawImage(img, 0, 0, sizePx, sizePx);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
     // Le <image> du logo imbriqué dans le SVG ne se rasterise PAS quand le SVG
     // est chargé comme <img> (mode statique restreint du navigateur) → le PNG
@@ -4835,10 +4840,11 @@ async function _exportQrPng(qr, encodedForQr, design, sizePx = 1024) {
           li.src = logoUrl;
         });
         const ratio = Math.min(0.30, Math.max(0.10, design.logo.size || 0.20));
-        const box   = sizePx * ratio;
+        const box   = L.qrSize * ratio;
         const fit   = Math.min(box / logoImg.width, box / logoImg.height) || 0;
         const w = logoImg.width * fit, h = logoImg.height * fit;
-        ctx.drawImage(logoImg, (sizePx - w) / 2, (sizePx - h) / 2, w, h);
+        // Centre du QR, pas du canevas : avec un cadre, le QR est décalé.
+        ctx.drawImage(logoImg, L.qrX + (L.qrSize - w) / 2, L.qrY + (L.qrSize - h) / 2, w, h);
       } catch (e) {
         console.warn('[sdqr] logo non composé sur le PNG :', e.message);
         // On garde le QR (quitte à avoir le trou) plutôt que d'échouer l'export.
@@ -4860,6 +4866,7 @@ async function _exportQrPng(qr, encodedForQr, design, sizePx = 1024) {
 // (pas de coût au chargement du pad ; échec géré par le dispatcher → '✗').
 async function _exportQrPdf(qr, encodedForQr, design, sizePx = 2048) {
   const svg = await renderQrCustom(encodedForQr, design, sizePx);
+  let canvasW = sizePx, canvasH = sizePx;
   const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
   const svgUrl = URL.createObjectURL(svgBlob);
   let dataUrl;
@@ -4870,12 +4877,13 @@ async function _exportQrPdf(qr, encodedForQr, design, sizePx = 2048) {
       i.onerror = () => rej(new Error('Image load failed'));
       i.src = svgUrl;
     });
+    const L = qrLayout(design, sizePx);               // dimensions RÉELLES (cf. PNG)
     const canvas = document.createElement('canvas');
-    canvas.width = sizePx; canvas.height = sizePx;
+    canvas.width = Math.round(L.W); canvas.height = Math.round(L.H);
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#ffffff';                       // PDF imprimé = toujours fond blanc
-    ctx.fillRect(0, 0, sizePx, sizePx);
-    ctx.drawImage(img, 0, 0, sizePx, sizePx);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     const logoUrl = design?.logo?.dataUrl;            // logo recomposé (comme le PNG)
     if (logoUrl) {
       try {
@@ -4886,14 +4894,15 @@ async function _exportQrPdf(qr, encodedForQr, design, sizePx = 2048) {
           x.src = logoUrl;
         });
         const ratio = Math.min(0.30, Math.max(0.10, design.logo.size || 0.20));
-        const box = sizePx * ratio;
+        const box = L.qrSize * ratio;
         const fit = Math.min(box / li.width, box / li.height) || 0;
         const w = li.width * fit, h = li.height * fit;
-        ctx.drawImage(li, (sizePx - w) / 2, (sizePx - h) / 2, w, h);
+        ctx.drawImage(li, L.qrX + (L.qrSize - w) / 2, L.qrY + (L.qrSize - h) / 2, w, h);
       } catch (e) {
         console.warn('[sdqr] logo non composé sur le PDF :', e.message);
       }
     }
+    canvasW = canvas.width; canvasH = canvas.height;
     dataUrl = canvas.toDataURL('image/png');
   } finally {
     URL.revokeObjectURL(svgUrl);
@@ -4902,14 +4911,19 @@ async function _exportQrPdf(qr, encodedForQr, design, sizePx = 2048) {
   const { jsPDF } = await import('/app/vendor/jspdf-2.5.2.mjs');
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = 210, qrMM = 120, x = (pageW - qrMM) / 2, y = 48;
-  pdf.addImage(dataUrl, 'PNG', x, y, qrMM, qrMM);
+  // Respecte le rapport largeur/hauteur du visuel (un cadre le rend plus haut
+  // que large) : placer en carré l'aurait ré-écrasé sur la page.
+  const ratioWH = canvasH > 0 ? canvasW / canvasH : 1;
+  const drawW = ratioWH >= 1 ? qrMM : qrMM * ratioWH;
+  const drawH = ratioWH >= 1 ? qrMM / ratioWH : qrMM;
+  pdf.addImage(dataUrl, 'PNG', (pageW - drawW) / 2, y, drawW, drawH);
   pdf.setTextColor('#1B2A4A');
   pdf.setFontSize(20);
-  pdf.text(String(qr.name || 'QR Keystone'), pageW / 2, y + qrMM + 20, { align: 'center' });
+  pdf.text(String(qr.name || 'QR Keystone'), pageW / 2, y + drawH + 20, { align: 'center' });
   if (qr.short_id) {
     pdf.setTextColor('#8a8f99');
     pdf.setFontSize(11);
-    pdf.text(`${CF_API.replace(/^https?:\/\//, '')}/r/${qr.short_id}`, pageW / 2, y + qrMM + 29, { align: 'center' });
+    pdf.text(`${CF_API.replace(/^https?:\/\//, '')}/r/${qr.short_id}`, pageW / 2, y + drawH + 29, { align: 'center' });
   }
   pdf.save(`${_slug(qr.name)}-${qr.short_id || qr.id.slice(0, 8)}.pdf`);
 }
