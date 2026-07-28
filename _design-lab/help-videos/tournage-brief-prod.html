@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournage — vidéo d'aide Brief Prod</title>
+  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/workspace.css">
+</head>
+<body>
+  <script>
+    // ── Seed AVANT l'import du module ─────────────────────────────
+    // Brief Prod (codex.js) restaure son brouillon depuis localStorage
+    // (ks_kodex_draft) à l'ouverture, et la modale de bienvenue ne
+    // s'affiche que si ks_kodex_welcomed est absent ET le brouillon vide.
+    // On pilote donc chaque vue de capture par un brouillon pré-seedé
+    // (le champ `view` du draft ouvre directement la bonne étape).
+    const view = 'pli';   // tournage : dépliant A4 avec pliage
+
+    // Scénario de démo réaliste : ouverture d'une brûlerie de café à Toulon.
+    const CONTENT = {
+      sector: 'universal',
+      fields: {
+        nom_projet: 'Brûlerie du Port — ouverture de la boutique',
+        lieu: '12 quai Cronstadt, Toulon',
+        echeance: 'Ouverture le 5 septembre 2026 — affichage à partir du 20 août',
+        argumentaire: "Torréfaction artisanale sur place, cafés de spécialité en circuit direct avec quatre fermes productrices (Éthiopie, Colombie, Brésil, Vietnam). Espace dégustation de 18 places face au port, ateliers d'initiation le samedi matin. Une adresse de quartier pensée pour les Toulonnais, pas pour les touristes de passage.",
+        cta: 'Venez goûter le premier cru maison',
+        infos_specifiques: "Offre d'ouverture : un paquet de 250 g offert pour tout abonnement annuel.\nHoraires : mardi-samedi 8h-19h.\nInstagram : @breulerieduport",
+        mentions_legales: '',
+      },
+    };
+    const ASSETS = {
+      logo_owned: true, charte_owned: false, fonts_owned: false,
+      charte: {
+        primary_hex: '#1B2A4A', secondary_hex: '#C9A96E',
+        font_title: 'Cormorant Garamond', font_body: 'Source Sans 3',
+      },
+      brand_book_url: '', uploads: [],
+      extra_notes: "Ambiance chaleureuse et artisanale — bois, cuivre, grain de café. Éviter les codes « coffee shop » anglo-saxons génériques : l'identité est méditerranéenne.",
+    };
+    const OUTPUT = { status: 'idle', error: null, codeMaitre: null, brief: null, briefId: null };
+
+    // Le standard est laissé à null : _loadDraft le re-hydrate depuis le
+    // catalogue réel (/K_STORE_ASSETS/CATALOG/kodex-vendors-seed.json).
+    const DEST_4X3 = {
+      category: 'large_format', support_id: 'poster-4x3', vendor_id: 'exaprint',
+      standard: null, vendor_url: '', specs_pdf: null, _form_open: false,
+      custom: null, two_sided: false, fold_type: 'none',
+    };
+    const DEST_PLI = {
+      category: 'print_paper', support_id: 'folded-leaflet-a4', vendor_id: 'exaprint',
+      standard: null, vendor_url: '', specs_pdf: null, _form_open: false,
+      custom: null, two_sided: false, fold_type: 'roule-2',
+    };
+
+    const draftFor = (v, dest) => ({
+      view: v, destination: dest, content: CONTENT, assets: ASSETS,
+      output: OUTPUT, linked_pulsa_form_id: null,
+    });
+    const DRAFTS = {
+      etape1:  draftFor('destination', DEST_4X3),
+      pli:     draftFor('destination', DEST_PLI),
+      message: draftFor('content',     DEST_4X3),
+      brief:   draftFor('output',      DEST_4X3),
+    };
+
+    localStorage.removeItem('ks_kodex_draft');
+    localStorage.removeItem('ks_kodex_welcomed');
+    localStorage.setItem('ks_active_engine', 'Claude');
+    if (DRAFTS[view]) {
+      localStorage.setItem('ks_kodex_draft', JSON.stringify(DRAFTS[view]));
+      localStorage.setItem('ks_kodex_welcomed', '1');
+    }
+    // view vide → pas de brouillon ni de flag : la modale de bienvenue
+    // s'affiche (capture « accueil »).
+
+    // ── Stub API Worker ───────────────────────────────────────────
+    // Les catalogues locaux (/K_STORE_ASSETS/…) passent par le vrai fetch ;
+    // seuls les appels au Worker Cloudflare (bibliothèque de briefs,
+    // assets uploadés) sont interceptés.
+    const _fetch = window.fetch.bind(window);
+    window.fetch = (url, opts) => {
+      const u = String(url);
+      const ok = (data) => Promise.resolve(new Response(JSON.stringify(data),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      if (u.includes('workers.dev') || u.includes('/api/')) return ok({ items: [] });
+      return _fetch(url, opts);
+    };
+  </script>
+  <script type="module">
+    import { openKodex } from '/app/codex.js';
+    import { icon } from '/app/lib/ui-icons.js';
+    import { mountFilm } from '/_design-lab/help-videos/tournage.js';
+    import { steps, meta } from '/_design-lab/help-videos/scenario-brief-prod.js';
+
+    (async () => {
+      await openKodex();
+      await new Promise(r => setTimeout(r, 1600));   // catalogue + aperçu gabarit
+      document.querySelectorAll('img').forEach(img => {
+        const s = img.getAttribute('src') || '';
+        if (s.startsWith('./LOGOS/')) img.src = s.slice(1);
+      });
+      mountFilm({ steps, meta: { ...meta, iconSvg: icon(meta.iconName, 64) } });
+    })();
+  </script>
+</body>
+</html>
