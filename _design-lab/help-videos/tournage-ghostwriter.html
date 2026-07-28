@@ -82,6 +82,28 @@
       if (u.includes('/api/')) return ok({});
       return _fetch(url, opts);
     };
+    // ── PDF de démonstration (correcteur PDF) ────────────────────
+    // Un devis avec de vraies fautes : le correcteur les surligne à
+    // même la page. Fabriqué avec le jsPDF déjà vendored (aucun
+    // fichier binaire à committer).
+    window.__makeDemoPdf = async () => {
+      const { jsPDF } = await import('/app/vendor/jspdf-2.5.2.mjs');
+      const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+      doc.setFontSize(16); doc.text('Atelier Verriere - Devis 2026-118', 20, 25);
+      doc.setFontSize(11);
+      const lines = [
+        'Madame, Monsieur,', '',
+        'Suite a votre demande, veuillez trouvez ci-joint le devis pour la',
+        'restauration des vitraux de la chapelle Saint-Roch.', '',
+        'Les panneaux seront depose en atelier durant trois semaine, puis',
+        'reposes avec des baguettes de plomb neuve. Les travaux seras',
+        'realises par nos maitres verriers.', '',
+        'Nous restons a votre disposition pour tout complement.', '',
+        'Bien cordialement,', 'Julien Roche - Atelier Verriere',
+      ];
+      let y = 40; lines.forEach(l => { doc.text(l, 20, y); y += 7; });
+      return new File([doc.output('blob')], 'Devis-vitraux-chapelle.pdf', { type: 'application/pdf' });
+    };
   </script>
   <script type="module">
     import { openGhostwriterStudio } from '/app/ghostwriter-studio.js';
