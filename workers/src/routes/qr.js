@@ -803,6 +803,26 @@ export async function handleUpdateQr(request, env, qrId) {
       entity.template_data    = body.template_data;
       entity.concierge_source = upd_source || entity.concierge_source || 'inline';
     }
+  } else if (entity.template_id && body.template_data !== undefined
+             && body.template_data && typeof body.template_data === 'object') {
+    // 2026-07-29 — ÉDITION DU CONTENU des autres modèles Smart (QR Ring,
+    // carte de visite, réseaux, jeux…). Jusqu'ici la route ignorait
+    // silencieusement body.template_data hors Concierge : une faute de frappe
+    // dans une page hébergée obligeait à SUPPRIMER le QR et à en refaire un —
+    // donc à réimprimer le support. On édite désormais sur le MÊME short_id :
+    // code imprimé valable, scans et historique intacts.
+    const json_str = JSON.stringify(body.template_data);
+    if (json_str.length > TEMPLATE_DATA_MAX) {
+      return err(`template_data trop volumineux (max ${Math.round(TEMPLATE_DATA_MAX / 1024)} KB)`, 400, origin);
+    }
+    // Même validation qu'à la création : le modèle a le dernier mot sur son
+    // propre contenu (ex. QR Ring exige un nom de lieu + un moyen de contact).
+    const tpl = getTemplate(entity.template_id);
+    if (tpl && typeof tpl.validate === 'function') {
+      const errs = tpl.validate(body.template_data);
+      if (Array.isArray(errs) && errs.length) return err(errs[0], 400, origin);
+    }
+    entity.template_data = body.template_data;
   }
   if (body.status !== undefined && ['active', 'archived'].includes(body.status)) {
     entity.status = body.status;

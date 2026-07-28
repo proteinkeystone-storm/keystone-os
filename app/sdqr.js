@@ -3896,6 +3896,26 @@ async function _openQrDetail(panel, qr) {
         </div>
         `}
 
+        ${(() => {
+          // Édition du CONTENU d'une expérience Smart (2026-07-29). Concierge a
+          // son propre éditeur nesté ; ici, les modèles à champs déclaratifs.
+          if (!isSmart) return '';
+          const tpl = getTemplate(qr.template_id);
+          if (!tpl || qr.template_id === 'concierge') return '';
+          if (!Array.isArray(tpl.fields) || !tpl.fields.length) return '';
+          return `
+        <div class="sdqr-edit-payload" id="sdqr-edit-td-wrap">
+          <div class="sdqr-edit-payload-head">
+            <span class="sdqr-field-lbl">Contenu de la page (modifiable)</span>
+            <button class="sdqr-btn sdqr-btn--primary sdqr-btn--xs" id="sdqr-save-td">Mettre à jour le contenu</button>
+          </div>
+          <div class="sdqr-form-grid" id="sdqr-edit-td-fields"></div>
+          <div class="sdqr-detail-notice">
+            <strong>Le QR imprimé reste valable :</strong> le code ne change pas. Seuls les textes et les images de la page changent — pour tous les prochains scans, immédiatement.
+          </div>
+        </div>`;
+        })()}
+
         ${_renderDesignPanel(qr)}
 
         ${deliverEntryHtml()}
@@ -4002,6 +4022,64 @@ async function _openQrDetail(panel, qr) {
       if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
     }
   });
+
+  // ── Édition du CONTENU d'une expérience Smart (2026-07-29) ───────────
+  // Jusqu'ici une faute de frappe dans une page hébergée imposait de
+  // supprimer le QR et d'en refaire un — donc de RÉIMPRIMER le support.
+  // On édite sur le même short_id : code imprimé valable, scans conservés.
+  (() => {
+    const tdWrap = content.querySelector('#sdqr-edit-td-fields');
+    if (!tdWrap) return;
+    const tpl = getTemplate(qr.template_id);
+    if (!tpl || !Array.isArray(tpl.fields) || !tpl.fields.length) return;
+
+    // Copie de travail : on ne touche à l'objet du QR qu'après un save réussi.
+    // Les clés hors schéma (ex. alert_email du QR Ring, posé par un bloc
+    // dédié à la création) sont ainsi PRÉSERVÉES telles quelles.
+    const editing = { ...(qr.template_data || {}) };
+    tdWrap.innerHTML = tpl.fields.map(f => _renderField(f, editing)).join('');
+    tdWrap.querySelectorAll('[data-payload-key]:not(.sdqr-image-widget input[type="hidden"])').forEach(el => {
+      const write = () => { editing[el.dataset.payloadKey] = el.type === 'checkbox' ? el.checked : el.value; };
+      el.addEventListener('input',  write);
+      el.addEventListener('change', write);
+    });
+    _bindImageWidgets(tdWrap, editing);
+    _bindColorWidgets(tdWrap);
+    _bindLotsWidgets(tdWrap, editing);
+    _bindIconPickers(tdWrap);
+    _bindCardPickers(tdWrap, editing);
+
+    content.querySelector('#sdqr-save-td')?.addEventListener('click', async () => {
+      const msg  = content.querySelector('#sdqr-detail-msg');
+      const btn  = content.querySelector('#sdqr-save-td');
+      const fail = (t) => { if (msg) { msg.hidden = false; msg.textContent = t; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; } };
+      // Mêmes garde-fous qu'à la création (le Worker revalide de son côté).
+      for (const f of tpl.fields) {
+        if (f.required && !(editing[f.id] || '').toString().trim()) return fail(`Champ obligatoire : ${f.label}`);
+      }
+      if (typeof tpl.validate === 'function') {
+        const errs = tpl.validate(editing);
+        if (Array.isArray(errs) && errs.length) return fail(errs[0]);
+      }
+      if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
+      try {
+        const patch = { template_data: editing };
+        if (_designHasUnsavedChanges(_editingDesign, qr.design)) {
+          patch.design = _editingDesign;
+          qr.design = { ..._editingDesign };
+        }
+        await _apiUpdate(qr.id, patch);
+        qr.template_data = { ...editing };
+        const i = _cachedQrs.findIndex(q => q.id === qr.id);
+        if (i >= 0) _cachedQrs[i] = { ..._cachedQrs[i], template_data: { ...editing } };
+        if (msg) { msg.hidden = false; msg.textContent = '✓ Contenu mis à jour — le QR imprimé reste valable'; msg.className = 'sdqr-detail-msg sdqr-detail-msg--ok'; }
+      } catch (e) {
+        fail(e.message);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Mettre à jour le contenu'; }
+      }
+    });
+  })();
 
   // Conversion Concierge/Smart → redirection simple (smart → dynamic).
   // Garde-fou : on confirme EXPLICITEMENT la destination (champ pré-rempli,
