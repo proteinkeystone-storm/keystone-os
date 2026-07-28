@@ -38,6 +38,21 @@ body.kora-holding, body.kora-holding *{
 .ws-topbar-actions .kora-dock{ height:38px; width:190px; border-radius:10px; }
 .ws-topbar-actions .kora-dock.kora-mini{ width:38px; }
 
+/* ── MOBILE : le galet a sa PROPRE place, à côté du burger ──
+   Sur narrow les actions se replient dans un dropdown caché ; y ranger le
+   galet le faisait disparaître et son canvas (position:fixed, calé sur le
+   rect du dock) recouvrait le burger — l'aide devenait inatteignable
+   (Stéphane, 28/07). Le slot est posé par kora.js AVANT le burger.
+   La marge de 20 px > au halo de 14 px du canvas : il ne mord jamais
+   sur le burger. */
+.kora-slot{ display:inline-flex; align-items:center; flex:0 0 auto; margin-right:20px; }
+.kora-slot .kora-dock{ height:38px; width:180px; border-radius:10px; }
+.kora-slot .kora-dock.kora-mini{ width:38px; }
+/* très petits écrans : le galet reste mini pour ne pas manger le titre */
+@media (max-width: 560px){
+  .kora-slot .kora-dock{ width:38px; }
+}
+
 /* ── La fenêtre POUSSE le dashboard (retour Stéphane 18/07) ──
    Rien ne passe dessous : le contenu se réorganise à gauche. Desktop
    seulement (mobile = feuille plein écran) ; les outils plein écran

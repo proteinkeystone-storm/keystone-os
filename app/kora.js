@@ -13,7 +13,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const KORA_CSS_V = '19';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
+const KORA_CSS_V = '20';   /* bumper à CHAQUE modif de kora.css (piège cache connu) */
 
 /* ── Shader (verbatim harnais kora-galet-morph.html) ── */
 const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -408,9 +408,32 @@ function _frame(now) {
      bouton, mêmes dimensions que ses voisins, l'extension les pousse
      par le flex. Outil fermé → retour dans la cc-bar. Visibilité
      RÉELLE testée (les overlays restent dans le DOM éteints). */
-  const toolbars = [...document.querySelectorAll('.ws-topbar-actions, .sdqr-topbar-right')]
-    .filter(el => el.getBoundingClientRect().width > 0);
-  const host = toolbars.length ? toolbars[toolbars.length - 1] : _ccBar;
+  /* ⚠ MOBILE (≤1024px) : .ws-topbar-actions n'est PLUS une barre, c'est un
+     dropdown replié derrière le burger (display:none tant qu'il n'est pas
+     ouvert). Y poser le galet le rendait invisible ET, comme le canvas est
+     en position:fixed calée sur le rect du dock, le galet se dessinait
+     PAR-DESSUS le burger : plus aucun accès au « ? », à « Noter », etc.
+     (signalé par Stéphane 28/07 sur Key Form). Sur narrow, le galet prend
+     donc sa PROPRE place dans la topbar, juste avant le burger. */
+  let host = null;
+  if (window.innerWidth <= 1024) {
+    const burger = [...document.querySelectorAll('.ws-topbar-burger')]
+      .filter(el => el.getBoundingClientRect().width > 0).pop();
+    if (burger && burger.parentElement) {
+      let slot = burger.parentElement.querySelector(':scope > .kora-slot');
+      if (!slot) {
+        slot = document.createElement('span');
+        slot.className = 'kora-slot';
+        burger.parentElement.insertBefore(slot, burger);
+      }
+      host = slot;
+    }
+  }
+  if (!host) {
+    const toolbars = [...document.querySelectorAll('.ws-topbar-actions, .sdqr-topbar-right')]
+      .filter(el => el.getBoundingClientRect().width > 0);
+    host = toolbars.length ? toolbars[toolbars.length - 1] : _ccBar;
+  }
   if (host && _dock.parentElement !== host) {
     host.appendChild(_dock);
     /* changement de contexte (dashboard ↔ outil, outil ↔ outil) : la
