@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournage — vidéo d'aide Social Manager</title>
+  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/workspace.css">
+</head>
+<body>
+  <script>
+    // ── Harnais de captures pour la notice PDF Social Manager (O-SOC-001) ──
+    // Même technique que ms/sa-notice-harness : stub de fetch + seed AVANT
+    // l'import du module, puis navigation auto par ?view=….
+    // Métier de démo : une pâtisserie artisanale (réaliste, français, zéro emoji).
+
+    // 1) Seed AVANT import : jeton (sinon bandeau « Connecte-toi en admin »
+    //    + comptes non chargés) et brouillon (le composer le recharge au boot).
+    localStorage.setItem('ks_jwt', 'demo-notice-jwt');
+    localStorage.setItem('ks_social_manager_draft_v1', JSON.stringify({
+      text: "Nouveauté de la semaine : le Paris-Brest pistache rejoint la vitrine. "
+          + "Précommandes ouvertes pour le week-end — pensez à réserver avant vendredi midi. "
+          + "#patisserie #faitmaison",
+      targets: ['facebook', 'instagram', 'threads', 'telegram'],
+    }));
+
+    // 2) Capacités = même projection que listPlatformsPublic() du Worker
+    //    (workers/src/lib/social/registry.js) — champs lus par le composer.
+    const PLATFORMS = [
+      { id:'facebook',  label:'Facebook Page', enabled:true,
+        text:{ maxLength:63206, maxHashtags:null },
+        media:{ enabled:true,  required:false, imageMax:10, carousel:true,  videoEnabled:true,  videoMaxDurationSec:7200, captionMaxLength:null } },
+      { id:'instagram', label:'Instagram', enabled:true,
+        text:{ maxLength:2200,  maxHashtags:30 },
+        media:{ enabled:true,  required:true,  imageMax:10, carousel:true,  videoEnabled:true,  videoMaxDurationSec:90,   captionMaxLength:null } },
+      { id:'threads',   label:'Threads', enabled:true,
+        text:{ maxLength:500,   maxHashtags:null },
+        media:{ enabled:true,  required:false, imageMax:10, carousel:true,  videoEnabled:true,  videoMaxDurationSec:300,  captionMaxLength:null } },
+      { id:'telegram',  label:'Telegram', enabled:true,
+        text:{ maxLength:4096,  maxHashtags:null },
+        media:{ enabled:true,  required:false, imageMax:10, carousel:true,  videoEnabled:true,  videoMaxDurationSec:3600, captionMaxLength:1024 } },
+      { id:'linkedin',  label:'LinkedIn', enabled:true,
+        text:{ maxLength:3000,  maxHashtags:null },
+        media:{ enabled:false, required:false, imageMax:9,  carousel:false, videoEnabled:false, videoMaxDurationSec:null, captionMaxLength:null } },
+    ];
+
+    // 3) Comptes connectés (santé : LinkedIn expire dans 5 jours → « Expire dans 5 j »
+    //    dans le panneau Gérer, sans bandeau danger sur le composer).
+    const day = 86400000;
+    const ACCOUNTS = [
+      { id:'acc-fb', platform:'facebook',  display_name:'Pâtisserie Valmont',   status:'connected', expires_at:null },
+      { id:'acc-ig', platform:'instagram', display_name:'@patisserievalmont',   status:'connected', expires_at:null },
+      { id:'acc-th', platform:'threads',   display_name:'@patisserievalmont',   status:'connected', expires_at:null },
+      { id:'acc-tg', platform:'telegram',  display_name:'@valmont_actus',       status:'connected', expires_at:null },
+      { id:'acc-li', platform:'linkedin',  display_name:'Claire Valmont',       status:'connected',
+        expires_at: new Date(Date.now() + 5 * day).toISOString() },
+    ];
+
+    // 4) File de publication : programmés (annulables) + récents (publié, partiel).
+    const at = (ms) => new Date(Date.now() + ms).toISOString();
+    const POSTS = [
+      { id:'p-101', status:'scheduled', scheduledAt: at(18 * 3600000),
+        excerpt:"Nouveauté de la semaine : le Paris-Brest pistache rejoint la vitrine. Précommandes ouvertes…",
+        targets:['facebook','instagram','threads'], results:[] },
+      { id:'p-102', status:'scheduled', scheduledAt: at(3 * day + 2 * 3600000),
+        excerpt:"Atelier macarons samedi 25 : il reste 4 places. Inscription au comptoir ou en message privé.",
+        targets:['facebook','telegram'], results:[] },
+      { id:'p-090', status:'published',
+        excerpt:"Merci pour ce marché de Croix-Rousse : tout est parti avant midi. On remet ça dimanche prochain.",
+        targets:['facebook','instagram','threads'],
+        results:[
+          { platform:'facebook',  status:'published', url:'https://www.facebook.com/patisserievalmont/posts/1024' },
+          { platform:'instagram', status:'published', url:'https://www.instagram.com/p/DEMO1024/' },
+          { platform:'threads',   status:'published', url:'https://www.threads.net/@patisserievalmont/post/DEMO' },
+        ] },
+      { id:'p-089', status:'partial',
+        excerpt:"Fermeture exceptionnelle lundi 14 juillet — réouverture mardi à 7 h 30 avec la fournée complète.",
+        targets:['facebook','telegram'],
+        results:[
+          { platform:'facebook', status:'published', url:'https://www.facebook.com/patisserievalmont/posts/1019' },
+          { platform:'telegram', status:'failed', error:'canal injoignable' },
+        ] },
+    ];
+
+    // 5) Stub de fetch : couvre GET /registry, /accounts, /posts (boot + polling).
+    //    Les autres /api/* renvoient un objet vide (aucun POST pendant la capture).
+    const _fetch = window.fetch.bind(window);
+    window.fetch = (url, opts) => {
+      const u = String(url);
+      const ok = (data) => Promise.resolve(new Response(JSON.stringify(data),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      if (u.includes('/api/social/registry')) return ok({ platforms: PLATFORMS });
+      if (u.includes('/api/social/accounts')) return ok({ accounts: ACCOUNTS });
+      if (u.includes('/api/social/posts'))    return ok({ posts: POSTS });
+      if (u.includes('/api/'))                return ok({});
+      return _fetch(url, opts);
+    };
+  </script>
+  <script type="module">
+    import { openSocialManager } from '/app/social-manager.js';
+    import { icon } from '/app/lib/ui-icons.js';
+    import { mountFilm } from '/_design-lab/help-videos/tournage.js';
+    import { steps, meta } from '/_design-lab/help-videos/scenario-social-manager.js';
+
+    openSocialManager();
+    setTimeout(() => {
+      document.querySelectorAll('img').forEach(img => {
+        const s = img.getAttribute('src') || '';
+        if (s.startsWith('./LOGOS/')) img.src = s.slice(1);
+      });
+      mountFilm({ steps, meta: { ...meta, iconSvg: icon(meta.iconName, 64) } });
+    }, 1100);
+  </script>
+</body>
+</html>
