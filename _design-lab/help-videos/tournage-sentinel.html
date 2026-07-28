@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournage — vidéo d'aide Sentinel</title>
+  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/workspace.css">
+  <link rel="stylesheet" href="/app/sentinel.css">
+</head>
+<body>
+  <script>
+    // Stub API : données de démonstration réalistes pour les captures de la
+    // notice PDF — AUCUN backend requis. Même technique que ms/sa-notice-harness.
+    // Métier de démo : une menuiserie à Annecy (site Wix) + deux autres sites.
+    const now = Date.now();
+    const iso = (minAgo) => new Date(now - minAgo * 60000).toISOString();
+    const spark = (base, jitter) => Array.from({ length: 12 }, (_, i) =>
+      ({ ms: base + (i * jitter) % Math.max(1, Math.round(base * 0.8)), ok: true }));
+
+    const SITES = [
+      { id: 's1', url: 'https://www.menuiserie-delorme.fr', label: 'Menuiserie Delorme',
+        platform: 'wix', last_ok: 1, last_ms: 412, last_score: 68, uptime24h: 100,
+        last_checked_at: iso(2), spark: spark(380, 41) },
+      { id: 's2', url: 'https://www.fleurs-camelia.fr', label: 'Fleurs Camélia',
+        platform: 'wordpress', last_ok: 1, last_ms: 236, last_score: 81, uptime24h: 99,
+        last_checked_at: iso(4), spark: spark(210, 29) },
+      { id: 's3', url: 'https://www.atelier-graphique-savoie.fr', label: 'Atelier Graphique Savoie',
+        platform: 'custom', last_ok: 1, last_ms: 88, last_score: 92, uptime24h: 100,
+        last_checked_at: iso(1), spark: spark(80, 13) },
+    ];
+
+    const COCKPIT = {
+      site: { id: 's1', url: 'https://www.menuiserie-delorme.fr', label: 'Menuiserie Delorme',
+        platform: 'wix', last_ok: 1, next_check_at: new Date(now + 7 * 60000).toISOString() },
+      uptime30d: 99.8, uptimeTrend: 'stable', scoreTrend: 6,
+      ssl: { https: true, valid: true },
+      series30d: Array.from({ length: 30 }, (_, i) =>
+        ({ ms: 320 + (i * 53) % 240 + (i === 19 ? 410 : 0) })),
+      scoreHistory: [
+        { at: '2026-06-24 03:10:00', score: 54, scores: { performance: 55, seo: 41, securite: 78, accessibilite: 60, presence: 40 } },
+        { at: '2026-07-01 03:10:00', score: 58, scores: { performance: 57, seo: 46, securite: 80, accessibilite: 64, presence: 45 } },
+        { at: '2026-07-10 03:10:00', score: 62, scores: { performance: 60, seo: 51, securite: 82, accessibilite: 67, presence: 50 } },
+        { at: '2026-07-18 03:10:00', score: 68, scores: { performance: 62, seo: 58, securite: 85, accessibilite: 71, presence: 55 } },
+      ],
+      audit: {
+        score: 68,
+        scores: { performance: 62, seo: 58, securite: 85, accessibilite: 71, presence: 55 },
+        cwv: { lcp: 3400 },
+        pages: [
+          { path: '/', score: 66 }, { path: '/realisations', score: 72 },
+          { path: '/services', score: 70 }, { path: '/a-propos', score: 68 },
+          { path: '/contact', score: 64 },
+        ],
+        findings: [
+          { key: 'meta_missing', axis: 'seo', sev: 'high',
+            title: 'Méta description absente',
+            detail: 'La page ne présente aucune méta description : Google affiche un extrait choisi au hasard, ce qui fait baisser le taux de clic.',
+            pages: ['/', '/contact'],
+            fix: {
+              steps: [
+                'Ouvrez votre éditeur Wix, puis le menu Pages.',
+                'Sur la page concernée : Paramètres › Référencement (SEO) › Description.',
+                'Collez la description (130 à 160 caractères), puis publiez le site.',
+              ],
+              codeLabel: 'Balise à coller (site sur-mesure)',
+              code: '<meta name="description" content="Menuiserie Delorme, à Annecy : fenêtres, escaliers et agencements en bois sur mesure. Atelier familial, devis gratuit sous 48 h.">',
+            } },
+          { key: 'schema_missing', axis: 'presence', sev: 'high',
+            title: 'Aucune donnée structurée LocalBusiness',
+            detail: 'Sans fiche Schema.org, les moteurs et les IA ne relient pas le site à un établissement réel (nom, adresse, horaires).',
+            pages: ['/'],
+            fix: {
+              steps: [
+                'Dans Wix : Paramètres › Balises personnalisées (code de l’en-tête).',
+                'Collez le bloc ci-dessous dans la section head, puis publiez.',
+              ],
+              codeLabel: 'Code à coller',
+              code: '<script type="application/ld+json">\n{\n  "@context": "https://schema.org",\n  "@type": "LocalBusiness",\n  "name": "Menuiserie Delorme",\n  "address": {\n    "@type": "PostalAddress",\n    "streetAddress": "14 route des Aravis",\n    "addressLocality": "Annecy",\n    "postalCode": "74000"\n  },\n  "telephone": "+33 4 50 00 00 00",\n  "url": "https://www.menuiserie-delorme.fr"\n}\n<\/script>',
+            } },
+          { key: 'img_alt', axis: 'accessibilite', sev: 'medium',
+            title: '12 images sans texte alternatif',
+            detail: 'Les visiteurs malvoyants et les moteurs de recherche ne peuvent pas interpréter ces images.',
+            pages: ['/', '/realisations', '/services'],
+            fix: {
+              steps: [
+                'Dans l’éditeur Wix, cliquez sur chaque image › Paramètres.',
+                'Renseignez le champ « Texte alternatif (alt) » : décrivez l’image en une phrase.',
+                'Exemple : « Escalier en chêne massif posé dans un chalet à Annecy ».',
+              ],
+            } },
+          { key: 'h1_multiple', axis: 'seo', sev: 'medium',
+            title: 'Plusieurs titres H1 sur la même page',
+            detail: 'Une page doit porter un seul titre principal H1 : au-delà, les moteurs ne savent plus quel est le sujet.',
+            pages: ['/realisations'],
+            fix: {
+              steps: [
+                'Dans l’éditeur, sélectionnez chaque titre concerné.',
+                'Ne gardez qu’un seul « Titre 1 (H1) » ; passez les autres en « Titre 2 (H2) ».',
+              ],
+            } },
+          { key: 'hsts_missing', axis: 'securite', sev: 'low',
+            title: 'En-tête de sécurité HSTS absent',
+            detail: 'Le navigateur n’est pas forcé de rester en HTTPS lors des visites suivantes.',
+            pages: ['/'],
+            fix: {
+              steps: [
+                'Sur Wix, cet en-tête est géré par la plateforme : vérifiez que le domaine personnalisé est bien connecté (Paramètres › Domaines).',
+              ],
+            } },
+        ],
+      },
+      geo: {
+        configured: true,
+        business_name: 'Menuiserie Delorme', city: 'Annecy', activity: 'menuiserie bois sur mesure',
+        prompts: [
+          'Quel menuisier recommandes-tu à Annecy pour des fenêtres bois sur mesure ?',
+          'Qui fabrique des escaliers en bois sur mesure près d’Annecy ?',
+          'Quelle menuiserie choisir pour rénover un chalet en Haute-Savoie ?',
+        ],
+        engines: ['gemini', 'perplexity', 'gpt'],
+        score: 45, run_at: '2026-07-17 03:05:00',
+        results: [
+          { prompt: 'Quel menuisier recommandes-tu à Annecy pour des fenêtres bois sur mesure ?',
+            engines: [
+              { engine: 'gemini', cited: true, rank: 2, sentiment: 'positive',
+                snippet: 'Parmi les artisans reconnus à Annecy, la Menuiserie Delorme est souvent citée pour ses fenêtres bois sur mesure et son atelier familial.' },
+              { engine: 'perplexity', cited: false, sourced: true },
+              { engine: 'gpt', cited: false },
+            ] },
+          { prompt: 'Qui fabrique des escaliers en bois sur mesure près d’Annecy ?',
+            engines: [
+              { engine: 'gemini', cited: false },
+              { engine: 'perplexity', cited: false },
+              { engine: 'gpt', cited: false },
+            ] },
+          { prompt: 'Quelle menuiserie choisir pour rénover un chalet en Haute-Savoie ?',
+            engines: [
+              { engine: 'gemini', cited: true, rank: 4,
+                snippet: 'Pour une rénovation de chalet, plusieurs menuiseries de Haute-Savoie se distinguent, dont la Menuiserie Delorme à Annecy.' },
+              { engine: 'perplexity', cited: false, sourced: true },
+              { engine: 'gpt', cited: false },
+            ] },
+        ],
+      },
+      gsc: {
+        available: true, connected: true, score: 52,
+        property: 'https://www.menuiserie-delorme.fr/', account_email: 'contact@menuiserie-delorme.fr',
+        run_at: '2026-07-18 08:30:00',
+        results: {
+          totals: { clicks: 34, impressions: 1240, position: 8.4 },
+          queries: [
+            { query: 'menuisier annecy', clicks: 12, impressions: 410, position: 6.2 },
+            { query: 'fenêtre bois sur mesure annecy', clicks: 9, impressions: 260, position: 4.8 },
+            { query: 'escalier bois haute-savoie', clicks: 6, impressions: 190, position: 7.5 },
+            { query: 'menuiserie delorme', clicks: 5, impressions: 88, position: 1.1 },
+            { query: 'rénovation chalet menuiserie', clicks: 2, impressions: 292, position: 12.4 },
+          ],
+        },
+      },
+    };
+
+    const _fetch = window.fetch.bind(window);
+    window.fetch = (url, opts) => {
+      const u = String(url);
+      const ok = (data) => Promise.resolve(new Response(JSON.stringify(data),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      if (u.includes('/api/sentinel/')) {
+        if (u.includes('/cockpit')) return ok({ cockpit: COCKPIT });
+        if (u.includes('/sites')) return ok({ sites: SITES, limit: 5, plan: 'MAX', email_enabled: true, geo_enabled: true });
+        return ok({});
+      }
+      if (u.includes('/api/')) return ok({});
+      return _fetch(url, opts);
+    };
+  </script>
+  <script type="module">
+    import { openSentinel } from '/app/sentinel.js';
+    import { icon } from '/app/lib/ui-icons.js';
+    import { mountFilm } from '/_design-lab/help-videos/tournage.js';
+    import { steps, meta } from '/_design-lab/help-videos/scenario-sentinel.js';
+
+    openSentinel();
+    setTimeout(() => {
+      document.querySelectorAll('img').forEach(img => {
+        const s = img.getAttribute('src') || '';
+        if (s.startsWith('./LOGOS/')) img.src = s.slice(1);
+      });
+      mountFilm({ steps, meta: { ...meta, iconSvg: icon(meta.iconName, 64) } });
+    }, 900);
+  </script>
+</body>
+</html>
