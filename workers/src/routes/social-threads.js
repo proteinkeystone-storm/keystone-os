@@ -14,16 +14,17 @@
    - KS_THREADS_APP_SECRET  (client_secret)
    Réutilise KS_ENCRYPTION_KEY (chiffrement AES-GCM du token).
 
-   ⚠ Multi-tenant : la connexion range sous tenant 'default'. Quand on
-   passera au self-service, lier le `state` au JWT/tenant du user.
+   Multi-tenant : le callback ne range plus rien directement. Il MET le
+   jeton EN ATTENTE (claim_code) ; la propriété se fixe à la confirmation
+   authentifiée — cf. lib/social/pending-link.js (correctif CSRF de liaison).
    ═══════════════════════════════════════════════════════════════ */
 
-import { generateId, json, err, getAllowedOrigin } from '../lib/auth.js';
-import { encrypt }             from '../lib/crypto.js';
+import { json, err, getAllowedOrigin } from '../lib/auth.js';
 import { signJWT, verifyJWT }  from '../lib/jwt.js';
 import { ensureSocialSchema }  from '../lib/social/schema.js';
 import { getPlatform }         from '../lib/social/registry.js';
 import { socialEntitled, socialTenantOf } from './social.js';
+import { stashPendingAccounts, pendingCallbackPage, frontOrigin } from '../lib/social/pending-link.js';
 
 const REDIRECT_PATH = '/api/social/callback/threads';
 
@@ -74,12 +75,12 @@ export async function handleThreadsCallback(request, env) {
   if (oauthErr) return htmlPage(`❌ Autorisation refusée : ${oauthErr}`);
   if (!code || !state) return htmlPage('❌ Paramètres manquants (code/state).');
 
-  // Vérif du state signé → tenant (comme Facebook). Un JWT de session est rejeté.
-  let tenantId;
+  // Vérif du state signé (défense en profondeur). Le tenant du state N'EST
+  // PLUS utilisé pour la propriété : la liaison se fixe à la confirmation
+  // authentifiée (cf. lib/social/pending-link.js — correctif CSRF).
   try {
     const claims = await verifyJWT(state, env);
     if (claims.purpose !== 'th_oauth' || !claims.tenant) throw new Error('purpose/tenant');
-    tenantId = claims.tenant;
   } catch (_) {
     return htmlPage('❌ Sécurité : lien de connexion invalide ou expiré. Relance depuis le Social Manager.');
   }
@@ -128,27 +129,19 @@ export async function handleThreadsCallback(request, env) {
 
     const displayName = username ? `@${username}` : 'Threads';
     const scopes      = getPlatform('threads').auth.scopes.profile.join(',');   // synchro registry (inclut threads_manage_insights)
-    const acc         = await encrypt(accessToken, env.KS_ENCRYPTION_KEY);
 
-    const existing = await env.DB
-      .prepare('SELECT id FROM social_accounts WHERE tenant_id = ? AND platform = ? AND external_id = ?')
-      .bind(tenantId, 'threads', userId).first();
-
-    if (existing) {
-      await env.DB.prepare(`
-        UPDATE social_accounts
-        SET access_ciphertext=?, access_iv=?, display_name=?, scopes=?, expires_at=?, status='connected', updated_at=datetime('now')
-        WHERE id=?
-      `).bind(acc.ciphertext, acc.iv, displayName, scopes, expiresAt, existing.id).run();
-    } else {
-      await env.DB.prepare(`
-        INSERT INTO social_accounts
-          (id, tenant_id, platform, target_type, external_id, display_name, access_ciphertext, access_iv, scopes, expires_at, status)
-        VALUES (?, ?, 'threads', 'profile', ?, ?, ?, ?, ?, ?, 'connected')
-      `).bind(generateId(), tenantId, userId, displayName, acc.ciphertext, acc.iv, scopes, expiresAt).run();
-    }
-
-    return htmlPage(`✅ <strong>Threads connecté</strong> : ${displayName}<br><br>Tu peux fermer cet onglet et retourner au <strong>Social Manager</strong> (recharge la page).`);
+    // Mise en attente : le jeton se fixera sur le tenant de celui qui
+    // confirme dans l'app authentifiée, jamais sur l'initiateur du state.
+    const { claimCode } = await stashPendingAccounts(env, {
+      accounts: [{
+        platform: 'threads', targetType: 'profile',
+        externalId: userId, displayName, token: accessToken, scopes, expiresAt,
+      }],
+      summary: displayName,
+    });
+    return pendingCallbackPage({
+      frontOrigin: frontOrigin(env), claimCode, network: 'Threads', summary: displayName,
+    });
   } catch (e) {
     return htmlPage(`❌ Échec de connexion Threads : ${e.message}`);
   }

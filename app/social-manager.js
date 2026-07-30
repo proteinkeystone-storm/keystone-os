@@ -98,6 +98,12 @@ export function openSocialManager(opts = {}) {
   _loadQueue();
   _startQueuePolling();
   document.addEventListener('visibilitychange', _onVisible);
+  // Finalisation d'une connexion OAuth (correctif CSRF de liaison) : le
+  // callback (onglet/popup d'autorisation) nous renvoie un claim_code par
+  // postMessage ; on l'échange ici, authentifié, contre le rangement du
+  // compte. Repli : le même code peut arriver via ?social_claim dans l'URL.
+  window.addEventListener('message', _onLinkMessage);
+  _consumeClaimFromUrl();
 }
 
 export function closeSocialManager() {
@@ -106,9 +112,67 @@ export function closeSocialManager() {
   _stopQueuePolling();
   document.removeEventListener('keydown', _onKey);
   document.removeEventListener('visibilitychange', _onVisible);
+  window.removeEventListener('message', _onLinkMessage);
   _root.remove();
   _root = null;
   document.body.style.overflow = '';
+}
+
+// ══════════════════════════════════════════════════════════════
+// Finalisation d'une liaison OAuth (correctif CSRF de liaison de compte)
+// ─────────────────────────────────────────────────────────────
+// Le callback OAuth ne range plus rien : il met le jeton EN ATTENTE et
+// nous renvoie un claim_code à usage unique — livré au SEUL navigateur qui
+// a approuvé le consentement. On l'échange ici, avec NOTRE jeton, ce qui
+// fixe la propriété sur CE compte-ci (jamais sur l'initiateur du flux).
+// ══════════════════════════════════════════════════════════════
+const _claimSeen = new Set();
+const _CLAIM_RE  = /^[0-9a-f]{64}$/i;
+
+function _onLinkMessage(ev) {
+  // On n'accepte le message QUE de l'origine du Worker (là où vit le
+  // callback) et seulement le type attendu. Tout le reste est ignoré.
+  let apiOrigin;
+  try { apiOrigin = new URL(CF_API).origin; } catch (_) { return; }
+  if (ev.origin !== apiOrigin) return;
+  const d = ev.data;
+  if (!d || d.type !== 'ks-social-link' || typeof d.claim !== 'string') return;
+  _confirmSocialLink(d.claim);
+}
+
+// Repli : le claim_code peut aussi revenir dans l'URL (popup bloqué →
+// navigation plein écran). On le consomme puis on le retire de l'URL.
+function _consumeClaimFromUrl() {
+  try {
+    const u = new URL(window.location.href);
+    const c = u.searchParams.get('social_claim');
+    if (!c) return;
+    u.searchParams.delete('social_claim');
+    window.history.replaceState({}, '', u.toString());
+    _confirmSocialLink(c);
+  } catch (_) {}
+}
+
+async function _confirmSocialLink(code) {
+  if (!code || !_CLAIM_RE.test(code) || _claimSeen.has(code)) return;
+  _claimSeen.add(code);   // un claim_code ne se rejoue pas côté client non plus
+  const token = _adminToken();
+  if (!token) { _toast('Connecte-toi pour finaliser la connexion du réseau.', 'warn'); return; }
+  try {
+    const r = await fetch(`${CF_API}/api/social/connect/confirm`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ claim_code: code }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || data.ok === false) throw new Error(data.error || `Erreur ${r.status}`);
+    const linked = Array.isArray(data.linked) && data.linked.length ? data.linked.join(', ') : 'compte lié';
+    _toast(`Réseau connecté : ${linked}`, 'ok');
+    if (_root) await _loadAccounts();
+  } catch (e) {
+    _claimSeen.delete(code);   // échec réseau : on autorise une nouvelle tentative
+    _toast(e?.message || 'Finalisation de la connexion échouée', 'warn');
+  }
 }
 
 // ══════════════════════════════════════════════════════════════

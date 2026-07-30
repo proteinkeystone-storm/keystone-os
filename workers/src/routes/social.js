@@ -21,6 +21,7 @@ import { ensureSocialSchema }  from '../lib/social/schema.js';
 import { broadcast, fetchPostInsights } from '../lib/social/broadcast.js';
 import { createCanonicalPost, validateCanonical } from '../lib/social/canonical.js';
 import { getPlatform, listPlatformsPublic } from '../lib/social/registry.js';
+import { confirmPendingLink } from '../lib/social/pending-link.js';
 
 // ── Gate admin flexible : secret (/admin) OU JWT isAdmin/plan ADMIN (/app) ──
 export async function requireAdminFlexible(request, env) {
@@ -94,6 +95,35 @@ export async function socialEntitled(request, env) {
   try { assets = JSON.parse(lic.owned_assets); } catch (_) { return false; }
   if (!Array.isArray(assets)) return false;
   return assets.includes(SOCIAL_ASSET);
+}
+
+// ── POST /api/social/connect/confirm ──────────────────────────
+// Finalise une liaison OAuth MISE EN ATTENTE par le callback. C'est le
+// point qui FERME la CSRF de liaison de compte : le jeton se fixe sur le
+// tenant de CELUI QUI CONFIRME ici (identité authentifiée), JAMAIS sur le
+// tenant scellé dans le `state` (l'initiateur, potentiellement l'attaquant).
+// Le `claim_code` est le seul laissez-passer, et il n'a été livré qu'au
+// navigateur ayant réellement approuvé le consentement chez le réseau.
+// Body : { claim_code }
+export async function handleSocialConfirmLink(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  // Entitlement Social requis (comme /connect). Le tenant est résolu de
+  // l'identité authentifiée, et _ensureTenant sème la ligne tenants si besoin.
+  if (!(await socialEntitled(request, env))) return err('Accès Social Manager non autorisé', 403, origin);
+  const tenant = await socialTenantOf(request, env);
+  if (!tenant) return err('Authentification requise', 401, origin);
+
+  const body = await parseBody(request);
+  const claimCode = (typeof body?.claim_code === 'string') ? body.claim_code : '';
+
+  const res = await confirmPendingLink(env, { claimCode, tenant });
+  if (!res.ok) {
+    // Message neutre : on ne distingue pas « code inconnu » de « expiré »
+    // pour ne rien offrir à un tâtonnement (le code fait 256 bits de toute façon).
+    const status = res.reason === 'code_invalide' ? 400 : 410;
+    return json({ ok: false, error: 'Lien de connexion introuvable ou expiré. Relance la connexion depuis le Social Manager.' }, status, origin);
+  }
+  return json({ ok: true, linked: res.linked }, 200, origin);
 }
 
 // ═══ Logique métier réutilisable (HTTP, CRON, automatisation) ═══

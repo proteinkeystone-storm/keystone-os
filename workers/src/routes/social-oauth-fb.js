@@ -17,9 +17,12 @@
                                          signé), pas à un cookie (le callback
                                          Meta arrive sur un autre domaine que
                                          le front → cookie non fiable).
-   GET /api/social/callback/facebook  → vérifie le state signé → tenant →
-                                         échange code → liste Pages + IG liés →
-                                         range chaque compte chiffré PAR TENANT.
+   GET /api/social/callback/facebook  → vérifie le state signé → échange code
+                                         → liste Pages + IG liés → MET EN
+                                         ATTENTE (claim_code) au lieu de ranger.
+                                         La propriété se fixe à la confirmation
+                                         authentifiée — cf. lib/social/pending-link.js
+                                         (correctif CSRF de liaison de compte).
    GET|POST /api/social/facebook/deauthorize     → ping retrait d'app (Meta)
    GET|POST /api/social/facebook/data-deletion   → demande RGPD (format Meta)
 
@@ -30,13 +33,13 @@
    (signature du `state`, via signJWT/verifyJWT).
    ═══════════════════════════════════════════════════════════════ */
 
-import { json, err, getAllowedOrigin, generateId } from '../lib/auth.js';
-import { encrypt }                  from '../lib/crypto.js';
+import { json, err, getAllowedOrigin } from '../lib/auth.js';
 import { signJWT, verifyJWT }       from '../lib/jwt.js';
 import { ensureSocialSchema }       from '../lib/social/schema.js';
 import { getPlatform }              from '../lib/social/registry.js';
 import { exchangeCodeForToken }     from '../lib/social/adapters/facebook.js';
 import { socialEntitled, socialTenantOf } from './social.js';
+import { stashPendingAccounts, pendingCallbackPage, frontOrigin } from '../lib/social/pending-link.js';
 
 const REDIRECT_PATH  = '/api/social/callback/facebook';
 const DEFAULT_APP_ID = '1914445162406395';   // app « Keystone Social » (cf. mémoire)
@@ -151,27 +154,6 @@ async function listPagesWithIG(userToken) {
   return out;
 }
 
-// Upsert d'un compte social chiffré, scopé tenant (miroir du callback Threads).
-async function storeAccount(env, { tenant, platform, targetType, externalId, displayName, token, scopes }) {
-  const acc = await encrypt(token, env.KS_ENCRYPTION_KEY);
-  const existing = await env.DB
-    .prepare('SELECT id FROM social_accounts WHERE tenant_id = ? AND platform = ? AND external_id = ?')
-    .bind(tenant, platform, externalId).first();
-  if (existing) {
-    await env.DB.prepare(`
-      UPDATE social_accounts
-      SET access_ciphertext=?, access_iv=?, display_name=?, scopes=?, expires_at=NULL, status='connected', updated_at=datetime('now')
-      WHERE id=?
-    `).bind(acc.ciphertext, acc.iv, displayName, scopes, existing.id).run();
-  } else {
-    await env.DB.prepare(`
-      INSERT INTO social_accounts
-        (id, tenant_id, platform, target_type, external_id, display_name, access_ciphertext, access_iv, scopes, expires_at, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'connected')
-    `).bind(generateId(), tenant, platform, targetType, externalId, displayName, acc.ciphertext, acc.iv, scopes).run();
-  }
-}
-
 // ── GET /api/social/callback/facebook?code=…&state=… ──────────
 export async function handleFacebookCallback(request, env) {
   const url      = new URL(request.url);
@@ -181,12 +163,14 @@ export async function handleFacebookCallback(request, env) {
   if (oauthErr) return htmlPage(`❌ Autorisation refusée : ${esc(oauthErr)}`);
   if (!code || !state) return htmlPage('❌ Paramètres manquants (code/state).');
 
-  // 1) Vérif du state signé → tenant. Un JWT de session (sans purpose) est rejeté.
-  let tenant;
+  // 1) Vérif du state signé (défense en profondeur : le callback n'est
+  //    atteignable que via un /connect légitime). Le tenant du state N'EST
+  //    PLUS utilisé pour la propriété — cf. lib/social/pending-link.js
+  //    (correctif CSRF de liaison). La liaison se fixera sur le tenant de
+  //    celui qui CONFIRME dans l'app authentifiée, pas sur l'initiateur.
   try {
     const claims = await verifyJWT(state, env);
     if (claims.purpose !== 'fb_oauth' || !claims.tenant) throw new Error('purpose/tenant');
-    tenant = claims.tenant;
   } catch (_) {
     return htmlPage('❌ Sécurité : lien de connexion invalide ou expiré. Relance depuis le Social Manager.');
   }
@@ -209,44 +193,39 @@ export async function handleFacebookCallback(request, env) {
     const pages = await listPagesWithIG(userToken);
     if (!pages.length) return htmlPage('❌ Aucune Page Facebook administrée sur ce compte. Vérifie que tu es admin d\'une Page.');
 
-    // 4) Range chaque Page (et son IG lié) sous le tenant. v1 = toutes les Pages
-    //    administrées ; un sélecteur de Page sera un raffinement ultérieur.
+    // 4) Prépare chaque Page (et son IG lié). On ne RANGE plus directement :
+    //    on met EN ATTENTE derrière un claim_code, que seul ce navigateur
+    //    (celui qui a approuvé le consentement) reçoit. La finalisation
+    //    authentifiée fixera la propriété. v1 = toutes les Pages administrées.
     const scopes = oauthScopes();
+    const accounts = [];
     const labels = [];
-    let igFound = false;
     for (const p of pages) {
-      await storeAccount(env, {
-        tenant, platform: 'facebook', targetType: 'page',
+      accounts.push({
+        platform: 'facebook', targetType: 'page',
         externalId: p.id, displayName: p.name || 'Page', token: p.pageToken, scopes,
       });
       labels.push(p.name || p.id);
       if (p.ig?.id) {
-        await storeAccount(env, {
-          tenant, platform: 'instagram', targetType: 'business',
+        accounts.push({
+          platform: 'instagram', targetType: 'business',
           externalId: p.ig.id, displayName: p.ig.username ? '@' + p.ig.username : (p.name || 'Instagram'),
           token: p.pageToken, scopes,   // l'IG publie via le Page token lié
         });
         labels.push(p.ig.username ? '@' + p.ig.username : 'Instagram');
-        igFound = true;
       }
     }
 
-    // Diagnostic Instagram : si aucun IG capté, distinguer « permission non
-    // accordée » (réglage app Meta) de « pas d'IG pro lié à la Page ».
-    let igNote = '';
-    if (!igFound) {
-      let igPermOk = false;
-      try {
-        const permRes = await fetch(`${getPlatform('facebook').api.base}/me/permissions?access_token=${encodeURIComponent(userToken)}`);
-        const perm = await permRes.json().catch(() => ({}));
-        igPermOk = (perm.data || []).some(x => x.permission === 'instagram_basic' && x.status === 'granted');
-      } catch (_) { /* non bloquant */ }
-      igNote = igPermOk
-        ? `<br><br><span style="opacity:.85;font-size:14px">ℹ️ Instagram non connecté : aucun compte Instagram <em>professionnel</em> n'est relié à cette Page (lie-le côté Facebook, puis reconnecte). Facebook marche quand même.</span>`
-        : `<br><br><span style="opacity:.85;font-size:14px">ℹ️ Instagram non connecté : la <strong>permission Instagram</strong> n'a pas été accordée à l'autorisation (réglage de l'app Meta). Facebook marche quand même.</span>`;
-    }
-
-    return htmlPage(`✅ <strong>Facebook connecté</strong> : ${esc(labels.join(', '))}${igNote}<br><br>Ferme cet onglet et recharge le <strong>Social Manager</strong>.`);
+    // Met en attente et renvoie la page de finalisation (postMessage du
+    // claim_code vers l'origine épinglée + repli manuel). La propriété se
+    // fixera à la confirmation authentifiée, pas ici.
+    const { claimCode } = await stashPendingAccounts(env, {
+      accounts, summary: labels.join(', '),
+    });
+    return pendingCallbackPage({
+      frontOrigin: frontOrigin(env), claimCode, network: 'Facebook',
+      summary: labels.join(', '),
+    });
   } catch (e) {
     return htmlPage(`❌ Échec de connexion Facebook : ${esc(e.message)}`);
   }

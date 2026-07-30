@@ -11,7 +11,9 @@
                            n'a pas approuvé, le scope n'est pas accordé → message clair.
 
    Calqué sur le flux Facebook (social-oauth-fb.js) : state JWT signé (tenant +
-   target), échange code→token, identité, rangement chiffré PAR TENANT.
+   target), échange code→token, identité. Le callback MET EN ATTENTE (claim_code)
+   au lieu de ranger ; la propriété se fixe à la confirmation authentifiée
+   — cf. lib/social/pending-link.js (correctif CSRF de liaison de compte).
 
    Secrets Worker requis :
    - KS_LINKEDIN_CLIENT_ID      (Client ID de l'app LinkedIn — À POSER)
@@ -22,13 +24,13 @@
    DOIT être enregistrée à l'identique dans les réglages OAuth de l'app LinkedIn.
    ═══════════════════════════════════════════════════════════════ */
 
-import { json, err, getAllowedOrigin, generateId } from '../lib/auth.js';
-import { encrypt }                  from '../lib/crypto.js';
+import { json, err, getAllowedOrigin } from '../lib/auth.js';
 import { signJWT, verifyJWT }       from '../lib/jwt.js';
 import { ensureSocialSchema }       from '../lib/social/schema.js';
 import { getPlatform }              from '../lib/social/registry.js';
 import { buildAuthUrl, exchangeCodeForToken } from '../lib/social/adapters/linkedin.js';
 import { socialEntitled, socialTenantOf } from './social.js';
+import { stashPendingAccounts, pendingCallbackPage, frontOrigin } from '../lib/social/pending-link.js';
 
 const REDIRECT_PATH = '/api/social/callback/linkedin';
 const STATE_TTL     = 600;   // 10 min — le state signé expire vite
@@ -69,27 +71,11 @@ export async function handleLinkedInConnect(request, env) {
   return json({ authUrl, target }, 200, origin);
 }
 
-// Upsert d'un compte social chiffré, scopé tenant (miroir du callback Facebook).
 // LinkedIn : token ≈ 60 j → on renseigne expires_at pour le suivi de péremption.
-async function storeAccount(env, { tenant, platform, targetType, externalId, displayName, token, scopes, expiresInSec }) {
-  const acc = await encrypt(token, env.KS_ENCRYPTION_KEY);
-  const expiresAt = expiresInSec ? new Date(Date.now() + expiresInSec * 1000).toISOString() : null;
-  const existing = await env.DB
-    .prepare('SELECT id FROM social_accounts WHERE tenant_id = ? AND platform = ? AND external_id = ?')
-    .bind(tenant, platform, externalId).first();
-  if (existing) {
-    await env.DB.prepare(`
-      UPDATE social_accounts
-      SET access_ciphertext=?, access_iv=?, display_name=?, scopes=?, expires_at=?, status='connected', updated_at=datetime('now')
-      WHERE id=?
-    `).bind(acc.ciphertext, acc.iv, displayName, scopes, expiresAt, existing.id).run();
-  } else {
-    await env.DB.prepare(`
-      INSERT INTO social_accounts
-        (id, tenant_id, platform, target_type, external_id, display_name, access_ciphertext, access_iv, scopes, expires_at, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'connected')
-    `).bind(generateId(), tenant, platform, targetType, externalId, displayName, acc.ciphertext, acc.iv, scopes, expiresAt).run();
-  }
+// expiresInSec → ISO (ou null). La conversion vivait dans storeAccount ;
+// elle est faite ici, à la construction du descripteur de mise en attente.
+function _expiresIso(expiresInSec) {
+  return expiresInSec ? new Date(Date.now() + expiresInSec * 1000).toISOString() : null;
 }
 
 // Liste les Pages (organisations) que le membre ADMINISTRE. Nécessite le scope
@@ -133,12 +119,13 @@ export async function handleLinkedInCallback(request, env) {
   if (oauthErr) return htmlPage(`❌ Autorisation refusée : ${esc(oauthErr)}`);
   if (!code || !state) return htmlPage('❌ Paramètres manquants (code/state).');
 
-  // 1) Vérif du state signé → tenant + target.
-  let tenant, target;
+  // 1) Vérif du state signé → target. Le tenant du state N'EST PLUS utilisé
+  //    pour la propriété : la liaison se fixe à la confirmation authentifiée
+  //    (cf. lib/social/pending-link.js — correctif CSRF de liaison).
+  let target;
   try {
     const claims = await verifyJWT(state, env);
     if (claims.purpose !== 'li_oauth' || !claims.tenant) throw new Error('purpose/tenant');
-    tenant = claims.tenant;
     target = claims.target === 'organization' ? 'organization' : 'profile';
   } catch (_) {
     return htmlPage('❌ Sécurité : lien de connexion invalide ou expiré. Relance depuis le Social Manager.');
@@ -157,32 +144,36 @@ export async function handleLinkedInCallback(request, env) {
     if (!tok.accessToken) throw new Error('token introuvable');
     const scopesStr = (getPlatform('linkedin').auth.scopes[target] || []).join(' ');
 
-    // 3a) Page entreprise : ranger chaque organisation administrée.
+    const expiresAt = _expiresIso(tok.expiresInSec);
+
+    // 3a) Page entreprise : mettre en attente chaque organisation administrée.
     if (target === 'organization') {
       const orgs = await listAdminOrganizations(tok.accessToken);
       if (!orgs.length) {
         return htmlPage('ℹ️ Aucune <strong>Page LinkedIn</strong> administrée détectée — ou l\'accès « Pages » (Community Management API) n\'est pas encore <strong>validé par LinkedIn</strong>. Ton <strong>profil</strong>, lui, fonctionne dès maintenant.');
       }
-      const labels = [];
-      for (const o of orgs) {
-        await storeAccount(env, {
-          tenant, platform: 'linkedin', targetType: 'organization',
-          externalId: o.urn, displayName: o.name || o.urn, token: tok.accessToken,
-          scopes: scopesStr, expiresInSec: tok.expiresInSec,
-        });
-        labels.push(o.name || o.urn);
-      }
-      return htmlPage(`✅ <strong>Page(s) LinkedIn connectée(s)</strong> : ${esc(labels.join(', '))}<br><br>Ferme cet onglet et recharge le <strong>Social Manager</strong>.`);
+      const accounts = orgs.map(o => ({
+        platform: 'linkedin', targetType: 'organization',
+        externalId: o.urn, displayName: o.name || o.urn, token: tok.accessToken,
+        scopes: scopesStr, expiresAt,
+      }));
+      const summary = orgs.map(o => o.name || o.urn).join(', ');
+      const { claimCode } = await stashPendingAccounts(env, { accounts, summary });
+      return pendingCallbackPage({ frontOrigin: frontOrigin(env), claimCode, network: 'LinkedIn', summary });
     }
 
     // 3b) Profil membre : l'URN auteur vient de userinfo (résolu par l'adapter).
     if (!tok.externalId) throw new Error('identité LinkedIn introuvable (userinfo) — vérifie les scopes openid/profile.');
-    await storeAccount(env, {
-      tenant, platform: 'linkedin', targetType: 'profile',
-      externalId: tok.externalId, displayName: tok.displayName || 'Profil LinkedIn',
-      token: tok.accessToken, scopes: scopesStr, expiresInSec: tok.expiresInSec,
+    const displayName = tok.displayName || 'Profil LinkedIn';
+    const { claimCode } = await stashPendingAccounts(env, {
+      accounts: [{
+        platform: 'linkedin', targetType: 'profile',
+        externalId: tok.externalId, displayName, token: tok.accessToken,
+        scopes: scopesStr, expiresAt,
+      }],
+      summary: displayName,
     });
-    return htmlPage(`✅ <strong>LinkedIn connecté</strong> : ${esc(tok.displayName || 'ton profil')}<br><br>Ferme cet onglet et recharge le <strong>Social Manager</strong>.`);
+    return pendingCallbackPage({ frontOrigin: frontOrigin(env), claimCode, network: 'LinkedIn', summary: displayName });
   } catch (e) {
     return htmlPage(`❌ Échec de connexion LinkedIn : ${esc(e.message)}`);
   }

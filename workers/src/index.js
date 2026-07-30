@@ -133,7 +133,7 @@ import {
   handleSsoConnectionsAdmin,
 } from './routes/auth-oidc.js';
 // ── Social Broadcast — routes de production (Sprint Social-1) ──
-import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialProvisionTelegram, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry, handleSocialPostsList, handleSocialPostCancel, handleSocialPostsDelete, handleSocialPostRetry, handleSocialAccountDisconnect, sweepDuePosts, refreshSocialTokens, handleSocialTokenRefreshNow, handleSocialPostInsights } from './routes/social.js';
+import { handleSocialProvisionFacebook, handleSocialProvisionInstagram, handleSocialProvisionThreads, handleSocialProvisionTelegram, handleSocialPublish, handleSocialAccountsList, handleSocialRegistry, handleSocialPostsList, handleSocialPostCancel, handleSocialPostsDelete, handleSocialPostRetry, handleSocialAccountDisconnect, handleSocialConfirmLink, sweepDuePosts, refreshSocialTokens, handleSocialTokenRefreshNow, handleSocialPostInsights } from './routes/social.js';
 import { handleSocialMediaUpload, handleSocialMediaServe } from './routes/social-media.js';
 import { handleThreadsConnect, handleThreadsCallback, handleThreadsDeauthorize, handleThreadsDataDeletion } from './routes/social-threads.js';
 import { handleFacebookConnect, handleFacebookCallback, handleFacebookDeauthorize, handleFacebookDataDeletion } from './routes/social-oauth-fb.js';
@@ -587,6 +587,10 @@ export default {
       if (path === '/api/social/callback/facebook'   && method === 'GET')  return handleFacebookCallback(request, env);
       if (path === '/api/social/connect/linkedin'    && method === 'GET')  return handleLinkedInConnect(request, env);
       if (path === '/api/social/callback/linkedin'   && method === 'GET')  return handleLinkedInCallback(request, env);
+      // Finalisation authentifiée d'une liaison OAuth mise en attente
+      // (correctif CSRF de liaison — le jeton se fixe sur le tenant confirmant).
+      // Le préflight OPTIONS est déjà servi par le handler global en tête.
+      if (path === '/api/social/connect/confirm'     && method === 'POST') return handleSocialConfirmLink(request, env);
       if (path === '/api/social/facebook/deauthorize'  && (method === 'GET' || method === 'POST')) return handleFacebookDeauthorize(request, env);
       if (path === '/api/social/facebook/data-deletion' && (method === 'GET' || method === 'POST')) return handleFacebookDataDeletion(request, env);
       if (path === '/api/social/provision/threads'   && method === 'POST') return handleSocialProvisionThreads(request, env);
