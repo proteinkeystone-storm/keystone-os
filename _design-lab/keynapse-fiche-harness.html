@@ -67,7 +67,14 @@ window.fetch = async (url, opts = {}) => {
     const todo = { id: 't' + (++seq), label: JSON.parse(opts.body || '{}').label || '', done: 0 };
     DETAIL.todos.push(todo); return j({ todo });
   }
-  if (/\/api\/keynapse\/bubbles\/[^/]+$/.test(u.split('?')[0])) return j(DETAIL);
+  const m = u.split('?')[0].match(/\/api\/keynapse\/bubbles\/([^/]+)$/);
+  if (m) {
+    // Chaque bulle renvoie SA fiche : sans ça, ouvrir b2 afficherait le titre de
+    // b1 et on ne saurait plus laquelle on regarde en testant la mémoire.
+    const id = decodeURIComponent(m[1]);
+    const bubble = [BUBBLE, ...OTHER].find((b) => b.id === id) || BUBBLE;
+    return j({ ...DETAIL, bubble, notes: id === BUBBLE.id ? DETAIL.notes : [], todos: id === BUBBLE.id ? DETAIL.todos : [] });
+  }
   return j({
     ok: true, zones: [], bubbles: [BUBBLE, ...OTHER], links: DETAIL.links,
     reminders: DETAIL.reminders, todos: [], notes: [], media: [], audios: [],
@@ -77,7 +84,7 @@ window.fetch = async (url, opts = {}) => {
 localStorage.setItem('ks_jwt', 'harness');
 
 const { openKeynapse } = await import('/app/keynapse.js');
-openKeynapse({ bubbleId: 'b1' });
+openKeynapse({ bubbleId: qs.get('bubble') || 'b1' });   // ?bubble=b2 pour tester la mémoire PAR bulle
 </script>
 </body>
 </html>

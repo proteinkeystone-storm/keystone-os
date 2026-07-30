@@ -443,7 +443,7 @@ async function _submitComposer() {
 // ════════════════════════════════════════════════════════════════
 function _onBubbleClick(node) { if (node && node.id) _openPanel(node.id); }
 async function _openPanel(id) {
-  _panel = { id, detail: null, loading: true, error: null, voice: { busy: '', props: null, note: '', error: '' }, remTime: null, remOpen: false, sec: _secDefault() };
+  _panel = { id, detail: null, loading: true, error: null, voice: { busy: '', props: null, note: '', error: '' }, remTime: null, remOpen: false, sec: _secDefault(id) };
   _ensurePanelEl(); _renderPanel();
   try {
     const r = await _api(`/bubbles/${encodeURIComponent(id)}`);
@@ -513,16 +513,35 @@ function _renderPanel() {
 // corps à chaque ajout de note / tâche / lien — un état porté par le DOM se
 // refermerait sous les doigts.
 //
-// Toute bulle s'ouvre sur la DERNIÈRE section consultée, mémorisée par APPAREIL
-// (localStorage, hors coffre cloud comme kn_motion : c'est un confort de
-// lecture, pas une donnée de compte). Une session passée sur les rappels ouvre
-// donc chaque bulle sur Rappels — et le bloc-notes jaune n'est plus à l'écran
-// tant qu'on ne redéplie pas « Notes libres ». C'est voulu.
-const KN_SEC_KEY = 'kn_sec';
+// Chaque bulle garde SA propre configuration : rouvrir une fiche la retrouve
+// telle qu'on l'a laissée, y compris entièrement repliée. Une mémoire unique
+// pour toute l'app imposait la section de la dernière bulle consultée à toutes
+// les autres — une bulle « photos » et une bulle « échéances » ne se lisent pas
+// de la même façon.
+// Mémoire par APPAREIL (localStorage, hors coffre cloud comme kn_motion) :
+// confort de lecture, pas donnée de compte.
+const KN_SEC_KEY = 'kn_secs';
+const KN_SEC_MAX = 200;          // liste MRU bornée : sans plafond, elle enfle à chaque bulle jamais revue
 const KN_SECS = ['notes', 'caps', 'todos', 'rems', 'links'];
-function _secDefault() {
-  try { const v = localStorage.getItem(KN_SEC_KEY); if (KN_SECS.includes(v)) return v; } catch (_) {}
-  return 'notes';
+// Forme stockée : [[bubbleId, sec], …], la plus récemment consultée en tête.
+// sec === '' signifie « replié VOLONTAIREMENT » — à distinguer d'une bulle
+// jamais ouverte, qui doit s'ouvrir sur Notes libres.
+function _secStore() {
+  try { const r = JSON.parse(localStorage.getItem(KN_SEC_KEY) || '[]'); return Array.isArray(r) ? r : []; } catch (_) { return []; }
+}
+function _secDefault(id) {
+  const e = _secStore().find((x) => Array.isArray(x) && x[0] === id);
+  if (!e) return 'notes';
+  return KN_SECS.includes(e[1]) ? e[1] : null;
+}
+function _secRemember(id, sec) {
+  const list = _secStore().filter((x) => Array.isArray(x) && x[0] !== id);
+  list.unshift([id, sec || '']);
+  try { localStorage.setItem(KN_SEC_KEY, JSON.stringify(list.slice(0, KN_SEC_MAX))); } catch (_) {}
+}
+function _secForget(id) {
+  const list = _secStore().filter((x) => Array.isArray(x) && x[0] !== id);
+  try { localStorage.setItem(KN_SEC_KEY, JSON.stringify(list)); } catch (_) {}
 }
 function _setSec(key) {
   if (!_panel) return;
@@ -533,9 +552,7 @@ function _setSec(key) {
     return;
   }
   _panel.sec = (_panel.sec === key) ? null : key;   // re-cliquer referme (vue sommaire)
-  // Tout replié n'est PAS mémorisé : on garde la dernière section réellement
-  // consultée, sinon la fiche suivante s'ouvrirait sur un panneau muet.
-  if (_panel.sec) { try { localStorage.setItem(KN_SEC_KEY, _panel.sec); } catch (_) {} }
+  _secRemember(_panel.id, _panel.sec);              // « tout replié » compris : c'est un état choisi
   _refreshBody();
 }
 // En-tête toujours visible : il fait sommaire quand la section est repliée,
@@ -1505,6 +1522,7 @@ function _confirmDeleteBubble(btn) {
 async function _deleteBubble() {
   if (!_panel) return;
   const id = _panel.id; _closePanel();
+  _secForget(id);          // pas de configuration orpheline pour une bulle disparue
   _state.bubbles = _state.bubbles.filter((b) => b.id !== id);
   _state.links = _state.links.filter((l) => l.from_bubble !== id && l.to_bubble !== id);
   if (!_state.bubbles.length) { _teardownEngine(); _render(); } else _pushEngine();
