@@ -1839,7 +1839,17 @@ async function _agentLLM(env, { engine, apiKey, system, messages, max_tokens, te
   const params = { messages: msgs, max_tokens, stream: false };
   if (typeof temperature === 'number') params.temperature = temperature;
   const res = await env.AI.run(KS_AI_MODEL, params);
-  const out = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+  // Workers AI rend une CHAÎNE quand le modèle encadre son JSON (```json), mais
+  // un OBJET/TABLEAU DÉJÀ DÉSÉRIALISÉ quand il répond en JSON pur — donc quand
+  // il obéit le mieux à « Réponds UNIQUEMENT avec un tableau JSON ». Le .trim()
+  // direct jetait alors une TypeError : les « questions de couverture » de
+  // Kortex échouaient à TOUS les coups (4/4 en sonde le 31/07/2026, sur le vrai
+  // modèle), pendant que les variantes de repli passaient (4/4 en chaîne).
+  // Même piège, même correctif que kora.js (_koraText) et keynapse.js.
+  const rawOut = res?.response ?? res?.choices?.[0]?.message?.content ?? '';
+  const out = (typeof rawOut === 'string') ? rawOut.trim() : (() => {
+    try { return JSON.stringify(rawOut) || ''; } catch (_) { return ''; }
+  })();
   await recordUsage(env, 'smart-agent', {
     usage  : res?.usage,
     inText : msgs.map(m => m.content || '').join('\n'),
