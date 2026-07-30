@@ -327,6 +327,28 @@ export function openBrainstorming(opts = {}) {
   }
 }
 
+// ── Appels réseau en vol ────────────────────────────────────────
+// Quitter l'outil ou repartir à zéro laissait les flux se terminer dans le
+// vide : un tour de table, ce sont neuf agents qui continuaient de générer
+// pour personne — de la bande passante et des jetons dépensés après le départ
+// de l'utilisateur. On garde donc trace de tout appel vivant pour pouvoir le
+// couper net.
+const _enVol = new Set();
+function _piste() {
+  const ctrl = new AbortController();
+  _enVol.add(ctrl);
+  return { signal: ctrl.signal, fini: () => _enVol.delete(ctrl) };
+}
+function _couperTout() {
+  for (const ctrl of _enVol) { try { ctrl.abort(); } catch (_) {} }
+  _enVol.clear();
+}
+// Une interruption VOULUE n'est pas une panne : elle ne doit jamais s'afficher
+// comme une erreur de connexion.
+function _estInterrompu(e) {
+  return !!e && (e.name === 'AbortError' || String(e.message || '').includes('aborted'));
+}
+
 // Repartir à zéro sans quitter l'outil : on enchaîne les séances (tests, briefs
 // successifs) sans repasser par le Dashboard.
 // Rien n'est perdu — la séance est autosauvegardée dans la bibliothèque à chaque
@@ -337,8 +359,9 @@ function _resetSeance() {
   const enCours = !!(_currentSession && _currentSession.history && _currentSession.history.length);
   if (enCours && !confirm('Repartir à zéro ?\n\nLa séance en cours reste enregistrée dans la bibliothèque — vous pourrez la rouvrir.')) return;
   const mode = _currentSession?.mode || DEFAULT_MODE;
+  _couperTout();                // coupe les appels en vol (rien ne génère plus pour personne)
   _typewriterReset();
-  _currentSession = null;       // coupe les flux en retard (cf. _seanceObsolete)
+  _currentSession = null;       // ceinture : ignore ce qui serait déjà en vol (cf. _seanceObsolete)
   openBrainstorming({ mode });
 }
 
@@ -349,6 +372,7 @@ export function closeBrainstorming() {
     setTimeout(() => panel.remove(), 250);
   }
   document.body.style.overflow = '';
+  _couperTout();                // on quitte : plus rien ne doit continuer à générer
   _currentSession = null;
   _typewriterReset();
 }
@@ -903,16 +927,18 @@ async function _fetchSourceUrl(panel, root, url) {
   const btn = root.querySelector('.wr-source-fetch');
   if (btn) btn.disabled = true;
   _sourceMsg(root, 'Récupération de la page…');
+  const piste = _piste();
   try {
     const res = await fetch(`${_apiBase()}/api/content/fetch-source`, {
-      method: 'POST', headers: _authHeaders(), body: JSON.stringify({ url }),
+      method: 'POST', headers: _authHeaders(), body: JSON.stringify({ url }), signal: piste.signal,
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { _sourceMsg(root, data.error || `Échec (${res.status}).`); return; }
     _setSource(panel, { text: data.text, ref: data.source_ref || url, title: data.title, truncated: data.truncated });
-  } catch (_) {
-    _sourceMsg(root, 'Connexion impossible au service.');
+  } catch (e) {
+    if (!_estInterrompu(e)) _sourceMsg(root, 'Connexion impossible au service.');
   } finally {
+    piste.fini();
     if (btn) btn.disabled = false;
   }
 }
@@ -939,10 +965,12 @@ function _readSourceFile(panel, root, file) {
 async function _pickRosterAuto(panel) {
   const living = panel.querySelector('.wr-living');
   if (living) living.textContent = 'Composition du comité…';
+  const pisteRoster = _piste();
   try {
     const res = await fetch(`${_apiBase()}/api/brainstorming/pick-roster`, {
       method:  'POST',
       headers: _authHeaders(),
+      signal:  pisteRoster.signal,
       body:    JSON.stringify({
         brief:          _currentSession.brief,
         cognitive_mode: _currentSession.mode,
@@ -957,18 +985,19 @@ async function _pickRosterAuto(panel) {
       _applyRosterToCells(panel);              // allume les pictos retenus
     }
   } catch (_) {
-    /* réseau KO : on garde le comité provisoire, la séance démarre */
+    /* réseau KO ou séance quittée : on garde le comité provisoire, la séance démarre */
   } finally {
+    pisteRoster.fini();
     if (living) living.textContent = 'Strategic Lead ouvre la discussion…';
   }
 }
 
 async function _callOrchestration(panel, singleAgentId = null) {
-  // Les flux ne sont pas interruptibles (pas d'AbortController) : si l'utilisateur
-  // repart à zéro pendant que la table parle, les répliques en retard
-  // continueraient d'arriver et se colleraient à la NOUVELLE séance. On retient
-  // donc l'identité de la séance qui a lancé l'appel, et tout ce qui revient
-  // après un changement de séance est ignoré.
+  // Ceinture ET bretelles. L'interruption (_couperTout) coupe la connexion, mais
+  // le code déjà EN VOL — une lecture en cours, une promesse qui se résout —
+  // continue son chemin de quelques instants. On retient donc aussi l'identité
+  // de la séance qui a lancé l'appel : ce qui revient après un changement de
+  // séance est ignoré plutôt que collé à la NOUVELLE.
   const _sessionAuLancement = _currentSession?.id || null;
   const _seanceObsolete = () => (_currentSession?.id || null) !== _sessionAuLancement;
   const url = `${_apiBase()}/api/brainstorming/agent-respond`;
@@ -1006,14 +1035,18 @@ async function _callOrchestration(panel, singleAgentId = null) {
   const _claudeKey = _getClaudeBYOKKey();
   if (_claudeKey) payload.apiKey = _claudeKey;
 
+  const { signal, fini } = _piste();
   let res;
   try {
     res = await fetch(url, {
       method:  'POST',
       headers: _authHeaders(),
       body:    JSON.stringify(payload),
+      signal,
     });
   } catch (e) {
+    fini();
+    if (_estInterrompu(e)) return;          // séance quittée ou relancée : sortie muette
     throw new Error('Connexion impossible au Worker');
   }
 
@@ -1036,7 +1069,7 @@ async function _callOrchestration(panel, singleAgentId = null) {
   while (!complete) {
     const { done, value } = await reader.read();
     if (done) break;
-    if (_seanceObsolete()) { try { await reader.cancel(); } catch (_) {} return; }   // séance repartie à zéro entre-temps
+    if (_seanceObsolete()) { fini(); try { await reader.cancel(); } catch (_) {} return; }   // séance repartie à zéro entre-temps
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split('\n');
     buffer = lines.pop() || '';
@@ -1182,6 +1215,7 @@ async function _callOrchestration(panel, singleAgentId = null) {
       }
     }
   }
+  fini();   // flux drainé jusqu'au bout : plus rien à couper
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1585,6 +1619,7 @@ async function _callSynthesize(panel) {
   const btn = panel.querySelector('.wr-synthesize-btn');
   // Sprint 7.10 — utilise l'helper pour garantir un seul label propre
   _setSynthesizeBtnState(btn, 'loading');
+  const _pisteSynthese = _piste();   // synthèse = appel long : interruptible comme le reste
 
   try {
     // Sprint 7.9 — Si BYOK Claude configuré (Réglages → Vault), on demande
@@ -1607,6 +1642,7 @@ async function _callSynthesize(panel) {
       method:  'POST',
       headers: _authHeaders(),
       body:    JSON.stringify(bodyPayload),
+      signal:  _pisteSynthese.signal,
     });
     if (!res.ok) {
       let detail = '';
@@ -1627,8 +1663,9 @@ async function _callSynthesize(panel) {
 
     _openSynthesisDrawer(panel, synthData);
   } catch (e) {
-    _appendErrorMessage(panel, `Synthèse impossible : ${e?.message || e}`);
+    if (!_estInterrompu(e)) _appendErrorMessage(panel, `Synthèse impossible : ${e?.message || e}`);
   } finally {
+    _pisteSynthese.fini();
     // Sprint 7.10 — reset propre via l'helper (état 'done' = "Relancer la synthèse")
     _setSynthesizeBtnState(btn, 'done');
   }
@@ -2185,7 +2222,9 @@ async function _loadGestAgents(box) {
   box.hidden = false;
   box.innerHTML = `<div class="wr-gest-agents-msg">Chargement des experts maison…</div>`;
   try {
-    const res = await fetch(`${_apiBase()}/api/smart-agent/agents`, { headers: _authHeaders() });
+    const pisteGest = _piste();
+    const res = await fetch(`${_apiBase()}/api/smart-agent/agents`, { headers: _authHeaders(), signal: pisteGest.signal });
+    pisteGest.fini();
     if (res.status === 403) {
       _gestAgentsCache = { forbidden: true, agents: [] };
     } else if (!res.ok) {

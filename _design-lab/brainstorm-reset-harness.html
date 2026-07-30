@@ -18,10 +18,34 @@ if (navigator.serviceWorker) {
   const regs = await navigator.serviceWorker.getRegistrations();
   await Promise.all(regs.map((r) => r.unregister()));
 }
+// Journal des appels : on veut PROUVER que l'interruption coupe vraiment le
+// flux, pas seulement que l'écran se vide.
+window.__journal = { ouverts: 0, interrompus: 0, chunksApresReset: 0 };
+window.__resetFait = false;
+
 const realFetch = window.fetch.bind(window);
 window.fetch = async (url, opts = {}) => {
   const u = String((url && url.url) || url);
   if (!u.includes('/api/')) return realFetch(url, opts);
+
+  // Le débat : un flux SSE lent et sans fin, comme un vrai tour de table.
+  if (u.includes('/agent-respond')) {
+    window.__journal.ouverts++;
+    const signal = opts.signal;
+    const flux = new ReadableStream({
+      start(ctrl) {
+        const enc = new TextEncoder();
+        let i = 0;
+        const timer = setInterval(() => {
+          if (window.__resetFait) window.__journal.chunksApresReset++;
+          ctrl.enqueue(enc.encode(`data: ${JSON.stringify({ type: 'chunk', agent_id: 'strategic', text: `mot${i++} ` })}\n\n`));
+        }, 120);
+        const stop = () => { clearInterval(timer); try { ctrl.close(); } catch (_) {} };
+        if (signal) signal.addEventListener('abort', () => { window.__journal.interrompus++; stop(); });
+      },
+    });
+    return new Response(flux, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+  }
   return new Response(JSON.stringify({ ok: true, agents: [], sessions: [] }),
     { status: 200, headers: { 'Content-Type': 'application/json' } });
 };
