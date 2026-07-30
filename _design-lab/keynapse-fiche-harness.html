@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Harnais — fiche Keynapse en accordéon</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/app/workspace.css">
+<link rel="stylesheet" href="/app/keynapse.css">
+<style>
+  html, body { margin: 0; background: #11151f; color: #f8fafc; }
+</style>
+</head>
+<body>
+<script type="module">
+// Harnais isolé : le worker est REMPLACÉ par des réponses factices — rien ne
+// sort de la machine, aucune donnée réelle touchée. Sert à regarder l'accordéon
+// de la fiche (une seule section dépliée à la fois).
+if (navigator.serviceWorker) {
+  const regs = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(regs.map((r) => r.unregister()));   // SW localhost = faux caches
+}
+
+const BUBBLE = {
+  id: 'b1', title: 'Refonte du hall', description: '', color: '#6366f1', zone_id: null,
+  x: 0, y: 0, created_at: '2026-07-20 10:00:00', updated_at: '2026-07-29 15:00:00',
+};
+const OTHER = [
+  { id: 'b2', title: 'Budget 2027',  description: '', color: '#22c55e', zone_id: null, x: 320, y: 140, created_at: '2026-07-01 10:00:00', updated_at: '2026-07-01 10:00:00' },
+  { id: 'b3', title: 'Fournisseurs', description: '', color: '#f97316', zone_id: null, x: -260, y: 190, created_at: '2026-07-02 10:00:00', updated_at: '2026-07-02 10:00:00' },
+];
+const DETAIL = {
+  bubble: BUBBLE,
+  notes: [
+    { id: 'n1', body: 'Le marbre du hall vieillit mal côté ouest.', created_at: '2026-07-21 09:00:00' },
+    { id: 'n2', body: 'Voir avec l’architecte pour l’éclairage indirect.', created_at: '2026-07-22 09:00:00' },
+  ],
+  todos: [
+    { id: 't1', label: 'Demander trois devis', done: 1 },
+    { id: 't2', label: 'Valider la teinte',    done: 0 },
+    { id: 't3', label: 'Planifier la pose',    done: 0 },
+  ],
+  links: [{ id: 'l1', from_bubble: 'b1', to_bubble: 'b2' }],
+  media: [], audios: [],
+  reminders: [{ id: 'r1', at: '2026-08-05 09:00:00', repeat: '', label: '', notified_at: null }],
+};
+
+// ?notes=N : fiche bien remplie, pour vérifier que le bloc-notes jaune reste
+// visible et que c'est la LISTE qui scrolle.
+const qs = new URLSearchParams(location.search);
+if (qs.has('empty')) DETAIL.notes.length = 0;            // fiche neuve
+const extra = Number(qs.get('notes') || 0);
+for (let i = 0; i < extra; i++) {
+  DETAIL.notes.push({ id: 'x' + i, body: `Note de remplissage numéro ${i + 1}.`, created_at: '2026-07-23 09:00:00' });
+}
+
+let seq = 100;
+const realFetch = window.fetch.bind(window);
+window.fetch = async (url, opts = {}) => {
+  const u = String((url && url.url) || url);
+  if (!u.includes('/api/')) return realFetch(url, opts);
+  const j = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  if (/\/notes$/.test(u)) {
+    const note = { id: 'n' + (++seq), body: JSON.parse(opts.body || '{}').body || '', created_at: '2026-07-30 12:00:00' };
+    DETAIL.notes.push(note); return j({ note });
+  }
+  if (/\/todos$/.test(u)) {
+    const todo = { id: 't' + (++seq), label: JSON.parse(opts.body || '{}').label || '', done: 0 };
+    DETAIL.todos.push(todo); return j({ todo });
+  }
+  if (/\/api\/keynapse\/bubbles\/[^/]+$/.test(u.split('?')[0])) return j(DETAIL);
+  return j({
+    ok: true, zones: [], bubbles: [BUBBLE, ...OTHER], links: DETAIL.links,
+    reminders: DETAIL.reminders, todos: [], notes: [], media: [], audios: [],
+    apps: [], owned: [], entitlements: {},
+  });
+};
+localStorage.setItem('ks_jwt', 'harness');
+
+const { openKeynapse } = await import('/app/keynapse.js');
+openKeynapse({ bubbleId: 'b1' });
+</script>
+</body>
+</html>

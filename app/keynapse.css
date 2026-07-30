@@ -161,14 +161,65 @@
 .kyn-sec { flex: 0 0 auto; padding: 16px 18px; border-top: 1px solid var(--kyn-sep, rgba(255,255,255,.06)); }
 .kyn-sec:first-child { border-top: none; }
 .kyn-sec-h { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3, rgba(248,250,252,.4)); margin: 0 0 9px; }
+
+/* ── Accordéon : une seule section dépliée à la fois ────────────
+   Les en-têtes repliés font SOMMAIRE (libellé + compteur toujours lisibles),
+   d'où le compteur stylé à part et le chevron qui pivote. Le corps n'est rendu
+   QUE pour la section ouverte (pas de display:none) : les <img> des captures et
+   les molettes de rappel se mesurent mal cachées — on ne les fabrique donc que
+   quand elles servent. */
+.kyn-sec-tog {
+  display: flex; align-items: center; gap: 7px; width: 100%; margin: 0; padding: 3px 0;
+  background: none; border: 0; cursor: pointer; text-align: left; font: inherit;
+  font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--tx3, rgba(248,250,252,.4)); transition: color .18s ease;
+}
+.kyn-sec-tog:hover { color: var(--tx2, rgba(248,250,252,.55)); }
+.kyn-sec.is-open .kyn-sec-tog { color: var(--text, #f8fafc); }
+.kyn-sec.is-open .kyn-sec-tog { margin-bottom: 9px; }
+.kyn-sec-lbl { flex: 0 1 auto; min-width: 0; }
+.kyn-sec-n { flex: none; letter-spacing: .04em; color: var(--kyn-accent, var(--gold, #6366f1)); opacity: .85; }
+.kyn-sec-chev { flex: none; margin-left: auto; display: inline-flex; opacity: .55; transition: transform .22s cubic-bezier(.22,.61,.36,1); }
+.kyn-sec.is-open .kyn-sec-chev { transform: rotate(180deg); opacity: .8; }
+.kyn-sec-body { animation: kyn-secin .2s ease both; }
+@keyframes kyn-secin { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .kyn-sec-body { animation: none; }
+  .kyn-sec-chev { transition: none; }
+}
+
 /* Notes libres = grand bloc-notes adaptatif : grandit (flex-grow) pour occuper
    tout l'espace libre si la fiche est vide, se réduit vers son min-height quand
    on remplit captures / tâches / rappels / liens. flex-shrink: 0 ⇒ la section ne
    descend JAMAIS sous son contenu : si le total déborde (mobile, fiche pleine),
    c'est le CORPS qui scrolle et le textarea garde son min-height (pas de
-   chevauchement des sections du dessous). */
-.kyn-sec--notes { flex: 1 0 auto; display: flex; flex-direction: column; }
-.kyn-sec--notes .kyn-add { flex: 1 0 auto; }
+   chevauchement des sections du dessous).
+   Repliée, elle redevient une simple ligne : le flex-grow ne vaut que dépliée.
+   En accordéon, cette croissance est BORNÉE à l'espace restant (min-height: 0),
+   sinon un bloc-notes bien rempli pousse Captures / Actions / Rappels / Liens
+   hors de l'écran et fait disparaître le sommaire, seule raison d'être de
+   l'accordéon.
+   C'est la LISTE des notes — et elle seule — qui absorbe le trop-plein en
+   scrollant : mettre le scroll sur la section entière poussait le bloc-notes
+   jaune (dernier enfant) sous le pli dès qu'il y avait deux notes, alors qu'il
+   est la signature de la fiche et doit rester sous les yeux.
+   Le partage se joue sur les deux mots-clés flex : la LISTE ne grandit pas mais
+   se comprime (0 1) et scrolle, le BLOC JAUNE grandit mais ne se comprime
+   jamais (1 0, plancher 120). Fiche vide → le bloc jaune occupe tout, comme
+   avant l'accordéon ; fiche à douze notes → la liste rend l'espace et scrolle,
+   le bloc jaune reste entier sous les yeux.
+   L'overflow: hidden du corps est le filet : sans lui, une fenêtre trop courte
+   fait déborder le bloc jaune PAR-DESSUS l'en-tête « Captures ».
+   Les deux min-height sont les PLANCHERS sous lesquels la compression s'arrête
+   (sur un téléphone, l'espace disponible descend à ~150 px et la liste se
+   faisait écraser à zéro : douze notes annoncées dans l'en-tête, aucune à
+   l'écran). Passé ces planchers, c'est le corps du panneau qui scrolle. La
+   liste n'est pas rendue du tout quand la fiche n'a aucune note, pour que le
+   bloc jaune occupe tout, comme sur une fiche neuve. */
+.kyn-sec--notes.is-open { flex: 1 1 auto; min-height: 264px; display: flex; flex-direction: column; }
+.kyn-sec--notes.is-open .kyn-sec-body { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.kyn-notes-list { flex: 0 1 auto; min-height: 96px; overflow-y: auto; }
+.kyn-sec--notes .kyn-add { flex: 1 0 auto; min-height: 120px; }
 .kyn-sec--notes .kyn-add textarea[data-field="note-add"] { height: 100%; min-height: 120px; }
 
 .kyn-prog { height: 5px; border-radius: 3px; background: var(--bd, rgba(255,255,255,.08)); overflow: hidden; margin-bottom: 10px; }

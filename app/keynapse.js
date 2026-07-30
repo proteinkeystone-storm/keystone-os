@@ -189,6 +189,7 @@ function _onClick(e) {
     case 'kyn-motion-toggle': return _toggleMotion();
     // Fiche
     case 'kyn-panel-close': return _closePanel();
+    case 'kyn-sec':         return _setSec(el.dataset.sec);
     case 'kyn-color':       return _patchBubble({ color: el.dataset.color });
     case 'kyn-todo-toggle': return _toggleTodo(el.dataset.id);
     case 'kyn-todo-del':    return _delTodo(el.dataset.id);
@@ -442,7 +443,7 @@ async function _submitComposer() {
 // ════════════════════════════════════════════════════════════════
 function _onBubbleClick(node) { if (node && node.id) _openPanel(node.id); }
 async function _openPanel(id) {
-  _panel = { id, detail: null, loading: true, error: null, voice: { busy: '', props: null, note: '', error: '' }, remTime: null, remOpen: false };
+  _panel = { id, detail: null, loading: true, error: null, voice: { busy: '', props: null, note: '', error: '' }, remTime: null, remOpen: false, sec: _secDefault() };
   _ensurePanelEl(); _renderPanel();
   try {
     const r = await _api(`/bubbles/${encodeURIComponent(id)}`);
@@ -507,26 +508,73 @@ function _renderPanel() {
   _hydrateMedia();
   _calibrateRemWheels();
 }
+// ── Accordéon de la fiche : une seule section ouverte à la fois ──
+// L'état vit sur _panel, JAMAIS dans le DOM : _refreshBody() ré-injecte tout le
+// corps à chaque ajout de note / tâche / lien — un état porté par le DOM se
+// refermerait sous les doigts.
+//
+// Toute bulle s'ouvre sur la DERNIÈRE section consultée, mémorisée par APPAREIL
+// (localStorage, hors coffre cloud comme kn_motion : c'est un confort de
+// lecture, pas une donnée de compte). Une session passée sur les rappels ouvre
+// donc chaque bulle sur Rappels — et le bloc-notes jaune n'est plus à l'écran
+// tant qu'on ne redéplie pas « Notes libres ». C'est voulu.
+const KN_SEC_KEY = 'kn_sec';
+const KN_SECS = ['notes', 'caps', 'todos', 'rems', 'links'];
+function _secDefault() {
+  try { const v = localStorage.getItem(KN_SEC_KEY); if (KN_SECS.includes(v)) return v; } catch (_) {}
+  return 'notes';
+}
+function _setSec(key) {
+  if (!_panel) return;
+  // L'enregistrement vocal vit DANS la section Captures : la quitter ferait
+  // disparaître « Terminer / Annuler » avec le micro toujours ouvert.
+  if (_rec && _panel.sec === 'caps' && key !== 'caps') {
+    _toast('Terminez ou annulez l’enregistrement avant de changer de section.');
+    return;
+  }
+  _panel.sec = (_panel.sec === key) ? null : key;   // re-cliquer referme (vue sommaire)
+  // Tout replié n'est PAS mémorisé : on garde la dernière section réellement
+  // consultée, sinon la fiche suivante s'ouvrirait sur un panneau muet.
+  if (_panel.sec) { try { localStorage.setItem(KN_SEC_KEY, _panel.sec); } catch (_) {} }
+  _refreshBody();
+}
+// En-tête toujours visible : il fait sommaire quand la section est repliée,
+// d'où le compteur qui reste lisible fermé (« Captures · 3 »).
+function _secHeadHTML(key, label, count) {
+  const on = _panel.sec === key;
+  return `
+    <button type="button" class="kyn-sec-h kyn-sec-tog" data-act="kyn-sec" data-sec="${key}" aria-expanded="${on}" aria-label="${_escAttr(label)}${on ? ' — replier' : ' — déplier'}">
+      <span class="kyn-sec-lbl">${label}</span>
+      ${count ? `<span class="kyn-sec-n">${count}</span>` : ''}
+      <span class="kyn-sec-chev" aria-hidden="true">${icon('chevron-down', 14) || ''}</span>
+    </button>`;
+}
 function _panelBodyHTML() {
   const d = _panel.detail;
   const todos = d.todos, done = todos.filter((t) => t.done).length;
   const pct = todos.length ? Math.round(done / todos.length * 100) : 0;
+  const openNotes = _panel.sec === 'notes', openTodos = _panel.sec === 'todos';
   return `
-    <div class="kyn-sec kyn-sec--notes">
-      <p class="kyn-sec-h">Notes libres</p>
+    <div class="kyn-sec kyn-sec--notes${openNotes ? ' is-open' : ''}">
+      ${_secHeadHTML('notes', 'Notes libres', d.notes.length ? `· ${d.notes.length}` : '')}
+      ${openNotes ? `<div class="kyn-sec-body">
+      ${!d.notes.length ? '' : `<div class="kyn-notes-list">
       ${d.notes.map((n) => `
         <div class="kyn-note">
           <div style="flex:1;min-width:0"><div class="kyn-note-body">${_esc(n.body)}</div><div class="kyn-note-date">${_fmtDate(n.created_at)}</div></div>
           <button class="kyn-row-del" data-act="kyn-note-del" data-id="${n.id}" aria-label="Supprimer la note">×</button>
         </div>`).join('')}
+      </div>`}
       <div class="kyn-add">
         <textarea data-field="note-add" maxlength="4000" placeholder="Ajouter une note…"></textarea>
         <button class="kyn-add-btn" data-act="kyn-note-add" aria-label="Ajouter la note">+</button>
       </div>
+      </div>` : ''}
     </div>
     ${_capturesSectionHTML()}
-    <div class="kyn-sec">
-      <p class="kyn-sec-h">Actions${todos.length ? ` · ${done}/${todos.length}` : ''}</p>
+    <div class="kyn-sec${openTodos ? ' is-open' : ''}">
+      ${_secHeadHTML('todos', 'Actions', todos.length ? `· ${done}/${todos.length}` : '')}
+      ${openTodos ? `<div class="kyn-sec-body">
       ${todos.length ? `<div class="kyn-prog"><div class="kyn-prog-fill" style="width:${pct}%"></div></div>` : ''}
       ${todos.map((t) => `
         <div class="kyn-todo" data-done="${t.done ? 1 : 0}">
@@ -538,6 +586,7 @@ function _panelBodyHTML() {
         <input data-field="todo-add" type="text" maxlength="500" placeholder="Ajouter une tâche…" autocomplete="off">
         <button class="kyn-add-btn" data-act="kyn-todo-add" aria-label="Ajouter la tâche">+</button>
       </div>
+      </div>` : ''}
     </div>
     ${_remindersSectionHTML()}
     ${_linksSectionHTML()}`;
@@ -552,9 +601,11 @@ function _linksSectionHTML() {
   }).filter(Boolean);
   const linkedIds = new Set(linked.map((x) => x.id));
   const candidates = _state.bubbles.filter((b) => b.id !== id && !linkedIds.has(b.id));
+  const open = _panel.sec === 'links';
   return `
-    <div class="kyn-sec">
-      <p class="kyn-sec-h">Liens${linked.length ? ` · ${linked.length}` : ''}</p>
+    <div class="kyn-sec${open ? ' is-open' : ''}">
+      ${_secHeadHTML('links', 'Liens', linked.length ? `· ${linked.length}` : '')}
+      ${!open ? '' : `<div class="kyn-sec-body">
       ${linked.map((x) => `
         <div class="kyn-linkrow">
           <button class="kyn-linkgo" data-act="kyn-link-go" data-id="${x.id}"><span class="kyn-zchip-dot" style="background:${_escAttr(x.color)}"></span>${_esc(x.title)}</button>
@@ -565,6 +616,7 @@ function _linksSectionHTML() {
         <select data-field="link-target" class="kyn-link-select"><option value="" disabled selected>Relier à…</option>${candidates.map((b) => `<option value="${_escAttr(b.id)}">${_esc(b.title)}</option>`).join('')}</select>
         <button class="kyn-add-btn" data-act="kyn-link-add" aria-label="Tisser le lien">+</button>
       </div>` : (linked.length ? '' : `<p class="kyn-color-note">Crée d'autres bulles pour pouvoir les relier.</p>`)}
+      </div>`}
     </div>`;
 }
 async function _addLink() {
@@ -609,9 +661,11 @@ function _capturesSectionHTML() {
   const media = _panel.detail.media || [];
   const audios = _panel.detail.audios || [];
   const n = media.length + audios.length;
+  const open = _panel.sec === 'caps';
   return `
-    <div class="kyn-sec">
-      <p class="kyn-sec-h">Captures${n ? ` · ${n}` : ''}</p>
+    <div class="kyn-sec${open ? ' is-open' : ''}">
+      ${_secHeadHTML('caps', 'Captures', n ? `· ${n}` : '')}
+      ${!open ? '' : `<div class="kyn-sec-body">
       <div class="kyn-caps">
         ${media.map((m) => m.kind === 'pdf' ? `
           <div class="kyn-cap">
@@ -643,6 +697,7 @@ function _capturesSectionHTML() {
       </div>
       ${_audiosListHTML()}
       ${_voiceUIHTML()}
+      </div>`}
     </div>`;
 }
 
@@ -1031,9 +1086,11 @@ function _remindersSectionHTML() {
          <button type="button" class="kyn-time-ok" data-act="kyn-time-ok" aria-label="Valider l'heure">${icon('check', 16) || 'OK'}</button>
        </div>`
     : `<button type="button" class="kyn-time-chip" data-act="kyn-time-open" aria-label="Choisir l'heure">${icon('clock', 14) || ''}<span>${p2(tt.h)}:${p2(tt.m)}</span></button>`;
+  const openSec = _panel.sec === 'rems';
   return `
-    <div class="kyn-sec">
-      <p class="kyn-sec-h">Rappels${rems.length ? ` · ${rems.length}` : ''}</p>
+    <div class="kyn-sec${openSec ? ' is-open' : ''}">
+      ${_secHeadHTML('rems', 'Rappels', rems.length ? `· ${rems.length}` : '')}
+      ${!openSec ? '' : `<div class="kyn-sec-body">
       ${rems.map((r) => _reminderRowHTML(r, now)).join('')}
       <div class="kyn-rem-form">
         <input data-field="rem-date" type="date" class="kyn-rem-date" min="${today}" value="${today}" aria-label="Date du rappel">
@@ -1047,6 +1104,7 @@ function _remindersSectionHTML() {
         <button class="kyn-add-btn" data-act="kyn-rem-add" aria-label="Ajouter le rappel">+</button>
       </div>
       ${_notifAffordanceHTML()}
+      </div>`}
     </div>`;
 }
 function _reminderRowHTML(r, now) {
