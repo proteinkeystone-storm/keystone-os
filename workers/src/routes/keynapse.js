@@ -662,7 +662,14 @@ async function _extractPlan(env, gate, text, opts) {
       max_tokens: maxTokens,
       stream: false,
     });
-    const raw = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
+    // Workers AI renvoie tantôt une CHAÎNE (le modèle encadre son JSON dans une
+    // clôture ```json), tantôt un OBJET DÉJÀ DÉSÉRIALISÉ quand il répond en JSON
+    // pur — ce que fait le prompt LISTE. Un .trim() direct jetait alors une
+    // TypeError avalée par le catch : l'extraction était juste, et l'utilisateur
+    // lisait « rien repéré dans ce texte ». Vérifié en sonde sur le vrai modèle
+    // le 31/07/2026 : liste → objet, tâches → chaîne.
+    const out = res?.response ?? res?.choices?.[0]?.message?.content ?? '';
+    const raw = (typeof out === 'string') ? out.trim() : JSON.stringify(out);
     // Compteur budget IA (angle mort corrigé le 22/07/2026 : Keynapse
     // consommait des neurones sans jamais apparaître au compteur).
     await recordUsage(env, 'keynapse', {
