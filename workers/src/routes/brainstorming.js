@@ -332,7 +332,7 @@ PRIORITÉ ABSOLUE — LES LIGNES [Client] : ce sont les interventions et réacti
 - Sinon (réflexion stratégique ouverte, diagnostic, cadrage) → "ideation": null.
 
 ÉTAPE 2 — SI IDÉATION : TRANCHE (refonte 2026-07 — une synthèse qui liste tout sans choisir est un échec)
-- CHOISIS 1 à 3 candidats retenus MAXIMUM (le "top"). Pour chacun, une rationale de 15-25 mots qui dit (a) pourquoi il BAT les autres et (b) à QUI on le doit — nomme l'agent ou le croisement d'agents (ex. "l'insight de Consumer Insight croisé au levier de Growth Hacker").
+- CHOISIS 1 à 3 candidats retenus MAXIMUM (le "top"). Pour chacun, une rationale de 15-25 mots qui dit d'abord POURQUOI IL BAT LES AUTRES (le critère qui tranche), puis crédite l'agent d'un simple tiret : « … — l'idée de Creative Director » ou « … — l'insight de Consumer Insight croisé au levier de Growth Hacker ». N'écris JAMAIS les mots de cette consigne (« à qui on le doit ») dans ta réponse.
 - Puis EXACTEMENT 2 groupes, pas plus :
   · {"direction": "Réserve", "items": [5 à 8 candidats solides mais battus, les meilleurs restants]}
   · {"direction": "Écartés", "items": [3 à 5 entrées au format "Candidat — pourquoi il perd, en 5-10 mots"]}
@@ -344,10 +344,11 @@ CONTRAINTES DE FORMAT STRICTES
   {
     "ideation": {
       "groups": [
-        { "direction": "<thème, 2-4 mots>", "items": ["<vrai candidat 1>", "<vrai candidat 2>", "...6 à 10 par groupe..."] }
+        { "direction": "Réserve", "items": ["<candidat gardé sous le coude>", "...6 à 10..."] },
+        { "direction": "Écartés", "items": ["<candidat abandonné> — <le motif, 2-5 mots>", "...2 à 5..."] }
       ],
       "top": [
-        { "label": "<le meilleur candidat>", "rationale": "<pourquoi il gagne, 6-12 mots>" }
+        { "label": "<le meilleur candidat>", "rationale": "<15-25 mots : pourquoi il BAT les autres candidats — le critère qui tranche — PUIS l'agent à qui on le doit>" }
       ]
     },
     "positioning": "<1 phrase de 15-25 mots résumant l'angle retenu>",
@@ -361,8 +362,10 @@ CONTRAINTES DE FORMAT STRICTES
   }
 - "ideation" : rempli SI le brief appelle un livrable génératif, sinon null.
   Chaque "item" et "label" doit être DIRECTEMENT UTILISABLE — un VRAI nom ("Keystone Nexus", "Cortex", "Pulse OS"…), JAMAIS une description abstraite ("un nom évoquant la performance").
-  top de 1 à 3 (LE choix), 2 groups exactement (Réserve, Écartés).
+  top de 1 à 3 (LE choix), 2 groups EXACTEMENT et dans cet ordre : "Réserve" puis "Écartés". Aucun autre groupe, aucun autre nom.
+  UN CANDIDAT N'APPARAÎT QU'UNE SEULE FOIS dans tout le bloc : s'il est dans "top", il n'est NI en Réserve NI en Écartés. Un candidat écarté n'est jamais aussi en réserve. Répéter un candidat rend la synthèse illisible.
 - "positioning" = LE VERDICT en une phrase assumée ("On part sur X parce que Y") — jamais un résumé neutre.
+  Il doit dire CE QU'ON ABANDONNE en choisissant (le renoncement assumé), pas seulement ce qu'on retient. INTERDIT de reformuler la "rationale" du top : si la phrase pouvait être copiée-collée depuis le top, elle ne sert à rien.
 - Brief NON génératif (ideation: null) : "positioning" = LA recommandation TRANCHÉE (un parti pris, pas un panorama), "opportunities" = les 3 raisons qui la portent (créditées aux agents), "risks" = les 2 garde-fous à poser.
 - 3 opportunities, 2 risks, 3 next_actions (toujours, ils contextualisent la décision).
 - Deadlines RÉALISTES : entre J+7 et J+90 par rapport à aujourd'hui.
