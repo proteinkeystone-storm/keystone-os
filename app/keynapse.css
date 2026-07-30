@@ -181,10 +181,13 @@
 .kyn-sec-n { flex: none; letter-spacing: .04em; color: var(--kyn-accent, var(--gold, #6366f1)); opacity: .85; }
 .kyn-sec-chev { flex: none; margin-left: auto; display: inline-flex; opacity: .55; transition: transform .22s cubic-bezier(.22,.61,.36,1); }
 .kyn-sec.is-open .kyn-sec-chev { transform: rotate(180deg); opacity: .8; }
-.kyn-sec-body { animation: kyn-secin .2s ease both; }
+/* L'animation ne joue QUE sur un changement de section (classe posée par le JS),
+   jamais sur un simple re-rendu : cocher une tâche re-génère tout le corps de la
+   fiche, et l'animation rejouée à chaque clic faisait sautiller la zone. */
+.kyn-sec-body--in { animation: kyn-secin .2s ease both; }
 @keyframes kyn-secin { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
-  .kyn-sec-body { animation: none; }
+  .kyn-sec-body--in { animation: none; }
   .kyn-sec-chev { transition: none; }
 }
 

@@ -576,6 +576,7 @@ function _setSec(key) {
   }
   _panel.sec = (_panel.sec === key) ? null : key;   // re-cliquer referme (vue sommaire)
   _secRemember(_panel.id, _panel.sec);              // « tout replié » compris : c'est un état choisi
+  _panel.secAnim = true;                            // seul ce geste anime le dépliage
   _refreshBody();
 }
 // En-tête toujours visible : il fait sommaire quand la section est repliée,
@@ -589,6 +590,14 @@ function _secHeadHTML(key, label, count) {
       <span class="kyn-sec-chev" aria-hidden="true">${icon('chevron-down', 14) || ''}</span>
     </button>`;
 }
+// _secBodyCls() est consommée UNE fois : le drapeau retombe dès le premier
+// appel, si bien que le rendu suivant (cocher une tâche, ajouter une note)
+// n'anime plus rien. Sans ça, la zone sautille à chaque clic.
+function _secBodyCls() {
+  const on = !!(_panel && _panel.secAnim);
+  if (on) _panel.secAnim = false;
+  return on ? 'kyn-sec-body kyn-sec-body--in' : 'kyn-sec-body';
+}
 function _panelBodyHTML() {
   const d = _panel.detail;
   const todos = d.todos, done = todos.filter((t) => t.done).length;
@@ -597,7 +606,7 @@ function _panelBodyHTML() {
   return `
     <div class="kyn-sec kyn-sec--notes${openNotes ? ' is-open' : ''}">
       ${_secHeadHTML('notes', 'Notes libres', d.notes.length ? `· ${d.notes.length}` : '')}
-      ${openNotes ? `<div class="kyn-sec-body">
+      ${openNotes ? `<div class="${_secBodyCls()}">
       ${!d.notes.length ? '' : `<div class="kyn-notes-list">
       ${d.notes.map((n) => `
         <div class="kyn-note">
@@ -614,7 +623,7 @@ function _panelBodyHTML() {
     ${_capturesSectionHTML()}
     <div class="kyn-sec${openTodos ? ' is-open' : ''}">
       ${_secHeadHTML('todos', 'Actions', todos.length ? `· ${done}/${todos.length}` : '')}
-      ${openTodos ? `<div class="kyn-sec-body">
+      ${openTodos ? `<div class="${_secBodyCls()}">
       ${todos.length ? `<div class="kyn-prog"><div class="kyn-prog-fill" style="width:${pct}%"></div></div>` : ''}
       ${todos.map((t) => `
         <div class="kyn-todo" data-done="${t.done ? 1 : 0}">
@@ -765,7 +774,7 @@ function _linksSectionHTML() {
   return `
     <div class="kyn-sec${open ? ' is-open' : ''}">
       ${_secHeadHTML('links', 'Liens', linked.length ? `· ${linked.length}` : '')}
-      ${!open ? '' : `<div class="kyn-sec-body">
+      ${!open ? '' : `<div class="${_secBodyCls()}">
       ${linked.map((x) => `
         <div class="kyn-linkrow">
           <button class="kyn-linkgo" data-act="kyn-link-go" data-id="${x.id}"><span class="kyn-zchip-dot" style="background:${_escAttr(x.color)}"></span>${_esc(x.title)}</button>
@@ -825,7 +834,7 @@ function _capturesSectionHTML() {
   return `
     <div class="kyn-sec${open ? ' is-open' : ''}">
       ${_secHeadHTML('caps', 'Captures', n ? `· ${n}` : '')}
-      ${!open ? '' : `<div class="kyn-sec-body">
+      ${!open ? '' : `<div class="${_secBodyCls()}">
       <div class="kyn-caps">
         ${media.map((m) => m.kind === 'pdf' ? `
           <div class="kyn-cap">
@@ -1257,7 +1266,7 @@ function _remindersSectionHTML() {
   return `
     <div class="kyn-sec${openSec ? ' is-open' : ''}">
       ${_secHeadHTML('rems', 'Rappels', rems.length ? `· ${rems.length}` : '')}
-      ${!openSec ? '' : `<div class="kyn-sec-body">
+      ${!openSec ? '' : `<div class="${_secBodyCls()}">
       ${rems.map((r) => _reminderRowHTML(r, now)).join('')}
       <div class="kyn-rem-form">
         <input data-field="rem-date" type="date" class="kyn-rem-date" min="${today}" value="${today}" aria-label="Date du rappel">
