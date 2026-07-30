@@ -364,6 +364,7 @@ CONTRAINTES DE FORMAT STRICTES
   Chaque "item" et "label" doit être DIRECTEMENT UTILISABLE — un VRAI nom ("Keystone Nexus", "Cortex", "Pulse OS"…), JAMAIS une description abstraite ("un nom évoquant la performance").
   top de 1 à 3 (LE choix), 2 groups EXACTEMENT et dans cet ordre : "Réserve" puis "Écartés". Aucun autre groupe, aucun autre nom.
   UN CANDIDAT N'APPARAÎT QU'UNE SEULE FOIS dans tout le bloc : s'il est dans "top", il n'est NI en Réserve NI en Écartés. Un candidat écarté n'est jamais aussi en réserve. Répéter un candidat rend la synthèse illisible.
+  Cette règle vaut même DÉGUISÉ : ni reformulation, ni synonyme, ni ajout d'un sous-titre ou d'un tiret ("X" et "X — L'ombre dans la ville" sont LE MÊME candidat). Si une piste est déjà dans "top", elle disparaît purement et simplement des groupes.
 - "positioning" = LE VERDICT en une phrase assumée ("On part sur X parce que Y") — jamais un résumé neutre.
   Il doit dire CE QU'ON ABANDONNE en choisissant (le renoncement assumé), pas seulement ce qu'on retient. INTERDIT de reformuler la "rationale" du top : si la phrase pouvait être copiée-collée depuis le top, elle ne sert à rien.
 - Brief NON génératif (ideation: null) : "positioning" = LA recommandation TRANCHÉE (un parti pris, pas un panorama), "opportunities" = les 3 raisons qui la portent (créditées aux agents), "risks" = les 2 garde-fous à poser.

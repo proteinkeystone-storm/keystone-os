@@ -327,6 +327,21 @@ export function openBrainstorming(opts = {}) {
   }
 }
 
+// Repartir à zéro sans quitter l'outil : on enchaîne les séances (tests, briefs
+// successifs) sans repasser par le Dashboard.
+// Rien n'est perdu — la séance est autosauvegardée dans la bibliothèque à chaque
+// tour de table ; on le RAPPELLE dans la confirmation, sinon « tout effacer »
+// fait hésiter à tort. Le mode de réflexion en cours est conservé : celui qui
+// enchaîne trois briefs dans le même mode ne veut pas le re-choisir trois fois.
+function _resetSeance() {
+  const enCours = !!(_currentSession && _currentSession.history && _currentSession.history.length);
+  if (enCours && !confirm('Repartir à zéro ?\n\nLa séance en cours reste enregistrée dans la bibliothèque — vous pourrez la rouvrir.')) return;
+  const mode = _currentSession?.mode || DEFAULT_MODE;
+  _typewriterReset();
+  _currentSession = null;       // coupe les flux en retard (cf. _seanceObsolete)
+  openBrainstorming({ mode });
+}
+
 export function closeBrainstorming() {
   const panel = document.getElementById('wr-fullscreen');
   if (panel) {
@@ -366,6 +381,11 @@ function _renderShell() {
       <div class="ws-topbar-actions">
         ${helpButtonHTML(APP_ID)}
         ${ratingButtonHTML(APP_ID)}
+        <button class="ws-iconbtn" id="wr-reset-btn" data-act="reset"
+                title="Repartir à zéro — nouvelle séance"
+                aria-label="Repartir à zéro, nouvelle séance">
+          ${icon('refresh', 18)}
+        </button>
         <button class="ws-iconbtn" id="wr-library-btn" data-act="library"
                 title="Bibliothèque (${_loadLibrary().length} sessions)"
                 aria-label="Ouvrir la bibliothèque">
@@ -496,6 +516,7 @@ function _wireShell(panel) {
   if (railBtns[1]) railBtns[1].addEventListener('click', () => _openModesModal(panel));
   // Bibliothèque des sessions — bouton top-right (cohérence cross-outils, picto book-open)
   panel.querySelector('#wr-library-btn')?.addEventListener('click', () => _openLibraryModal(panel));
+  panel.querySelector('#wr-reset-btn')?.addEventListener('click', () => _resetSeance());
 
   // Sprint 6 — Toggle bottom sheet signals (tablette/mobile)
   const signalsToggle = panel.querySelector('#wr-signals-toggle');
@@ -943,6 +964,13 @@ async function _pickRosterAuto(panel) {
 }
 
 async function _callOrchestration(panel, singleAgentId = null) {
+  // Les flux ne sont pas interruptibles (pas d'AbortController) : si l'utilisateur
+  // repart à zéro pendant que la table parle, les répliques en retard
+  // continueraient d'arriver et se colleraient à la NOUVELLE séance. On retient
+  // donc l'identité de la séance qui a lancé l'appel, et tout ce qui revient
+  // après un changement de séance est ignoré.
+  const _sessionAuLancement = _currentSession?.id || null;
+  const _seanceObsolete = () => (_currentSession?.id || null) !== _sessionAuLancement;
   const url = `${_apiBase()}/api/brainstorming/agent-respond`;
   const payload = {
     agent_id      : singleAgentId || 'auto',    // agent SEUL (relance ciblée) ou orchestrateur
@@ -1008,6 +1036,7 @@ async function _callOrchestration(panel, singleAgentId = null) {
   while (!complete) {
     const { done, value } = await reader.read();
     if (done) break;
+    if (_seanceObsolete()) { try { await reader.cancel(); } catch (_) {} return; }   // séance repartie à zéro entre-temps
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split('\n');
     buffer = lines.pop() || '';

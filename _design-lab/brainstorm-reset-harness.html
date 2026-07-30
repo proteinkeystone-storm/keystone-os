@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Harnais — bouton « repartir à zéro » (Brainstorming)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/app/style.css">
+<link rel="stylesheet" href="/app/workspace.css">
+<link rel="stylesheet" href="/app/brainstorming.css">
+<style>html,body{margin:0;background:#07102a;}</style>
+</head>
+<body>
+<script type="module">
+// Harnais isolé : l'API est bouchonnée, rien ne sort de la machine. Sert à voir
+// le bouton « repartir à zéro » et à vérifier qu'il ramène bien à l'écran de
+// préparation sans erreur console.
+if (navigator.serviceWorker) {
+  const regs = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(regs.map((r) => r.unregister()));
+}
+const realFetch = window.fetch.bind(window);
+window.fetch = async (url, opts = {}) => {
+  const u = String((url && url.url) || url);
+  if (!u.includes('/api/')) return realFetch(url, opts);
+  return new Response(JSON.stringify({ ok: true, agents: [], sessions: [] }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } });
+};
+localStorage.setItem('ks_jwt', 'harness');
+
+const { openBrainstorming } = await import('/app/brainstorming.js');
+openBrainstorming();
+</script>
+</body>
+</html>
