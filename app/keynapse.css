@@ -425,6 +425,40 @@
 .kyn-prop-at:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
 .kyn-props-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 11px; }
 
+/* ═══ KN-10 — lire un texte collé (zone Actions) ═══════════════
+   Réutilise le langage flat de la fiche (champ, rayon, séparateur) et le
+   panneau de propositions du vocal : c'est le MÊME geste — l'IA propose,
+   l'utilisateur coche. Rien de neuf à apprendre. */
+.kyn-ing-open {
+  display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 10px; padding: 9px 11px;
+  border: 1px dashed var(--kyn-field-bd, rgba(255,255,255,.14)); border-radius: var(--kyn-field-r, 10px);
+  background: transparent; color: var(--tx2, rgba(248,250,252,.55)); font: inherit; font-size: 12.5px;
+  cursor: pointer; text-align: left; transition: border-color .18s ease, color .18s ease;
+}
+.kyn-ing-open:hover { border-color: var(--kyn-accent, var(--gold, #6366f1)); color: var(--text, #f8fafc); }
+.kyn-ing-open svg { flex: none; }
+.kyn-ing-open--locked { opacity: .5; cursor: not-allowed; }
+.kyn-ing-open--locked:hover { border-color: var(--kyn-field-bd, rgba(255,255,255,.14)); color: var(--tx2, rgba(248,250,252,.55)); }
+
+.kyn-ing { margin-top: 10px; padding: 11px; border-radius: 12px; background: var(--navy3, #242d42); border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.06)); }
+.kyn-ing-modes { display: flex; gap: 6px; margin-bottom: 9px; }
+.kyn-ing-mode {
+  flex: 1; padding: 7px 8px; border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.05));
+  border-radius: var(--kyn-field-r, 10px); background: var(--kyn-field-bg, #232a3d);
+  color: var(--tx2, rgba(248,250,252,.55)); font: inherit; font-size: 12px; cursor: pointer;
+}
+.kyn-ing-mode.is-on { background: var(--kyn-accent, var(--gold, #6366f1)); border-color: var(--kyn-accent, var(--gold, #6366f1)); color: #fff; }
+.kyn-ing textarea {
+  width: 100%; min-height: 96px; resize: vertical; padding: 9px 11px;
+  background: var(--kyn-field-bg, #232a3d); border: 1px solid var(--kyn-field-bd, rgba(255,255,255,.05));
+  border-radius: var(--kyn-field-r, 10px); color: var(--text, #f8fafc); font: inherit; font-size: 13px; line-height: 1.45;
+}
+.kyn-ing textarea:focus { outline: none; border-color: var(--kyn-accent, var(--gold, #6366f1)); }
+.kyn-ing-foot { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.kyn-ing-count { flex: 1; font-size: 11px; color: var(--tx3, rgba(248,250,252,.4)); font-variant-numeric: tabular-nums; }
+.kyn-ing-count.is-near { color: var(--danger, #e05c5c); }
+.kyn-ing-foot .kyn-btn[disabled] { opacity: .45; cursor: not-allowed; }
+
 /* Petit message vocal (note / erreur) */
 .kyn-voicemsg { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 11px; border-radius: 10px; font-size: 12.5px; background: var(--navy3, #242d42); color: var(--tx2, rgba(248,250,252,.7)); }
 .kyn-voicemsg.is-err { background: color-mix(in srgb, var(--danger, #e05c5c) 16%, transparent); color: var(--danger, #e05c5c); }

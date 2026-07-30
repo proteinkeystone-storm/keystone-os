@@ -165,7 +165,7 @@ import { handleKeynapseHealth, handleKeynapseState,
          handleZoneCreate, handleZoneUpdate, handleZoneDelete,
          handleLinkCreate, handleLinkDelete,
          handleMediaUpload, handleMediaServe, handleMediaDelete,
-         handleVoiceUpload, handleReminderCreate,
+         handleVoiceUpload, handleTextIngest, handleReminderCreate,
          handleRemindersList, handleReminderUpdate, handleReminderDelete,
          handlePushSubscribe, handlePushUnsubscribe, sweepDueReminders } from './routes/keynapse.js';
 // networK (Pad O-NET-001 · NK-2) — réseau relationnel vivant, V1 manuelle, zéro IA.
@@ -339,6 +339,8 @@ export default {
       if (knMediaUp && method === 'POST') return handleMediaUpload(request, env, knMediaUp[1]);
       const knVoice = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)\/voice$/);
       if (knVoice && method === 'POST') return handleVoiceUpload(request, env, knVoice[1]);
+      const knIngest = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)\/ingest$/);
+      if (knIngest && method === 'POST') return handleTextIngest(request, env, knIngest[1]);
       const knReminderCreate = path.match(/^\/api\/keynapse\/bubbles\/([A-Za-z0-9-]+)\/reminders$/);
       if (knReminderCreate && method === 'POST') return handleReminderCreate(request, env, knReminderCreate[1]);
       const knReminder = path.match(/^\/api\/keynapse\/reminders\/([A-Za-z0-9-]+)$/);

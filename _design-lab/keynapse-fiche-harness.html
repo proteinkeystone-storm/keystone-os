@@ -59,9 +59,27 @@ window.fetch = async (url, opts = {}) => {
   const u = String((url && url.url) || url);
   if (!u.includes('/api/')) return realFetch(url, opts);
   const j = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  // Ingestion de texte : l'IA est REMPLACÉE par une extraction naïve (une ligne
+  // = un élément). Sert à éprouver le parcours — bouton, modes, validation,
+  // insertion — pas la qualité du modèle, qui ne se juge qu'en réel.
+  if (/\/ingest$/.test(u)) {
+    const b = JSON.parse(opts.body || '{}');
+    const lignes = String(b.text || '').split('\n').map((s) => s.replace(/^[-*•\d.\s]+/, '').trim()).filter((s) => s.length > 2);
+    if (qs.has('ingest-vide')) return j({ ok: true, mode: b.mode, proposals: { tasks: [], reminders: [] } });
+    if (qs.has('ingest-locked')) return j({ ok: true, proposals: { tasks: [], reminders: [] }, note: 'La lecture automatique d’un texte demande une application payante — Keynapse reste gratuit pour vos bulles.', code: 'AI_REQUIRES_PAID_APP' });
+    return j({ ok: true, mode: b.mode, proposals: {
+      tasks: lignes.slice(0, b.mode === 'list' ? 25 : 12),
+      reminders: b.mode === 'list' ? [] : [{ label: 'Relancer l’architecte', at: '2026-08-12T09:00' }],
+    } });
+  }
   if (/\/notes$/.test(u)) {
     const note = { id: 'n' + (++seq), body: JSON.parse(opts.body || '{}').body || '', created_at: '2026-07-30 12:00:00' };
     DETAIL.notes.push(note); return j({ note });
+  }
+  if (/\/reminders$/.test(u) && (opts.method || 'GET') === 'POST') {
+    const b = JSON.parse(opts.body || '{}');
+    const reminder = { id: 'r' + (++seq), at: String(b.at || '').replace('T', ' ').slice(0, 19), repeat: '', label: b.label || '', notified_at: null };
+    DETAIL.reminders.push(reminder); return j({ reminder });
   }
   if (/\/todos$/.test(u)) {
     const todo = { id: 't' + (++seq), label: JSON.parse(opts.body || '{}').label || '', done: 0 };

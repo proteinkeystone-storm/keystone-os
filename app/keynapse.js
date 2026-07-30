@@ -142,6 +142,7 @@ function _buildShell() {
   document.body.appendChild(_root);
   _root.addEventListener('click', _onClick);
   _root.addEventListener('change', _onChange);
+  _root.addEventListener('input', _onInput);
   try { bindRatingButton(_root, WORKSPACE_META.id); } catch (_) {}
   try { bindHelpButton(_root, WORKSPACE_META.id); } catch (_) {}
   try { bindBurger(_root); } catch (_) {}
@@ -221,6 +222,14 @@ function _onClick(e) {
     case 'kyn-voice-del':    return _delVoice(el.dataset.id);
     case 'kyn-prop-add':     return _addProposals();
     case 'kyn-prop-skip':    return _skipProposals();
+    // Ingestion d'un texte collé (KN-10)
+    case 'kyn-ing-open':     return _ingestOpen();
+    case 'kyn-ing-cancel':   return _ingestClose();
+    case 'kyn-ing-mode':     return _ingestMode(el.dataset.mode);
+    case 'kyn-ing-run':      return _ingestRun();
+    case 'kyn-ing-add':      return _ingestAdd();
+    case 'kyn-ing-skip':     return _ingestSkip();
+    case 'kyn-ing-dismiss':  return _ingestDismiss();
     case 'kyn-voice-dismiss': return _clearVoiceMsg();
     // Rappels (Sprint 7)
     case 'kyn-rem-add':      return _addReminder();
@@ -239,6 +248,20 @@ function _onClick(e) {
     case 'kyn-zone-recolor': _recolorZone = (_recolorZone === el.dataset.id ? null : el.dataset.id); return _renderZonesPanel();
     case 'kyn-zone-setcolor': return _setZoneColor(el.dataset.id, el.dataset.color);
   }
+}
+// Frappe dans le champ d'ingestion : on met à jour le compteur et le bouton
+// « Analyser » À LA MAIN, sans _refreshBody() — un re-render à chaque touche
+// détruirait le textarea et ferait sauter le curseur au début.
+function _onInput(e) {
+  const t = e.target;
+  if (!t || !t.dataset || t.dataset.field !== 'ing-text') return;
+  const g = _ingestState(); if (!g) return;
+  g.text = t.value;
+  const n = g.text.length;
+  const cnt = _panelEl && _panelEl.querySelector('.kyn-ing-count');
+  if (cnt) { cnt.textContent = `${n} / ${KN_INGEST_MAX}`; cnt.classList.toggle('is-near', n > KN_INGEST_MAX - 200); }
+  const run = _panelEl && _panelEl.querySelector('[data-act="kyn-ing-run"]');
+  if (run) run.disabled = !!g.busy || n < 12;
 }
 function _onChange(e) {
   const t = e.target, f = t && t.dataset && t.dataset.field;
@@ -603,11 +626,131 @@ function _panelBodyHTML() {
         <input data-field="todo-add" type="text" maxlength="500" placeholder="Ajouter une tâche…" autocomplete="off">
         <button class="kyn-add-btn" data-act="kyn-todo-add" aria-label="Ajouter la tâche">+</button>
       </div>
+      ${_ingestUIHTML()}
       </div>` : ''}
     </div>
     ${_remindersSectionHTML()}
     ${_linksSectionHTML()}`;
 }
+// ════════════════════════════════════════════════════════════════
+// KN-10 — lire un texte collé et en proposer des cases à cocher
+//
+// Deux lectures au choix : « à faire » (compte-rendu, courriel → tâches et
+// échéances) et « à réunir » (recette, notice → éléments à cocher). L'IA ne
+// FAIT rien : elle propose, l'utilisateur coche, comme pour un mémo vocal.
+//
+// L'écran vit dans la section Actions — pas dans Captures comme le vocal :
+// avec l'accordéon, des propositions rendues dans une section repliée seraient
+// tout simplement invisibles.
+// Même verrou que la dictée (application payante), vérifié aussi côté serveur.
+// ════════════════════════════════════════════════════════════════
+const KN_INGEST_MAX = 6000;      // aligné sur le plafond dur du worker
+function _ingestUIHTML() {
+  const g = (_panel && _panel.ingest) || null;
+  const ouvert = _dicteeAutorisee();
+  // Le compte rendu (« Ajouté : 5 tâches ») est rendu HORS du panneau : l'ajout
+  // referme le panneau, une note à l'intérieur ne s'afficherait jamais.
+  const ICO = icon('sparkles', 14) || icon('plus', 14) || '';
+  const LBL = 'Lire un texte et en tirer des tâches';
+  // Pendant la validation, le formulaire s'efface : les propositions et le
+  // bouton « Ajouter » passeraient sous le pli derrière un textarea de 96 px.
+  // « Ignorer » le fait revenir, texte intact.
+  let html = (g && g.props)
+    ? ''
+    : (!g || !g.open)
+      ? (ouvert
+          ? `<button class="kyn-ing-open" data-act="kyn-ing-open" aria-label="${LBL}">${ICO}<span>${LBL}</span></button>`
+          : `<button class="kyn-ing-open kyn-ing-open--locked" data-act="kyn-voice-locked" aria-label="${LBL} — demande une application payante" title="Lire un texte demande une application payante — Keynapse reste gratuit pour vos bulles.">${ICO}<span>${LBL}</span></button>`)
+      : _ingestFormHTML(g);
+  if (g && g.busy) html += `<div class="kyn-voicebusy"><span class="kyn-spin kyn-spin--sm"></span><span>${_esc(g.busy)}</span></div>`;
+  if (g) html += _propsHTML(
+    g.props, 'ing',
+    g.mode === 'list' ? 'Relevé dans le texte — à valider' : 'Détecté dans le texte — à valider',
+    g.mode === 'list' ? 'À réunir' : 'Tâches',
+  );
+  if (g && g.error)     html += `<div class="kyn-voicemsg is-err"><span>${_esc(g.error)}</span><button class="kyn-voicemsg-x" data-act="kyn-ing-dismiss" aria-label="Fermer">×</button></div>`;
+  else if (g && g.note) html += `<div class="kyn-voicemsg"><span>${_esc(g.note)}</span><button class="kyn-voicemsg-x" data-act="kyn-ing-dismiss" aria-label="Fermer">×</button></div>`;
+  return html;
+}
+function _ingestFormHTML(g) {
+  const n = (g.text || '').length;
+  return `
+    <div class="kyn-ing">
+      <div class="kyn-ing-modes" role="group" aria-label="Que faut-il lire dans ce texte ?">
+        <button class="kyn-ing-mode ${g.mode !== 'list' ? 'is-on' : ''}" data-act="kyn-ing-mode" data-mode="tasks">Ce qu'il y a à faire</button>
+        <button class="kyn-ing-mode ${g.mode === 'list' ? 'is-on' : ''}" data-act="kyn-ing-mode" data-mode="list">Ce qu'il y a à réunir</button>
+      </div>
+      <textarea data-field="ing-text" maxlength="${KN_INGEST_MAX}" placeholder="${g.mode === 'list' ? 'Collez une recette, une notice, une liste…' : 'Collez un compte-rendu, un courriel, des notes…'}">${_esc(g.text || '')}</textarea>
+      <div class="kyn-ing-foot">
+        <span class="kyn-ing-count ${n > KN_INGEST_MAX - 200 ? 'is-near' : ''}">${n} / ${KN_INGEST_MAX}</span>
+        <button class="kyn-btn" data-act="kyn-ing-cancel">Annuler</button>
+        <button class="kyn-btn kyn-btn--accent" data-act="kyn-ing-run"${g.busy || n < 12 ? ' disabled' : ''}>Analyser</button>
+      </div>
+    </div>`;
+}
+function _ingestState() {
+  if (!_panel) return null;
+  if (!_panel.ingest) _panel.ingest = { open: false, mode: 'tasks', text: '', busy: '', props: null, note: '', error: '' };
+  return _panel.ingest;
+}
+// La frappe n'est PAS re-rendue à chaque touche (le textarea perdrait le
+// curseur) : on relit sa valeur au moment d'agir.
+function _ingestReadText() {
+  const g = _ingestState(); if (!g || !_panelEl) return '';
+  const ta = _panelEl.querySelector('[data-field="ing-text"]');
+  if (ta) g.text = ta.value;
+  return g.text || '';
+}
+function _ingestOpen()  { const g = _ingestState(); if (!g) return; g.open = true;  g.note = ''; g.error = ''; _refreshBody(); }
+function _ingestClose() { const g = _ingestState(); if (!g) return; _ingestReadText(); g.open = false; g.props = null; _refreshBody(); }
+function _ingestMode(mode) {
+  const g = _ingestState(); if (!g) return;
+  _ingestReadText();                       // ne pas perdre ce qui est déjà collé
+  g.mode = mode === 'list' ? 'list' : 'tasks';
+  _refreshBody();
+}
+function _ingestDismiss() { const g = _ingestState(); if (!g) return; _ingestReadText(); g.note = ''; g.error = ''; _refreshBody(); }
+function _ingestSkip()    { const g = _ingestState(); if (!g) return; g.props = null; _refreshBody(); }
+async function _ingestRun() {
+  const g = _ingestState(); if (!g || g.busy) return;
+  const text = _ingestReadText().trim();
+  if (text.length < 12) { g.error = 'Collez d’abord un texte à lire.'; _refreshBody(); return; }
+  const bubbleId = _panel.id, mode = g.mode;
+  g.busy = 'Lecture du texte…'; g.props = null; g.note = ''; g.error = ''; _refreshBody();
+  try {
+    const r = await _api(`/bubbles/${encodeURIComponent(bubbleId)}/ingest`, { method: 'POST', body: { text, mode } });
+    if (!_panel || _panel.id !== bubbleId) return;
+    const g2 = _ingestState();
+    g2.busy = '';
+    const p = (r && r.proposals) || { tasks: [], reminders: [] };
+    if (r && r.note) { g2.note = r.note; _refreshBody(); return; }   // ex. verrou app payante
+    if (!p.tasks.length && !p.reminders.length) {
+      g2.note = mode === 'list'
+        ? 'Aucune liste d’éléments repérée dans ce texte.'
+        : 'Aucune tâche ni échéance repérée dans ce texte.';
+    } else {
+      // Tout coché par défaut : on décoche ce qu'on ne veut pas, plus rapide
+      // que l'inverse quand la liste est juste.
+      g2.props = {
+        tasks    : p.tasks.map((l) => ({ label: String(l), on: true })),
+        reminders: (p.reminders || []).map((r2) => ({ label: r2.label || '', at: r2.at || '', on: true })),
+      };
+    }
+    _refreshBody();
+  } catch (e) {
+    if (!_panel || _panel.id !== bubbleId) return;
+    const g2 = _ingestState();
+    g2.busy = ''; g2.error = (e && e.message) || 'Lecture impossible pour le moment.';
+    _refreshBody();
+  }
+}
+async function _ingestAdd() {
+  const g = _ingestState(); if (!g || !g.props) return;
+  await _addProposals(g, 'ing');
+  const g2 = _ingestState();
+  if (g2) { g2.text = ''; g2.open = false; _refreshBody(); }   // texte consommé : on referme
+}
+
 // ── Liens (Sprint 4 : tisser + naviguer) ────────────────────────
 function _linksSectionHTML() {
   const d = _panel.detail, id = _panel.id;
@@ -739,14 +882,24 @@ function _voiceUIHTML() {
   const v = (_panel && _panel.voice) || {};
   let html = '';
   if (v.busy) html += `<div class="kyn-voicebusy"><span class="kyn-spin kyn-spin--sm"></span><span>${_esc(v.busy)}</span></div>`;
-  const p = v.props;
-  if (p && (p.tasks.length || p.reminders.length)) {
-    const tasks = p.tasks.map((t, i) => `
+  html += _propsHTML(v.props, 'voice', 'Détecté dans le mémo — à valider');
+  if (v.error)     html += `<div class="kyn-voicemsg is-err"><span>${_esc(v.error)}</span><button class="kyn-voicemsg-x" data-act="kyn-voice-dismiss" aria-label="Fermer">×</button></div>`;
+  else if (v.note) html += `<div class="kyn-voicemsg"><span>${_esc(v.note)}</span><button class="kyn-voicemsg-x" data-act="kyn-voice-dismiss" aria-label="Fermer">×</button></div>`;
+  return html;
+}
+
+// Écran de validation partagé par le mémo vocal (section Captures) et par
+// l'ingestion de texte (section Actions). L'attribut data-ns cloisonne les deux
+// jeux de cases : sans lui, relire les cochages du DOM mélangerait les
+// propositions du micro et celles du texte collé.
+function _propsHTML(p, ns, titre, sousTitre) {
+  if (!p || (!p.tasks.length && !p.reminders.length)) return '';
+  const tasks = p.tasks.map((t, i) => `
       <label class="kyn-prop-row">
         <input type="checkbox" class="kyn-prop-check" data-prop="task" data-i="${i}"${t.on ? ' checked' : ''}>
         <span class="kyn-prop-lbl">${_esc(t.label)}</span>
       </label>`).join('');
-    const reminders = p.reminders.map((r, i) => `
+  const reminders = p.reminders.map((r, i) => `
       <div class="kyn-prop-row kyn-prop-rem">
         <label class="kyn-prop-remmain">
           <input type="checkbox" class="kyn-prop-check" data-prop="rem" data-i="${i}"${r.on ? ' checked' : ''}>
@@ -754,20 +907,16 @@ function _voiceUIHTML() {
         </label>
         <input type="datetime-local" class="kyn-prop-at" data-i="${i}" value="${_escAttr(r.at || '')}" aria-label="Date et heure du rappel">
       </div>`).join('');
-    html += `
-      <div class="kyn-props">
-        <p class="kyn-props-h">${icon('check', 13) || ''}<span>Détecté dans le mémo — à valider</span></p>
-        ${p.tasks.length ? `<p class="kyn-props-sub">Tâches</p>${tasks}` : ''}
+  return `
+      <div class="kyn-props" data-ns="${ns}">
+        <p class="kyn-props-h">${icon('check', 13) || ''}<span>${_esc(titre)}</span></p>
+        ${p.tasks.length ? `<p class="kyn-props-sub">${_esc(sousTitre || 'Tâches')}</p>${tasks}` : ''}
         ${p.reminders.length ? `<p class="kyn-props-sub">Rappels</p>${reminders}` : ''}
         <div class="kyn-props-foot">
-          <button class="kyn-btn" data-act="kyn-prop-skip">Ignorer</button>
-          <button class="kyn-btn kyn-btn--accent" data-act="kyn-prop-add">Ajouter</button>
+          <button class="kyn-btn" data-act="${ns === 'ing' ? 'kyn-ing-skip' : 'kyn-prop-skip'}">Ignorer</button>
+          <button class="kyn-btn kyn-btn--accent" data-act="${ns === 'ing' ? 'kyn-ing-add' : 'kyn-prop-add'}">Ajouter</button>
         </div>
       </div>`;
-  }
-  if (v.error)     html += `<div class="kyn-voicemsg is-err"><span>${_esc(v.error)}</span><button class="kyn-voicemsg-x" data-act="kyn-voice-dismiss" aria-label="Fermer">×</button></div>`;
-  else if (v.note) html += `<div class="kyn-voicemsg"><span>${_esc(v.note)}</span><button class="kyn-voicemsg-x" data-act="kyn-voice-dismiss" aria-label="Fermer">×</button></div>`;
-  return html;
 }
 
 // Charge les médias du panneau en blob authentifié (images + lecteurs audio),
@@ -1009,21 +1158,22 @@ async function _uploadVoice(blob) {
   _refreshBody();
 }
 // Relit l'état des cases/dates dans le DOM (source de vérité après rendu).
-function _syncPropsFromDOM() {
-  const v = _panel && _panel.voice; if (!v || !v.props || !_panelEl) return;
-  _panelEl.querySelectorAll('.kyn-prop-check').forEach((c) => {
+function _syncPropsFromDOM(store, ns) {
+  const v = store || (_panel && _panel.voice); if (!v || !v.props || !_panelEl) return;
+  const box = _panelEl.querySelector(`.kyn-props[data-ns="${ns || 'voice'}"]`); if (!box) return;
+  box.querySelectorAll('.kyn-prop-check').forEach((c) => {
     const i = parseInt(c.dataset.i, 10);
     const arr = c.dataset.prop === 'rem' ? v.props.reminders : v.props.tasks;
     if (arr[i]) arr[i].on = c.checked;
   });
-  _panelEl.querySelectorAll('.kyn-prop-at').forEach((inp) => {
+  box.querySelectorAll('.kyn-prop-at').forEach((inp) => {
     const i = parseInt(inp.dataset.i, 10);
     if (v.props.reminders[i]) v.props.reminders[i].at = inp.value;
   });
 }
-async function _addProposals() {
-  const v = _panel && _panel.voice; if (!v || !v.props) return;
-  _syncPropsFromDOM();
+async function _addProposals(store, ns) {
+  const v = store || (_panel && _panel.voice); if (!v || !v.props) return;
+  _syncPropsFromDOM(v, ns || 'voice');
   const bubbleId = _panel.id;
   const tasks = v.props.tasks.filter((t) => t.on && t.label.trim());
   const rems  = v.props.reminders.filter((r) => r.on && r.at);
@@ -1044,8 +1194,8 @@ async function _addProposals() {
     } catch (_) {}
   }
   if (!_panel || _panel.id !== bubbleId) return;
-  _panel.voice.busy = '';
-  _panel.voice.note = (nT || nR)
+  v.busy = '';
+  v.note = (nT || nR)
     ? `Ajouté : ${nT} tâche${nT > 1 ? 's' : ''}${nR ? ` · ${nR} rappel${nR > 1 ? 's' : ''}` : ''}.`
     : 'Rien à ajouter.';
   _refreshBody();

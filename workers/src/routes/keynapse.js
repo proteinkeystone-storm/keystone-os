@@ -546,6 +546,7 @@ export async function handleMediaDelete(request, env, id) {
 // d'amélioration possible si la qualité FR du modèle base est insuffisante.
 const WHISPER_MODEL   = '@cf/openai/whisper';
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;     // 10 Mo
+const MAX_INGEST_CHARS = 6000;                // texte collé : plafond DUR, pas une troncature muette
 const AUDIO_COLS      = 'id, bubble_id, transcript, created_at';
 const REMINDER_COLS   = 'id, bubble_id, label, at, repeat, notified_at, created_at';
 
@@ -574,7 +575,10 @@ async function _knRefundCredit(env, ticket) {
 
 // Pur : parse la réponse IA en { tasks:[string], reminders:[{label, at}] }.
 // Tolère un bloc ```json et du texte autour. Filtre/borne tout ; ne lève jamais.
-function _parseVoicePlan(raw) {
+// maxTasks : 8 pour un mémo vocal (qualité avant quantité), bien plus pour une
+// LISTE ingérée depuis un texte — une recette dépasse allègrement 8 ingrédients
+// et un plafond bas couperait la liste en silence.
+function _parseVoicePlan(raw, maxTasks = 8) {
   const empty = { tasks: [], reminders: [] };
   if (!raw || typeof raw !== 'string') return empty;
   let s = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
@@ -584,7 +588,7 @@ function _parseVoicePlan(raw) {
   try { obj = JSON.parse(s.slice(a, b + 1)); } catch (_) { return empty; }
   if (!obj || typeof obj !== 'object') return empty;
   const tasks = Array.isArray(obj.tasks)
-    ? obj.tasks.map((x) => String(x == null ? '' : x).trim()).filter(Boolean).slice(0, 8).map((l) => l.slice(0, 500))
+    ? obj.tasks.map((x) => String(x == null ? '' : x).trim()).filter(Boolean).slice(0, maxTasks).map((l) => l.slice(0, 500))
     : [];
   const reminders = Array.isArray(obj.reminders)
     ? obj.reminders.map((r) => {
@@ -610,21 +614,52 @@ RÈGLES STRICTES :
 6. Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour :
 {"tasks":["...","..."],"reminders":[{"label":"...","at":"2026-06-17T15:00"}]}`;
 
+// ── Ingestion d'un texte collé (KN-10) ──────────────────────────
+// Deux lectures d'un même texte, au choix de l'utilisateur :
+//   'tasks' — ce qu'il y a À FAIRE (compte-rendu, mail, devis) ;
+//   'list'  — ce qu'il y a À RÉUNIR (recette, notice, cahier des charges).
+// Le mode LISTE range ses éléments dans "tasks" et laisse "reminders" vide :
+// même schéma, même parseur, même écran de validation que le vocal. Une liste
+// d'ingrédients EST une liste à cocher — inutile d'inventer un second format.
+const TEXT_TASKS_PROMPT = `Tu es l'assistant de Keynapse. On te donne un texte en français (compte-rendu, courriel, note). Tu en extrais UNIQUEMENT les tâches à faire et les rappels datés réellement exprimés.
+
+RÈGLES STRICTES :
+1. N'invente rien. N'extrais que ce qui est écrit. Si le texte ne contient aucune action ni échéance, renvoie des listes vides.
+2. "tasks" : actions à faire, en français, à l'impératif court (max 12 mots). Sans date à l'intérieur.
+3. "reminders" : UNIQUEMENT si une échéance (date et/ou heure) est mentionnée. "label" = de quoi il s'agit (court). "at" = date/heure absolue au format ISO 8601 local "AAAA-MM-JJTHH:MM", calculée depuis AUJOURD'HUI ci-dessous pour les expressions relatives ("demain", "lundi", "dans deux heures"). Si l'heure n'est pas précisée, mets 09:00.
+4. Une même action ne peut pas être à la fois une tâche et un rappel : si elle a une échéance → rappel ; sinon → tâche.
+5. Maximum 12 tâches et 8 rappels. Qualité avant quantité.
+6. Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour :
+{"tasks":["...","..."],"reminders":[{"label":"...","at":"2026-06-17T15:00"}]}`;
+
+const TEXT_LIST_PROMPT = `Tu es l'assistant de Keynapse. On te donne un texte en français (recette, notice, cahier des charges, liste en vrac). Tu en extrais la LISTE DES ÉLÉMENTS À RÉUNIR ou À VÉRIFIER, pour en faire des cases à cocher.
+
+RÈGLES STRICTES :
+1. N'invente rien. N'extrais que ce qui est écrit. Si le texte ne contient aucune liste d'éléments, renvoie des listes vides.
+2. "tasks" : un élément par entrée, en français, court et concret. Garde les quantités quand elles sont données ("200 g de farine", "3 œufs"). Pas de phrase, pas de verbe d'action inutile.
+3. Ce sont les CHOSES, pas les étapes : pour une recette, les ingrédients — pas la préparation. Pour une notice, le matériel nécessaire. Pour un cahier des charges, les points à vérifier.
+4. Ne déduis aucune date : "reminders" reste TOUJOURS une liste vide.
+5. Maximum 25 éléments. Conserve l'ordre du texte.
+6. Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour :
+{"tasks":["200 g de farine","3 œufs"],"reminders":[]}`;
+
 // Extraction tâches/rappels depuis le transcript (1 crédit, refund si rien
 // d'exploitable ou si l'IA échoue). Best-effort : ne lève jamais, renvoie au
 // pire des listes vides (l'audio + le transcript sont déjà rendus au client).
-async function _extractVoicePlan(env, gate, transcript) {
+async function _extractPlan(env, gate, text, opts) {
+  const { systemPrompt, userLabel, maxTasks = 8, maxTokens = 800 } = opts;
   if (!env.AI || typeof env.AI.run !== 'function') return { tasks: [], reminders: [] };
   const ticket = await _knConsumeCredit(env, gate);
   if (ticket.blocked) return { tasks: [], reminders: [] };   // plus de crédits → pas de propositions
   const today = new Date().toISOString().slice(0, 16);
+  const body = text.slice(0, MAX_INGEST_CHARS);
   try {
     const res = await env.AI.run(KS_AI_MODEL, {
       messages: [
-        { role: 'system', content: `${VOICE_EXTRACT_PROMPT}\n\nAUJOURD'HUI : ${today}` },
-        { role: 'user',   content: `TRANSCRIPTION :\n\n${transcript.slice(0, 6000)}` },
+        { role: 'system', content: `${systemPrompt}\n\nAUJOURD'HUI : ${today}` },
+        { role: 'user',   content: `${userLabel} :\n\n${body}` },
       ],
-      max_tokens: 800,
+      max_tokens: maxTokens,
       stream: false,
     });
     const raw = (res?.response ?? res?.choices?.[0]?.message?.content ?? '').trim();
@@ -632,16 +667,60 @@ async function _extractVoicePlan(env, gate, transcript) {
     // consommait des neurones sans jamais apparaître au compteur).
     await recordUsage(env, 'keynapse', {
       usage  : res?.usage,
-      inText : VOICE_EXTRACT_PROMPT + transcript.slice(0, 6000),
+      inText : systemPrompt + body,
       outText: raw,
     });
-    const plan = _parseVoicePlan(raw);
+    const plan = _parseVoicePlan(raw, maxTasks);
     if (!plan.tasks.length && !plan.reminders.length) await _knRefundCredit(env, ticket);
     return plan;
   } catch (_) {
     await _knRefundCredit(env, ticket);
     return { tasks: [], reminders: [] };
   }
+}
+async function _extractVoicePlan(env, gate, transcript) {
+  return _extractPlan(env, gate, transcript, { systemPrompt: VOICE_EXTRACT_PROMPT, userLabel: 'TRANSCRIPTION', maxTasks: 8 });
+}
+
+// POST /bubbles/:id/ingest — corps { text, mode:'tasks'|'list' }.
+// Lit un texte collé et PROPOSE des tâches / des éléments à cocher. N'écrit
+// RIEN : c'est l'utilisateur qui valide ensuite, case par case, comme pour un
+// mémo vocal. Retourne { proposals:{ tasks, reminders } }.
+//
+// Coût : 1 appel IA (le vocal en fait 2 — Whisper puis extraction). Mais coller
+// est bien plus facile que dicter, donc le MÊME verrou « application payante »
+// s'applique, et il est vérifié ICI : côté client il ne serait que cosmétique.
+export async function handleTextIngest(request, env, bubbleId) {
+  const origin = getAllowedOrigin(env, request);
+  const braked = await budgetGuard(env, origin); if (braked) return braked;
+  const gate = await _gate(request, env, origin); if (gate.error) return gate.error;
+  const t = gate.tenant;
+  if (!env.AI || typeof env.AI.run !== 'function') return err('Moteur IA indisponible', 503, origin);
+  if (!(await _ownsBubble(env, t, bubbleId))) return err('Bulle introuvable', 404, origin);
+
+  let body = {};
+  try { body = await request.json(); } catch (_) { return err('Corps JSON attendu', 400, origin); }
+  const text = String(body?.text == null ? '' : body.text).trim();
+  const mode = body?.mode === 'list' ? 'list' : 'tasks';
+  if (text.length < 12) return err('Texte trop court à analyser', 400, origin);
+  if (text.length > MAX_INGEST_CHARS) return err(`Texte trop long (max ${MAX_INGEST_CHARS} caractères)`, 413, origin);
+
+  // Même règle que la dictée : le cœur de Keynapse reste gratuit, l'IA non.
+  if (isPricingV2(env) && gate.claims?.sub) {
+    const { plan, ownedAssets } = await resolveLicenceByHmac(env, gate.claims.sub);
+    if (!hasPaidApp({ plan: plan || gate.claims.plan, ownedAssets })) {
+      return json({
+        ok: true, proposals: { tasks: [], reminders: [] },
+        note: 'La lecture automatique d’un texte demande une application payante — Keynapse reste gratuit pour vos bulles.',
+        code: 'AI_REQUIRES_PAID_APP',
+      }, 200, origin);
+    }
+  }
+
+  const proposals = mode === 'list'
+    ? await _extractPlan(env, gate, text, { systemPrompt: TEXT_LIST_PROMPT,  userLabel: 'TEXTE', maxTasks: 25, maxTokens: 1200 })
+    : await _extractPlan(env, gate, text, { systemPrompt: TEXT_TASKS_PROMPT, userLabel: 'TEXTE', maxTasks: 12 });
+  return json({ ok: true, mode, proposals }, 200, origin);
 }
 
 // POST /bubbles/:id/voice — corps = octets audio (audio/webm | audio/mp4).
