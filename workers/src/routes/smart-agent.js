@@ -57,6 +57,7 @@ import { requireJWT }                              from '../lib/jwt.js';
 import { KS_AI_MODEL }                             from '../lib/ai-model.js';
 import { isEnforceEnabled, consumeCredits, refundCredits, resolvePlanByHmac } from '../lib/ai-credits.js';
 import { budgetGuard, recordUsage }               from '../lib/ai-budget.js';
+import { ipHashOf, ipRateExceeded, ipRateBump }    from '../lib/ip-throttle.js';
 import { callLLM, byokRoutingEnabled } from '../lib/llm-router.js';
 import { resolveEngineForApp, degradeAndWarn } from '../lib/app-mode.js';
 import { streamLLM }                               from '../lib/llm-stream.js';
@@ -2598,7 +2599,8 @@ const CHAT_MAX_TOKENS  = 700;   // SA-12.0 — plafond de génération (était 9
 // ── SA-5 — exposition publique anonyme (lien/QR) ─────────────────
 const PUBLIC_SLUG_RE        = /^[0-9A-Za-z]{8}$/;  // 8 chars (alphabet shortId)
 const PUBLIC_MAX_LEN        = 500;                 // question publique (plus courte qu'en interne)
-const PUBLIC_CAP_DEVICE     = 50;                  // questions/jour/appareil (anti-abus, valeur Stéphane)
+const PUBLIC_CAP_DEVICE     = 50;                  // questions/jour/appareil (empreinte UA+IP, falsifiable)
+const PUBLIC_CAP_IP        = 120;                  // questions/jour/IP (correctif #2 — l'IP ne se change pas d'un en-tête)
 const PUBLIC_DEFAULT_MAX_DAY = 500;                // plafond/jour/lien par défaut (protège le portefeuille)
 // Agent VITRINE de la landing : seul slug dont le compteur de questions
 // est exposé dans la méta publique (preuve d'usage). Les stats des
@@ -4122,14 +4124,18 @@ export async function handlePublicAgentChat(request, env, slug) {
   if (message.length > PUBLIC_MAX_LEN) return err(`Message trop long (${PUBLIC_MAX_LEN} caractères max)`, 400, origin);
   if (!env.AI || typeof env.AI.run !== 'function') return err('Moteur IA indisponible', 503, origin);
 
-  // Rate-limit anonyme : cap/appareil + plafond/jour du lien. Message neutre
-  // si dépassé (ne révèle pas la cause exacte). Compte AVANT la génération.
+  // Rate-limit anonyme : cap/appareil + cap/IP + plafond/jour du lien. Message
+  // neutre si dépassé (ne révèle pas la cause exacte). Compte AVANT la
+  // génération. Le cap/IP (correctif #2) rattrape la rotation d'UA, qui
+  // rendait le cap/appareil inopérant (l'UA est un simple en-tête ; l'IP non).
   const device = await publicDeviceHash(request);
+  const ipHash = await ipHashOf(request);
   const rate = await _publicRateCheck(env, gp.slug, device, link.max_per_day);
-  if (!rate.ok) {
+  if (!rate.ok || await ipRateExceeded(env, `agent:${gp.slug}`, ipHash, PUBLIC_CAP_IP)) {
     return json({ error: 'Limite de questions atteinte pour aujourd’hui. Revenez demain.', code: 'PUBLIC_RATE_LIMITED' }, 429, origin);
   }
   await _publicRateBump(env, gp.slug, device);
+  await ipRateBump(env, `agent:${gp.slug}`, ipHash);
 
   // Session publique (channel='public', isolée des sessions internes).
   let sessionId = (typeof b.session_id === 'string' && b.session_id) ? b.session_id : null;

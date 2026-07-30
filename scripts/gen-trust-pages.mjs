@@ -52,7 +52,7 @@ const CO = {
   city: 'Ollioules',
   region: 'Provence-Alpes-Côte d’Azur',
   country: 'France',
-  email: 'protein.keystone@gmail.com',
+  email: 'contact@protein-keystone.com',
   tel: '+33675590797',
   telHuman: '06 75 59 07 97',
   registry: 'https://annuaire-entreprises.data.gouv.fr/entreprise/520721853',

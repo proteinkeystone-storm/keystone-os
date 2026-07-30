@@ -81,7 +81,7 @@ npx wrangler d1 execute keystone-os --remote --file=restore-licences.sql
 
 **Variables d'env (worker) — toutes optionnelles, défauts sains :**
 - `KS_RESEND_KEY` (secret) — **requise pour recevoir les e-mails** (sinon la sentinelle tourne mais reste muette, loggué). Déjà utilisée par les autres e-mails Keystone.
-- `KS_OPS_ALERT_EMAIL` — destinataire des alertes (défaut `protein.keystone@gmail.com`).
+- `KS_OPS_ALERT_EMAIL` — destinataire des alertes (défaut `contact@protein-keystone.com`).
 - `KS_OPS_FAIL_THRESHOLD` — nb d'échecs consécutifs avant alerte (défaut `2`).
 - `KS_WORKER_URL` / `KS_LANDING_URL` — bases surveillées (défauts = prod). À laisser vides en prod.
 

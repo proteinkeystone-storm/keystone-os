@@ -8,7 +8,7 @@ Keystone OS est un système d'exploitation modulaire pour TPE et indépendants :
 - Éditeur : Protein Studio — Entreprise individuelle (Stéphane Benedetti)
 - SIRET : 520 721 853 00023 · SIREN : 520 721 853
 - Siège : 83190 Ollioules, France
-- Contact : protein.keystone@gmail.com · 06 75 59 07 97
+- Contact : contact@protein-keystone.com · 06 75 59 07 97
 - Registre officiel : https://annuaire-entreprises.data.gouv.fr/entreprise/520721853
 - Note de désambiguïsation : ne pas confondre avec d'autres entités françaises nommées « Keystone » (le nom est répandu). La fiche au registre officiel ci-dessus fait foi.
 

@@ -164,7 +164,7 @@ DK_EMAIL_DOMAIN = "redaction-pks.com"
 # Rétention des logs de scan en jours (purge auto via Cron, voir [triggers])
 SDQR_SCAN_RETENTION_DAYS = "90"
 # Email du DPO affiché sur la page /sdqr-privacy
-SDQR_DPO_EMAIL = "protein.keystone@gmail.com"
+SDQR_DPO_EMAIL = "contact@protein-keystone.com"
 
 # ── Web Push (Keynapse Sprint 9) — clé PUBLIQUE VAPID (publique par nature :
 # elle est aussi côté navigateur). La clé PRIVÉE est un SECRET :
@@ -196,7 +196,7 @@ crons = ["0 3 * * *", "* * * * *", "*/5 * * * *", "0 4 * * 1"]
 # ── OPS-2 · Sentinelle de soi (vars optionnelles, défauts sains) ──
 # KS_RESEND_KEY (secret) — requise pour que la sentinelle envoie ses e-mails
 #                          d'alerte/rétablissement (déjà utilisée ailleurs).
-# KS_OPS_ALERT_EMAIL     — destinataire des alertes (défaut protein.keystone@gmail.com)
+# KS_OPS_ALERT_EMAIL     — destinataire des alertes (défaut contact@protein-keystone.com)
 # KS_OPS_FAIL_THRESHOLD  — échecs consécutifs avant alerte (défaut 2, anti-flap)
 # KS_WORKER_URL / KS_LANDING_URL — bases surveillées (défauts = prod ; laisser vides)
 

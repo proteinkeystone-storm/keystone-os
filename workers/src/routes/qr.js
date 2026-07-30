@@ -27,6 +27,7 @@ import { buildConciergePrompt, conciergeTokenMap } from './smart-templates/conci
 import { buildConciergeBlockFromVefa, buildConciergeBlockFromKeyform } from './smart-templates/concierge-schema.js';
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage, estimateTokens } from '../lib/ai-budget.js';
+import { ipHashOf, ipRateExceeded, ipRateBump } from '../lib/ip-throttle.js';
 import { isEnforceEnabled, resolvePlanByHmac, consumeCredits, quotaForPlan } from '../lib/ai-credits.js';
 import { audit } from '../lib/audit.js';
 import { streamLLM } from '../lib/llm-stream.js';
@@ -1199,7 +1200,7 @@ export async function handleScansCsv(request, env, qrId) {
 // ══════════════════════════════════════════════════════════════════
 export async function handlePrivacyPage(request, env) {
   const retentionDays = parseInt(env.SDQR_SCAN_RETENTION_DAYS || '90', 10);
-  const dpoEmail = env.SDQR_DPO_EMAIL || 'protein.keystone@gmail.com';
+  const dpoEmail = env.SDQR_DPO_EMAIL || 'contact@protein-keystone.com';
   return new Response(_renderPrivacyPage(retentionDays, dpoEmail), {
     status: 200,
     headers: _htmlHeaders('public, max-age=3600'),
@@ -2166,7 +2167,8 @@ const CONCIERGE_MAX_TOK  = 600;
 // Volontairement GÉNÉREUX : un visiteur légitime pose 5 à 20 questions ;
 // ces plafonds ne doivent jamais gêner un vrai client, seulement borner
 // une boucle automatisée.
-const CONCIERGE_CAP_DEVICE = 50;    // questions/jour/appareil
+const CONCIERGE_CAP_DEVICE = 50;    // questions/jour/appareil (empreinte UA+IP, falsifiable)
+const CONCIERGE_CAP_IP     = 120;   // questions/jour/IP (correctif #2 — l'IP ne se change pas d'un en-tête)
 const CONCIERGE_CAP_QR     = 500;   // questions/jour/QR (protège le portefeuille)
 
 let _conciergeUsageReady = false;
@@ -2320,13 +2322,15 @@ export async function handleSmartQrConcierge(request, env) {
     return err('Workers AI non disponible (binding [ai] manquant)', 503, origin);
   }
 
-  // ── Plafond anti-abus par appareil et par QR (audit sept. 2026) ────
+  // ── Plafond anti-abus par appareil, par IP et par QR ───────────────
   // AVANT toute résolution de moteur ou débit : une boucle anonyme ne doit
-  // pas même atteindre le budget. L'empreinte est celle de game-play — elle
-  // est falsifiable (UA client), donc c'est un ralentisseur, pas un mur ;
-  // le plafond par QR, lui, borne l'abus même quand l'UA varie.
+  // pas même atteindre le budget. L'empreinte appareil (UA+IP) est
+  // falsifiable — l'UA est un simple en-tête —, donc c'est un ralentisseur,
+  // pas un mur. Le plafond par IP (correctif #2) rattrape la rotation d'UA :
+  // l'IP ne se change pas d'un en-tête. Le plafond par QR borne l'ensemble.
   await _ensureConciergeUsage(env);
   const conciergeDevice = await _deviceHash(request);
+  const conciergeIp     = await ipHashOf(request);
   const rate = await _conciergeRateCheck(env, shortId, conciergeDevice);
   if (!rate.ok) {
     return err(
@@ -2336,7 +2340,12 @@ export async function handleSmartQrConcierge(request, env) {
       429, origin,
     );
   }
+  // Plafond/IP : message neutre (on ne révèle pas la cause exacte du refus).
+  if (await ipRateExceeded(env, `concierge:${shortId}`, conciergeIp, CONCIERGE_CAP_IP)) {
+    return err('Vous avez atteint le nombre de questions pour aujourd\'hui. Revenez demain.', 429, origin);
+  }
   await _conciergeRateBump(env, shortId, conciergeDevice);
+  await ipRateBump(env, `concierge:${shortId}`, conciergeIp);
 
   // ── BYOK universel : moteur + clé du PROPRIÉTAIRE du QR ───────────
   // Surface PUBLIQUE (visiteur anonyme) : la clé est celle du proprio,

@@ -549,8 +549,8 @@ async function _handleCheckoutCompleted(env, event) {
     try {
       await sendEmail(env, {
         to:      customerEmail,
-        bcc:     'protein.keystone@gmail.com',
-        replyTo: 'protein.keystone@gmail.com',
+        bcc:     'contact@protein-keystone.com',
+        replyTo: 'contact@protein-keystone.com',
         subject: 'Votre clé Keystone OS',
         html:    tplWelcomeKey({
           ownerName:   customerEmail.split('@')[0],
@@ -606,8 +606,8 @@ async function _handleCheckoutCompleted(env, event) {
   try {
     await sendEmail(env, {
       to:      customerEmail,
-      bcc:     'protein.keystone@gmail.com',
-      replyTo: 'protein.keystone@gmail.com',
+      bcc:     'contact@protein-keystone.com',
+      replyTo: 'contact@protein-keystone.com',
       subject: `Votre clé Keystone OS — Plan ${plan}`,
       html:    tplWelcomeKey({
         ownerName:   customerEmail.split('@')[0],

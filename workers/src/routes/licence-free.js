@@ -164,7 +164,7 @@ export async function handleLicenceFree(request, env) {
   try {
     await sendEmail(env, {
       to:      email,
-      replyTo: 'protein.keystone@gmail.com',
+      replyTo: 'contact@protein-keystone.com',
       subject: 'Votre accès gratuit Keystone OS',
       html:    tplFreeKey({
         ownerName:   email.split('@')[0],

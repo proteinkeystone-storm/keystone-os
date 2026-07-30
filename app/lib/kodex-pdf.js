@@ -333,7 +333,7 @@ export async function exportBriefAsPDF(state, sector) {
   </div>
   <div class="footer">
     Document confidentiel généré par Keystone OS pour un usage professionnel.<br>
-    Protein Studio · Ollioules, Var, France · protein.keystone@gmail.com
+    Protein Studio · Ollioules, Var, France · contact@protein-keystone.com
   </div>
 </section>
 

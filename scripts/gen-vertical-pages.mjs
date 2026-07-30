@@ -490,7 +490,7 @@ function FOOT() {
         <a href="/a-propos">À propos</a><a href="/securite">Sécurité</a><a href="/confidentialite">Confidentialité</a><a href="/mentions-legales">Mentions légales</a><a href="/cgu">CGU</a><a href="/cgv">CGV</a><a href="/dpa">DPA & sous-traitants</a><a href="/reversibilite">Réversibilité</a><a href="/changelog">Nouveautés</a><a href="/roadmap">Feuille de route</a>
       </div>
       <div class="foot-col"><h4>Contact</h4>
-        <a href="mailto:protein.keystone@gmail.com">protein.keystone@gmail.com</a>
+        <a href="mailto:contact@protein-keystone.com">contact@protein-keystone.com</a>
         <a href="tel:+33675590797">06 75 59 07 97</a>
         <span>SAV : lun.–sam. 10h–19h (hors jours feries)</span>
       </div>

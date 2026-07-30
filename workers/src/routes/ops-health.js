@@ -31,7 +31,7 @@ const FETCH_TIMEOUT = 8000;
 // Bases par défaut (surchargées par env pour dev/test).
 const workerBase  = (env) => (env.KS_WORKER_URL  || 'https://keystone-os-api.keystone-os.workers.dev').replace(/\/$/, '');
 const landingBase = (env) => (env.KS_LANDING_URL || 'https://protein-keystone.com').replace(/\/$/, '');
-const alertTo     = (env) => env.KS_OPS_ALERT_EMAIL || env.KS_ADMIN_EMAIL || 'protein.keystone@gmail.com';
+const alertTo     = (env) => env.KS_OPS_ALERT_EMAIL || env.KS_ADMIN_EMAIL || 'contact@protein-keystone.com';
 
 // ── Santés représentatives, appelées EN INTERNE ─────────────────
 // ⚠ On NE fait PAS de self-HTTP vers le hostname du worker : Cloudflare

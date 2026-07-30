@@ -101,7 +101,7 @@ BYOK_ROUTING = "off"
 # Rétention des logs de scan en jours (purge auto via Cron, voir [triggers])
 SDQR_SCAN_RETENTION_DAYS = "90"
 # Email du DPO affiché sur la page /sdqr-privacy
-SDQR_DPO_EMAIL = "protein.keystone@gmail.com"
+SDQR_DPO_EMAIL = "contact@protein-keystone.com"
 
 # ── Web Push (Keynapse Sprint 9) — clé PUBLIQUE VAPID (publique par nature :
 # elle est aussi côté navigateur). La clé PRIVÉE est un SECRET :

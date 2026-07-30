@@ -280,7 +280,7 @@ function FOOT() {
         <a href="/#outils">Outils</a><a href="/#plans">Tarifs</a><a href="/faq">FAQ</a><a href="/activate">Se connecter</a>
       </div>
       <div class="foot-col"><h4>Contact</h4>
-        <a href="mailto:protein.keystone@gmail.com">protein.keystone@gmail.com</a>
+        <a href="mailto:contact@protein-keystone.com">contact@protein-keystone.com</a>
         <a href="tel:+33675590797">06 75 59 07 97</a>
         <span>SAV : lun.–sam. 10h–19h (hors jours fériés)</span>
       </div>
@@ -504,7 +504,7 @@ ${sections}
   <section class="band">
     <h2>Une question reste ?</h2>
     <p>Écrivez-nous, on répond du lundi au samedi, de 10h à 19h.</p>
-    <a class="btn btn-primary" href="mailto:protein.keystone@gmail.com">Nous écrire ${ARROW}</a>
+    <a class="btn btn-primary" href="mailto:contact@protein-keystone.com">Nous écrire ${ARROW}</a>
   </section>
 
 ${FOOT()}

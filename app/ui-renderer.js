@@ -1913,7 +1913,7 @@ function _renderKStoreAppDetail(appId) {
         : `<div class="ksfs-detail-icon" data-palette="${detailPalette}">${detailGlyph}</div>`;
 
     // ── Assistance → mailto ──
-    const SUPPORT_EMAIL = 'protein.keystone@gmail.com';
+    const SUPPORT_EMAIL = 'contact@protein-keystone.com';
     const supportSubject = encodeURIComponent(`Keystone OS — Assistance pour ${app.title || app.id}`);
     const supportBody    = encodeURIComponent(`Bonjour,\n\nJ'ai besoin d'aide concernant l'application "${app.title || app.id}".\n\nCordialement,`);
     const supportMailto  = `mailto:${SUPPORT_EMAIL}?subject=${supportSubject}&body=${supportBody}`;
@@ -4934,7 +4934,7 @@ function _renderSettingsBody() {
                     <p style="font-size:12px;line-height:1.6;color:var(--tx2);margin:0">
                         Une question, un bug, ou une demande spécifique ? L'équipe Keystone vous répond par e-mail.
                     </p>
-                    <a href="mailto:protein.keystone@gmail.com"
+                    <a href="mailto:contact@protein-keystone.com"
                        style="display:inline-flex;align-items:center;gap:10px;padding:10px 16px;
                               background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.22);
                               border-radius:8px;text-decoration:none;color:var(--gold);
@@ -4943,7 +4943,7 @@ function _renderSettingsBody() {
                        onmouseover="this.style.background='rgba(99,102,241,.15)';this.style.borderColor='rgba(99,102,241,.4)'"
                        onmouseout="this.style.background='rgba(99,102,241,.08)';this.style.borderColor='rgba(99,102,241,.22)'">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                        protein.keystone@gmail.com
+                        contact@protein-keystone.com
                     </a>
                     <p style="font-size:10.5px;color:var(--tx3);margin:0;line-height:1.5">
                         Réponse sous 48h (jours ouvrés). Pour les licences PRO &amp; MAX, le support est prioritaire.

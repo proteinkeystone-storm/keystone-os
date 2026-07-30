@@ -244,7 +244,7 @@ export async function degradeAndWarn(env, tenantId, appId, reason = 'vendor_erro
     const to = row?.mail || '';
     if (!/@/.test(to)) return true;
     await sendEmail(env, {
-      to, replyTo: 'protein.keystone@gmail.com',
+      to, replyTo: 'contact@protein-keystone.com',
       subject: 'Votre clé IA ne répond plus',
       html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;line-height:1.6;color:#111">
         <p>Votre clé de moteur IA n'a pas répondu sur <strong>${label}</strong>.</p>

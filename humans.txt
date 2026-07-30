@@ -1,7 +1,7 @@
 /* TEAM */
   Éditeur : Protein Studio (Entreprise individuelle)
   Responsable : Stéphane Benedetti
-  Contact : protein.keystone@gmail.com
+  Contact : contact@protein-keystone.com
   Lieu : Ollioules, France
 
 /* SITE */
