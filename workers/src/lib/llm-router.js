@@ -34,6 +34,7 @@
 import { KS_AI_MODEL } from './ai-model.js';
 import { decrypt }     from './crypto.js';
 import { recordUsage } from './ai-budget.js';
+import { aiText } from './ai-text.js';
 
 // Modèles par défaut (extensible — ne JAMAIS hardcoder côté frontend).
 // L'appelant peut override via `opts.model`.
@@ -210,14 +211,7 @@ async function _runMistral(env, { system, messages, max_tokens }) {
     throw new LLMError(`Workers AI erreur : ${e?.message || 'inconnue'}`, 502);
   }
 
-  const text = out?.response
-    || out?.result?.response
-    || out?.choices?.[0]?.message?.content
-    || out?.output?.[0]?.content?.[0]?.text
-    || out?.message?.content
-    || out?.text
-    || out?.completion
-    || '';
+  const text = aiText(out);
 
   const usage = out?.usage
     ? { input_tokens: out.usage.prompt_tokens ?? null, output_tokens: out.usage.completion_tokens ?? null }

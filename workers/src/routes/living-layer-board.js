@@ -36,6 +36,7 @@ import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { isThrottled, recordUsage } from '../lib/ai-budget.js';
 import { callLLM, byokRoutingEnabled } from '../lib/llm-router.js';
 import { quotaForPlan } from '../lib/ghost-quota.js';
+import { aiText } from '../lib/ai-text.js';
 
 // Moteur unique Keystone : Mistral Small 3.1 (cf. lib/ai-model.js).
 // Remplace Llama 3.1 8B le 2026-05-29. (Mode IA premium Claude Haiku
@@ -1144,14 +1145,7 @@ async function _buildAiPhraseLlama(env, systemPrompt, userPrompt) {
   } catch (e) {
     return null;
   }
-  const rawText = aiResponse?.response
-    || aiResponse?.result?.response
-    || aiResponse?.choices?.[0]?.message?.content
-    || aiResponse?.output?.[0]?.content?.[0]?.text
-    || aiResponse?.message?.content
-    || aiResponse?.text
-    || aiResponse?.completion
-    || '';
+  const rawText = aiText(aiResponse);
   // Compteur budget IA (best-effort)
   await recordUsage(env, 'living-layer', {
     usage : aiResponse?.usage,

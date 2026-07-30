@@ -13,6 +13,7 @@
 
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { isThrottled, recordUsage } from '../lib/ai-budget.js';
+import { aiText } from '../lib/ai-text.js';
 
 // Moteur unique Keystone : Mistral Small 3.1 (cf. lib/ai-model.js).
 // Latence OK pour une phrase courte de greeting, et AUCUN budget
@@ -137,14 +138,7 @@ export async function handleLivingLayerGreeting(request, env) {
   //   - { choices: [...] } pour les modèles OpenAI-compatibles (Gemma 4)
   //   - { output: [{ content: [{ text: "..." }] }] } pour Llama récents
   // (pattern repris de ghostwriter.js)
-  const rawText = aiResponse?.response
-    || aiResponse?.result?.response
-    || aiResponse?.choices?.[0]?.message?.content
-    || aiResponse?.output?.[0]?.content?.[0]?.text
-    || aiResponse?.message?.content
-    || aiResponse?.text
-    || aiResponse?.completion
-    || '';
+  const rawText = aiText(aiResponse);
 
   // Compteur budget IA (best-effort, ne casse jamais le greeting)
   await recordUsage(env, 'living-layer', {

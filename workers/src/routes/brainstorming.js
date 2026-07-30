@@ -30,6 +30,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { json, err, parseBody, getAllowedOrigin } from '../lib/auth.js';
+import { aiText } from '../lib/ai-text.js';
 import { requireJWT } from '../lib/jwt.js';
 import { getAgent, getAgentNamesForPrompt, normalizeDebateRoster } from '../lib/brainstorming-agents.js';
 import { pickNextAgent, shouldAutoPause } from '../lib/brainstorming-orchestrator.js';
@@ -510,11 +511,7 @@ async function _generateSynthesis(env, brief, history, todayIso) {
       return { error: 'Gemma 4 a épuisé son budget tokens en mode raisonnement. Relancez la synthèse.' };
     }
     // Extraction multi-format (Gemma 4 peut renvoyer 4 wrappings)
-    const raw = (res?.response
-      || res?.result?.response
-      || res?.choices?.[0]?.message?.content
-      || res?.output?.[0]?.content?.[0]?.text
-      || '').trim();
+    const raw = aiText(res);
     await recordUsage(env, 'brainstorming', {
       usage : res?.usage,
       inText: SYNTHESIZER_PROMPT + brief + dialogue,
@@ -595,11 +592,7 @@ async function _generatePostIdeasSynthesis(env, brief, history, network) {
       max_tokens: MAX_TOKENS_HEAVY_SYNTH,
       stream:     false,
     });
-    const raw = (res?.response
-      || res?.result?.response
-      || res?.choices?.[0]?.message?.content
-      || res?.output?.[0]?.content?.[0]?.text
-      || '').trim();
+    const raw = aiText(res);
     await recordUsage(env, 'brainstorming', { usage: res?.usage, inText: POST_IDEAS_PROMPT + brief + dialogue, outText: raw });
     const ideas = parsePostIdeas(raw);
     if (!ideas.length) return { error: 'Aucune idée exploitable — relance la synthèse.', raw: raw.slice(0, 200) };
@@ -803,11 +796,7 @@ async function _generatePostIdeas(env, topic, network) {
       max_tokens: MAX_TOKENS_HEAVY_SYNTH,
       stream:     false,
     });
-    const raw = (res?.response
-      || res?.result?.response
-      || res?.choices?.[0]?.message?.content
-      || res?.output?.[0]?.content?.[0]?.text
-      || '').trim();
+    const raw = aiText(res);
     await recordUsage(env, 'brainstorming', { usage: res?.usage, inText: POST_IDEAS_PROMPT + topic + netDesc, outText: raw });
     const ideas = parsePostIdeas(raw);
     if (!ideas.length) return { error: 'Aucune idée exploitable générée', raw: raw.slice(0, 200) };
@@ -1024,11 +1013,7 @@ async function _extractInsights(env, brief, history) {
     const choice0 = res?.choices?.[0];
     const gemmaLengthExhausted = choice0?.finish_reason === 'length' && !choice0?.message?.content;
     if (!gemmaLengthExhausted) {
-      const raw = (res?.response
-        || res?.result?.response
-        || res?.choices?.[0]?.message?.content
-        || res?.output?.[0]?.content?.[0]?.text
-        || '').trim();
+      const raw = aiText(res);
       await recordUsage(env, 'brainstorming', {
         usage : res?.usage,
         inText: INSIGHTS_PROMPT + brief + dialogue,
@@ -1053,10 +1038,7 @@ async function _extractInsights(env, brief, history) {
       max_tokens: 400,
       stream:     false,
     });
-    const raw = (res?.response
-      || res?.result?.response
-      || res?.choices?.[0]?.message?.content
-      || '').trim();
+    const raw = aiText(res);
     await recordUsage(env, 'brainstorming', {
       usage : res?.usage,
       inText: INSIGHTS_PROMPT + brief + dialogue,
