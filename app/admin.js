@@ -11,13 +11,6 @@ import { VEFA_CLAUSES_V1 }      from './lib/doc-templates/vefa-clauses-seed.js';
 import { VEFA_CLAUSES_V2 }      from './lib/doc-templates/vefa-clauses-seed-v2.js';
 import { VEFA_CONTRAT_CLAUSES_V1 } from './lib/doc-templates/vefa-contrat-clauses-seed.js';
 
-// ── Moteurs IA disponibles (fiches Key-Store) ──────────────────
-// Sert au select "Optimisé pour" + checkboxes "Moteurs compatibles".
-const KSTORE_AI_ENGINES = [
-  'Claude', 'GPT-5', 'Gemini', 'Mistral',
-  'Perplexity', 'Grok', 'Meta AI', 'Llama',
-];
-
 // ── Engine Registry ────────────────────────────────────────────
 const ENGINES = [
   { id: 'claude',     label: 'Claude',     color: '#c9a84c',
@@ -2684,21 +2677,6 @@ function openKStoreFicheEditor(idx, panel) {
     ).join('');
   };
 
-  // Selects "Optimisé pour" + "Compatibles"
-  const aiOptOptions = KSTORE_AI_ENGINES.map(e =>
-    `<option ${item.ai_optimized===e?'selected':''}>${esc(e)}</option>`
-  ).join('');
-
-  const compat = Array.isArray(item.ai_compatible) ? item.ai_compatible : [];
-  const aiCmpChecks = KSTORE_AI_ENGINES.map(e => `
-    <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;
-                  padding:5px 10px;border:1px solid var(--bd);border-radius:6px;
-                  cursor:pointer;background:rgba(255,255,255,.02)">
-      <input type="checkbox" value="${esc(e)}" class="ks-ai-cmp" ${compat.includes(e)?'checked':''}>
-      ${esc(e)}
-    </label>
-  `).join('');
-
   // Slots screenshots — nombre ILLIMITÉ (carrousel fiche détail).
   // shotIds est cloné (revert possible sur annulation) et tenu sans trous :
   // une suppression splice l'entrée, un ajout push à la fin.
@@ -2841,29 +2819,17 @@ function openKStoreFicheEditor(idx, panel) {
         </div>
       </fieldset>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-        <div>
-          <label class="form-label">Optimisé pour (moteur principal)</label>
-          <select class="form-select" id="ksf-ai-opt">
-            <option value="">— Choisir —</option>
-            ${aiOptOptions}
-          </select>
-        </div>
-        <div>
-          <label class="form-label">Copyright</label>
-          <input class="form-input" id="ksf-copyright" type="text"
-                 value="${esc(item.copyright || '© 2026-2027 Protein Studio')}">
-        </div>
-      </div>
-
+      <!-- « Optimisé pour » et « Moteurs IA compatibles » RETIRÉS le 31/07/2026.
+           Ces deux champs étaient déclaratifs : leur valeur par défaut ('Claude')
+           s'affichait sur presque toutes les fiches alors qu'en mode géré rien
+           n'appelle Claude (texte = Mistral Small sur Workers AI, voix = Whisper).
+           Un champ libre qui affirme une caractéristique technique finit toujours
+           par mentir. Les colonnes restent en base, simplement plus éditées ni
+           affichées — rien n'est détruit si on veut y revenir. -->
       <div>
-        <label class="form-label">Moteurs IA compatibles</label>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px" id="ksf-ai-cmp-wrap">
-          ${aiCmpChecks}
-        </div>
-        <p class="form-hint" style="opacity:.55;margin-top:4px">
-          De 1 à ${KSTORE_AI_ENGINES.length} moteurs — laisser vide pour "aucun précisé".
-        </p>
+        <label class="form-label">Copyright</label>
+        <input class="form-input" id="ksf-copyright" type="text"
+               value="${esc(item.copyright || '© 2026-2027 Protein Studio')}">
       </div>
 
       <!-- Image de tête de la carte (cover) -->
@@ -3209,9 +3175,10 @@ function openKStoreFicheEditor(idx, panel) {
     item.descTitle     = document.getElementById('ksf-desc-title').value.trim() || undefined;
     item.rgpdTitle     = document.getElementById('ksf-rgpd-title').value.trim() || undefined;
     item.rgpdText      = document.getElementById('ksf-rgpd-text').value.trim() || undefined;
-    item.ai_optimized  = document.getElementById('ksf-ai-opt').value || undefined;
     item.copyright     = document.getElementById('ksf-copyright').value.trim();
-    item.ai_compatible = Array.from(document.querySelectorAll('.ks-ai-cmp:checked')).map(c => c.value);
+    // ai_optimized / ai_compatible ne sont plus saisis (champs retirés du
+    // formulaire) : on ne les écrase pas non plus — ce qui existe en base
+    // reste tel quel, et une fiche sauvegardée ne les perd pas.
 
     // Icône (pictogramme de profil app)
     if (currentIconId) item.iconId = currentIconId;

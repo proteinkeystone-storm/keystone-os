@@ -1849,10 +1849,6 @@ function _renderKStoreAppDetail(appId) {
     const catLabel  = getCategoryPath(app.category, app.subcategory);
     const copyright = app.copyright || '© 2026-2027 Protein Studio';
 
-    // ── Moteurs IA (avec fallback) ──
-    const aiOpt = app.ai_optimized || 'Claude';
-    const aiCmp = app.ai_compatible || ['Claude', 'GPT 5', 'Mistral', 'Gemini'];
-
     // ── Bouton d'action ──
     const btnAction = (() => {
         if (!app.real) {
@@ -2007,16 +2003,16 @@ function _renderKStoreAppDetail(appId) {
                 </div>`;
             })()}
 
-            <!-- Badges moteurs IA + conversations incluses -->
+            <!-- Conversations incluses -->
+            <!-- Les lignes « Optimisé pour » et « Moteur AI compatible » ont été
+                 RETIRÉES le 31/07/2026 : elles annonçaient Claude sur presque
+                 toutes les fiches (valeur par défaut d'un champ libre de
+                 l'admin) alors qu'en mode géré rien n'appelle Claude — le
+                 texte passe par Mistral Small sur Workers AI, la voix par
+                 Whisper. Claude n'intervient QUE si le client apporte sa
+                 propre clé. Ne pas les remettre sans les brancher sur ce que
+                 le code appelle réellement. -->
             <div class="ksfs-detail-engines">
-                <div class="ksfs-detail-engine-row">
-                    <span class="ksfs-detail-engine-lbl">Optimisé pour</span>
-                    <span class="ksfs-detail-engine-chip ksfs-detail-engine-chip--optim">${aiOpt}</span>
-                </div>
-                <div class="ksfs-detail-engine-row">
-                    <span class="ksfs-detail-engine-lbl">Moteur AI compatible</span>
-                    ${aiCmp.map(e => `<span class="ksfs-detail-engine-chip">${e}</span>`).join('')}
-                </div>
                 ${convHtml}
             </div>
 
