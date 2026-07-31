@@ -117,6 +117,31 @@ export const APP_TIER = {
 // une licence 100 % gratuite ne coûte alors strictement rien.
 export const KEYNAPSE_VOICE_NOTE = 'O-Keyn-001';
 
+// ── Conversations incluses, app par app (affichage) ────────────
+// Le client voyait « 3 000 conversations » sur l'OS et RIEN sur les
+// applications vendues à l'unité — il ne pouvait pas savoir ce qu'il
+// achetait. Ces deux helpers alimentent les textes de vente ; ils LISENT
+// la grille au lieu de recopier des nombres, pour qu'un changement de
+// palier n'ait pas à être répercuté à la main dans trois écrans.
+
+/** Conversations/mois apportées par UNE app. 0 = app gratuite (sans IA). */
+export function conversationsForApp(appId) {
+    const tier = APP_TIER[appId];
+    return tier ? TIERS[tier].conversations : 0;
+}
+
+/**
+ * Fourchette réelle des applications PAYANTES vendues à l'unité — l'OS
+ * en est exclu (ce n'est pas une app, c'est le sac entier).
+ * → { min: 300, max: 1000 } aujourd'hui.
+ */
+export function paidConversationsRange() {
+    const vals = Object.values(APP_TIER)
+        .filter(t => t !== TIER.FREE && t !== TIER.OS)
+        .map(t => TIERS[t].conversations);
+    return { min: Math.min(...vals), max: Math.max(...vals) };
+}
+
 /**
  * La licence possède-t-elle au moins UNE app payante ?
  * Clé des fonctions IA greffées sur une app gratuite (dictée Keynapse).

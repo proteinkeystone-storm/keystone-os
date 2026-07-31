@@ -4,7 +4,8 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { getPad, getOwnedIds, setOwnedIds, getLifetimeIds, isFrigoMode, getCatalogEntry, getCatalog, CF_API, isAdminUser } from './pads-loader.js';
-import { isPricingV2, isFreeApp, priceForApp } from './lib/pricing.js';
+import { isPricingV2, isFreeApp, priceForApp,
+         conversationsForApp, paidConversationsRange, KEYNAPSE_VOICE_NOTE } from './lib/pricing.js';
 import { openCheckout }           from './lib/checkout.js';
 import { renderArtifactResult, COMP_ICONS } from './artifact-renderer.js';
 import { ApiHandler } from './api-handler.js';
@@ -946,9 +947,12 @@ const KS_PLANS_V2 = [
         anchor: 'Par application · 19, 49 ou 99 €',
         features: [
             { html: "<strong>L'application de votre choix</strong>, complète dès le premier jour" },
-            { html: '<strong>Conversations IA incluses</strong> — rien à configurer' },
+            // La fourchette est calculée depuis la grille (cf. paidConversationsRange) :
+            // annoncer « conversations incluses » sans dire combien laissait le client
+            // acheter à l'aveugle, alors que l'OS, lui, affichait ses 3 000.
+            { html: `<strong>${paidConversationsRange().min} à ${paidConversationsRange().max.toLocaleString('fr-FR')} conversations IA</strong> par mois, selon l'application` },
+            { text: 'Plusieurs applications ? Leurs conversations s\'additionnent' },
             { text: 'Ou votre propre clé (Claude, GPT, Mistral…)' },
-            { text: 'Ajoutez une application quand le besoin arrive' },
         ],
     },
     {
@@ -1912,6 +1916,40 @@ function _renderKStoreAppDetail(appId) {
                 style="background-image:url('${CF_API}/api/screenshot/${encodeURIComponent(app.iconId)}')"></div>`
         : `<div class="ksfs-detail-icon" data-palette="${detailPalette}">${detailGlyph}</div>`;
 
+    // ── Conversations IA incluses ──────────────────────────────
+    // L'information manquait ENTIÈREMENT des fiches : le client lisait un
+    // prix sans savoir ce qu'il achetait en usage. Elle vit ici, à côté des
+    // moteurs, parce que c'est la même question — « qu'est-ce que je peux
+    // en faire ». Les nombres viennent de la grille, jamais d'une saisie.
+    const convHtml = (() => {
+        // App annoncée mais pas encore livrée : elle n'est dans aucun palier,
+        // donc le helper rendrait 0 — et « fonctionne sans IA » serait FAUX.
+        // On se tait plutôt que d'affirmer.
+        if (!app.real) return '';
+        const n = conversationsForApp(appId);
+        const row = (chip, note) => `
+                <div class="ksfs-detail-engine-row">
+                    <span class="ksfs-detail-engine-lbl">Conversations IA</span>
+                    <span class="ksfs-detail-engine-chip ksfs-detail-engine-chip--optim">${chip}</span>
+                </div>
+                <p class="ksfs-detail-engine-note">${note}</p>`;
+
+        if (n > 0) {
+            return row(
+                `${n.toLocaleString('fr-FR')} par mois`,
+                'Comprises dans l\'abonnement, rien à configurer. Elles s\'ajoutent à celles de vos autres applications.'
+            );
+        }
+        // Gratuites : ne PAS afficher « 0 » — ce serait lu comme une
+        // privation alors que c'est l'argument (aucun compteur qui tourne).
+        if (appId === KEYNAPSE_VOICE_NOTE) {
+            return row('Aucune nécessaire',
+                'Toutes les fonctions de base marchent sans intelligence artificielle. Seule la dictée vocale en utilise : elle demande au moins une application payante dans votre licence.');
+        }
+        return row('Aucune nécessaire',
+            'Cette application fonctionne sans intelligence artificielle : aucun compteur ne tourne, rien à recharger.');
+    })();
+
     // ── Assistance → mailto ──
     const SUPPORT_EMAIL = 'contact@protein-keystone.com';
     const supportSubject = encodeURIComponent(`Keystone OS — Assistance pour ${app.title || app.id}`);
@@ -1969,7 +2007,7 @@ function _renderKStoreAppDetail(appId) {
                 </div>`;
             })()}
 
-            <!-- Badges moteurs IA -->
+            <!-- Badges moteurs IA + conversations incluses -->
             <div class="ksfs-detail-engines">
                 <div class="ksfs-detail-engine-row">
                     <span class="ksfs-detail-engine-lbl">Optimisé pour</span>
@@ -1979,6 +2017,7 @@ function _renderKStoreAppDetail(appId) {
                     <span class="ksfs-detail-engine-lbl">Moteur AI compatible</span>
                     ${aiCmp.map(e => `<span class="ksfs-detail-engine-chip">${e}</span>`).join('')}
                 </div>
+                ${convHtml}
             </div>
 
             <!-- Bloc texte explicatif -->

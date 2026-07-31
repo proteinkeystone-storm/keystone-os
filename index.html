@@ -2221,7 +2221,13 @@ function __keystonePostHero(){
 
    La règle qui a présidé à tout ça reste vraie : cette page est publique
    et un `git push` la met en ligne. Un prix affiché ici doit TOUJOURS
-   être celui que Stripe prélève. */
+   être celui que Stripe prélève.
+
+   ⚠️ Même règle pour les CONVERSATIONS (« 300 à 1 000 », « 3 000 ») : cette
+   page est statique et ne peut pas importer `app/lib/pricing.js`, donc ces
+   nombres sont recopiés à la main. La source de vérité reste `TIERS` dans
+   pricing.js (et son jumeau worker). Si un palier change de quota, corriger
+   ICI aussi — l'app, elle, se met à jour toute seule (paidConversationsRange). */
 (function(){
   const g=document.getElementById('plansGrid'); if(!g) return;
   const chk='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
@@ -2251,9 +2257,9 @@ function __keystonePostHero(){
       anchor:"Par application · 19, 49 ou 99 €",
       feats:[
       "<strong>L'application de votre choix</strong>, complète dès le premier jour",
-      "<strong>Conversations IA incluses</strong> — rien à configurer",
-      "Ou votre propre clé (Claude, GPT, Mistral…)",
-      "Ajoutez une application quand le besoin arrive"]},
+      "<strong>300 à 1 000 conversations IA</strong> par mois, selon l'application",
+      "Plusieurs applications ? Leurs conversations s'additionnent",
+      "Ou votre propre clé (Claude, GPT, Mistral…)"]},
     {name:"OS complet", tag:"", price:"129€", cta:"Choisir l'OS complet", primary:false,
       href:"#os", ico:ICO_OS,
       colors:"--p-c:#c084fc;--p-bg:rgba(192,132,252,.12);--p-bd:rgba(192,132,252,.28)",
