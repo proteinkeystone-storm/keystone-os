@@ -376,6 +376,7 @@ const ADMIN_GROUPS = {
     { id: 'monitoring', label: 'Monitoring', desc: 'Supervision',                    render: renderMonitoring },
     { id: 'funnel',     label: 'Funnel',     desc: 'Audience landing (souveraine)',  render: renderFunnel },
     { id: 'budget',     label: 'Budget IA',  desc: 'Crédits neurones + bridage',     render: renderBudget },
+    { id: 'missive',    label: 'Missive',    desc: 'Usage par compte (prévention de l\'abus)', render: renderMissiveUsage },
   ],
   systeme: [
     { id: 'devices',  label: '📱 Appareils',      desc: 'Appareils liés',  render: renderDevices },
@@ -3480,6 +3481,144 @@ async function renderSatisfaction(panel) {
       </div>`;
 
     panel.querySelector('#btn-refresh-sat')?.addEventListener('click', () => renderSatisfaction(panel));
+  } catch (err) {
+    panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TAB — MISSIVE · USAGE (prévention de l'abus) · 2026-07-31
+// ══════════════════════════════════════════════════════════════════
+// Missive est chiffrée de bout en bout : le serveur ne peut PAS lire ce qui
+// transite, et cet écran ne le prétend pas. Il répond à la seule question
+// qu'on puisse honnêtement se poser sur un service aveugle : « ce compte
+// se comporte-t-il comme un usage normal ? ».
+//
+// Ce qui est affiché ici ne sort d'aucune inspection de contenu : ce sont
+// des compteurs d'ENVOI (combien, quand, depuis combien d'appareils),
+// conservés 90 jours puis effacés par le cron. Aucun destinataire, aucune
+// IP en clair, aucun message — cf. workers/migrations/014_sceau_usage.sql.
+async function renderMissiveUsage(panel) {
+  try {
+    const data = await api('/api/admin/sceau/usage');
+    const rows = data.rows || [];
+    const meta = data.meta || {};
+
+    // ⚠ --gold vaut #818cf8 dans la charte (un indigo, malgré son nom) : il
+    // est indistinct de l'accent et ne peut PAS servir de couleur d'alerte.
+    // D'où cet ambre explicite, la seule teinte qui ressorte sur ce fond.
+    const AMBRE = '#f59e0b';
+
+    // Barres horaires : 24 cases, heure UTC. Sert à repérer d'un coup d'œil
+    // un rythme de machine (régulier, nocturne) là où un humain fait des
+    // paquets irréguliers. Volontairement muet quand il n'y a rien à voir.
+    const spark = (hours) => {
+      const max = Math.max(...hours, 1);
+      if (!hours.some(Boolean)) return '<span style="color:var(--text-muted);font-size:11px">—</span>';
+
+      // Bande de 24 cases pleines plutôt qu'un histogramme : à cette taille,
+      // des barres de quelques pixels ne se lisent pas — l'intensité passe
+      // par la couleur, qui reste lisible même sur une case de 6 px.
+      const nuit = (h) => h >= 23 || h <= 4;
+      const cases = hours.map((n, h) => {
+        const bg = n
+          ? `${nuit(h) ? AMBRE : 'var(--accent, #6c8cff)'};opacity:${(0.35 + 0.65 * (n / max)).toFixed(2)}`
+          : 'var(--border);opacity:.5';
+        return `<div style="width:6px;height:15px;background:${bg};border-radius:2px"
+                     title="${String(h).padStart(2, '0')} h (UTC) — ${n} missive${n > 1 ? 's' : ''}"></div>`;
+      }).join('');
+
+      // Le résumé en toutes lettres fait le vrai travail : on lit une ligne
+      // de tableau, on ne déchiffre pas un graphique. La bande ne sert plus
+      // qu'à confirmer d'un coup d'œil.
+      const total = hours.reduce((a, b) => a + b, 0);
+      const nuitN = hours.reduce((a, n, h) => a + (nuit(h) ? n : 0), 0);
+      const bureau = hours.reduce((a, n, h) => a + (h >= 8 && h <= 19 ? n : 0), 0);
+      const pic = hours.indexOf(max);
+      let mot = 'réparti', col = 'var(--text-muted)';
+      if (nuitN / total >= 0.5)        { mot = 'la nuit';         col = AMBRE; }
+      else if (bureau / total >= 0.75) { mot = 'heures de bureau'; }
+      const resume = `${mot} · pic ${String(pic).padStart(2, '0')} h`;
+
+      return `<div style="white-space:nowrap">
+        <div style="display:flex;gap:1px" title="Envois par heure (UTC)">${cases}</div>
+        <div style="display:flex;justify-content:space-between;width:167px;font-size:9px;color:var(--text-muted);margin-top:2px">
+          <span>0 h</span><span>6</span><span>12</span><span>18</span><span>23</span></div>
+        <div style="font-size:10.5px;color:${col};margin-top:3px">${resume}</div>
+      </div>`;
+    };
+
+    const riskCell = (r) => {
+      if (!r.score) return '<span style="color:var(--text-muted);font-size:11px">—</span>';
+      const col = r.score >= 5 ? 'var(--danger)' : (r.score >= 3 ? AMBRE : 'var(--text-muted)');
+      return `<div style="color:${col};font-weight:700;font-size:13px">${r.score}</div>
+        <div style="font-size:10.5px;color:var(--text-muted);line-height:1.45;margin-top:2px">${
+          r.flags.map(f => esc(f)).join('<br>')}</div>`;
+    };
+
+    const who = (r) => {
+      const nom = r.email || r.owner || null;
+      return `<div style="font-weight:600;font-size:13px">${nom ? esc(nom) : '<span style="color:var(--text-muted)">compte sans nom</span>'}</div>
+        <div style="font-size:10.5px;color:var(--text-muted);font-family:ui-monospace,monospace">${esc(String(r.tenant_id).slice(0, 12))}…${
+          r.plan ? ` · ${esc(r.plan)}` : ''}${r.account_age_days !== null ? ` · ${r.account_age_days} j` : ''}</div>`;
+    };
+
+    const pledgeCell = (r) => r.pledge_accepted
+      ? `<span style="font-size:10px;font-weight:700;color:#4caf80;border:1px solid #4caf80;border-radius:5px;padding:1px 7px" title="Signé le ${esc(r.pledge_at || '')}">SIGNÉ</span>`
+      : `<span style="font-size:10px;font-weight:700;color:var(--text-muted);border:1px solid var(--border);border-radius:5px;padding:1px 7px">—</span>`;
+
+    const actifs7j = rows.filter(r => r.sealed_7d > 0).length;
+    const total7j  = rows.reduce((s, r) => s + r.sealed_7d, 0);
+    const mails7j  = rows.reduce((s, r) => s + r.emailed_7d, 0);
+    const aVoir    = rows.filter(r => r.score >= 3).length;
+
+    panel.innerHTML = `
+      <div class="section-header">
+        <h2 class="section-title">Missive · Usage</h2>
+        <button class="btn btn-secondary" id="btn-refresh-missive" style="font-size:12px">↻</button>
+      </div>
+      <p style="color:var(--text-muted);font-size:12.5px;margin:-6px 0 16px;line-height:1.6">
+        Compteurs d'<strong>envoi</strong> uniquement — le contenu des missives est chiffré et reste
+        illisible, y compris ici. Aucun destinataire, aucune adresse IP en clair.
+        Conservation ${meta.retention_days || 90} jours, puis effacement automatique.
+        Le score ne déclenche rien : il ne fait que remonter les comptes à regarder.</p>
+
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Comptes actifs (7 j)</div><div class="stat-value">${actifs7j}</div></div>
+        <div class="stat-card"><div class="stat-label">Missives (7 j)</div><div class="stat-value">${total7j}</div></div>
+        <div class="stat-card"><div class="stat-label">E-mails de code (7 j)</div><div class="stat-value">${mails7j}</div></div>
+        <div class="stat-card"><div class="stat-label">À regarder</div>
+          <div class="stat-value" style="color:${aVoir ? AMBRE : 'inherit'}">${aVoir}</div></div>
+      </div>
+
+      <div style="margin-top:18px;overflow-x:auto">
+      ${rows.length === 0
+        ? `<div class="empty-state"><p>Aucun envoi enregistré.</p>
+           <p style="font-size:12px;color:var(--text-muted)">Le journal se remplit dès la première missive scellée.</p></div>`
+        : `<table class="data-table" style="min-width:900px"><thead><tr>
+             <th>Compte</th><th>24 h</th><th>7 j</th><th>Total</th><th>Actives</th>
+             <th>E-mails 7 j</th><th>Appareils</th><th>Rythme (UTC)</th><th>Engagement</th><th>Signal</th>
+           </tr></thead><tbody>${rows.map(r => `
+             <tr${r.score >= 3 ? ' style="background:rgba(245,158,11,.07)"' : ''}>
+               <td>${who(r)}</td>
+               <td style="font-weight:700">${r.sealed_24h}</td>
+               <td>${r.sealed_7d}</td>
+               <td style="color:var(--text-muted)">${r.sealed_total}</td>
+               <td>${r.active}</td>
+               <td>${r.emailed_7d}${r.emailed_7d >= (meta.email_cap_daily || 20) ? ` <span style="color:${AMBRE}">!</span>` : ''}</td>
+               <td>${r.devices}${r.shared_device_max > 1 ? ` <span style="color:${AMBRE}" title="Appareil partagé avec d'autres comptes">↔${r.shared_device_max}</span>` : ''}</td>
+               <td>${spark(r.hours || [])}</td>
+               <td>${pledgeCell(r)}</td>
+               <td>${riskCell(r)}</td>
+             </tr>`).join('')}</tbody></table>`}
+      </div>
+      <p style="color:var(--text-muted);font-size:11.5px;margin-top:14px;line-height:1.6">
+        Les cases ambrées du rythme sont les heures de nuit (23 h → 5 h UTC).
+        « ↔ » signale un appareil vu sur plusieurs comptes — le signe d'une création
+        de comptes en série. Engagement = version ${esc(meta.pledge_version || '—')} du texte
+        accepté avant le premier envoi.</p>`;
+
+    panel.querySelector('#btn-refresh-missive')?.addEventListener('click', () => renderMissiveUsage(panel));
   } catch (err) {
     panel.innerHTML = `<div class="loading" style="color:var(--danger)">${esc(err.message)}</div>`;
   }

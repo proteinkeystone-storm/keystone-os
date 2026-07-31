@@ -15,7 +15,13 @@ import {
   handleSceauDelete, handleSceauEmail, handleSceauMeta, handleSceauEval, handleSceauBlob, handleSceauOpened, sweepExpiredSecrets,
   handleTokenCreate, handleTokenList, handleTokenPoint, handleTokenDelete,
   handleTokenMeta, handleTokenEval, handleTokenBlob, handleTokenOpened,
+  handleSceauPledge, handleSceauUsageAdmin,
 } from '../src/routes/sceau.js';
+
+// Doit rester aligné sur SEC_PLEDGE_VERSION (src/routes/sceau.js). Une
+// divergence ferait échouer la signature — c'est voulu : le contrôle porte
+// sur la version du texte, pas sur la simple présence d'une acceptation.
+const PLEDGE_VERSION = 'v1-2026-07';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const SUITE = Oprf.Suite.P256_SHA256;
@@ -32,6 +38,12 @@ function makeD1() {
   db.exec(readFileSync(join(__dir, '../migrations/010_sceau_blob.sql'), 'utf8'));
   db.exec(readFileSync(join(__dir, '../migrations/011_sceau_question.sql'), 'utf8'));
   db.exec(readFileSync(join(__dir, '../migrations/013_sceau_durcissement.sql'), 'utf8'));
+  db.exec(readFileSync(join(__dir, '../migrations/014_sceau_usage.sql'), 'utf8'));
+  // Fixture : le tenant 'default' (celui de l'auth admin utilisée par la
+  // quasi-totalité des sections) a DÉJÀ signé l'engagement d'usage. Sans
+  // ça, chaque section testerait la garde anti-abus au lieu de son propre
+  // sujet. La section R, elle, efface cette ligne pour éprouver le refus.
+  db.exec(`INSERT INTO sec_pledges (tenant_id, version) VALUES ('default', 'v1-2026-07')`);
   return {
     _db: db,
     prepare(sql) {
@@ -78,9 +90,19 @@ async function callEval(handler, shortId, blindedB64, asAdmin) {
 let pass = 0, fail = 0;
 function ok(cond, msg) { if (cond) { pass++; console.log('  ✅', msg); } else { fail++; console.log('  ❌', msg); } }
 
+// Engagement d'usage (juil. 2026) : depuis la garde anti-abus, /init refuse
+// tant qu'il n'est pas signé. Les sections qui repartent d'une base neuve
+// le resignent — c'est le parcours réel du pad, pas un contournement : la
+// section R vérifie explicitement que le refus tombe SANS cette signature.
+async function signPledge() {
+  const r = await handleSceauPledge(req('POST', { accepted: true, version: PLEDGE_VERSION }), env);
+  return r.status === 200;
+}
+
 // Crée + scelle un secret, renvoie {shortId, oprfPub}
 async function createSealed(plaintext, passphrase, opts = {}) {
-  const initRes = await handleSceauInit(req('POST', { label: opts.label }), env);
+  let initRes = await handleSceauInit(req('POST', { label: opts.label }), env);
+  if (initRes.status === 403) { await signPledge(); initRes = await handleSceauInit(req('POST', { label: opts.label }), env); }
   const init = await initRes.json();
   const shortId = init.short_id, oprfPub = init.oprf_pub;
   // eval de création (NON comptée)
@@ -366,6 +388,12 @@ env.DB = makeD1();
     const tok = await signJWT({ sub: 'user-' + plan, plan, isAdmin: false }, env);
     return new Request('https://x/api/sceau/init', { method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: '{}' });
   };
+  // L'engagement est par COMPTE : chacun de ces plans est un tenant distinct,
+  // donc chacun signe pour lui. C'est ce qu'on veut vérifier ici : le gating
+  // par plan, une fois l'engagement acquis.
+  for (const plan of ['STARTER', 'PRO', 'MAX', 'BETA']) {
+    env.DB._db.prepare('INSERT INTO sec_pledges (tenant_id, version) VALUES (?, ?)').run('user-' + plan, PLEDGE_VERSION);
+  }
   // Nouveau contrat (audit sept. 2026 · M-6) : Missive est au palier FREE de
   // la grille — l'ancien 403 sur STARTER refusait des licences gratuites qui
   // portent O-SEC-001 dans leur sac. Toute identité authentifiée passe.
@@ -703,6 +731,129 @@ env.DB = makeD1(); env.HELP_MEDIA = makeR2();
   }
   const apresFautes = await handleSceauEmail(emailReq2({ to: 'ok@exemple.fr', code: 'X' }), env, em2.shortId);
   ok(apresFautes.status !== 429, 'une faute de frappe sur l\'adresse ne brûle pas le quota');
+}
+
+// ──────────────────────────────────────────────────────────────
+// R. Engagement d'usage du créateur (prévention de l'abus, juil. 2026)
+// ──────────────────────────────────────────────────────────────
+// Le serveur ne peut pas modérer un contenu qu'il ne voit pas. Ce qu'il
+// PEUT faire, c'est refuser de créer tant que la personne n'a pas déclaré
+// à quoi elle s'engage — et en garder la trace datée. Une case cochée
+// seulement dans le navigateur ne vaudrait rien : ces tests vérifient que
+// la garde vit CÔTÉ SERVEUR.
+console.log('\nR. Engagement d’usage du créateur');
+env.DB = makeD1(); env.HELP_MEDIA = makeR2();
+{
+  env.DB._db.exec('DELETE FROM sec_pledges');   // compte qui n'a jamais signé
+
+  const refus = await handleSceauInit(req('POST', { label: 'sans engagement' }), env);
+  const refusBody = await refus.json();
+  ok(refus.status === 403, 'création REFUSÉE tant que l’engagement n’est pas signé');
+  ok(refusBody.code === 'pledge_required', 'le refus porte un code exploitable par le pad (pledge_required)');
+  ok(refusBody.pledge_version === PLEDGE_VERSION, 'le refus annonce la version du texte à faire signer');
+
+  // Un client resté en cache sur un ancien texte ne doit pas pouvoir valider
+  // le nouveau à l'insu de la personne : on exige la version AFFICHÉE.
+  const vieux = await handleSceauPledge(req('POST', { accepted: true, version: 'v0-perime' }), env);
+  ok(vieux.status === 409, 'une version d’engagement périmée est refusée (409)');
+  const sansCase = await handleSceauPledge(req('POST', { accepted: false, version: PLEDGE_VERSION }), env);
+  ok(sansCase.status === 400, 'refuser la case ne signe rien (400)');
+  ok(env.DB._db.prepare('SELECT COUNT(*) c FROM sec_pledges').get().c === 0, 'aucun engagement enregistré après ces tentatives');
+
+  const signe = await handleSceauPledge(req('POST', { accepted: true, version: PLEDGE_VERSION }), env);
+  ok(signe.status === 200, 'engagement signé -> 200');
+  const row = env.DB._db.prepare('SELECT * FROM sec_pledges').get();
+  ok(row.tenant_id === 'default' && row.version === PLEDGE_VERSION, 'l’engagement est enregistré par compte ET par version');
+  ok(!!row.accepted_at, 'l’engagement est daté (c’est ce qui le rend opposable)');
+
+  const apres = await handleSceauInit(req('POST', { label: 'après engagement' }), env);
+  ok(apres.status === 201, 'création autorisée une fois l’engagement signé');
+
+  const liste = await (await handleSceauList(req('GET'), env)).json();
+  ok(liste.pledge?.accepted === true, 'la liste annonce au pad que l’engagement est acquis');
+
+  // Changement de texte = tout le monde resigne. On simule en écrivant une
+  // version périmée : la garde doit se refermer.
+  env.DB._db.prepare('UPDATE sec_pledges SET version = ?').run('v0-perime');
+  const reRefus = await handleSceauInit(req('POST', {}), env);
+  ok(reRefus.status === 403, 'changer la version du texte refait signer tout le monde');
+}
+
+// ──────────────────────────────────────────────────────────────
+// S. Journal d'usage + écran admin (ce qu'on compte, et ce qu'on ne voit pas)
+// ──────────────────────────────────────────────────────────────
+console.log('\nS. Journal d’usage (agrégats) et écran admin');
+env.DB = makeD1(); env.HELP_MEDIA = makeR2();
+{
+  const s1 = await createSealed('secret un', PASS, { label: 'j1' });
+  await createSealed('secret deux', PASS, { label: 'j2' });
+
+  const j = env.DB._db.prepare('SELECT * FROM sec_usage_hourly WHERE tenant_id = ?').all('default');
+  ok(j.length === 1, 'le journal agrège par heure (une seule ligne pour deux envois rapprochés)');
+  ok(j[0].sealed === 2 && j[0].created === 2, 'créations et scellements comptés séparément');
+  ok(/^\d{4}-\d{2}-\d{2}T\d{2}$/.test(j[0].hour_utc), 'granularité HORAIRE (pas à la seconde)');
+
+  const d = env.DB._db.prepare('SELECT * FROM sec_usage_device').all();
+  ok(d.length === 1 && d[0].count === 2, 'l’appareil est compté une fois, avec son nombre d’envois');
+  ok(/^[0-9a-f]{16}$/.test(d[0].fp), 'l’empreinte est un haché tronqué — ni IP ni User-Agent en clair');
+
+  // Le journal ne doit RIEN savoir du contenu ni du destinataire. On balaie
+  // toutes les valeurs stockées : aucune ne doit contenir le clair, le code,
+  // ni une adresse e-mail. C'est le test qui protège la promesse du produit.
+  // Envoi réel simulé (comme en section N) : le compteur `emailed` ne
+  // s'incrémente qu'APRÈS un envoi réussi — un service d'e-mail en panne
+  // ne doit pas gonfler les statistiques d'un compte.
+  const realFetchS = globalThis.fetch;
+  globalThis.fetch = async () => new Response('{"id":"x"}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  env.KS_RESEND_KEY = 'fake-key';
+  await handleSceauEmail(new Request('https://x.test/api/sceau/x/email',
+    { method: 'POST', headers: auth, body: JSON.stringify({ to: 'destinataire@exemple.fr', code: PASS }) }), env, s1.shortId);
+  globalThis.fetch = realFetchS; delete env.KS_RESEND_KEY;
+  const dump = JSON.stringify([
+    env.DB._db.prepare('SELECT * FROM sec_usage_hourly').all(),
+    env.DB._db.prepare('SELECT * FROM sec_usage_device').all(),
+    env.DB._db.prepare('SELECT * FROM sec_pledges').all(),
+  ]);
+  ok(!dump.includes('destinataire@exemple.fr'), 'le journal ne contient AUCUN destinataire');
+  ok(!dump.includes(PASS) && !dump.includes('secret un'), 'le journal ne contient ni code ni contenu');
+  ok(env.DB._db.prepare('SELECT emailed FROM sec_usage_hourly').get().emailed === 1, 'les envois d’e-mail de code sont comptés');
+
+  // ── Écran admin ─────────────────────────────────────────────
+  const anon = await handleSceauUsageAdmin(new Request('https://x/api/admin/sceau/usage'), env);
+  ok(anon.status === 401, 'l’écran d’usage est fermé sans secret admin');
+
+  const adm = await (await handleSceauUsageAdmin(new Request('https://x/api/admin/sceau/usage', { headers: auth }), env)).json();
+  const me = adm.rows.find(r => r.tenant_id === 'default');
+  ok(!!me, 'l’écran liste le compte actif');
+  ok(me.sealed_24h === 2 && me.sealed_7d === 2, 'volumes 24 h / 7 j corrects');
+  ok(me.devices === 1, 'nombre d’appareils distincts');
+  ok(Array.isArray(me.hours) && me.hours.length === 24, 'répartition horaire sur 24 cases');
+  ok(me.pledge_accepted === true && !!me.pledge_at, 'l’état de l’engagement remonte à l’admin');
+  ok(adm.meta.retention_days === 90, 'la rétention annoncée est portée par l’API');
+  ok(typeof me.score === 'number' && Array.isArray(me.flags), 'chaque ligne porte un score ET ses raisons en clair');
+
+  // Multi-compte : deux comptes derrière la même empreinte. C'est LE signal
+  // qui trahit la création de comptes en série pour contourner un plafond.
+  env.DB._db.prepare('INSERT INTO sec_usage_device (tenant_id, fp, count) VALUES (?, ?, 1)')
+    .run('autre-compte', d[0].fp);
+  env.DB._db.prepare('INSERT INTO sec_usage_hourly (tenant_id, hour_utc, created, sealed) VALUES (?, ?, 1, 1)')
+    .run('autre-compte', new Date().toISOString().slice(0, 13));
+  const adm2 = await (await handleSceauUsageAdmin(new Request('https://x/api/admin/sceau/usage', { headers: auth }), env)).json();
+  const me2 = adm2.rows.find(r => r.tenant_id === 'default');
+  ok(me2.shared_device_max === 2, 'un appareil partagé entre deux comptes est détecté');
+  ok(me2.flags.some(f => f.includes('partagé')), 'et la raison est écrite en clair dans la ligne');
+
+  // ── Rétention : 90 jours, tenus par le cron (pas seulement annoncés) ──
+  const vieux = new Date(Date.now() - 100 * 86400_000);
+  env.DB._db.prepare('INSERT INTO sec_usage_hourly (tenant_id, hour_utc, sealed) VALUES (?, ?, 5)')
+    .run('vieux-compte', vieux.toISOString().slice(0, 13));
+  env.DB._db.prepare('INSERT INTO sec_usage_device (tenant_id, fp, last_at, count) VALUES (?, ?, ?, 3)')
+    .run('vieux-compte', 'ffffffffffffffff', vieux.toISOString().slice(0, 19).replace('T', ' '));
+  const sweep = await sweepExpiredSecrets(env);
+  ok(sweep.usagePurged === 1, 'le journal de plus de 90 jours est purgé par le cron');
+  ok(sweep.devicesPurged === 1, 'les empreintes de plus de 90 jours aussi');
+  ok(env.DB._db.prepare('SELECT COUNT(*) c FROM sec_usage_hourly WHERE tenant_id = ?').get('default').c === 1,
+     'les lignes récentes survivent à la purge');
 }
 
 console.log(`\n=== RÉSULTAT : ${pass} OK, ${fail} KO ===`);

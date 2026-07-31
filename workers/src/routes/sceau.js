@@ -11,6 +11,10 @@
      POST   /api/sceau/:id/seal    dépose le chiffré → status='scelle'
      GET    /api/sceau             liste les secrets du tenant (zéro matériel sensible)
      DELETE /api/sceau/:id         burn manuel (détruit chiffré + clé OPRF)
+     POST   /api/sceau/pledge      engagement d'usage du créateur (daté, versionné)
+
+   Route (admin) — prévention de l'abus, cf. migration 014_sceau_usage.sql :
+     GET    /api/admin/sceau/usage agrégats d'ENVOI par compte (jamais de contenu)
 
    Routes (publiques) — lecture au scan de /s/<id> :
      GET    /s/:id/meta            {status, oprf_pub, attempts_left} | 410 si mort
@@ -180,6 +184,85 @@ async function _secRateOk(request, env) {
   return _rateOkFor(env, await _secDevice(request), SEC_RATE_CAP);
 }
 
+// ══════════════════════════════════════════════════════════════
+// PRÉVENTION DE L'ABUS (juillet 2026) — cf. migration 014
+// ══════════════════════════════════════════════════════════════
+// Le serveur est aveugle et le reste : on ne peut pas modérer un contenu
+// qu'on ne voit pas, et on n'essaie pas. Deux dispositifs seulement :
+//   1. un ENGAGEMENT explicite du créateur, enregistré et opposable ;
+//   2. un JOURNAL D'USAGE agrégé (combien, quand, depuis quels appareils),
+//      qui rend un abus VISIBLE EN VOLUME sans rien révéler du contenu.
+// Ni l'un ni l'autre ne touche à la lecture : le destinataire ne voit
+// aucune différence, le canal reste ce qu'il est.
+
+// Version du texte d'engagement. La CHANGER refait signer tout le monde
+// (le contrôle porte sur `version`, pas sur la simple présence d'une ligne).
+const SEC_PLEDGE_VERSION = 'v1-2026-07';
+// Rétention du journal d'usage. Aligné sur ce qu'on annonce côté /securite.
+const SEC_USAGE_RETENTION_DAYS = 90;
+
+let _secAbuseReady = false;
+async function _ensureSecAbuse(env) {
+  if (_secAbuseReady) return;
+  // Idempotent, et volontairement redondant avec la migration 014 : un
+  // déploiement en avance sur la migration ne doit pas casser la création.
+  try {
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS sec_pledges (
+      tenant_id TEXT PRIMARY KEY, version TEXT NOT NULL,
+      accepted_at TEXT NOT NULL DEFAULT (datetime('now')), fp TEXT)`).run();
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS sec_usage_hourly (
+      tenant_id TEXT NOT NULL, hour_utc TEXT NOT NULL,
+      created INTEGER NOT NULL DEFAULT 0, sealed INTEGER NOT NULL DEFAULT 0,
+      emailed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (tenant_id, hour_utc))`).run();
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS sec_usage_device (
+      tenant_id TEXT NOT NULL, fp TEXT NOT NULL,
+      first_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (tenant_id, fp))`).run();
+    _secAbuseReady = true;
+  } catch (_) { /* non bloquant : les écritures ci-dessous sont best-effort */ }
+}
+
+/** Engagement en cours de validité pour ce compte ? */
+async function _pledgeOk(env, tenant) {
+  await _ensureSecAbuse(env);
+  try {
+    const row = await env.DB
+      .prepare('SELECT version FROM sec_pledges WHERE tenant_id = ?')
+      .bind(tenant).first();
+    return row?.version === SEC_PLEDGE_VERSION;
+  } catch (_) {
+    return true;   // base muette → on n'enferme personne dehors (fail-open assumé)
+  }
+}
+
+// Compteur d'usage. `field` ∈ created | sealed | emailed. Best-effort de
+// bout en bout : un journal qui tombe ne doit JAMAIS empêcher un envoi.
+// L'heure est UTC (comme le compteur de budget IA : à Paris, le jour
+// bascule à 2 h du matin — c'est voulu, pas un bug d'affichage).
+async function _noteUsage(env, tenant, request, field) {
+  if (!tenant) return;
+  await _ensureSecAbuse(env);
+  const hour = new Date().toISOString().slice(0, 13);   // 'YYYY-MM-DDTHH'
+  try {
+    await env.DB.prepare(`
+      INSERT INTO sec_usage_hourly (tenant_id, hour_utc, ${field})
+      VALUES (?, ?, 1)
+      ON CONFLICT(tenant_id, hour_utc) DO UPDATE SET ${field} = ${field} + 1
+    `).bind(tenant, hour).run();
+    // L'appareil n'est noté qu'à la CRÉATION : c'est l'acte qu'on surveille.
+    if (field === 'created') {
+      const fp = await _secDevice(request);
+      await env.DB.prepare(`
+        INSERT INTO sec_usage_device (tenant_id, fp, count)
+        VALUES (?, ?, 1)
+        ON CONFLICT(tenant_id, fp) DO UPDATE SET
+          count = count + 1, last_at = datetime('now')
+      `).bind(tenant, fp).run();
+    }
+  } catch (_) { /* journal muet : on continue, l'envoi prime */ }
+}
+
 // Réponse publique no-store (jamais en cache : sinon le chiffré "ressuscite").
 function _publicJson(data, status, origin) {
   const r = json(data, status, origin);
@@ -211,6 +294,15 @@ export async function handleSceauInit(request, env) {
   if (!tenant) return err('Non autorisé', 401, origin);
   if (!entitled) return err('Non autorisé', 403, origin);
 
+  // Engagement du créateur : contrôlé ICI, côté serveur. Une case cochée
+  // dans le navigateur ne prouve rien et se contourne en dix secondes ;
+  // ce qui vaut quelque chose, c'est un refus de créer tant que
+  // l'acceptation n'est pas enregistrée, datée et versionnée.
+  if (!(await _pledgeOk(env, tenant))) {
+    return json({ error: 'Engagement d’usage requis', code: 'pledge_required',
+                  pledge_version: SEC_PLEDGE_VERSION }, 403, origin);
+  }
+
   const body = await parseBody(request);
   const label = typeof body.label === 'string' ? body.label.slice(0, 120) : null;
 
@@ -231,6 +323,7 @@ export async function handleSceauInit(request, env) {
      VALUES (?, ?, ?, ?, ?, 'init', ?, datetime('now'))`
   ).bind(shortId, tenant, _b64e(pub), wrapped.ciphertext, wrapped.iv, label).run();
 
+  await _noteUsage(env, tenant, request, 'created');
   return json({ short_id: shortId, oprf_pub: _b64e(pub) }, 201, origin);
 }
 
@@ -326,6 +419,7 @@ export async function handleSceauSeal(request, env, shortId) {
       WHERE short_id = ? AND status = 'init'`
   ).bind(inlineCt, blobKey, iv, kind, mime, question, max, expiresAt, label, kdfV, receipt, shortId).run();
 
+  await _noteUsage(env, tenant, request, 'sealed');
   return json({ ok: true, short_id: shortId, status: 'scelle', kind, max_attempts: max, expires_at: expiresAt }, 200, origin);
 }
 
@@ -348,7 +442,41 @@ export async function handleSceauList(request, env) {
     ...r,
     attempts_left: r.status === 'scelle' ? Math.max(0, r.max_attempts - r.attempts) : 0,
   }));
-  return json({ items }, 200, origin);
+  // L'état de l'engagement voyage avec la liste : le pad l'a déjà en main
+  // au premier rendu, donc il n'ouvre la fenêtre d'engagement qu'une fois,
+  // au bon moment, sans requête supplémentaire au démarrage.
+  const pledge = { accepted: await _pledgeOk(env, tenant), version: SEC_PLEDGE_VERSION };
+  return json({ items, pledge }, 200, origin);
+}
+
+// POST /api/sceau/pledge → enregistre l'engagement d'usage du créateur.
+// Idempotent : re-signer met simplement la date et la version à jour.
+export async function handleSceauPledge(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const { tenant, entitled } = await _resolveAuth(request, env);
+  if (!tenant) return err('Non autorisé', 401, origin);
+  if (!entitled) return err('Non autorisé', 403, origin);
+
+  const body = await parseBody(request);
+  // On exige que le client renvoie la version qu'il vient d'AFFICHER : un
+  // client resté en cache sur un ancien texte ne peut pas valider le
+  // nouveau à l'insu de la personne.
+  if (body.version !== SEC_PLEDGE_VERSION) {
+    return json({ error: 'Version d’engagement obsolète', code: 'pledge_stale',
+                  pledge_version: SEC_PLEDGE_VERSION }, 409, origin);
+  }
+  if (body.accepted !== true) return err('Acceptation requise', 400, origin);
+
+  await _ensureSecAbuse(env);
+  const fp = await _secDevice(request);
+  await env.DB.prepare(`
+    INSERT INTO sec_pledges (tenant_id, version, accepted_at, fp)
+    VALUES (?, ?, datetime('now'), ?)
+    ON CONFLICT(tenant_id) DO UPDATE SET
+      version = excluded.version, accepted_at = excluded.accepted_at, fp = excluded.fp
+  `).bind(tenant, SEC_PLEDGE_VERSION, fp).run();
+
+  return json({ ok: true, version: SEC_PLEDGE_VERSION }, 200, origin);
 }
 
 // DELETE /api/sceau/:id → burn manuel (détruit chiffré + clé OPRF).
@@ -419,6 +547,7 @@ export async function handleSceauEmail(request, env, shortId) {
   } catch (e) {
     return err('Envoi email impossible', 502, origin);
   }
+  await _noteUsage(env, tenant, request, 'emailed');
   return json({ ok: true }, 200, origin);
 }
 
@@ -745,6 +874,182 @@ export async function handleTokenOpened(request, env, tid) {
   return handleSceauOpened(request, env, sid);
 }
 
+// ══════════════════════════════════════════════════════════════
+// ADMIN — usage de Missive (prévention de l'abus)
+// ══════════════════════════════════════════════════════════════
+// GET /api/admin/sceau/usage → une ligne par compte, agrégée.
+// Ce que cet écran ne dira JAMAIS : ce qui a été envoyé, à qui, ni depuis
+// quelle adresse IP. Il répond à une seule question, celle qu'un hébergeur
+// a le droit de se poser : « ce compte se comporte-t-il comme un usage
+// normal ? ». Tout le reste reste chiffré et hors de portée, y compris de
+// nous — c'est le produit, pas une limite de l'écran.
+
+// Fenêtre glissante au format du journal ('YYYY-MM-DDTHH').
+function _hourAgo(hours) {
+  return new Date(Date.now() - hours * 3600_000).toISOString().slice(0, 13);
+}
+
+/** SELECT tolérant : une table absente dégrade l'affichage, pas l'écran. */
+async function _safeAll(env, sql, ...binds) {
+  try {
+    const st = env.DB.prepare(sql);
+    const r = await (binds.length ? st.bind(...binds) : st).all();
+    return r.results || [];
+  } catch (_) { return []; }
+}
+
+// Score de risque : volontairement SIMPLE et EXPLIQUÉ. Une règle unique
+// fabrique du faux positif et se contourne ; un score opaque ne se relit
+// pas six mois plus tard. Chaque point porte sa raison en clair, et le
+// score ne déclenche RIEN tout seul — il ne fait que trier la liste.
+function _riskOf(r) {
+  const flags = [];
+  let score = 0;
+  if (r.sealed_24h >= 50)      { score += 3; flags.push(`${r.sealed_24h} missives en 24 h`); }
+  else if (r.sealed_24h >= 20) { score += 2; flags.push(`${r.sealed_24h} missives en 24 h`); }
+  if (r.peak_hour >= 10)       { score += 2; flags.push(`rafale : ${r.peak_hour} en une heure`); }
+  if (r.shared_device_max >= 3){ score += 2; flags.push(`appareil partagé avec ${r.shared_device_max - 1} autre(s) compte(s)`); }
+  else if (r.shared_device_max === 2) { score += 1; flags.push('appareil partagé avec un autre compte'); }
+  if (r.devices >= 5)          { score += 1; flags.push(`${r.devices} appareils distincts`); }
+  if (r.account_age_days !== null && r.account_age_days <= 1 && r.sealed_24h >= 5) {
+    score += 2; flags.push('compte de moins de 24 h déjà actif');
+  }
+  if (r.emailed_7d >= 40)      { score += 1; flags.push(`${r.emailed_7d} e-mails de code en 7 j`); }
+  if (r.sealed_7d >= 10 && r.night_share >= 0.6) {
+    score += 1; flags.push(`${Math.round(r.night_share * 100)} % des envois la nuit (UTC)`);
+  }
+  if (!r.pledge_accepted && r.sealed_7d > 0) { score += 1; flags.push('engagement non signé (version à jour)'); }
+  return { score, flags };
+}
+
+export async function handleSceauUsageAdmin(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  if (!requireAdmin(request, env)) return err('Non autorisé', 401, origin);
+  await _ensureSecAbuse(env);
+
+  const h24 = _hourAgo(24), h7d = _hourAgo(24 * 7);
+
+  // 1. Volumes + rythme, par compte. `peak_hour` = la pire heure de la
+  //    semaine : c'est ce qui sépare un usage humain d'un script.
+  const usage = await env.DB.prepare(`
+    SELECT tenant_id,
+           SUM(sealed)                                          AS sealed_total,
+           SUM(CASE WHEN hour_utc >= ? THEN sealed  ELSE 0 END) AS sealed_24h,
+           SUM(CASE WHEN hour_utc >= ? THEN sealed  ELSE 0 END) AS sealed_7d,
+           SUM(CASE WHEN hour_utc >= ? THEN emailed ELSE 0 END) AS emailed_7d,
+           SUM(created) - SUM(sealed)                           AS abandoned,
+           MAX(CASE WHEN hour_utc >= ? THEN sealed  ELSE 0 END) AS peak_hour,
+           MAX(hour_utc)                                        AS last_hour,
+           MIN(hour_utc)                                        AS first_hour
+      FROM sec_usage_hourly
+     GROUP BY tenant_id
+  `).bind(h24, h7d, h7d, h7d).all();
+
+  // 2. Répartition horaire sur 7 j (histogramme 24 cases, heure UTC).
+  const hist = await env.DB.prepare(`
+    SELECT tenant_id, CAST(substr(hour_utc, 12, 2) AS INTEGER) AS h, SUM(sealed) AS n
+      FROM sec_usage_hourly WHERE hour_utc >= ? GROUP BY tenant_id, h
+  `).bind(h7d).all();
+  const hours = new Map();
+  for (const row of (hist.results || [])) {
+    if (!hours.has(row.tenant_id)) hours.set(row.tenant_id, new Array(24).fill(0));
+    hours.get(row.tenant_id)[row.h] = row.n || 0;
+  }
+
+  // 3. Appareils par compte, et empreintes vues sur PLUSIEURS comptes
+  //    (le signal du multi-compte — celui que Stéphane voulait voir).
+  const devs = await env.DB.prepare(
+    'SELECT tenant_id, COUNT(*) AS n FROM sec_usage_device GROUP BY tenant_id'
+  ).all();
+  const devCount = new Map((devs.results || []).map(r => [r.tenant_id, r.n]));
+
+  const shared = await env.DB.prepare(`
+    SELECT d.tenant_id AS tenant_id, MAX(c.n) AS worst
+      FROM sec_usage_device d
+      JOIN (SELECT fp, COUNT(DISTINCT tenant_id) AS n FROM sec_usage_device GROUP BY fp HAVING n > 1) c
+        ON c.fp = d.fp
+     GROUP BY d.tenant_id
+  `).all();
+  const sharedMax = new Map((shared.results || []).map(r => [r.tenant_id, r.worst]));
+
+  // 4. Identité du compte + âge. tenant_id = lookup_hmac de la licence.
+  //    Toléré : ces deux tables appartiennent au domaine LICENCE, pas à
+  //    Missive. Si l'une manque ou change, on perd le nom affiché — pas
+  //    l'écran entier. Les compteurs, eux, restent lisibles.
+  const lics = await _safeAll(env,
+    `SELECT lookup_hmac, key, owner, plan, created_at FROM licences WHERE lookup_hmac IS NOT NULL`);
+  const lic = new Map(lics.map(r => [r.lookup_hmac, r]));
+  const mails = await _safeAll(env,
+    `SELECT licence_key, email FROM licence_emails WHERE role = 'owner' AND status != 'revoked'`);
+  const mailOf = new Map(mails.map(r => [r.licence_key, r.email]));
+
+  // 5. Engagement signé.
+  const pl = await env.DB.prepare('SELECT tenant_id, version, accepted_at FROM sec_pledges').all();
+  const pledges = new Map((pl.results || []).map(r => [r.tenant_id, r]));
+
+  // 6. Instantané : ce qui est vivant MAINTENANT (sec_secrets ne garde les
+  //    lignes mortes que ~24 h — d'où le journal ci-dessus pour l'histoire).
+  const live = await env.DB.prepare(`
+    SELECT tenant_id,
+           SUM(CASE WHEN status = 'scelle' THEN 1 ELSE 0 END) AS active,
+           SUM(CASE WHEN status = 'expire' THEN 1 ELSE 0 END) AS expired_unread
+      FROM sec_secrets GROUP BY tenant_id
+  `).all();
+  const liveOf = new Map((live.results || []).map(r => [r.tenant_id, r]));
+
+  const now = Date.now();
+  const rows = (usage.results || []).map(u => {
+    const t   = u.tenant_id;
+    const l   = lic.get(t) || null;
+    const p   = pledges.get(t) || null;
+    const lv  = liveOf.get(t) || {};
+    const hh  = hours.get(t) || new Array(24).fill(0);
+    const tot = hh.reduce((a, b) => a + b, 0);
+    // « Nuit » = 23 h → 5 h UTC. Approximation assumée : sans la localisation
+    // du compte on ne peut pas faire mieux, et ce n'est qu'un indice de tri.
+    const night = [23, 0, 1, 2, 3, 4].reduce((a, h) => a + hh[h], 0);
+
+    const r = {
+      tenant_id:        t,
+      licence_key:      l?.key   || null,
+      owner:            l?.owner || null,
+      email:            l ? (mailOf.get(l.key) || null) : null,
+      plan:             l?.plan  || null,
+      account_age_days: l?.created_at ? Math.floor((now - new Date(l.created_at + 'Z').getTime()) / 86400_000) : null,
+      sealed_total:     u.sealed_total || 0,
+      sealed_24h:       u.sealed_24h   || 0,
+      sealed_7d:        u.sealed_7d    || 0,
+      emailed_7d:       u.emailed_7d   || 0,
+      abandoned:        Math.max(0, u.abandoned || 0),
+      peak_hour:        u.peak_hour    || 0,
+      first_seen:       u.first_hour   || null,
+      last_seen:        u.last_hour    || null,
+      active:           lv.active || 0,
+      expired_unread:   lv.expired_unread || 0,
+      devices:          devCount.get(t)  || 0,
+      shared_device_max: sharedMax.get(t) || 0,
+      night_share:      tot ? night / tot : 0,
+      hours:            hh,
+      pledge_accepted:  p?.version === SEC_PLEDGE_VERSION,
+      pledge_at:        p?.accepted_at || null,
+      pledge_version:   p?.version || null,
+    };
+    return { ...r, ..._riskOf(r) };
+  });
+
+  rows.sort((a, b) => b.score - a.score || b.sealed_7d - a.sealed_7d);
+
+  return json({
+    rows,
+    meta: {
+      pledge_version:  SEC_PLEDGE_VERSION,
+      retention_days:  SEC_USAGE_RETENTION_DAYS,
+      email_cap_daily: SEC_EMAIL_CAP,
+      generated_at:    _now(),
+    },
+  }, 200, origin);
+}
+
 // ── Cron : purge des secrets expirés (branché sur le daily 0 3 * * *) ──
 // ⚠ expires_at est stocké en ISO 8601 UTC (…T…Z). On NE compare PAS à
 // datetime('now') de SQLite (format espacé) : lexicalement 'T' > ' ' fausserait
@@ -775,5 +1080,22 @@ export async function sweepExpiredSecrets(env) {
         AND COALESCE(destroyed_at, sealed_at, created_at) < datetime('now','-1 day')`
   ).run();
   for (const r of (toFree.results || [])) await _destroyBlob(env, r.blob_key);
-  return { expired: res.meta?.changes || 0, purged: purge.meta?.changes || 0, freed: (toFree.results || []).length };
+
+  // Journal d'usage : rétention 90 j. Un journal anti-abus qu'on garde
+  // pour toujours cesse d'être une protection et devient un passif —
+  // et une durée annoncée qui n'est pas tenue par du code ne vaut rien.
+  let usagePurged = 0, devicesPurged = 0;
+  try {
+    await _ensureSecAbuse(env);
+    const cutoff = new Date(Date.now() - SEC_USAGE_RETENTION_DAYS * 86400_000);
+    const h = await env.DB.prepare('DELETE FROM sec_usage_hourly WHERE hour_utc < ?')
+      .bind(cutoff.toISOString().slice(0, 13)).run();
+    const d = await env.DB.prepare("DELETE FROM sec_usage_device WHERE last_at < ?")
+      .bind(cutoff.toISOString().slice(0, 19).replace('T', ' ')).run();
+    usagePurged   = h.meta?.changes || 0;
+    devicesPurged = d.meta?.changes || 0;
+  } catch (_) { /* purge best-effort : elle repassera demain */ }
+
+  return { expired: res.meta?.changes || 0, purged: purge.meta?.changes || 0,
+           freed: (toFree.results || []).length, usagePurged, devicesPurged };
 }

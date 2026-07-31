@@ -85,7 +85,8 @@ import { handleSdqrAsset } from './routes/sdqr-assets.js';
 import { handleSceauInit, handleSceauEvalCreate, handleSceauSeal, handleSceauList, handleSceauDelete, handleSceauEmail,
          handleSceauMeta, handleSceauEval, handleSceauBlob, handleSceauOpened, sweepExpiredSecrets,
          handleTokenCreate, handleTokenList, handleTokenPoint, handleTokenDelete,
-         handleTokenMeta, handleTokenEval, handleTokenBlob, handleTokenOpened } from './routes/sceau.js';
+         handleTokenMeta, handleTokenEval, handleTokenBlob, handleTokenOpened,
+         handleSceauPledge, handleSceauUsageAdmin } from './routes/sceau.js';
 import { handleSceauPage, handleSceauTokenPage, handleSceauAsset } from './routes/sceau-page.js';
 import { handleExpirationReminders }                                  from './routes/expiration-reminders.js';
 import { handleListLicencesEnriched, handleToggleLicenceFlag,
@@ -935,7 +936,9 @@ export default {
         const td = path.match(/^\/api\/sceau\/token\/([A-Za-z0-9]{4,32})$/);
         if (td && method === 'DELETE') return handleTokenDelete(request, env, td[1]);
       }
-      // Sceau — création/gestion privée (JWT)
+      // Sceau — création/gestion privée (JWT). `pledge` AVANT les routes
+      // /api/sceau/:id (sinon « pledge » serait lu comme un short_id).
+      if (path === '/api/sceau/pledge' && method === 'POST') return handleSceauPledge(request, env);
       if (path === '/api/sceau/init' && method === 'POST') return handleSceauInit(request, env);
       if (path === '/api/sceau'      && method === 'GET')  return handleSceauList(request, env);
       {
@@ -1057,6 +1060,11 @@ export default {
       if (path === '/api/admin/ai-budget/throttle'  && method === 'POST') return handleAiBudgetThrottle(request, env);
       if (path === '/api/admin/ai-budget/threshold' && method === 'POST') return handleAiBudgetThreshold(request, env);
       if (path === '/api/admin/ai-budget/calibrate' && method === 'POST') return handleAiBudgetCalibrate(request, env);
+
+      // ── Missive — usage par compte (prévention de l'abus, juil. 2026) ──
+      // Agrégats d'ENVOI uniquement. Aucun contenu, aucun destinataire,
+      // aucune IP : le serveur reste aveugle, cf. migration 014.
+      if (path === '/api/admin/sceau/usage'        && method === 'GET')  return handleSceauUsageAdmin(request, env);
 
       // ── PADs ─────────────────────────────────────────────────
       if (path === '/api/pads'               && method === 'GET')    return handleListPads(request, env);

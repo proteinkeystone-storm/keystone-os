@@ -28,7 +28,7 @@ const HKDF_SALT = _enc.encode('sceau/v1');
 const HKDF_INFO = _enc.encode('aes-gcm-256');
 
 let _root = null;
-let _view = 'list';        // 'list' | 'tokens' | 'create' | 'result'
+let _view = 'list';        // 'list' | 'tokens' | 'create' | 'result' | 'pledge'
 let _items = [];
 let _tokens = [];
 let _loading = false;
@@ -44,6 +44,10 @@ let _fileSel = null;       // File choisi (mode fichier)
 let _unlockMode = 'code';  // 'code' (passphrase générée) | 'qa' (question/réponse) | 'email'
 let _codeStyle = 'fort';   // 'fort' (16 car. ~79 bits) | 'mots' (3 mots + nombre, ~30,5 bits)
 let _draft = {};           // valeurs saisies, préservées entre les re-render (bascules de mode)
+// Engagement d'usage (juil. 2026). Optimiste au départ : si le serveur ne
+// répond pas cette information (version antérieure), on n'invente pas une
+// barrière — c'est la garde SERVEUR qui fait autorité, pas cet état.
+let _pledge = { accepted: true, version: null };
 
 // Capture les champs du formulaire de création AVANT un re-render (sinon une
 // bascule de mode efface le message/nom/etc. déjà saisis).
@@ -260,7 +264,13 @@ async function _api(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   let data = null; try { data = await res.json(); } catch (_) {}
-  if (!res.ok) throw new Error((data && data.error) || `Erreur ${res.status}`);
+  if (!res.ok) {
+    const e = new Error((data && data.error) || `Erreur ${res.status}`);
+    e.code = data && data.code;   // ex. 'pledge_required' → on sait quoi afficher
+    e.pledge_version = data && data.pledge_version;
+    e.status = res.status;
+    throw e;
+  }
   return data;
 }
 
@@ -332,10 +342,17 @@ function _main() { return _root && _root.querySelector('[data-slot="main"]'); }
 
 async function _load() {
   _loading = true; _error = null; _render();
-  try { const d = await _api(''); _items = d.items || []; }
+  try {
+    const d = await _api('');
+    _items = d.items || [];
+    if (d.pledge) _pledge = d.pledge;
+  }
   catch (e) { _error = e.message; }
   _loading = false; _render();
-  if (!_error && !_items.length) _maybeSeedSample();
+  // La missive d'exemple attend l'engagement : elle passe par la même
+  // création que les autres, donc le serveur la refuserait. Elle se sèmera
+  // au prochain chargement, une fois la case cochée.
+  if (!_error && !_items.length && _pledge.accepted) _maybeSeedSample();
 }
 
 // ── Missive d'exemple (premier lancement) ───────────────────────
@@ -400,6 +417,33 @@ async function _maybeSeedSample() {
   try { await _seedSample(); await _load(); }
   catch (_) { /* pas d'exemple : le pad reste parfaitement utilisable */ }
 }
+// Enregistre l'engagement, puis enchaîne sur la création. La case doit
+// être cochée : c'est le seul geste qui vaut acceptation — pas le fait
+// d'avoir cliqué sur « Continuer ».
+async function _acceptPledge() {
+  const box = _root && _root.querySelector('#sc-pledge-ok');
+  if (!box || !box.checked) {
+    _error = 'Cochez la case pour continuer.';
+    _render(); return;
+  }
+  _busy = true; _error = null; _render();
+  try {
+    const d = await _api('/pledge', { method: 'POST', body: { accepted: true, version: _pledge.version } });
+    _pledge = { accepted: true, version: d.version };
+    _busy = false;
+    _view = 'create'; _render();
+  } catch (e) {
+    _busy = false;
+    // Version périmée : le serveur a changé de texte depuis l'ouverture du
+    // pad. On recharge pour afficher le bon, plutôt que de faire signer
+    // quelque chose que la personne n'a pas eu sous les yeux.
+    _error = e.code === 'pledge_stale'
+      ? 'Le texte a été mis à jour, rechargez la page pour en prendre connaissance.'
+      : e.message;
+    _render();
+  }
+}
+
 async function _loadTokens() {
   _loading = true; _error = null; _render();
   try { const d = await _api('/token'); _tokens = d.items || []; }
@@ -410,10 +454,52 @@ async function _loadTokens() {
 // ── Rendu ───────────────────────────────────────────────────────
 function _render() {
   const main = _main(); if (!main) return;
+  if (_view === 'pledge') return _renderPledge(main);
   if (_view === 'create') return _renderCreate(main);
   if (_view === 'result') return _renderResult(main);
   if (_view === 'tokens') return _renderTokens(main);
   _renderList(main);
+}
+
+// ── Engagement d'usage (avant la première missive) ──────────────
+// Une missive est illisible pour nous : c'est la promesse du produit, et
+// c'est aussi ce qui la rend engageante pour celui qui l'envoie. On le dit
+// une fois, en clair, avant le premier envoi — et on dit dans la foulée
+// ce qu'on conserve de son côté, parce qu'annoncer l'un sans l'autre
+// serait une demi-vérité.
+function _renderPledge(main) {
+  main.innerHTML = `
+    <div class="sceau-form-wrap">
+      <button class="sceau-link-back" data-act="tolist">${icon('chevron-left', 18)} Retour</button>
+      <h1>Avant votre première missive</h1>
+      <p class="sceau-pledge-lead">
+        Ce que vous envoyez ici est chiffré : seule la personne qui reçoit le
+        code pourra l'ouvrir. Nous, nous ne pouvons pas le lire — jamais, même
+        si on nous le demandait. Cette confidentialité est réelle, et c'est
+        justement pour ça qu'elle vous engage.
+      </p>
+
+      <div class="sceau-pledge-box">
+        <div class="sceau-pledge-title">Vous vous engagez à</div>
+        <ul class="sceau-pledge-list">
+          <li>n'envoyer que des choses dont vous avez le droit de disposer ;</li>
+          <li>ne jamais vous en servir pour menacer, faire chanter ou harceler quelqu'un ;</li>
+          <li>ne rien transmettre d'interdit par la loi.</li>
+        </ul>
+      </div>
+
+      <label class="sceau-pledge-check">
+        <input type="checkbox" id="sc-pledge-ok">
+        <span>J'ai lu et je m'y engage.</span>
+      </label>
+
+      <div class="sceau-actions">
+        <button class="sceau-btn primary" data-act="pledge-accept" ${_busy ? 'disabled' : ''}>
+          ${icon('shield-check', 18)} ${_busy ? 'Enregistrement…' : 'Continuer'}
+        </button>
+      </div>
+      ${_error ? `<span class="sceau-note danger">${icon('alert-triangle', 14)}${_esc(_error)}</span>` : ''}
+    </div>`;
 }
 
 function _tabs(active) {
@@ -593,6 +679,7 @@ function _renderCreate(main) {
 
         <button type="submit" class="sceau-btn primary big" ${_busy ? 'disabled' : ''}>${_busy ? 'Scellage…' : 'Sceller le secret'}</button>
         <p class="sceau-note">${icon('shield-check', 14)} Un code de déverrouillage fort sera généré. Vous devrez le transmettre au destinataire <strong>par un autre canal</strong> — il n'est pas récupérable.</p>
+        <p class="sceau-note">${icon('info', 14)} Rappel de votre engagement : rien d'illégal, aucune menace, aucun chantage. <button type="button" class="sceau-inline-link" data-act="pledge-read">Relire</button></p>
       </form>
     </div>`;
   if (_createMode === 'vocal') _paintRecorder();
@@ -825,8 +912,10 @@ function _onClick(e) {
   if (act === 'reload-tok') return _loadTokens();
   if (act === 'tab-secrets') { _view = 'list'; _load(); return; }
   if (act === 'tab-tokens')  { _view = 'tokens'; _loadTokens(); return; }
-  if (act === 'new')    { _tokenTarget = null; _createMode = 'text'; _recBlob = null; _fileSel = null; _unlockMode = 'code'; _codeStyle = 'fort'; _draft = {}; _view = 'create'; _render(); return; }
+  if (act === 'new')    { _tokenTarget = null; _createMode = 'text'; _recBlob = null; _fileSel = null; _unlockMode = 'code'; _codeStyle = 'fort'; _draft = {}; _view = _pledge.accepted ? 'create' : 'pledge'; _error = null; _render(); return; }
   if (act === 'newtoken') return _createToken();
+  if (act === 'pledge-read')   { _captureDraft(); _view = 'pledge'; _error = null; _render(); return; }
+  if (act === 'pledge-accept') return _acceptPledge();
   if (act === 'mode-text')  { _captureDraft(); _createMode = 'text';  _recBlob = null; _fileSel = null; _render(); return; }
   if (act === 'mode-vocal') { _captureDraft(); _createMode = 'vocal'; _fileSel = null; _render(); return; }
   if (act === 'mode-file')  { _captureDraft(); _createMode = 'file';  _recBlob = null; _render(); return; }
@@ -852,7 +941,7 @@ function _onClick(e) {
   if (act === 'copypass') return _copy(_result?.passphrase, t);
   if (act === 'nfc')    return _writeNfc(t);
   if (act === 'nfc-url') return _writeNfcUrl(t.dataset.url, _root.querySelector('#sceau-rowqr-msg'));
-  if (act === 'tok-load') { _tokenTarget = tid; _createMode = 'text'; _recBlob = null; _fileSel = null; _unlockMode = 'code'; _codeStyle = 'fort'; _draft = {}; _view = 'create'; _render(); return; }
+  if (act === 'tok-load') { _tokenTarget = tid; _createMode = 'text'; _recBlob = null; _fileSel = null; _unlockMode = 'code'; _codeStyle = 'fort'; _draft = {}; _view = _pledge.accepted ? 'create' : 'pledge'; _error = null; _render(); return; }
   if (act === 'tok-link') return _copy(`${API_BASE}/s/t/${tid}`, t);
   if (act === 'tok-qr')   return _toggleRowQr(`${API_BASE}/s/t/${tid}`, tid);
   if (act === 'tok-burn') return _burnToken(tid);
@@ -946,7 +1035,17 @@ async function _create() {
     _result = { passphrase, url, isToken: !!_tokenTarget, qa: _unlockMode === 'qa', emailTo, emailSent, emailErr };
     _busy = false; _view = 'result'; _render();
   } catch (e) {
-    _busy = false; _render();
+    _busy = false;
+    // Le serveur réclame l'engagement (première missive, ou texte mis à
+    // jour depuis l'ouverture du pad) : on le présente au lieu d'afficher
+    // une erreur technique. La saisie est conservée.
+    if (e.code === 'pledge_required') {
+      _captureDraft();
+      _pledge = { accepted: false, version: e.pledge_version || _pledge.version };
+      _error = null; _view = 'pledge'; _render();
+      return;
+    }
+    _render();
     _toast(e.message || 'Échec du scellage.');
   }
 }

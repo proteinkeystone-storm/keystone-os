@@ -157,3 +157,28 @@ select.sceau-input{appearance:none;-webkit-appearance:none;-moz-appearance:none;
   .sceau-modesw{display:flex;width:100%}
   .sceau-mode{flex:1 1 auto}
 }
+
+/* ── Engagement d'usage (avant la première missive) ──
+   Une friction volontaire : elle doit se LIRE, pas se cliquer au réflexe.
+   D'où la mesure de tout ce qui pourrait accélérer le geste — pas de case
+   pré-cochée, pas de bouton isolé qui attire l'œil avant le texte. */
+.sceau-pledge-lead{color:var(--sc-muted);font-size:14.5px;line-height:1.65;margin:10px 0 20px}
+.sceau-pledge-box{
+  border:1px solid var(--sc-line);border-left-width:3px;border-left-color:var(--sc-accent);
+  border-radius:12px;background:rgba(255,255,255,.02);padding:14px 16px;margin-bottom:14px;
+}
+.sceau-pledge-title{font:700 13.5px -apple-system,sans-serif;letter-spacing:-0.01em;color:var(--sc-ink);margin-bottom:8px}
+.sceau-pledge-list{margin:0;padding-left:18px;color:var(--sc-muted);font-size:14px;line-height:1.7}
+.sceau-pledge-p{margin:0;color:var(--sc-muted);font-size:14px;line-height:1.65}
+.sceau-pledge-p strong{color:var(--sc-ink)}
+.sceau-pledge-check{
+  display:flex;align-items:flex-start;gap:10px;margin:20px 0 18px;
+  color:var(--sc-ink);font-size:14.5px;line-height:1.5;cursor:pointer;
+}
+.sceau-pledge-check input{width:18px;height:18px;margin:1px 0 0;accent-color:var(--sc-accent);cursor:pointer;flex:0 0 auto}
+/* Lien « Relire » au fil du texte : un bouton pour l'accessibilité, l'allure
+   d'un lien pour ne pas peser dans une note de bas de formulaire. */
+.sceau-inline-link{
+  background:none;border:0;padding:0;font:inherit;color:var(--sc-accent);
+  text-decoration:underline;cursor:pointer;
+}
