@@ -1165,7 +1165,10 @@ void main(){
     d.textContent = ds.charAt(0).toUpperCase() + ds.slice(1);
   }
   tick(); setInterval(tick, 15000);
-  var NAMES = ['Camille','Marc','Sophie','Karim','Léa','Antoine','Nadia','Hugo','Claire','Julien','Inès','Paul'];
+  // Prenoms COURTS uniquement (4 lettres max) : au-dela, « Bonjour, X »
+  // passe a la ligne et casse l'en-tete. Trois suffisent a montrer que
+  // l'ecran s'adresse a chacun.
+  var NAMES = ['Léa','Marc','Nina'];
   var i = 0;
   setInterval(function(){
     i = (i + 1) % NAMES.length;
