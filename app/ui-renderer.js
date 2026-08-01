@@ -50,7 +50,7 @@ import { keystoneDocHTML }                                            from './li
 import {
     KSTORE_CATEGORIES, KSTORE_MOCK_APPS, KSTORE_FEATURED_IDS, KSTORE_PROMOS,
     getMockApp, getMockAppsByCategory, getMockAppsBySubcategory,
-    getCategoryLabel, getCategoryPath, getCategoryPalette,
+    getCategoryLabel, getCategoryPath, getCategoryPalette, getCategoryColor,
 } from './kstore-mock-catalog.js';
 // ── Sprint B (Master Renderer) — module additif, OFF par défaut ──
 // Activation : window.__KS_MASTER_RENDERER__ = true OU
@@ -1267,6 +1267,10 @@ function _buildKStorePanel() {
     };
     wrap.querySelector('#ksfs-back-btn').addEventListener('click', _ksGoBack);
     document.addEventListener('keydown', e => {
+        // Visionneuse de captures ouverte → Échap lui appartient (ce
+        // handler-ci est enregistré AVANT le sien, il tirerait en premier
+        // et fermerait la fiche en même temps que la visionneuse).
+        if (document.querySelector('.ksfs-shotviewer')) return;
         if (e.key === 'Escape' && wrap.classList.contains('open')) _ksGoBack();
     });
 
@@ -1360,11 +1364,33 @@ function _buildKStorePanel() {
             return;
         }
 
+        // Vignette de capture → visionneuse plein écran
+        const shotEl = e.target.closest('.ksfs-detail-shot[data-shot-url]');
+        if (shotEl) {
+            e.stopPropagation();
+            const shotsWrap = shotEl.closest('.ksfs-detail-shots-wrap');
+            const urls = [...shotsWrap.querySelectorAll('.ksfs-detail-shot[data-shot-url]')]
+                .map(el => el.dataset.shotUrl);
+            _openShotViewer(urls, Number(shotEl.dataset.shotIdx) || 0,
+                shotsWrap.style.getPropertyValue('--ks-shot-bd').trim());
+            return;
+        }
+
         // Card / featured → ouvrir page détail
         const card = e.target.closest('[data-app-id]');
         if (card) {
             _openKStoreAppDetail(card.dataset.appId);
         }
+    });
+
+    // Clavier : Entrée/Espace sur une vignette (role=button) → même chemin
+    // que le clic (la délégation ci-dessus fait le reste).
+    wrap.querySelector('#ksfs-content').addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const shotEl = e.target.closest?.('.ksfs-detail-shot[data-shot-url]');
+        if (!shotEl) return;
+        e.preventDefault();
+        shotEl.click();
     });
 }
 
@@ -1847,6 +1873,7 @@ function _renderKStoreAppDetail(appId) {
 
     // ── Méta : catégorie + copyright ──
     const catLabel  = getCategoryPath(app.category, app.subcategory);
+    const catColor  = getCategoryColor(app.category);
     const copyright = app.copyright || '© 2026-2027 Protein Studio';
 
     // ── Bouton d'action ──
@@ -1986,15 +2013,23 @@ function _renderKStoreAppDetail(appId) {
             ${(() => {
                 const shots = (Array.isArray(app.screenshots) ? app.screenshots : []).filter(Boolean);
                 if (shots.length === 0) return '';
+                // Liseré 1 px à la couleur de la catégorie (posé en variable sur
+                // le wrap : vignettes ET visionneuse le reprennent) ; chaque
+                // vignette est cliquable → visionneuse plein écran (trop petites
+                // pour lire les textes/boutons des écrans).
+                const urls = shots.map(s => `${CF_API}/api/screenshot/${encodeURIComponent(s)}`);
                 return `
-                <div class="ksfs-detail-shots-wrap">
+                <div class="ksfs-detail-shots-wrap"${catColor ? ` style="--ks-shot-bd:${catColor}"` : ''}>
                     <button class="ksfs-detail-shot-nav ksfs-detail-shot-nav--prev" aria-label="Précédent">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                              style="width:14px;height:14px"><polyline points="15 18 9 12 15 6"/></svg>
                     </button>
                     <div class="ksfs-detail-shots">
-                        ${shots.map(s => `<div class="ksfs-detail-shot ksfs-detail-shot--filled"
-                                style="background-image:url('${CF_API}/api/screenshot/${encodeURIComponent(s)}')"></div>`).join('')}
+                        ${urls.map((u, i) => `<div class="ksfs-detail-shot ksfs-detail-shot--filled"
+                                role="button" tabindex="0"
+                                aria-label="Agrandir la capture ${i + 1} sur ${urls.length}"
+                                data-shot-idx="${i}" data-shot-url="${u}"
+                                style="background-image:url('${u}')"></div>`).join('')}
                     </div>
                     <button class="ksfs-detail-shot-nav ksfs-detail-shot-nav--next" aria-label="Suivant">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
@@ -2039,6 +2074,63 @@ function _renderKStoreAppDetail(appId) {
             ` : ''}
         </div>
     `;
+}
+
+// ── Visionneuse de captures (fiche K-Store) ───────────────────
+// Les vignettes du carrousel sont trop petites pour lire les écrans :
+// un clic les ouvre en grand. La visionneuse vit AU-DESSUS du Key-Store
+// (.ksfs est un overlay fixed z-index 1000 → elle monte à 10050, cf.
+// l'incident « popup caché sous un workspace fullscreen »). Fermeture :
+// croix, clic hors image, Échap ; navigation : flèches écran + clavier.
+function _openShotViewer(urls, start, accent) {
+    if (!Array.isArray(urls) || urls.length === 0) return;
+    document.querySelector('.ksfs-shotviewer')?.remove();
+    let idx = Math.max(0, Math.min(start || 0, urls.length - 1));
+
+    const box = document.createElement('div');
+    box.className = 'ksfs-shotviewer';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    box.setAttribute('aria-label', 'Capture d\'écran agrandie');
+    if (accent) box.style.setProperty('--ks-shot-bd', accent);
+
+    const CHEV_L = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
+    const CHEV_R = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+    const CROSS  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+
+    box.innerHTML = `
+        <button class="ksfs-shotviewer-close" aria-label="Fermer">${CROSS}</button>
+        ${urls.length > 1 ? `
+        <button class="ksfs-shotviewer-nav ksfs-shotviewer-nav--prev" aria-label="Capture précédente">${CHEV_L}</button>
+        <button class="ksfs-shotviewer-nav ksfs-shotviewer-nav--next" aria-label="Capture suivante">${CHEV_R}</button>` : ''}
+        <img class="ksfs-shotviewer-img" src="${urls[idx]}" alt="Capture d'écran ${idx + 1} sur ${urls.length}">
+        ${urls.length > 1 ? `<div class="ksfs-shotviewer-count">${idx + 1} / ${urls.length}</div>` : ''}
+    `;
+
+    const img   = box.querySelector('.ksfs-shotviewer-img');
+    const count = box.querySelector('.ksfs-shotviewer-count');
+    const show  = (i) => {
+        idx = (i + urls.length) % urls.length;
+        img.src = urls[idx];
+        img.alt = `Capture d'écran ${idx + 1} sur ${urls.length}`;
+        if (count) count.textContent = `${idx + 1} / ${urls.length}`;
+    };
+    const close = () => { document.removeEventListener('keydown', onKey); box.remove(); };
+    const onKey = (ev) => {
+        if (ev.key === 'Escape')          { ev.preventDefault(); close(); }
+        else if (ev.key === 'ArrowLeft')  { show(idx - 1); }
+        else if (ev.key === 'ArrowRight') { show(idx + 1); }
+    };
+
+    box.addEventListener('click', (ev) => {
+        if (ev.target.closest('.ksfs-shotviewer-close'))      return close();
+        if (ev.target.closest('.ksfs-shotviewer-nav--prev'))  return show(idx - 1);
+        if (ev.target.closest('.ksfs-shotviewer-nav--next'))  return show(idx + 1);
+        if (ev.target === box) close();   // clic hors image = fermer
+    });
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(box);
+    box.querySelector('.ksfs-shotviewer-close').focus();
 }
 
 function _renderKStorePlans() {

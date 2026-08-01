@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Harnais — Fiche K-Store (captures : liseré catégorie + visionneuse)</title>
+  <style>
+    html, body { height:100%; margin:0; padding:0; overflow:hidden; }
+    iframe { display:block; width:100%; height:100%; border:0; }
+  </style>
+</head>
+<body>
+  <script>
+    // ── Harnais fiche K-Store (2026-08-02) ──────────────────────────
+    // Vérifie les captures de la fiche : liseré 1 px couleur catégorie
+    // + visionneuse plein écran au clic. Dérivé d'os-notice-harness :
+    // vraie app.html en iframe, réseau stubbé. Le stub /api/catalog sème
+    // des screenshots sur Missive (O-SEC-001, catégorie Diffuser=vert) ;
+    // les images pointent vers le worker (404 en local) → le harnais les
+    // remplace après rendu par des WebP locaux, pour juger le visuel.
+    const b64u = (o) => btoa(JSON.stringify(o)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    const fakeJwt = b64u({ alg:'HS256', typ:'JWT' }) + '.' +
+      b64u({ sub:'harness-fiche', owner:'Atelier Lumen', plan:'MAX', exp: 4102444800 }) + '.x';
+    try {
+      localStorage.setItem('ks_jwt', fakeJwt);
+      localStorage.setItem('ks_onboarded', '1');
+      localStorage.setItem('ks_user_name', 'Camille');
+      localStorage.setItem('ks_licence_key', 'HARN-FICH-E202-6KS0');
+      localStorage.setItem('ks_licence_plan', 'Max');
+      localStorage.setItem('ks_licence_owner', 'Atelier Lumen');
+      localStorage.setItem('ks_owned_assets', JSON.stringify([
+        'A-COM-001','A-COM-003','A-COM-005','O-AGT-001','O-SOC-001',
+        'O-GEO-001','O-Keyn-001','O-SEC-001','O-DSK-001','O-BRD-001',
+      ]));
+      localStorage.removeItem('ks_is_demo');
+    } catch (e) { console.warn('seed', e); }
+
+    // ── Stub réseau injecté dans app.html (AUCUN accent grave ici) ──
+    const STUB = '<base href="' + location.origin + '/">' +
+'<scr' + 'ipt>\n' +
+'  const _fetch = window.fetch.bind(window);\n' +
+'  window.fetch = (url, opts) => {\n' +
+'    const u = String(url);\n' +
+'    if (u.includes("/api/vault/load")) {\n' +
+'      return Promise.resolve(new Response(JSON.stringify({\n' +
+'        vault: { v: 1, api: {}, prefs: { ks_user_name: "Camille" } },\n' +
+'        updatedAt: "2026-08-02T10:00:00.000Z",\n' +
+'      }), { status: 200, headers: { "Content-Type": "application/json" } }));\n' +
+'    }\n' +
+'    if (u.includes("/api/catalog")) {\n' +
+'      return Promise.resolve(new Response(JSON.stringify({\n' +
+'        catalog: { updatedAt: "2026-08-02T10:00:00.000Z", tools: [\n' +
+'          { id: "O-SEC-001", screenshots: ["hx-1", "hx-2", "hx-3"] },\n' +
+'        ] },\n' +
+'      }), { status: 200, headers: { "Content-Type": "application/json" } }));\n' +
+'    }\n' +
+'    if (u.includes("/api/") || u.includes("workers.dev")) {\n' +
+'      return Promise.resolve(new Response("{}",\n' +
+'        { status: 200, headers: { "Content-Type": "application/json" } }));\n' +
+'    }\n' +
+'    return _fetch(url, opts);\n' +
+'  };\n' +
+'  if (navigator.serviceWorker) {\n' +
+'    navigator.serviceWorker.register = () => new Promise(() => {});\n' +
+'  }\n' +
+'</scr' + 'ipt>';
+
+    (async () => {
+      const html = await (await fetch('/app.html')).text();
+      const patched = html.replace(/<head>/i, '<head>\n' + STUB);
+      const frame = document.createElement('iframe');
+      frame.id = 'app';
+      document.body.appendChild(frame);
+
+      const wait = (ms) => new Promise(r => setTimeout(r, ms));
+      frame.addEventListener('load', async () => {
+        const doc = frame.contentDocument;
+        await wait(2500); // boot complet (pads, catalogue)
+        doc.getElementById('kstore-catalog-btn')?.click();
+        await wait(900);
+        doc.querySelector('[data-app-id="O-SEC-001"]')?.click();
+        await wait(600);
+        // Les ids hx-* pointent vers le worker (404 en local) : on
+        // rebranche vignettes ET visionneuse sur des WebP locaux.
+        const LOCAL = ['/outils/shots/missive.webp', '/outils/shots/keynapse.webp', '/outils/shots/book.webp'];
+        doc.querySelectorAll('.ksfs-detail-shot[data-shot-url]').forEach((el, i) => {
+          const src = LOCAL[i % LOCAL.length];
+          el.dataset.shotUrl = src;
+          el.style.backgroundImage = "url('" + src + "')";
+          el.style.backgroundSize = 'cover';
+          el.style.backgroundPosition = 'center';
+        });
+        window.__ficheReady = true;
+      });
+      frame.srcdoc = patched;
+    })();
+  </script>
+</body>
+</html>
