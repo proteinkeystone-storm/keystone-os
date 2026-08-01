@@ -39,6 +39,9 @@ function jwt(claims) {
 }
 // Tenant de test, formule MAX (entitle Sceau).
 const TOK = jwt({ sub: 'bk-test-tenant', owner: 'BackupTest', email: 'bk@test', plan: 'MAX' });
+// Doit suivre SEC_PLEDGE_VERSION de workers/src/routes/sceau.js : le serveur
+// exige la version exacte que le client pretend avoir affichee (409 sinon).
+const PLEDGE_VERSION = 'v1-2026-07';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -74,6 +77,17 @@ async function main() {
   const id = seed.data.id;
 
   // ── 2. Seed d'un secret Sceau (peuple oprf_key_enc — cible sécu) ─
+  // Depuis la garde anti-abus Missive (31/07/2026), /sceau/init REFUSE de
+  // creer tant que le compte n'a pas signe l'engagement d'usage. Sans cette
+  // signature, le seed echoue et la verification « le backup n'embarque pas
+  // les colonnes crypto » ne porte plus sur AUCUNE ligne : elle passerait a
+  // vide. On signe donc d'abord, et on l'assert — si la version du texte
+  // bouge, le banc le dit au lieu de se degrader en silence.
+  const pledge = await api('/api/sceau/pledge', { method: 'POST', token: TOK,
+                                                  body: { accepted: true, version: PLEDGE_VERSION } });
+  ok(pledge.status === 200 && pledge.data.ok,
+     `engagement d'usage signe (${PLEDGE_VERSION}) — prealable a toute creation`, pledge.data);
+
   const seal = await api('/api/sceau/init', { method: 'POST', token: TOK, body: { label: 'bk-sec' } });
   const sceauSeeded = seal.status === 201 && seal.data.short_id;
   ok(sceauSeeded, 'seed sceau/init → 201 + short_id (sinon sécu testée en structurel)', seal.data);
