@@ -833,7 +833,7 @@ a.qr-item:hover{border-color:var(--accent-bd);transform:translateY(-2px)}
 .kora-cell span{font-size:10.5px;font-weight:600;color:var(--text-3);letter-spacing:.02em}
 /* ── Réplique du vrai dashboard Keystone ── */
 .kd-galet{grid-column:3;width:100%;aspect-ratio:1.6;display:block}
-.kd-head{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:center}
+.kd-head{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:center}
 .kd-headmain{grid-column:1/3;display:flex;align-items:flex-start;gap:12px;min-width:0}
 .kd-logo{width:40px;height:40px;border-radius:11px;border:1px solid var(--border);background:rgba(255,255,255,.03);display:grid;place-items:center;color:#c9a45c;flex:0 0 auto}
 .kd-logo svg{width:23px;height:22px;fill:currentColor}
@@ -850,23 +850,40 @@ a.qr-item:hover{border-color:var(--accent-bd);transform:translateY(-2px)}
 .kd-sectionrow span{font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text-3);white-space:nowrap}
 .kd-sectionrow i{flex:1;height:1px;background:var(--border)}
 .kd-sectionrow em{font-style:normal;font-size:9px;font-weight:700;color:var(--accent-3);background:var(--accent-bg);border:1px solid var(--accent-bd);border-radius:999px;padding:1px 7px}
-.kd-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kd-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .kd-card{border:1px solid var(--border);border-radius:12px;background:var(--bg);padding:12px;display:flex;flex-direction:column;gap:5px}
 .kd-card.kd-active{border-color:rgba(139,144,255,.45);background:linear-gradient(160deg,rgba(99,102,241,.13),var(--bg));box-shadow:0 0 26px -10px rgba(99,102,241,.5)}
 .kd-top{display:flex;align-items:flex-start;gap:8px;margin-bottom:2px}
 .kd-ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--fam,var(--accent-2));background:rgba(255,255,255,.04);border:1px solid var(--border);flex:0 0 auto}
 .kd-ic svg{width:15px;height:15px}
 .kd-stat{min-width:0;flex:1}
-.kd-stat label{display:block;font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)}
+.kd-stat label{display:block;font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);white-space:nowrap}
 .kd-stat b{font-size:14px;font-weight:800;color:var(--text)}
 .kd-stat small{font-size:9px;font-weight:600;color:var(--text-2)}
-.kd-live{font-size:10px !important}
+.kd-live{font-size:10px !important;white-space:nowrap}
 .kd-live i{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:4px}
 .kd-spark{display:block;width:100%;height:11px;margin-top:3px}
 .kd-more{margin-left:auto;width:19px;height:19px;border-radius:50%;border:1px solid var(--border);display:grid;place-items:center;color:var(--text-3);flex:0 0 auto}
 .kd-more svg{width:10px;height:10px}
 .kd-card h4{font-size:12.5px;font-weight:800;letter-spacing:-.01em}
 .kd-card p{font-size:10.5px;line-height:1.45;color:var(--text-2)}
+/* Replique du dashboard en etroit : a 375 px, l'en-tete sur une seule rangee
+   ecrasait le bloc salutation a 7 px (« Bonjour » et l'heure se chevauchaient,
+   la ligne Living Layer disparaissait). On passe a deux rangees : salutation
+   + galet en haut, heure dessous ; et les cartes en 2 colonnes pour rester
+   lisibles. */
+@media (max-width:760px){
+  .kd-head{grid-template-columns:1fr auto; gap:10px; align-items:center}
+  .kd-headmain{grid-column:1; flex-wrap:wrap; gap:10px; min-width:0}
+  .kd-logo{width:34px; height:34px; border-radius:9px}
+  .kd-logo svg{width:19px; height:18px}
+  .kd-hi{flex:1 1 110px}
+  .kd-bonjour{font-size:16px}
+  .kd-clock{flex:1 1 100%; text-align:left; margin-left:0}
+  .kd-clock b{font-size:16px}
+  .kd-galet{grid-column:2; width:92px}
+  .kd-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 </style>
 <section class="sec pains" id="quotidien">
   <div class="pains-stage" id="painsStage">
@@ -876,13 +893,13 @@ a.qr-item:hover{border-color:var(--accent-bd);transform:translateY(-2px)}
         <h2 class="h2">Votre semaine,<br>on la connaît.</h2>
       </div>
       <div class="pains-drum">
-        <p class="pain-line" style="--pk:#fb7185">Il est 23 h. Un client écrit. <em>Il ira voir ailleurs.</em></p>
-        <p class="pain-line" style="--pk:#34d399">Un post. Cinq réseaux. <em>Cinq fois le même copier-coller.</em></p>
+        <p class="pain-line" style="--pk:#fb7185">Il est 23 h. Un client écrit. Personne ne répond&nbsp;: <em>il&nbsp;ira&nbsp;voir&nbsp;ailleurs.</em></p>
+        <p class="pain-line" style="--pk:#34d399">Un post. Cinq réseaux. <em>Cinq fois le même copier‑coller.</em></p>
         <p class="pain-line" style="--pk:#a78bfa">Trois lignes à écrire. <em>Une heure à les chercher.</em></p>
         <p class="pain-line" style="--pk:#34d399">Un tarif change. <em>Tout est déjà imprimé.</em></p>
-        <p class="pain-line" style="--pk:#fb7185">Ce client fidèle à rappeler. <em>C'était en mars.</em></p>
+        <p class="pain-line" style="--pk:#fb7185">Ce client fidèle à rappeler. <em>C'était en mars…</em></p>
         <p class="pain-line" style="--pk:#38bdf8">Sur Google, vos concurrents partout. <em>Vous, nulle part.</em></p>
-        <p class="pain-line" style="--pk:#818cf8">Tout ça, Keystone le fait. <em>Pour vous !</em></p>
+        <p class="pain-line" style="--pk:#818cf8">Tous ces soucis, Keystone les règle. <em>Pour vous&nbsp;!</em></p>
       </div>
     </div>
   </div>
