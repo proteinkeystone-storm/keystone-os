@@ -132,6 +132,7 @@ html{scroll-behavior:smooth}
 body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter","Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;letter-spacing:-.02em;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 a{color:inherit;text-decoration:none}
 .wrap{max-width:920px;margin:0 auto;padding:0 22px}
+.wrap-hero{max-width:1160px}
 body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(60% 50% at 50% -8%,rgba(99,102,241,.18),transparent 70%)}
 .nav{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:14px 22px;background:rgba(2,6,23,.72);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
 .nav-logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:15px}
@@ -200,6 +201,25 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
 .foot-col a,.foot-col address,.foot-col span{display:block;font-size:13.5px;color:var(--text-2);font-style:normal;margin-bottom:7px;line-height:1.5}
 .foot-col a:hover{color:var(--text)}
 .foot-copy{margin-top:28px;font-size:12.5px;color:var(--text-3)}
+.hero-shot{position:relative;z-index:0;margin:38px auto 0;max-width:620px}
+.hero-shot::before{content:'';position:absolute;inset:-10% -8%;z-index:-1;background:radial-gradient(50% 50% at 55% 42%,rgba(99,102,241,.24),transparent 70%);filter:blur(12px)}
+.mock{border:1px solid var(--border-strong);border-radius:14px;background:#0b1222;overflow:hidden;box-shadow:0 30px 80px rgba(2,6,23,.55)}
+.mock-bar{display:flex;align-items:center;gap:6px;padding:10px 14px;background:rgba(255,255,255,.03);border-bottom:1px solid var(--border)}
+.mock-bar i{width:9px;height:9px;border-radius:50%;flex:none}
+.mock-bar i:nth-child(1){background:rgba(255,95,86,.72)}
+.mock-bar i:nth-child(2){background:rgba(255,189,46,.72)}
+.mock-bar i:nth-child(3){background:rgba(39,201,63,.68)}
+.mock-bar em{font-style:normal;margin-left:8px;font-size:11.5px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mock img{display:block;width:100%;height:auto}
+.hero-shot figcaption{margin-top:12px;font-size:12.5px;color:var(--text-3);line-height:1.55;text-align:left}
+.hero-shot figcaption::before{content:'';display:inline-block;width:6px;height:6px;border-radius:2px;background:var(--accent-2);margin-right:8px;vertical-align:2px}
+@media(min-width:980px){
+.hero.split{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(0,.96fr);gap:54px;align-items:center;text-align:left;padding:46px 0 58px}
+.hero.split .hero-copy h1{font-size:clamp(30px,3.5vw,44px)}
+.hero.split .hero-copy .lead{margin:20px 0 0;max-width:560px}
+.hero.split .hero-copy .ctas{justify-content:flex-start}
+.hero.split .hero-shot{margin:0;max-width:none}
+}
 @media(max-width:560px){.hero{padding:24px 0 36px}}
 </style>
 </head>
@@ -210,22 +230,35 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
   <a class="nav-cta" href="/activate">Se connecter</a>
 </nav>
 
-<div class="wrap">
+<div class="wrap wrap-hero">
 
   <nav class="crumb" aria-label="Fil d'Ariane">
     <a href="/">Accueil</a> &nbsp;/&nbsp; <a href="/#outils">Outils</a> &nbsp;/&nbsp; <span>Key Brand</span>
   </nav>
 
-  <header class="hero">
-    <span class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><g fill="currentColor" stroke="none"><path d="M17,6 L17,16.2792476 L18.5,17.7902865 L20,16.2792476 L20,6 L17,6 Z M17,5 L20,5 L20,3.01471863 L17,3.01471863 L17,5 Z M21,7 L21,16.4852814 C21,16.6172545 20.9478236,16.7438756 20.8548472,16.8375362 L18.8548472,18.8522548 C18.6592928,19.0492484 18.3407072,19.0492484 18.1451528,18.8522548 L16.1451528,16.8375362 C16.0521764,16.7438756 16,16.6172545 16,16.4852814 L16,14 L15.5,14 C14.6715729,14 14,13.3284271 14,12.5 L14,9.5 C14,8.67157288 14.6715729,8 15.5,8 L16,8 L16,7 L6,7 L6,14.5 C6,14.7761424 5.77614237,15 5.5,15 L5,15 C3.34314575,15 2,16.3431458 2,18 C2,19.6568542 3.34314575,21 5,21 L22,21 L22,7 L21,7 Z M21,6 L22.5,6 C22.7761424,6 23,6.22385763 23,6.5 L23,21.5 C23,21.7761424 22.7761424,22 22.5,22 L5,22 C2.790861,22 1,20.209139 1,18 L1,6.5 C1,4.01471863 3.01471863,2 5.5,2 C5.77614237,2 6,2.22385763 6,2.5 L6,6 L16,6 L16,2.51471863 C16,2.23857625 16.2238576,2.01471863 16.5,2.01471863 L20.5,2.01471863 C20.7761424,2.01471863 21,2.23857625 21,2.51471863 L21,6 Z M16,9 L15.5,9 C15.2238576,9 15,9.22385763 15,9.5 L15,12.5 C15,12.7761424 15.2238576,13 15.5,13 L16,13 L16,9 Z M2,15.3541756 C2.73294445,14.5237549 3.80530747,14 5,14 L5,3.03544443 C3.30385293,3.27805926 2,4.73676405 2,6.5 L2,15.3541756 L2,15.3541756 Z M8.5,8 L11.5,8 C12.3284271,8 13,8.67157288 13,9.5 L13,12.5 C13,13.3284271 12.3284271,14 11.5,14 L8.5,14 C7.67157288,14 7,13.3284271 7,12.5 L7,9.5 C7,8.67157288 7.67157288,8 8.5,8 Z M8.5,9 C8.22385763,9 8,9.22385763 8,9.5 L8,12.5 C8,12.7761424 8.22385763,13 8.5,13 L11.5,13 C11.7761424,13 12,12.7761424 12,12.5 L12,9.5 C12,9.22385763 11.7761424,9 11.5,9 L8.5,9 Z M7.5,17 C7.22385763,17 7,16.7761424 7,16.5 C7,16.2238576 7.22385763,16 7.5,16 L14.5,16 C14.7761424,16 15,16.2238576 15,16.5 C15,16.7761424 14.7761424,17 14.5,17 L7.5,17 Z M7.5,19 C7.22385763,19 7,18.7761424 7,18.5 C7,18.2238576 7.22385763,18 7.5,18 L15.5,18 C15.7761424,18 16,18.2238576 16,18.5 C16,18.7761424 15.7761424,19 15.5,19 L7.5,19 Z"/></g></svg>Key Brand</span>
-    <h1>Votre charte graphique,<br><em>vivante et partageable d’un lien.</em></h1>
-    <p class="lead">Key Brand transforme votre charte graphique en mini-site interactif : logo téléchargeable au bon format, couleurs copiables avec tests de contraste, typographies à l'essai, règles d'usage générées avec votre logo. Une charte par marque, partageable d'un lien — toujours à jour, sans PDF.</p>
-    <div class="ctas">
-      <button class="btn btn-primary" type="button" data-buy="O-BRD-001">Obtenir Key Brand — 19 €/mois <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
-      <a class="btn btn-ghost" href="/#outils">Voir tous les outils</a>
+  <header class="hero split">
+    <div class="hero-copy">
+      <span class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><g fill="currentColor" stroke="none"><path d="M17,6 L17,16.2792476 L18.5,17.7902865 L20,16.2792476 L20,6 L17,6 Z M17,5 L20,5 L20,3.01471863 L17,3.01471863 L17,5 Z M21,7 L21,16.4852814 C21,16.6172545 20.9478236,16.7438756 20.8548472,16.8375362 L18.8548472,18.8522548 C18.6592928,19.0492484 18.3407072,19.0492484 18.1451528,18.8522548 L16.1451528,16.8375362 C16.0521764,16.7438756 16,16.6172545 16,16.4852814 L16,14 L15.5,14 C14.6715729,14 14,13.3284271 14,12.5 L14,9.5 C14,8.67157288 14.6715729,8 15.5,8 L16,8 L16,7 L6,7 L6,14.5 C6,14.7761424 5.77614237,15 5.5,15 L5,15 C3.34314575,15 2,16.3431458 2,18 C2,19.6568542 3.34314575,21 5,21 L22,21 L22,7 L21,7 Z M21,6 L22.5,6 C22.7761424,6 23,6.22385763 23,6.5 L23,21.5 C23,21.7761424 22.7761424,22 22.5,22 L5,22 C2.790861,22 1,20.209139 1,18 L1,6.5 C1,4.01471863 3.01471863,2 5.5,2 C5.77614237,2 6,2.22385763 6,2.5 L6,6 L16,6 L16,2.51471863 C16,2.23857625 16.2238576,2.01471863 16.5,2.01471863 L20.5,2.01471863 C20.7761424,2.01471863 21,2.23857625 21,2.51471863 L21,6 Z M16,9 L15.5,9 C15.2238576,9 15,9.22385763 15,9.5 L15,12.5 C15,12.7761424 15.2238576,13 15.5,13 L16,13 L16,9 Z M2,15.3541756 C2.73294445,14.5237549 3.80530747,14 5,14 L5,3.03544443 C3.30385293,3.27805926 2,4.73676405 2,6.5 L2,15.3541756 L2,15.3541756 Z M8.5,8 L11.5,8 C12.3284271,8 13,8.67157288 13,9.5 L13,12.5 C13,13.3284271 12.3284271,14 11.5,14 L8.5,14 C7.67157288,14 7,13.3284271 7,12.5 L7,9.5 C7,8.67157288 7.67157288,8 8.5,8 Z M8.5,9 C8.22385763,9 8,9.22385763 8,9.5 L8,12.5 C8,12.7761424 8.22385763,13 8.5,13 L11.5,13 C11.7761424,13 12,12.7761424 12,12.5 L12,9.5 C12,9.22385763 11.7761424,9 11.5,9 L8.5,9 Z M7.5,17 C7.22385763,17 7,16.7761424 7,16.5 C7,16.2238576 7.22385763,16 7.5,16 L14.5,16 C14.7761424,16 15,16.2238576 15,16.5 C15,16.7761424 14.7761424,17 14.5,17 L7.5,17 Z M7.5,19 C7.22385763,19 7,18.7761424 7,18.5 C7,18.2238576 7.22385763,18 7.5,18 L15.5,18 C15.7761424,18 16,18.2238576 16,18.5 C16,18.7761424 15.7761424,19 15.5,19 L7.5,19 Z"/></g></svg>Key Brand</span>
+      <h1>Votre charte graphique,<br><em>vivante et partageable d’un lien.</em></h1>
+      <p class="lead">Key Brand transforme votre charte graphique en mini-site interactif : logo téléchargeable au bon format, couleurs copiables avec tests de contraste, typographies à l'essai, règles d'usage générées avec votre logo. Une charte par marque, partageable d'un lien — toujours à jour, sans PDF.</p>
+      <div class="ctas">
+        <button class="btn btn-primary" type="button" data-buy="O-BRD-001">Obtenir Key Brand — 19 €/mois <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+        <a class="btn btn-ghost" href="/#outils">Voir tous les outils</a>
+      </div>
+      <p class="trust">Sans engagement, résiliable à tout moment · vos données restent à vous, hébergées en Europe</p>
     </div>
-    <p class="trust">Sans engagement, résiliable à tout moment · vos données restent à vous, hébergées en Europe</p>
+    <figure class="hero-shot">
+      <div class="mock">
+        <div class="mock-bar"><i></i><i></i><i></i><em>Key Brand</em></div>
+        <img src="/outils/shots/key-brand.webp" width="1440" height="900" alt="Une charte Key Brand : la palette de couleurs de la marque avec nuanciers et codes copiables" fetchpriority="high" decoding="async">
+      </div>
+      <figcaption>Les couleurs de la marque : nuanciers, codes copiables, contrastes déjà vérifiés.</figcaption>
+    </figure>
   </header>
+
+</div>
+
+<div class="wrap">
 
   <section class="block" aria-labelledby="how">
     <span class="eyebrow-l">Le principe</span>

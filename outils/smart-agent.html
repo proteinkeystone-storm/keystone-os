@@ -140,6 +140,7 @@ html{scroll-behavior:smooth}
 body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter","Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;letter-spacing:-.02em;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 a{color:inherit;text-decoration:none}
 .wrap{max-width:920px;margin:0 auto;padding:0 22px}
+.wrap-hero{max-width:1160px}
 body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(60% 50% at 50% -8%,rgba(99,102,241,.18),transparent 70%)}
 .nav{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:14px 22px;background:rgba(2,6,23,.72);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
 .nav-logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:15px}
@@ -208,6 +209,25 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
 .foot-col a,.foot-col address,.foot-col span{display:block;font-size:13.5px;color:var(--text-2);font-style:normal;margin-bottom:7px;line-height:1.5}
 .foot-col a:hover{color:var(--text)}
 .foot-copy{margin-top:28px;font-size:12.5px;color:var(--text-3)}
+.hero-shot{position:relative;z-index:0;margin:38px auto 0;max-width:620px}
+.hero-shot::before{content:'';position:absolute;inset:-10% -8%;z-index:-1;background:radial-gradient(50% 50% at 55% 42%,rgba(99,102,241,.24),transparent 70%);filter:blur(12px)}
+.mock{border:1px solid var(--border-strong);border-radius:14px;background:#0b1222;overflow:hidden;box-shadow:0 30px 80px rgba(2,6,23,.55)}
+.mock-bar{display:flex;align-items:center;gap:6px;padding:10px 14px;background:rgba(255,255,255,.03);border-bottom:1px solid var(--border)}
+.mock-bar i{width:9px;height:9px;border-radius:50%;flex:none}
+.mock-bar i:nth-child(1){background:rgba(255,95,86,.72)}
+.mock-bar i:nth-child(2){background:rgba(255,189,46,.72)}
+.mock-bar i:nth-child(3){background:rgba(39,201,63,.68)}
+.mock-bar em{font-style:normal;margin-left:8px;font-size:11.5px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mock img{display:block;width:100%;height:auto}
+.hero-shot figcaption{margin-top:12px;font-size:12.5px;color:var(--text-3);line-height:1.55;text-align:left}
+.hero-shot figcaption::before{content:'';display:inline-block;width:6px;height:6px;border-radius:2px;background:var(--accent-2);margin-right:8px;vertical-align:2px}
+@media(min-width:980px){
+.hero.split{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(0,.96fr);gap:54px;align-items:center;text-align:left;padding:46px 0 58px}
+.hero.split .hero-copy h1{font-size:clamp(30px,3.5vw,44px)}
+.hero.split .hero-copy .lead{margin:20px 0 0;max-width:560px}
+.hero.split .hero-copy .ctas{justify-content:flex-start}
+.hero.split .hero-shot{margin:0;max-width:none}
+}
 @media(max-width:560px){.hero{padding:24px 0 36px}}
 </style>
 </head>
@@ -218,22 +238,35 @@ h2{font-size:clamp(23px,3.4vw,31px);font-weight:900;letter-spacing:-.03em;margin
   <a class="nav-cta" href="/activate">Se connecter</a>
 </nav>
 
-<div class="wrap">
+<div class="wrap wrap-hero">
 
   <nav class="crumb" aria-label="Fil d'Ariane">
     <a href="/">Accueil</a> &nbsp;/&nbsp; <a href="/#outils">Outils</a> &nbsp;/&nbsp; <span>Smart Agent</span>
   </nav>
 
-  <header class="hero">
-    <span class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/><path d="M19 1.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8z"/></svg>Smart Agent</span>
-    <h1>Vos clients ont une question.<br><em>Votre agent IA répond. Sans vous.</em></h1>
-    <p class="lead">Votre jumeau numérique de savoir-faire. Un agent qui répond à vos clients UNIQUEMENT depuis le savoir que vous avez validé — jamais d'invention : s'il ne sait pas, il le dit, et la question rejoint sa liste de travail. Vous le nourrissez (texte, page web, fichier, interview guidée), vous le testez, puis vous le publiez par lien ou QR code : vos visiteurs lui parlent sans compte, à l'écrit ou à la voix.</p>
-    <div class="ctas">
-      <button class="btn btn-primary" type="button" data-buy="O-AGT-001">Obtenir Smart Agent — 99 €/mois <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
-      <a class="btn btn-ghost" href="/#outils">Voir tous les outils</a>
+  <header class="hero split">
+    <div class="hero-copy">
+      <span class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/><path d="M19 1.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8z"/></svg>Smart Agent</span>
+      <h1>Vos clients ont une question.<br><em>Votre agent IA répond. Sans vous.</em></h1>
+      <p class="lead">Votre jumeau numérique de savoir-faire. Un agent qui répond à vos clients UNIQUEMENT depuis le savoir que vous avez validé — jamais d'invention : s'il ne sait pas, il le dit, et la question rejoint sa liste de travail. Vous le nourrissez (texte, page web, fichier, interview guidée), vous le testez, puis vous le publiez par lien ou QR code : vos visiteurs lui parlent sans compte, à l'écrit ou à la voix.</p>
+      <div class="ctas">
+        <button class="btn btn-primary" type="button" data-buy="O-AGT-001">Obtenir Smart Agent — 99 €/mois <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+        <a class="btn btn-ghost" href="/#outils">Voir tous les outils</a>
+      </div>
+      <p class="trust">Sans engagement, résiliable à tout moment · vos données restent à vous, hébergées en Europe</p>
     </div>
-    <p class="trust">Sans engagement, résiliable à tout moment · vos données restent à vous, hébergées en Europe</p>
+    <figure class="hero-shot">
+      <div class="mock">
+        <div class="mock-bar"><i></i><i></i><i></i><em>Smart Agent</em></div>
+        <img src="/outils/shots/smart-agent.webp" width="1440" height="900" alt="Le mode Tester de Smart Agent : conversation avec l’agent IA qui répond depuis le savoir validé" fetchpriority="high" decoding="async">
+      </div>
+      <figcaption>Vous le testez comme un client : il répond depuis votre savoir, jamais au-delà.</figcaption>
+    </figure>
   </header>
+
+</div>
+
+<div class="wrap">
 
   <section class="block" aria-labelledby="how">
     <span class="eyebrow-l">Le principe</span>
