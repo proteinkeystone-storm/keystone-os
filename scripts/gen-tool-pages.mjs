@@ -75,14 +75,24 @@ const META = [
     h1a: 'Un secret.', h1b: 'Lu une seule fois, puis disparu.',
     title: 'Missive — transmettre un secret en lecture unique, chiffré | Keystone OS',
     desc: 'Transmettez un mot de passe, un code ou une information sensible qui se lit une seule fois puis s’autodétruit. Chiffré sur votre appareil — même nous ne pouvons pas le lire. Par lien, QR ou puce NFC. Sans IA, souverain.' },
-  // Key Brand (O-BRD-001) : page landing PRÊTE mais désactivée tant que le pad
-  // n'est pas dans la grille publique TOOLS d'index.html (décision go-to-market
-  // de Stéphane). Pour lancer publiquement : ajouter l'entrée TOOLS + SLUG dans
-  // index.html, décommenter ci-dessous, puis `npm run gen-pages`.
-  // { app: 'O-BRD-001', slug: 'key-brand',
-  //   h1a: 'Votre charte graphique,', h1b: 'vivante et partageable d’un lien.',
-  //   title: 'Key Brand — la charte graphique interactive qui remplace le PDF | Keystone OS',
-  //   desc: 'Réunissez logo, couleurs, typographies et règles d’usage dans un mini-site interactif : téléchargement du logo au bon format, codes couleur copiables, contrastes testés, interdits générés avec votre logo. Une charte par marque, partageable d’un lien ou d’un QR — toujours à jour, sans IA.' },
+  // Les 4 outils ci-dessous ont rejoint la grille publique TOOLS d'index.html
+  // le 01/08/2026 (la landing annonce 14 outils) — leurs pages sont donc actives.
+  { app: 'O-BRD-001', slug: 'key-brand',
+    h1a: 'Votre charte graphique,', h1b: 'vivante et partageable d’un lien.',
+    title: 'Key Brand — la charte graphique interactive qui remplace le PDF | Keystone OS',
+    desc: 'Réunissez logo, couleurs, typographies et règles d’usage dans un mini-site interactif : téléchargement du logo au bon format, codes couleur copiables, contrastes testés, interdits générés avec votre logo. Une charte par marque, partageable d’un lien ou d’un QR — toujours à jour, sans IA.' },
+  { app: 'O-NET-001', slug: 'network',
+    h1a: 'Vos relations,', h1b: 'vivantes — pas un carnet d’adresses de plus.',
+    title: 'networK — votre réseau relationnel vivant, en carte mentale | Keystone OS',
+    desc: 'Vos relations se déploient en carte mentale autour de vous : catégories libres, fiche contact complète, journal d’activité et relances au bon moment. L’anti-CRM, souverain et hébergé en Europe.' },
+  { app: 'O-BOK-001', slug: 'book',
+    h1a: 'Votre PDF devient un livret', h1b: 'que l’on feuillette. En un seul fichier.',
+    title: 'booK — vos PDF en flipbooks autonomes, à feuilleter | Keystone OS',
+    desc: 'Transformez un PDF ou des images en livret que l’on feuillette. Le fichier exporté est autonome : il s’ouvre d’un double-clic partout, sans serveur, sans abonnement, sans watermark — il vous appartient, pour toujours.' },
+  { app: 'O-DSK-001', slug: 'desk',
+    h1a: 'Le chemin de fer de votre revue,', h1b: 'vivant et partagé.',
+    title: 'desK — le chemin de fer vivant de votre revue | Keystone OS',
+    desc: 'Chaque page du numéro devient une carte dans une grille de planches partagée par l’équipe : marge réelle avant bouclage, relances, casier de contributions et pré-impression. Le chemin de fer papier, en vivant.' },
 ];
 
 // ── helpers ─────────────────────────────────────────────────────

@@ -733,12 +733,12 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
     <div class="constellation" id="cz"></div>
 
     <div class="hero-center" id="center">
-      <a class="hero-badge" href="#outils" title="Voir le catalogue des outils"><span class="dot"></span><span id="czcount">0</span>&nbsp;outils&nbsp;·&nbsp;et&nbsp;ça&nbsp;grandit</a>
-      <h1 class="hero-title">Toute votre communication.<br><em>Une seule plateforme.</em></h1>
-      <p class="hero-sub">Un <b>agent IA</b> qui répond à vos clients 24h/24. Vos posts <b>publiés sur tous vos réseaux en un clic</b>. Des <b>Smart Links</b> qui ouvrent une expérience, pas juste une page. Une <b>charte de marque vivante</b>, un <b>comité d'IA qui brainstorme</b>, des <b>messages scellés</b>. Activez ce qu'il vous faut — sans empiler les abonnements.</p>
+      <a class="hero-badge" href="#outils" title="Voir le catalogue des outils"><span class="dot"></span><span id="czcount">0</span>&nbsp;outils&nbsp;·&nbsp;une&nbsp;seule&nbsp;plateforme</a>
+      <h1 class="hero-title">Vous avez un métier.<br><em>Pas deux en un…</em></h1>
+      <p class="hero-sub">Répondre, publier, écrire, relancer : c'est un deuxième métier. <b>Keystone s'en charge, avec vos mots.</b> Vous récupérez vos soirées.</p>
       <div class="hero-ctas">
-        <a class="btn btn-ghost" href="#demo"><span class="live-dot" aria-hidden="true"></span> Essayer Smart Agent</a>
-        <a class="btn btn-primary" href="#plans">Commencer <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+        <a class="btn btn-ghost" href="#demo"><span class="live-dot" aria-hidden="true"></span> Voir en direct</a>
+        <a class="btn btn-primary" href="#plans">Essayer Keystone <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
       </div>
       <p class="hero-trust">Sans carte bancaire · accès en 2 minutes</p>
     </div>
@@ -750,36 +750,419 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
   </div>
 </section>
 
+<!-- 2 · VOTRE QUOTIDIEN (agitation — le miroir) -->
+<style>
+/* ── Maquette V2 : styles additionnels ── */
+.pains{text-align:center;padding:16px 24px 0}
+.pains .h2{font-size:clamp(40px,5vw,64px);line-height:1.06}
+.pains-stage{position:relative;height:420vh}
+.pains-pin{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;align-items:center;overflow:hidden;padding-bottom:18vh}
+.pains-head{padding-top:5vh}
+.pains-drum{position:relative;flex:1;width:min(92vw,980px);perspective:1050px;text-align:left}
+.pain-line{position:absolute;top:50%;left:0;right:0;font-size:clamp(26px,3.6vw,46px);font-weight:900;letter-spacing:-.02em;line-height:1.18;color:rgba(248,250,252,.28);transition:color .35s ease;will-change:transform,opacity,filter}
+.pain-line em{font-style:normal;color:inherit;transition:color .35s ease}
+.pain-line.lit{color:var(--text)}
+.pain-line.lit em{color:var(--pk,var(--accent-2))}
+.pains-close{margin:clamp(40px,7vh,72px) auto 0;max-width:760px;font-size:clamp(19px,2.2vw,27px);font-weight:800;letter-spacing:-.01em;line-height:1.4;color:var(--text)}
+.pains-close b{color:var(--accent-3)}
+/* Animations réduites : retour à la colonne fixe, tout allumé */
+@media (prefers-reduced-motion:reduce){
+  .pains-stage{height:auto}
+  .pains-pin{position:static;height:auto;overflow:visible}
+  .pains-drum{perspective:none;max-width:900px;margin:40px auto 0}
+  .pain-line{position:static;margin-top:44px;color:var(--text)}
+  .pain-line em{color:var(--pk,var(--accent-2))}
+}
+.hl-cta .btn{white-space:nowrap}
+/* ── Footer v2 : rangé, hiérarchisé ── */
+.foot-v2{display:block; padding:56px 24px 28px}
+.fo2-top{display:flex; flex-wrap:wrap; gap:48px; justify-content:space-between; margin-bottom:44px}
+.fo2-brand{max-width:250px}
+.fo2-tagline{margin-top:12px; font-size:13px; line-height:1.65; color:var(--text-3)}
+.fo2-cols{display:flex; gap:72px; flex-wrap:wrap}
+.fo2-bottom{border-top:1px solid var(--border); padding-top:20px}
+.fo2-legal{display:flex; gap:8px 22px; flex-wrap:wrap; margin-bottom:14px}
+.fo2-legal a{font-size:12px; color:var(--text-3); text-decoration:none}
+.fo2-legal a:hover{color:var(--text)}
+.fo2-meta{display:flex; flex-wrap:wrap; gap:8px 28px; justify-content:space-between; align-items:baseline}
+.fo2-social{display:flex; gap:18px; flex-wrap:wrap}
+.fo2-social a{font-size:12px; color:var(--text-3); text-decoration:none}
+.fo2-social a:hover{color:var(--text)}
+.foot-v2 .foot-copy{margin:0; font-size:12px; color:var(--text-3)}
+.mega-wordmark{opacity:.55}
+/* ── Zone Smart QR unifiée : grille des originalités ── */
+.qr-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;max-width:1060px;margin:34px auto 0;text-align:left}
+.qr-item{display:block;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:var(--r-md);padding:20px 20px 18px;text-decoration:none;color:inherit;transition:border-color .25s ease, transform .25s ease}
+a.qr-item:hover{border-color:var(--accent-bd);transform:translateY(-2px)}
+.qr-item h4{font-size:15.5px;font-weight:800;letter-spacing:-.01em;margin-bottom:6px}
+.qr-item p{font-size:13.5px;line-height:1.5;color:var(--text-2)}
+.qr-item .qr-more{display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-size:12.5px;font-weight:700;color:var(--accent-3)}
+@media (max-width:900px){.qr-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:580px){.qr-grid{grid-template-columns:1fr}}
+/* ── Bloc « 3 outils gratuits, pour toujours » ── */
+.freeapps{text-align:center}
+.free-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;max-width:1060px;margin:44px auto 0;text-align:left}
+.free-card{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:var(--r-lg);padding:26px 24px;display:flex;flex-direction:column;gap:12px}
+.free-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.free-ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;color:var(--fam,var(--accent-2));background:rgba(255,255,255,.04);border:1px solid var(--border)}
+.free-ic svg{width:24px;height:24px}
+.free-badge{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--green);background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.28);border-radius:999px;padding:4px 10px;white-space:nowrap}
+.free-card h3{font-size:19px;font-weight:800;letter-spacing:-.02em}
+.free-hook{font-size:14.5px;font-weight:700;color:var(--text);letter-spacing:-.01em}
+.free-card ul{list-style:none;display:flex;flex-direction:column;gap:7px}
+.free-card li{font-size:13.5px;line-height:1.5;color:var(--text-2);padding-left:16px;position:relative}
+.free-card li::before{content:'';position:absolute;left:0;top:8px;width:5px;height:5px;border-radius:50%;background:var(--fam,var(--accent-2))}
+@media (max-width:900px){.free-grid{grid-template-columns:1fr;max-width:520px}}
+/* ── Section « Voici Keystone » : 2 vedettes + bandeau + galet ── */
+.sol-star{display:flex;gap:14px;align-items:flex-start;margin-top:24px}
+.sol-ic{flex:0 0 auto;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--accent-bg);color:var(--accent-2);border:1px solid var(--accent-bd)}
+.sol-ic svg{width:17px;height:17px}
+.sol-star p{font-size:15px;line-height:1.55;color:var(--text-2)}
+.sol-star b{color:var(--text)}
+.sol-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;max-width:1080px;margin:58px auto 0;padding-top:34px;border-top:1px solid var(--border)}
+.sol-tile{display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px}
+.sol-tile p{font-size:13.5px;line-height:1.5;color:var(--text-2)}
+.sol-tile .feat-ic{width:54px;height:54px;border-radius:15px}
+.sol-tile .feat-ic svg{width:25px;height:25px}
+.sol-tile b{display:block;color:var(--text);font-size:14.5px;margin-bottom:2px}
+@media (max-width:860px){.sol-strip{grid-template-columns:1fr;gap:20px}}
+.appwin-top{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:end;margin-bottom:18px}
+.appwin-top .appwin-hi{grid-column:1/3;margin-bottom:0;align-self:center}
+.kora-cell{grid-column:3;display:flex;flex-direction:column;align-items:center;gap:1px}
+.kora-cell canvas{width:100%;aspect-ratio:1.5;display:block}
+.kora-cell span{font-size:10.5px;font-weight:600;color:var(--text-3);letter-spacing:.02em}
+/* ── Réplique du vrai dashboard Keystone ── */
+.kd-galet{grid-column:3;width:100%;aspect-ratio:1.6;display:block}
+.kd-head{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:center}
+.kd-headmain{grid-column:1/3;display:flex;align-items:flex-start;gap:12px;min-width:0}
+.kd-logo{width:40px;height:40px;border-radius:11px;border:1px solid var(--border);background:rgba(255,255,255,.03);display:grid;place-items:center;color:#c9a45c;flex:0 0 auto}
+.kd-logo svg{width:23px;height:22px;fill:currentColor}
+.kd-hi{flex:1;min-width:0}
+.kd-bonjour{font-size:19px;font-weight:900;letter-spacing:-.02em;color:var(--text)}
+#kdName{transition:opacity .35s ease}
+.kd-ll{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-2);margin-top:4px}
+.kd-ll svg{width:11px;height:11px;flex:0 0 auto;color:var(--accent-2)}
+.kd-ll span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kd-clock{text-align:right;flex:0 0 auto;margin-left:auto}
+.kd-clock b{display:block;font-size:19px;font-weight:900;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.kd-clock span{font-size:9.5px;color:var(--text-3);letter-spacing:.03em}
+.kd-sectionrow{display:flex;align-items:center;gap:10px;margin:18px 0 10px}
+.kd-sectionrow span{font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text-3);white-space:nowrap}
+.kd-sectionrow i{flex:1;height:1px;background:var(--border)}
+.kd-sectionrow em{font-style:normal;font-size:9px;font-weight:700;color:var(--accent-3);background:var(--accent-bg);border:1px solid var(--accent-bd);border-radius:999px;padding:1px 7px}
+.kd-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kd-card{border:1px solid var(--border);border-radius:12px;background:var(--bg);padding:12px;display:flex;flex-direction:column;gap:5px}
+.kd-card.kd-active{border-color:rgba(139,144,255,.45);background:linear-gradient(160deg,rgba(99,102,241,.13),var(--bg));box-shadow:0 0 26px -10px rgba(99,102,241,.5)}
+.kd-top{display:flex;align-items:flex-start;gap:8px;margin-bottom:2px}
+.kd-ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--fam,var(--accent-2));background:rgba(255,255,255,.04);border:1px solid var(--border);flex:0 0 auto}
+.kd-ic svg{width:15px;height:15px}
+.kd-stat{min-width:0;flex:1}
+.kd-stat label{display:block;font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)}
+.kd-stat b{font-size:14px;font-weight:800;color:var(--text)}
+.kd-stat small{font-size:9px;font-weight:600;color:var(--text-2)}
+.kd-live{font-size:10px !important}
+.kd-live i{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:4px}
+.kd-spark{display:block;width:100%;height:11px;margin-top:3px}
+.kd-more{margin-left:auto;width:19px;height:19px;border-radius:50%;border:1px solid var(--border);display:grid;place-items:center;color:var(--text-3);flex:0 0 auto}
+.kd-more svg{width:10px;height:10px}
+.kd-card h4{font-size:12.5px;font-weight:800;letter-spacing:-.01em}
+.kd-card p{font-size:10.5px;line-height:1.45;color:var(--text-2)}
+</style>
+<section class="sec pains" id="quotidien">
+  <div class="pains-stage" id="painsStage">
+    <div class="pains-pin">
+      <div class="pains-head">
+        <span class="eyebrow">Votre quotidien</span>
+        <h2 class="h2">Votre semaine,<br>on la connaît.</h2>
+      </div>
+      <div class="pains-drum">
+        <p class="pain-line" style="--pk:#fb7185">Il est 23 h. Un client écrit. <em>Il ira voir ailleurs.</em></p>
+        <p class="pain-line" style="--pk:#34d399">Un post. Cinq réseaux. <em>Cinq fois le même copier-coller.</em></p>
+        <p class="pain-line" style="--pk:#a78bfa">Trois lignes à écrire. <em>Une heure à les chercher.</em></p>
+        <p class="pain-line" style="--pk:#34d399">Un tarif change. <em>Tout est déjà imprimé.</em></p>
+        <p class="pain-line" style="--pk:#fb7185">Ce client fidèle à rappeler. <em>C'était en mars.</em></p>
+        <p class="pain-line" style="--pk:#38bdf8">Sur Google, vos concurrents partout. <em>Vous, nulle part.</em></p>
+        <p class="pain-line" style="--pk:#818cf8">Tout ça, Keystone le fait. <em>Pour vous !</em></p>
+      </div>
+    </div>
+  </div>
+</section>
+<script>
+/* Tambour des douleurs : la section s'épingle, le scroll fait tourner le
+   cylindre — phrase de devant nette et allumée, les autres grises et floues.
+   Une fois les six passées, la page reprend son défilement normal. */
+(function(){
+  var stage = document.getElementById('painsStage'); if (!stage) return;
+  var lines = [].slice.call(stage.querySelectorAll('.pain-line'));
+  var N = lines.length; if (!N) return;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches){
+    lines.forEach(function(l){ l.classList.add('lit'); }); return;
+  }
+  var ticking = false;
+  function layout(){
+    ticking = false;
+    var r = stage.getBoundingClientRect();
+    var span = Math.max(1, r.height - innerHeight);
+    var prog = Math.min(1, Math.max(0, -r.top / span));
+    var p = prog * (N - 1);
+    var S = Math.max(78, innerHeight * 0.125);
+    for (var i = 0; i < N; i++){
+      var d = i - p, ad = Math.abs(d), l = lines[i];
+      l.style.transform = 'translateY(calc(-50% + ' + (d * S).toFixed(1) + 'px)) rotateX(' + (-d * 20).toFixed(2) + 'deg) scale(' + (1 - Math.min(ad * 0.05, 0.2)).toFixed(3) + ')';
+      l.style.opacity = (ad > 2.6 ? 0 : 1 - Math.min(ad * 0.34, 0.82)).toFixed(3);
+      l.style.filter = 'blur(' + Math.min(ad * 1.7, 4).toFixed(2) + 'px)';
+      l.classList.toggle('lit', ad < 0.5);
+    }
+  }
+  function onScroll(){ if (!ticking){ ticking = true; requestAnimationFrame(layout); } }
+  addEventListener('scroll', onScroll, {passive:true});
+  addEventListener('resize', onScroll);
+  layout();
+})();
+</script>
+
 <!-- 3 · C'EST QUOI -->
-<section class="sec what">
+<section class="sec what" id="os">
   <div class="what-grid">
     <div class="what-copy reveal">
-      <span class="eyebrow">Le principe</span>
-      <h2 class="h2">Un OS modulaire.<br>Vous activez ce dont vous avez besoin.</h2>
-      <p class="lead">Keystone sépare le <b>contenant</b> — un cockpit unique, rapide, cohérent — du <b>contenu</b> : vos outils métier, ajoutés à la carte. Vous démarrez avec ce qu'il vous faut, vous étendez quand vous voulez.</p>
-      <ul class="feat">
-        <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg></span><span><b>Modulaire</b> — chaque outil s'ajoute d'un clic, sans refonte.</span></li>
-        <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3"/></svg></span><span><b>Vous payez ce que vous activez</b> — à la configuration, vous choisissez les outils de votre plan ; votre dashboard arrive prêt avec votre sélection.</span></li>
-        <li><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg></span><span><b>Souverain</b> — vos données restent à vous, hébergées en Europe.</span></li>
-      </ul>
+      <span class="eyebrow">La solution</span>
+      <h2 class="h2">Voici Keystone.</h2>
+      <p class="lead">Un seul écran pour répondre, publier, écrire et relancer. Uniquement les outils utiles à votre métier.</p>
+      <div class="sol-star"><span class="sol-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg></span>
+        <p><b>Kora, votre assistante.</b> Le galet qui ondule en haut de la fenêtre, c'est elle. Dites-lui « publie ce post » — elle pilote tous vos outils, à la voix ou à l'écrit.</p></div>
+      <div class="sol-star"><span class="sol-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+        <p><b>Le Living Layer veille.</b> Scans, lectures, demandes, rappels : votre activité s'affiche en direct, sans rien ouvrir.</p></div>
     </div>
     <div class="what-visual reveal">
       <div class="appwin">
         <div class="appwin-bar"><i></i><i></i><i></i></div>
         <div class="appwin-body">
-          <p class="appwin-hi">Bonjour, Stéphane — <b>10 outils actifs</b></p>
-          <div class="appgrid" id="appgrid"></div>
+          <div class="kd-head">
+            <div class="kd-headmain">
+            <span class="kd-logo"><svg viewBox="0 0 260.85 246.17"><use href="#kpuce"/></svg></span>
+            <div class="kd-hi">
+              <p class="kd-bonjour">Bonjour, <span id="kdName">Camille</span></p>
+              <p class="kd-ll"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="20" x2="4" y2="14"/><line x1="10" y1="20" x2="10" y2="8"/><line x1="16" y1="20" x2="16" y2="11"/><line x1="22" y1="20" x2="22" y2="16"/></svg><span>Portail Marron : 18 scans cette semaine</span></p>
+            </div>
+            <div class="kd-clock"><b id="kdTime">—:—</b><span id="kdDate"></span></div>
+            </div>
+            <canvas id="koraGalet" class="kd-galet" title="Kora — au travail"></canvas>
+          </div>
+          <div class="kd-sectionrow"><span>Suite d'applications métiers</span><i></i><em>6</em></div>
+          <div class="kd-grid"><div class="kd-card" style="--fam:#34d399"><div class="kd-top"><span class="kd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="16" y="16" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14" y="19" width="2" height="2" fill="currentColor" stroke="none"/><rect x="19" y="19" width="2" height="2" fill="currentColor" stroke="none"/></svg></span><div class="kd-stat"><label>Scans 24h</label><b>6</b><svg class="kd-spark" viewBox="0 0 60 14" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,9 14,4 28,6 42,5 52,9 60,11" fill="none" stroke="#818cf8" stroke-width="1.4"/></svg></div><span class="kd-more"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></span></div><h4>Smart Dynamic QR</h4><p>QR codes dynamiques &amp; stats souveraines</p></div><div class="kd-card kd-active" style="--fam:#a78bfa"><div class="kd-top"><span class="kd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5" opacity="0.3"/><circle cx="12" cy="3.5" r="1.3"/><circle cx="17.5" cy="5.5" r="1.3"/><circle cx="20.5" cy="10.5" r="1.3"/><circle cx="19.4" cy="16.3" r="1.3"/><circle cx="14.9" cy="20" r="1.3"/><circle cx="9.1" cy="20" r="1.3"/><circle cx="4.6" cy="16.3" r="1.3"/><circle cx="3.5" cy="10.5" r="1.3"/><circle cx="6.5" cy="5.5" r="1.3"/></svg></span><div class="kd-stat"><label>Sessions</label><b>3</b></div><span class="kd-more"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></span></div><h4>Brainstorming</h4><p>Planche d'ambiance pour studio 3D</p></div><div class="kd-card" style="--fam:#fbbf24"><div class="kd-top"><span class="kd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="7" r="2.4"/><circle cx="17.5" cy="6" r="2"/><circle cx="13.5" cy="17" r="2.7"/><path d="M7.7 8.6l4.6 6.4"/><path d="M8.3 6.4l7.2-.2"/></svg></span><div class="kd-stat"><label>Notes</label><b>19 <small>bulles</small></b></div><span class="kd-more"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></span></div><h4>Keynapse</h4><p>Vos idées en bulles vivantes — une constellation qui respire</p></div><div class="kd-card" style="--fam:#38bdf8"><div class="kd-top"><span class="kd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></svg></span><div class="kd-stat"><label>Disponibilité</label><b class="kd-live"><i></i>4 sites en ligne</b></div><span class="kd-more"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></span></div><h4>Sentinel</h4><p>Auditez et surveillez vos sites — dispo, SEO, visibilité IA</p></div><div class="kd-card" style="--fam:#34d399"><div class="kd-top"><span class="kd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><g transform="scale(0.03) translate(-120.0,-121.8) scale(1.3)" fill="currentColor" stroke="none"><path d="M344.9,229.5c-21.7,7-43.3,14.6-64.6,22.8c-4,1.5-6.9,5.5-7.5,10.4c-12.6,110.6,16.5,191.2,51.3,244.4 c14.7,22.7,32.3,42.7,52.1,59.4c7.9,6.5,14.9,11.2,20.3,14.2c2.7,1.5,5,2.5,6.7,3.1c0.7,0.3,1.5,0.5,2.3,0.7 c0.8-0.1,1.5-0.4,2.3-0.7c1.7-0.6,4-1.6,6.7-3.1c5.5-3,12.5-7.7,20.3-14.2c19.8-16.6,37.4-36.7,52.1-59.4 c34.8-53.1,64-133.8,51.3-244.4c-0.6-4.8-3.5-8.9-7.5-10.4c-14.8-5.7-39.9-14.9-64.6-22.7c-25.3-8-48.6-13.9-60.7-13.9 C393.5,215.6,370.2,221.5,344.9,229.5L344.9,229.5z M338.8,202.1c24.7-7.8,51-14.9,66.7-14.9s42,7,66.7,14.9 c25.3,8,50.8,17.4,65.8,23.1c12.8,4.9,22,18,23.8,33.6c13.6,119.1-17.9,207.3-56.2,265.7c-16.2,25-35.5,47-57.4,65.2 c-7.5,6.3-15.5,11.9-23.9,16.6c-6.4,3.5-13.2,6.4-18.9,6.4s-12.5-2.9-18.9-6.4c-8.4-4.7-16.3-10.3-23.9-16.6 c-21.8-18.3-41.1-40.3-57.4-65.2c-38.2-58.4-69.8-146.6-56.2-265.7c1.8-15.6,11-28.6,23.8-33.6 C294.8,216.9,316.7,209.2,338.8,202.1z"/><path d="M493.8,315.6c5.7,5.7,5.7,14.9,0,20.6c0,0,0,0,0,0l-87.5,87.5c-5.7,5.7-14.9,5.7-20.6,0c0,0,0,0,0,0L341.9,380 c-5.7-5.7-5.7-14.9,0-20.6s14.9-5.7,20.6,0l33.4,33.4l77.2-77.2C478.8,309.9,488,309.9,493.8,315.6 C493.8,315.6,493.8,315.6,493.8,315.6z"/><path d="M328,533.5c-22.8-11.6-36.7-32.4-38.7-51.9C278.4,377.5,104,370.3,11.7,269.3l0,0C21.1,401.9,166.9,396,255.1,459.4 c-56.4-22-147.3-13.4-214.8-53.8c34.4,98.8,142.9,61.9,224.4,86.1c-48.1-2.9-110.4,26.5-171,7.2c55.8,81.3,122.3,23.2,188.7,21.3 c-33.2,9.7-66.4,48.3-112.7,46.5c58.3,52.1,85.9-1.5,125.5-23.2c-3.9,5-6.2,11.3-6.3,18.1c-0.1,16.5,13.1,29.9,29.6,30 c16.5,0.1,29.9-13.1,30-29.6C348.7,548.7,340,537.4,328,533.5L328,533.5z"/><path d="M472,533.5c-12,3.9-20.7,15.3-20.6,28.6c0.1,16.5,13.6,29.7,30,29.6c16.5-0.1,29.7-13.6,29.6-30 c-0.1-6.8-2.4-13.1-6.3-18.1c39.6,21.6,67.2,75.3,125.5,23.2c-46.3,1.8-79.6-36.8-112.7-46.5c66.4,1.9,132.9,60,188.7-21.3 c-60.6,19.2-122.9-10.1-171-7.2c81.5-24.2,190,12.7,224.4-86.1c-67.5,40.4-158.3,31.7-214.8,53.8c88.3-63.4,234-57.5,243.4-190.1 l0,0c-92.3,101-266.7,108.2-277.5,212.3C508.7,501.1,494.9,521.9,472,533.5L472,533.5z"/></g></svg></span><div class="kd-stat"><label>Sécurisé</label><b>E2E</b></div><span class="kd-more"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></span></div><h4>Missive</h4><p>Un secret qui se lit une fois, puis s'autodétruit</p></div><div class="kd-card" style="--fam:#34d399"><div class="kd-top"><span class="kd-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span><div class="kd-stat"><label>Flipbooks</label><b>2</b></div><span class="kd-more"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></span></div><h4>booK</h4><p>Vos PDF en livrets — un fichier qui s'ouvre partout</p></div></div>
         </div>
       </div>
     </div>
   </div>
+  <div class="sol-strip reveal">
+    <div class="sol-tile"><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg></span><p><b>Prêt en 2 minutes</b>Rien à installer : tout marche dans votre navigateur.</p></div>
+    <div class="sol-tile"><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3"/></svg></span><p><b>Un seul abonnement</b>Pas d'applis ni de factures empilées.</p></div>
+    <div class="sol-tile"><span class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg></span><p><b>Vos données à vous</b>Hébergées en Europe, conformes RGPD.</p></div>
+  </div>
 </section>
+<script>
+/* ── Galet Kora (état « travail ») — shader du harnais verrouillé, figé sur un état ── */
+(function(){
+  var cv = document.getElementById('koraGalet'); if (!cv) return;
+  var gl = cv.getContext('webgl', {alpha:true, premultipliedAlpha:false, antialias:false});
+  if (!gl) { cv.parentNode.style.display = 'none'; return; }
+  var VS = 'attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }';
+  var FS = `
+precision highp float;
+uniform vec2  uRes;
+uniform float uT;        // temps (s), déjà multiplié par la vitesse
+uniform float uN;        // exposant de Lamé effectif (état + slider + respiration)
+uniform float uRatio;    // a/b — allongement horizontal
+uniform float uBloom;    // halo central
+uniform float uPlasma;   // énergie des lames intérieures
+uniform float uComet;    // 0..1 — comète périmétrique (Travail)
+uniform float uKnock;    // 0..1 — flash « Besoin de toi »
+uniform float uLevel;    // 0..1 — niveau « voix » (Écoute)
+uniform float uWeave;    // 0..1 — tissage Réflexion
+uniform vec3  uTintA;    // teinte 1 (lavande / or…)
+uniform vec3  uTintB;    // teinte 2 (cyan / ambre…)
+uniform vec3  uTintC;    // teinte 3 — la 3e voix de la palette de l'état
+uniform float uWhite;    // part de blanc : Travail (toutes couleurs) ↔ Besoin (teinte pure)
+uniform float uDim;      // luminosité globale de l'état
+uniform vec3  uLay;      // poids des 3 familles de lames (l'état = combien de lames)
+uniform float uSharp;    // 0 = duveteux (aurore) · 1 = net (rubans Siri)
+
+/* SDF superellipse normalisée : f<0 dedans, ~0 au bord. */
+float lame(vec2 q, float n, vec2 ab){
+  vec2 w = pow(abs(q)/ab, vec2(n));
+  return pow(w.x + w.y, 1.0/n) - 1.0;
+}
+/* Angle paramétrique inverse — pour situer un fragment le long du bord. */
+float edgeAngle(vec2 q, float n, vec2 ab){
+  vec2 s = sign(q) * pow(abs(q)/ab, vec2(n*0.5));
+  return atan(s.y, s.x); // -PI..PI
+}
+void main(){
+  vec2 uv = (gl_FragCoord.xy*2.0 - uRes) / min(uRes.x,uRes.y);
+  float b = 0.46;                       // demi-hauteur (barre basse)
+  vec2 ab = vec2(b*uRatio, b);
+  float f  = lame(uv, uN, ab);
+
+  /* ── Intérieur : ONDE — UN langage, des dialectes par état.
+     Lobes d'onde pleins, miroirs autour de l'axe (langage validé) ;
+     l'ÉCOUTE l'affine en filigrane (traits fins, corps discrets). ── */
+  vec3 col = vec3(0.0);
+  if (f < 0.02) {
+    vec2 q = uv / ab;
+    float t = uT;
+    float aa = mix(0.12, 0.018, uSharp);
+    float fr = mix(1.0, 0.62, uWeave);
+    float voiced = mix(1.0, 0.25 + 0.85*uLevel, clamp(uLevel*8.0, 0.0, 1.0));
+    float amp = uPlasma * 1.9 * voiced * (1.0 + uKnock*0.35);
+
+    float x = q.x, y = q.y;
+    vec3 acc = vec3(0.0);
+    /* crêtes étouffées sur l'axe : la couleur vit dans les corps */
+    float axAtt = smoothstep(0.015, 0.13, abs(y));
+    /* dialecte ÉCOUTE (uLevel actif) : crêtes fines ×4, corps discrets */
+    float fine = clamp(uLevel*1.4, 0.0, 1.0);
+    float kf = mix(1.0, 6.0, fine);
+    float bw = mix(1.0, 0.22, fine);
+    float cg = mix(1.0, 1.8, fine);
+    vec3 cC = uTintC;
+
+    { float c1 = 0.75*sin(t*0.33);
+      float env = 0.16 + 0.62*exp(-pow((x - c1)*1.8, 2.0)) + 0.30*exp(-pow((x + c1*0.7)*2.4, 2.0));
+      float yi = amp * uLay.x * env * sin(2.2*3.14159*x*fr + 1.0*t);
+      float dyy = abs(y) - abs(yi);
+      acc += uTintA * (smoothstep(aa, -aa*0.5, dyy)*0.72*bw + exp(-dyy*dyy*140.0*kf)*0.55*cg*axAtt); }
+    { float c1 = 0.75*sin(t*0.41 + 2.1);
+      float env = 0.14 + 0.58*exp(-pow((x - c1)*2.1, 2.0)) + 0.26*exp(-pow((x + c1*0.6)*2.6, 2.0));
+      float yi = amp * uLay.y * env * sin(3.1*3.14159*x*fr - 1.25*t);
+      float dyy = abs(y) - abs(yi);
+      acc += uTintB * (smoothstep(aa, -aa*0.5, dyy)*0.68*bw + exp(-dyy*dyy*150.0*kf)*0.50*cg*axAtt); }
+    { float c1 = 0.7*sin(t*0.27 + 4.2);
+      float env = 0.15 + 0.55*exp(-pow((x - c1)*1.6, 2.0));
+      float yi = amp * uLay.z * env * sin(1.7*3.14159*x*fr + 0.8*t);
+      float dyy = abs(y) - abs(yi);
+      acc += cC * (smoothstep(aa, -aa*0.5, dyy)*0.66*bw + exp(-dyy*dyy*130.0*kf)*0.50*cg*axAtt); }
+    { float c1 = 0.65*sin(t*0.37 + 1.3);
+      float env = 0.12 + 0.50*exp(-pow((x - c1)*2.2, 2.0));
+      float yi = amp * (uLay.x + uLay.y)*0.42*uWhite * env * sin(2.6*3.14159*x*fr - 0.55*t);
+      float dyy = abs(y) - abs(yi);
+      acc += vec3(0.93,0.95,1.0) * (smoothstep(aa, -aa*0.5, dyy)*0.15*bw + exp(-dyy*dyy*160.0*kf)*0.25*cg*axAtt); }
+
+    /* fil d'axe fin, teinté selon l'état */
+    acc += mix(uTintA, vec3(1.0), 0.10 + 0.22*uWhite) * exp(-y*y*1600.0) * 0.14;
+    /* blanc émergent aux chevauchements + vibrance */
+    float lum = dot(acc, vec3(0.35));
+    acc += vec3(1.0) * smoothstep(1.35, 2.4, lum) * 0.4 * (0.2 + 0.8*uWhite);
+    float lu = dot(acc, vec3(0.299, 0.587, 0.114));
+    acc = clamp(mix(vec3(lu), acc, 1.35), 0.0, 4.0);
+
+    vec3 ambient = mix(uTintA, uTintB, 0.4) * (0.12 + 0.08*uBloom);
+    float d = length(q);
+    float core = exp(-d*d*3.4) * 0.10 * uBloom;
+    vec3 inner = ambient + acc + vec3(core);
+    inner = inner / (1.0 + inner*0.30);
+    float inside = smoothstep(0.015, -0.03, f);
+    col += max(inner, 0.0) * inside;
+  }
+
+  /* ── Bord : liseré verre + comète paramétrique ── */
+  float rimSoft = exp(-abs(f)*26.0);
+  float rimLine = smoothstep(0.016, 0.002, abs(f));
+  float rim = mix(rimSoft, rimLine*1.15 + rimSoft*0.25, uSharp);
+  float topLight = 0.55 + 0.45 * clamp(-uv.y*1.4 + 0.3, 0.0, 1.0);
+  col += (uTintB*0.55 + vec3(0.65,0.65,0.95)*0.45) * rim * mix(0.55, 0.95, uSharp) * topLight;
+
+  if (uComet > 0.001) {
+    float aF = edgeAngle(uv, uN, ab);
+    float aC = mod(uT*1.35, 6.28318) - 3.14159;
+    float da = abs(atan(sin(aF-aC), cos(aF-aC)));          // distance angulaire
+    float trail = exp(-da*4.0) + 0.45*exp(-abs(atan(sin(aF-aC-0.7), cos(aF-aC-0.7)))*6.0);
+    col += mix(uTintB, vec3(1.0), 0.55) * exp(-abs(f)*22.0) * trail * 6.5 * uComet;
+  }
+
+  /* « Besoin de toi » : flash doux du liseré entier */
+  col += vec3(1.0, 0.82, 0.42) * rim * uKnock * 1.6;
+
+  col *= uDim;
+  /* légère vignette de scène */
+  float a = clamp(rim*1.2 + smoothstep(0.015,-0.03,f), 0.0, 1.0);
+  gl_FragColor = vec4(col, a);
+}`;
+  function sh(t, s){ var o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); return o; }
+  var prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog); gl.useProgram(prog);
+  var buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  var loc = gl.getAttribLocation(prog, 'p');
+  gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  var U = {}; ['uRes','uT','uN','uRatio','uBloom','uPlasma','uComet','uKnock','uLevel','uWeave','uTintA','uTintB','uTintC','uDim','uLay','uSharp','uWhite'].forEach(function(n){ U[n] = gl.getUniformLocation(prog, n); });
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  function resize(){ var d = Math.min(devicePixelRatio || 1, 2), r = cv.getBoundingClientRect();
+    cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+    gl.viewport(0, 0, cv.width, cv.height); }
+  addEventListener('resize', resize);
+  /* Réglages gravés du harnais — état « travail » (comète + pleine capacité) */
+  var S = { n:4.5, ratio:2.72, speed:2.19, plasma:0.43, comet:1, weave:0.2, dim:1.15,
+            A:[1.0,0.25,0.68], B:[0.13,0.82,1.0], C:[0.25,0.94,0.63], white:0.30, breathe:0.06, lay:[0.95,0.85,0.75] };
+  var running = false, simT = 0, last = 0, rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function draw(now){
+    if (running && !rm) requestAnimationFrame(draw);
+    var dt = Math.min((now - last) / 1000, 0.1); last = now;
+    simT += dt * S.speed;
+    var breathe = Math.sin(simT * 0.8) * S.breathe;
+    gl.uniform2f(U.uRes, cv.width, cv.height);
+    gl.uniform1f(U.uT, simT);
+    gl.uniform1f(U.uN, S.n + breathe);
+    gl.uniform1f(U.uRatio, S.ratio);
+    gl.uniform1f(U.uBloom, 0);
+    gl.uniform1f(U.uPlasma, S.plasma);
+    gl.uniform1f(U.uComet, S.comet);
+    gl.uniform1f(U.uKnock, 0);
+    gl.uniform1f(U.uLevel, 0);
+    gl.uniform1f(U.uWeave, S.weave);
+    gl.uniform3fv(U.uTintA, S.A); gl.uniform3fv(U.uTintB, S.B); gl.uniform3fv(U.uTintC, S.C);
+    gl.uniform1f(U.uWhite, S.white);
+    gl.uniform1f(U.uDim, S.dim);
+    gl.uniform3fv(U.uLay, S.lay);
+    gl.uniform1f(U.uSharp, 1);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  function start(){ if (running) return; running = true; resize(); last = performance.now(); requestAnimationFrame(draw); }
+  function stop(){ running = false; }
+  if (rm) { resize(); last = performance.now(); requestAnimationFrame(draw); }
+  else if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function(es){ es[0].isIntersecting ? start() : stop(); }, {rootMargin:'80px 0px'}).observe(cv);
+  } else { start(); }
+})();
+/* ── Réplique dashboard : heure/date réelles + prénoms tournants ── */
+(function(){
+  var t = document.getElementById('kdTime'), d = document.getElementById('kdDate'), n = document.getElementById('kdName');
+  if (!t || !d || !n) return;
+  function tick(){
+    var now = new Date();
+    t.textContent = now.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+    var ds = now.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    d.textContent = ds.charAt(0).toUpperCase() + ds.slice(1);
+  }
+  tick(); setInterval(tick, 15000);
+  var NAMES = ['Camille','Marc','Sophie','Karim','Léa','Antoine','Nadia','Hugo','Claire','Julien','Inès','Paul'];
+  var i = 0;
+  setInterval(function(){
+    i = (i + 1) % NAMES.length;
+    n.style.opacity = 0;
+    setTimeout(function(){ n.textContent = NAMES[i]; n.style.opacity = 1; }, 350);
+  }, 3800);
+})();
+</script>
 
 <!-- 3.5 · SMART AGENT (téléphone + Conseiller Keystone — la démo LIVE /a/Vtg9eJfs) -->
 <section class="sec daily" id="demo">
   <div class="what-grid">
     <div class="daily-copy reveal">
-      <span class="eyebrow">Nouveau · Smart Agent</span>
+      <span class="eyebrow">Smart Agent · la preuve, en direct</span>
       <h2 class="h2">Vos clients ont une question.<br>Votre agent IA répond. Sans vous.</h2>
       <p class="lead">Confiez votre savoir-faire au Smart Agent : il répond à vos clients par chat ou à la voix, derrière un simple lien ou un QR — et uniquement avec ce que vous lui avez appris, sans rien inventer.</p>
       <p class="lead" style="margin-top:10px">Celui-ci, c'est le nôtre, <b>en direct</b>. Posez votre question ci-dessous — à l'écrit ou au micro — et regardez-le répondre dans le téléphone. Activez le haut-parleur pour l'entendre.</p>
@@ -855,13 +1238,55 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
   </div>
 </section>
 
+<!-- 5.7 · PAR METIER (cas d'usage) -->
+<section class="sec metiers reveal" id="metiers">
+  <span class="eyebrow">Cas d'usage</span>
+  <h2 class="h2">Keystone pour votre métier.</h2>
+  <p class="lead" style="margin:14px auto 0; max-width:560px">Les mêmes outils, pensés pour votre quotidien. Trouvez le vôtre :</p>
+  <div class="metiers-grid">
+    <a href="/pour/immobilier" class="metier-card">Immobilier <span>→</span></a>
+    <a href="/pour/restaurants" class="metier-card">Restaurants &amp; cafés <span>→</span></a>
+    <a href="/pour/commercants" class="metier-card">Commerçants <span>→</span></a>
+    <a href="/pour/artisans" class="metier-card">Artisans du bâtiment <span>→</span></a>
+    <a href="/pour/hotellerie" class="metier-card">Hôtellerie &amp; locations <span>→</span></a>
+    <a href="/pour/beaute" class="metier-card">Coiffure &amp; beauté <span>→</span></a>
+    <a href="/pour/sante" class="metier-card">Santé &amp; bien-être <span>→</span></a>
+    <a href="/pour/artistes" class="metier-card">Artistes &amp; créatifs <span>→</span></a>
+    <a href="/pour/associations" class="metier-card">Associations &amp; clubs <span>→</span></a>
+    <a href="/pour/evenementiel" class="metier-card">Événementiel &amp; mariage <span>→</span></a>
+    <a href="/pour/consultants" class="metier-card">Consultants &amp; formateurs <span>→</span></a>
+    <a href="/pour/culture" class="metier-card">Musées &amp; culture <span>→</span></a>
+    <a href="/pour/sport" class="metier-card">Sport &amp; remise en forme <span>→</span></a>
+    <a href="/pour/automobile" class="metier-card">Garages &amp; automobile <span>→</span></a>
+  </div>
+</section>
+
+<!-- 5 · INNOVATION VEDETTE -->
+<section class="hl"><div class="hl-inner reveal" id="hlqr">
+  <span class="eyebrow">Exclusivité Keystone</span>
+  <h2 class="h2">Smart QR — un QR qui ouvre une expérience, pas juste un lien.</h2>
+  <p class="lead">Ce jeu à gratter, vous venez de le vivre : c'est un Smart QR, une exclusivité Keystone. Vos clients vivront la même chose derrière vos propres codes. Innovation déposée.</p>
+  <canvas class="scratch" id="scratchCanvas" aria-hidden="true"></canvas>
+</div>
+
+<div class="qr-grid reveal">
+  <div class="qr-item"><h4>Imprimé, jamais périmé</h4><p>Changez ce qu'il ouvre quand vous voulez. Rien à réimprimer.</p></div>
+  <a class="qr-item" href="/cas-usage/carte-fidelite"><h4>Des expériences, pas des liens</h4><p>Jeu à gratter, compte à rebours, fidélité, quiz, selon votre métier.</p><span class="qr-more">Découvrir <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span></a>
+  <a class="qr-item" href="/cas-usage/qr-sonnette"><h4>QR Ring, la sonnette</h4><p>On scanne, ça sonne chez vous. Aucun autre QR ne sonne.</p><span class="qr-more">Découvrir <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span></a>
+  <a class="qr-item" href="/cas-usage/concierge"><h4>QR Concierge</h4><p>Un accueil qui répond à vos clients derrière le code.</p><span class="qr-more">Découvrir <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span></a>
+  <div class="qr-item"><h4>Vos chiffres, sans Google</h4><p>Nombre de scans et carte de chaleur, le tout conforme RGPD.</p></div>
+  <div class="qr-item"><h4>À vos couleurs</h4><p>Votre logo, votre charte, des exports prêts pour l'imprimeur.</p></div>
+</div>
+<div class="hl-cta reveal"><a class="btn btn-ghost" href="#plans">Voir les offres <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a></div>
+</section>
+
 <!-- 4 · LES OUTILS PAR MÉTIER -->
 <section class="sec tools" id="outils">
   <div class="tools-rise">
     <div class="tools-head reveal">
       <span class="eyebrow">Le catalogue</span>
       <h2 class="h2">Vos outils.</h2>
-      <p class="lead" style="margin:14px auto 0">10 outils aujourd'hui. Le catalogue s'enrichit chaque mois.</p>
+      <p class="lead" style="margin:14px auto 0">14 outils aujourd'hui. Le catalogue s'enrichit chaque mois.</p>
     </div>
     <div id="toolsGrid"></div>
     <!-- Notices outils : contenu STATIQUE (crawlable par Google et les IA) affiché en
@@ -935,7 +1360,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
     </article>
     <article class="tn" id="tn-A-COM-004">
       <h3 class="tn-title">Key Form</h3>
-      <p class="tn-tldr">Key Form construit des formulaires intelligents partageables par URL. 17 types de champs, logique conditionnelle, notification e-mail souveraine, RGPD natif. Parité Typeform Pro à votre sauce.</p>
+      <p class="tn-tldr">Key Form construit des formulaires intelligents partageables par URL. 17 types de champs, logique conditionnelle, mail Resend, RGPD natif. Parité Typeform Pro à votre sauce.</p>
       <h4 class="tn-h">Comment ça marche</h4>
       <ol class="tn-steps">
         <li>Structure : ajoutez vos sections et vos champs (17 types, du texte simple à la signature manuscrite)</li>
@@ -946,7 +1371,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       </ol>
       <h4 class="tn-h">Questions fréquentes</h4>
       <div class="tn-faq">
-        <details><summary>Combien de temps les réponses sont-elles conservées ?</summary><div class="tn-a">Selon la TTL que vous avez choisie (30, 90, 180 ou 365 jours). Après expiration, suppression automatique côté serveur — conformité RGPD Art. 5 native. Le mail de notification reste dans la boîte du destinataire indéfiniment.</div></details>
+        <details><summary>Combien de temps les réponses sont-elles conservées ?</summary><div class="tn-a">Selon la TTL que vous avez choisie (30, 90, 180 ou 365 jours). Après expiration, suppression automatique côté serveur — conformité RGPD Art. 5 native. Le mail Resend reste dans la boîte du destinataire indéfiniment.</div></details>
         <details><summary>Mes répondants doivent-ils créer un compte ?</summary><div class="tn-a">Non, le formulaire est ouvert et anonyme par défaut. Vous pouvez activer un code d'accès optionnel dans l'étape Apparence pour les questionnaires confidentiels.</div></details>
         <details><summary>Comment partager le formulaire avec mes répondants ?</summary><div class="tn-a">Une fois publié, copiez l'URL keystone.app/f/{votre-slug} et envoyez-la par mail, SMS, Slack ou QR code. Aucune installation nécessaire pour le répondant.</div></details>
         <details><summary>Puis-je dupliquer un formulaire existant ?</summary><div class="tn-a">Oui : dans la bibliothèque, bouton 'Dupliquer'. Idéal pour réutiliser une structure (par exemple Biennale 2026 → Biennale 2027) en ne changeant que les destinataires et quelques champs.</div></details>
@@ -1084,6 +1509,95 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
         <details><summary>Missive est-elle compatible RGPD ? Que noter dans mon registre des traitements ?</summary><div class="tn-a">Oui — et plutôt deux fois qu'une : la minimisation et la limitation de conservation que le RGPD recommande sont ici garanties par construction (contenu chiffré illisible par l'éditeur, autodestruction, traces techniques purgées sous 24 h). Si vous tenez un registre des traitements, vous pouvez y recopier ceci : « Transmission ponctuelle d'informations sensibles via messagerie éphémère chiffrée de bout en bout (Missive, Keystone OS). Contenu illisible par l'éditeur ; autodestruction après lecture unique, expiration ou épuisement des essais ; métadonnées techniques purgées sous 24 heures. Ce canal n'est pas utilisé pour des données soumises à une obligation légale de conservation. » Une donnée déjà autodétruite ne peut plus être fournie lors d'une demande d'accès : c'est conforme, du moment que c'est documenté et que le canal n'est pas utilisé pour ce qui doit être conservé.</div></details>
         <details><summary>« Lu une fois » : et si quelqu'un filme l'écran ?</summary><div class="tn-a">On garantit qu'on ne peut plus accéder au message par ce lien après lecture — pas qu'il n'a pas été capturé pendant qu'il s'affichait. Missive protège contre l'interception du lien, pas contre un destinataire qui photographie son propre écran. C'est de l'éphémère sécurisé, pas de l'anti-capture.</div></details>
         <details><summary>Missive consomme-t-elle des conversations ?</summary><div class="tn-a">Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro conversation consommée, jamais.</div></details>
+      </div>
+    </article>
+    <article class="tn" id="tn-O-BRD-001">
+      <h3 class="tn-title">Key Brand</h3>
+      <p class="tn-tldr">Key Brand transforme votre charte graphique en mini-site interactif : logo téléchargeable au bon format, couleurs copiables avec tests de contraste, typographies à l'essai, règles d'usage générées avec votre logo. Une charte par marque, partageable d'un lien — toujours à jour, sans PDF.</p>
+      <h4 class="tn-h">Comment ça marche</h4>
+      <ol class="tn-steps">
+        <li>Créer une charte : bouton « Nouvelle charte », donnez-lui le nom de la marque — la vôtre ou celle d'un client (jusqu'à 30 chartes par compte).</li>
+        <li>Cinq onglets composent la charte : Logo, Couleurs, Typographies, Règles et Branding. Remplissez seulement ce que vous avez — la charte publiée ne montre jamais de section vide.</li>
+        <li>Tout s'enregistre automatiquement pendant que vous travaillez (mention « Enregistré » en haut à droite).</li>
+        <li>Dupliquez une charte existante pour démarrer la suivante plus vite (pratique pour les graphistes multi-clients).</li>
+        <li>Aucune intelligence artificielle : Key Brand ne consomme jamais de conversations, tout est inclus.</li>
+        <li>À venir au fil des mises à jour : dépôt du logo avec aperçus et téléchargements à la carte, atelier couleurs et contrastes, testeur de typographies, interdits auto-générés, et la page publique à partager d'un lien ou d'un QR.</li>
+      </ol>
+      <h4 class="tn-h">Questions fréquentes</h4>
+      <div class="tn-faq">
+        <details><summary>À qui s'adresse Key Brand ?</summary><div class="tn-a">Aux entreprises qui veulent une charte simple et pratique (un logo, des couleurs, une police suffisent), comme aux graphistes et agences qui livrent des chartes complètes à leurs clients. La même charte s'adapte : elle ne montre que ce que vous y mettez.</div></details>
+        <details><summary>Est-ce que ça remplace mon PDF de charte graphique ?</summary><div class="tn-a">C'est le but. Le PDF vieillit dès qu'il est envoyé ; votre charte Key Brand reste à jour en permanence, et ceux qui la consultent copient les codes couleur et téléchargent le logo directement, sans vous redemander les fichiers. Un export PDF restera disponible pour ceux qui en exigent un.</div></details>
+        <details><summary>Combien de chartes puis-je créer ?</summary><div class="tn-a">Jusqu'à 30 par compte, quelle que soit votre formule. De quoi couvrir votre marque et celles de vos clients.</div></details>
+        <details><summary>Key Brand consomme-t-il mes conversations ?</summary><div class="tn-a">Non, jamais. Key Brand n'utilise aucune intelligence artificielle : les aperçus, les tests de contraste et les téléchargements sont calculés directement dans votre navigateur.</div></details>
+        <details><summary>Qui peut voir mes chartes ?</summary><div class="tn-a">Vous seul, tant que vous ne publiez pas. La page publique à partager (lien discret non référencé, ou protégé par un code) arrive dans une prochaine mise à jour.</div></details>
+      </div>
+    </article>
+    <article class="tn" id="tn-O-NET-001">
+      <h3 class="tn-title">networK</h3>
+      <p class="tn-tldr">Votre réseau relationnel vivant — pas un carnet d'adresses de plus. Vous êtes au centre, et vos relations se déploient en carte mentale : des catégories libres (Clients, Fournisseurs, Partenaires…) d'où partent vos contacts. Un clic sur une catégorie la déplie ; un clic sur un contact ouvre sa fiche, où vous retrouvez ses coordonnées, ses rôles, ses tags, vos notes, et un journal d'activité qui raconte votre relation. Et depuis chaque fiche, vous continuez votre travail sans ressaisir : « Continuer avec… » ouvre une Missive, un Brief ou votre Smart Agent, déjà mis en contexte. Tout est à vous, rien n'est publié.</p>
+      <h4 class="tn-h">Comment ça marche</h4>
+      <ol class="tn-steps">
+        <li>Ajouter : le bouton « + Ajouter » crée une personne, une entreprise, un établissement, un groupe ou une nouvelle catégorie. Le « + » sur une catégorie ajoute directement un contact à l'intérieur.</li>
+        <li>Naviguer : cliquez une catégorie pour voir ses contacts. Sur ordinateur ils se déploient à droite ; sur mobile, le réseau glisse vers eux — touchez la catégorie à nouveau pour revenir. Glissez le fond pour vous déplacer, la molette (ou les boutons +/−) pour zoomer.</li>
+        <li>La fiche d'un contact : cliquez un contact pour ouvrir sa fiche. Boutons d'appel, e-mail et message en un tap ; onglets Résumé, Activité et Notes ; rôles et tags que vous ajoutez ou retirez ; et le « … » (ou la roue crantée) pour modifier ou supprimer le contact.</li>
+        <li>Le journal d'activité : dans l'onglet Activité, « Ajouter une activité » note un appel, un e-mail, un RDV, un devis… avec sa date. Les cinq plus récentes s'affichent dans le Résumé — la relation se raconte au fil du temps.</li>
+        <li>Continuer avec… : en bas de chaque fiche, les raccourcis ouvrent l'outil adapté (Missive, Brief, Smart Agent, Social) avec le contact déjà en contexte. Un outil que vous n'avez pas encore apparaît en suggestion « Découvrir », jamais imposé.</li>
+        <li>Ranger : le « … » d'une catégorie permet de la renommer, changer son icône, la monter/descendre ou la supprimer. Supprimer une catégorie ne supprime pas ses contacts : ils rejoignent « Sans catégorie ».</li>
+      </ol>
+      <h4 class="tn-h">Questions fréquentes</h4>
+      <div class="tn-faq">
+        <details><summary>Est-ce un CRM ? Mes contacts sont-ils privés ?</summary><div class="tn-a">networK n'est pas un CRM classique : pas de tunnel de vente ni de saisie obligatoire, juste votre réseau tel que vous le voyez. Vos contacts, notes et activités sont rangés dans votre espace Keystone, rattachés à votre compte — jamais publics ni partagés.</div></details>
+        <details><summary>Consomme-t-il des conversations ?</summary><div class="tn-a">Non. networK est 100 % manuel et sans intelligence artificielle : aucune action ne puise dans votre compteur de conversations. Vous ajoutez et organisez vos relations vous-même.</div></details>
+        <details><summary>Que veut dire « Continuer avec… » et « pré-rempli » ?</summary><div class="tn-a">Depuis une fiche, ces raccourcis ouvrent un autre outil Keystone en lui passant déjà les infos du contact. Par exemple « Publier pour ce client » ouvre Social Manager avec le message déjà amorcé à son nom — vous n'avez rien à ressaisir. Les outils que vous ne possédez pas s'affichent en suggestion, sans jamais bloquer.</div></details>
+        <details><summary>J'ai supprimé une catégorie : où sont passés ses contacts ?</summary><div class="tn-a">Ils ne sont jamais supprimés avec la catégorie. Ils réapparaissent dans un panier « Sans catégorie » à la racine de votre réseau, d'où vous pouvez les rouvrir et les reclasser.</div></details>
+        <details><summary>Pourquoi certains contacts sont-ils cachés derrière « Voir les N autres » ?</summary><div class="tn-a">Pour garder l'arbre lisible, une catégorie affiche ses premiers contacts puis un bouton « Voir les N autres » qui déplie le reste. La recherche en haut, elle, retrouve n'importe quel contact instantanément, même hors de sa catégorie.</div></details>
+      </div>
+    </article>
+    <article class="tn" id="tn-O-BOK-001">
+      <h3 class="tn-title">booK</h3>
+      <p class="tn-tldr">booK transforme un PDF ou des images en flipbook que l'on feuillette comme un vrai livre — et votre publication tient dans UN SEUL fichier autonome. Ce fichier s'ouvre d'un double-clic, partout, pour toujours : sans serveur, sans abonnement, sans watermark, sans même dépendre de Keystone. Envoyez-le par e-mail, posez-le derrière un QR, archivez-le sur une clé USB — il vous appartient. Et il reste rééditable : ré-importez-le dans booK, il redevient modifiable, même des années plus tard. Votre bibliothèque garde tous vos flipbooks sous la main.</p>
+      <h4 class="tn-h">Comment ça marche</h4>
+      <ol class="tn-steps">
+        <li>Créer : le « + » en haut ouvre un nouveau flipbook. Déposez un PDF (chaque page devient une page du livre) ou des images — tout est recompressé automatiquement pour que le fichier reste léger.</li>
+        <li>Organiser les pages : la première vignette est la couverture. Les flèches déplacent une page, la croix la retire. L'aperçu à droite montre EXACTEMENT le fichier qui sera livré.</li>
+        <li>Habiller : titre, sous-titre, auteur, teinte d'accent, fond de lecture sombre ou clair, et double page sur grand écran (comme un magazine ouvert).</li>
+        <li>Publier : « Enregistrer » range le flipbook dans votre bibliothèque ; « Télécharger le fichier autonome » produit le .html souverain. Le poids estimé s'affiche — au-delà de 20 Mo, pensez à alléger.</li>
+        <li>Feuilleter : clic ou flèches du clavier pour tourner les pages (effet page tournée sur ordinateur, glissement du doigt sur mobile), sommaire en vignettes, plein écran. Le fichier s'imprime aussi proprement, page par page.</li>
+        <li>Ré-importer : le bouton nuage en haut ouvre un fichier booK existant et le remet dans votre bibliothèque, prêt à être modifié — le fichier EST sa propre sauvegarde.</li>
+      </ol>
+      <h4 class="tn-h">Questions fréquentes</h4>
+      <div class="tn-faq">
+        <details><summary>En quoi est-ce différent des sites de flipbooks (FlipHTML5, Calaméo…) ?</summary><div class="tn-a">Chez eux, votre document vit sur LEURS serveurs : watermark, abonnement, et le lien meurt si vous résiliez. Avec booK, votre publication est un fichier qui vous appartient : il s'ouvre sans connexion, sans compte, et fonctionnera encore dans des années — même si Keystone disparaissait.</div></details>
+        <details><summary>Où le fichier peut-il être ouvert ?</summary><div class="tn-a">Partout où il y a un navigateur : double-clic depuis un ordinateur, pièce jointe d'e-mail, clé USB, espace de téléchargement de votre site… Il ne fait AUCUN appel à Internet. Et sans JavaScript (impression, très vieux navigateurs), les pages s'affichent quand même, simplement empilées.</div></details>
+        <details><summary>Mon flipbook créé sur ordinateur n'apparaît pas sur mon téléphone — c'est normal ?</summary><div class="tn-a">Oui : la bibliothèque est rangée dans le navigateur de CHAQUE appareil, elle ne transite par aucun serveur (c'est le principe souverain de booK). Pour passer un flipbook d'un appareil à l'autre : téléchargez le fichier autonome, envoyez-le-vous (AirDrop, e-mail…), puis ré-importez-le avec le bouton nuage — il arrive complet et modifiable. Le fichier EST la sauvegarde.</div></details>
+        <details><summary>L'import d'un gros PDF échoue sur mon téléphone, que faire ?</summary><div class="tn-a">La fabrication des pages demande de la mémoire, et les téléphones en ont peu : pour un PDF lourd (plusieurs dizaines de pages ou scans haute résolution), créez le flipbook sur ordinateur, puis transférez le fichier autonome sur le téléphone. Sur mobile, booK réduit automatiquement la finesse des pages pour limiter la casse.</div></details>
+        <details><summary>Mon fichier est lourd, que faire ?</summary><div class="tn-a">Le poids vient du nombre de pages et de la finesse des visuels (chaque page est déjà recompressée à l'import). Retirez les pages non essentielles, ou repartez d'un PDF exporté en qualité écran plutôt qu'imprimerie. En dessous de 15–20 Mo, tout va bien.</div></details>
+        <details><summary>Consomme-t-il des conversations ? Mes documents sont-ils envoyés quelque part ?</summary><div class="tn-a">Non et non. booK est 100 % sans IA et tout se fabrique dans votre navigateur : vos PDF et images ne quittent jamais votre appareil. Zéro conversation consommée, zéro donnée transmise.</div></details>
+        <details><summary>Puis-je le partager par un lien ou un QR ?</summary><div class="tn-a">Aujourd'hui, vous partagez le fichier lui-même (e-mail, transfert, votre site). Le lien public hébergé et le QR avec statistiques de lecture arrivent dans une prochaine version.</div></details>
+      </div>
+    </article>
+    <article class="tn" id="tn-O-DSK-001">
+      <h3 class="tn-title">desK</h3>
+      <p class="tn-tldr">desK est le chemin de fer vivant de votre revue : chaque page du numéro devient une carte dans une grille de planches partagée par toute l'équipe — le chemin de fer papier au mur, avec un curseur de taille à la InDesign. Chaque article affiche sa marge réelle avant le bouclage — tant qu'elle tient, rien ne s'allume ; quand elle se consume, la carte passe à l'ambre puis au rouge, et l'inspecteur vous tend la décision : relancer, ou basculer sur un remplaçant préparé au banc. Le marbre garde votre stock d'articles d'un numéro à l'autre : au bouclage, les publiés sont marqués, les non-utilisés y retournent avec la mention du report. La maquette reste dans InDesign : desK est le cockpit autour. Vos contributeurs, eux, ne changent rien à leurs habitudes — ils restent dans l'e-mail.</p>
+      <h4 class="tn-h">Comment ça marche</h4>
+      <ol class="tn-steps">
+        <li>Démarrer : créez votre publication (la revue et son équipe), puis un numéro — indiquez le nombre de pages et les quatre jalons (bouclage, fin de maquette, envoi imprimeur, parution). Le chemin de fer se génère, couverture et 4ᵉ de couv posées d'office.</li>
+        <li>Lire la grille : les planches (doubles-pages soudées) reviennent à la ligne et défilent verticalement, le rail des jalons reste en haut — c'est la ligne de vie du numéro. Le curseur règle la taille des cartes : tout à gauche, le numéro entier d'un coup d'œil ; tout à droite, les cartes complètes.</li>
+        <li>La carte-page : rubrique, titre, contributeur, statut et marge. Une page peut porter PLUSIEURS articles (brèves, papier + encadré) : badge « n » sur la carte, et la marge affichée est la plus serrée de ses articles. Cliquez pour ouvrir l'inspecteur : chaque emplacement a son banc de remplaçants, son historique, ses actions.</li>
+        <li>Les gestes : glissez une carte SUR une autre pour échanger ; glissez-la ENTRE deux planches pour l'insérer — tout le contenu coule, sauf les pages figées qui restent ancrées (une pub vendue « page 30 » reste page 30). Maj+clic sélectionne une plage de pages, Cmd/Ctrl+clic ajoute : la barre du bas applique rubrique, contributeur, un dossier étalé sur plusieurs pages ou le figeage, en un geste.</li>
+        <li>Le marbre : la vue de votre stock d'articles, transversale aux numéros — filtrez par rubrique, fraîcheur ou statut, réservez un article sur une page en un clic. Chaque article a sa fraîcheur : intemporel, ou daté avec péremption — le marbre signale ce qui doit être publié maintenant ou jamais. Au passage du numéro en « imprimé », le rituel de bouclage marque les publiés et reverse les remplaçants non utilisés au marbre : un report est un événement banal, pas une anomalie.</li>
+        <li>Les couleurs ne crient jamais pour rien : le rouge est réservé à la marge brûlée. Un simple retard n'allume rien tant que la marge tient — quand ça s'allume, c'est qu'une décision est requise. Le simulateur de report montre l'impact d'un retard EN DIRECT, sans rien écrire tant que vous n'appliquez pas.</li>
+      </ol>
+      <h4 class="tn-h">Questions fréquentes</h4>
+      <div class="tn-faq">
+        <details><summary>Comment la marge est-elle calculée ?</summary><div class="tn-a">Simplement, pour que tout le monde puisse la comprendre : la copie sera prête au plus tôt à sa date de remise (ou aujourd'hui si elle est dépassée), puis il faut la relire et la maquetter. La marge est ce qui reste avant le jalon concerné. Un article déjà remis ne dépend plus du bouclage — seulement de la fin de maquette. Quand une page porte plusieurs articles, sa carte affiche la marge la plus serrée.</div></details>
+        <details><summary>Que devient un article remplacé ou non utilisé au bouclage ?</summary><div class="tn-a">Il retourne au marbre avec la mention de son report — rien n'est perdu. À l'ouverture du numéro suivant, desK vous signale les articles reportés qui attendent. Un article « daté » avec une date de péremption est signalé quand il doit être publié maintenant ou jamais : fini le stock faussement rassurant plein de papiers morts.</div></details>
+        <details><summary>Comment monter un dossier de 10 pages sans le faire page par page ?</summary><div class="tn-a">Sélectionnez les pages d'un trait (clic sur la première, Maj+clic sur la dernière), puis « Étaler un article » dans la barre du bas : l'article devient titulaire de toutes les pages, marquées « suite » à partir de la deuxième. La même barre applique une rubrique, un contributeur ou fige des pages, en un seul geste.</div></details>
+        <details><summary>Pourquoi certaines pages ne bougent-elles pas quand je repagine ?</summary><div class="tn-a">Ce sont les pages figées (couverture, 4ᵉ de couv, publicités vendues, sommaire) : elles restent ancrées à leur numéro de page et le contenu coule autour d'elles — une pub vendue « page 30 » reste page 30. Pour les déplacer quand même, cochez « déplacer aussi les figées » dans la barre de sélection.</div></details>
+        <details><summary>desK remplace-t-il InDesign ou la relecture ?</summary><div class="tn-a">Non, et c'est voulu. La maquette reste dans InDesign ; la relecture de la copie se fait avec Ghost Writer. desK pilote ce qui manque : qui doit livrer quoi, quand, avec quelle marge — et quoi faire quand ça dérape.</div></details>
+        <details><summary>Mes contributeurs doivent-ils utiliser l'application ?</summary><div class="tn-a">Jamais. Ils continuent d'envoyer leurs textes par e-mail comme ils l'ont toujours fait. Vous pointez « copie reçue » en un clic. L'adresse de dépôt qui range toute seule les contributions arrive dans une prochaine version.</div></details>
+        <details><summary>Peut-on gérer plusieurs revues ?</summary><div class="tn-a">Oui, dès le premier jour : chaque publication a son équipe, ses rubriques, ses numéros. Le sélecteur en haut passe de l'une à l'autre.</div></details>
+        <details><summary>Consomme-t-il des conversations ?</summary><div class="tn-a">Non. Le cœur de desK — grille, marges, marbre, pointage, bascule, équipe — fonctionne sans aucune intelligence artificielle, à volonté.</div></details>
       </div>
     </article>
     <script type="application/ld+json">
@@ -1242,7 +1756,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
       "name": "Combien de temps les réponses sont-elles conservées ?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Selon la TTL que vous avez choisie (30, 90, 180 ou 365 jours). Après expiration, suppression automatique côté serveur — conformité RGPD Art. 5 native. Le mail de notification reste dans la boîte du destinataire indéfiniment."
+        "text": "Selon la TTL que vous avez choisie (30, 90, 180 ou 365 jours). Après expiration, suppression automatique côté serveur — conformité RGPD Art. 5 native. Le mail Resend reste dans la boîte du destinataire indéfiniment."
       }
     },
     {
@@ -1580,73 +2094,227 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
         "@type": "Answer",
         "text": "Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro conversation consommée, jamais."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "À qui s'adresse Key Brand ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Aux entreprises qui veulent une charte simple et pratique (un logo, des couleurs, une police suffisent), comme aux graphistes et agences qui livrent des chartes complètes à leurs clients. La même charte s'adapte : elle ne montre que ce que vous y mettez."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Est-ce que ça remplace mon PDF de charte graphique ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "C'est le but. Le PDF vieillit dès qu'il est envoyé ; votre charte Key Brand reste à jour en permanence, et ceux qui la consultent copient les codes couleur et téléchargent le logo directement, sans vous redemander les fichiers. Un export PDF restera disponible pour ceux qui en exigent un."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Combien de chartes puis-je créer ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Jusqu'à 30 par compte, quelle que soit votre formule. De quoi couvrir votre marque et celles de vos clients."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Key Brand consomme-t-il mes conversations ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non, jamais. Key Brand n'utilise aucune intelligence artificielle : les aperçus, les tests de contraste et les téléchargements sont calculés directement dans votre navigateur."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Qui peut voir mes chartes ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Vous seul, tant que vous ne publiez pas. La page publique à partager (lien discret non référencé, ou protégé par un code) arrive dans une prochaine mise à jour."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Est-ce un CRM ? Mes contacts sont-ils privés ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "networK n'est pas un CRM classique : pas de tunnel de vente ni de saisie obligatoire, juste votre réseau tel que vous le voyez. Vos contacts, notes et activités sont rangés dans votre espace Keystone, rattachés à votre compte — jamais publics ni partagés."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Consomme-t-il des conversations ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non. networK est 100 % manuel et sans intelligence artificielle : aucune action ne puise dans votre compteur de conversations. Vous ajoutez et organisez vos relations vous-même."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Que veut dire « Continuer avec… » et « pré-rempli » ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Depuis une fiche, ces raccourcis ouvrent un autre outil Keystone en lui passant déjà les infos du contact. Par exemple « Publier pour ce client » ouvre Social Manager avec le message déjà amorcé à son nom — vous n'avez rien à ressaisir. Les outils que vous ne possédez pas s'affichent en suggestion, sans jamais bloquer."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "J'ai supprimé une catégorie : où sont passés ses contacts ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Ils ne sont jamais supprimés avec la catégorie. Ils réapparaissent dans un panier « Sans catégorie » à la racine de votre réseau, d'où vous pouvez les rouvrir et les reclasser."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Pourquoi certains contacts sont-ils cachés derrière « Voir les N autres » ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Pour garder l'arbre lisible, une catégorie affiche ses premiers contacts puis un bouton « Voir les N autres » qui déplie le reste. La recherche en haut, elle, retrouve n'importe quel contact instantanément, même hors de sa catégorie."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "En quoi est-ce différent des sites de flipbooks (FlipHTML5, Calaméo…) ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Chez eux, votre document vit sur LEURS serveurs : watermark, abonnement, et le lien meurt si vous résiliez. Avec booK, votre publication est un fichier qui vous appartient : il s'ouvre sans connexion, sans compte, et fonctionnera encore dans des années — même si Keystone disparaissait."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Où le fichier peut-il être ouvert ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Partout où il y a un navigateur : double-clic depuis un ordinateur, pièce jointe d'e-mail, clé USB, espace de téléchargement de votre site… Il ne fait AUCUN appel à Internet. Et sans JavaScript (impression, très vieux navigateurs), les pages s'affichent quand même, simplement empilées."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Mon flipbook créé sur ordinateur n'apparaît pas sur mon téléphone — c'est normal ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui : la bibliothèque est rangée dans le navigateur de CHAQUE appareil, elle ne transite par aucun serveur (c'est le principe souverain de booK). Pour passer un flipbook d'un appareil à l'autre : téléchargez le fichier autonome, envoyez-le-vous (AirDrop, e-mail…), puis ré-importez-le avec le bouton nuage — il arrive complet et modifiable. Le fichier EST la sauvegarde."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "L'import d'un gros PDF échoue sur mon téléphone, que faire ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "La fabrication des pages demande de la mémoire, et les téléphones en ont peu : pour un PDF lourd (plusieurs dizaines de pages ou scans haute résolution), créez le flipbook sur ordinateur, puis transférez le fichier autonome sur le téléphone. Sur mobile, booK réduit automatiquement la finesse des pages pour limiter la casse."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Mon fichier est lourd, que faire ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Le poids vient du nombre de pages et de la finesse des visuels (chaque page est déjà recompressée à l'import). Retirez les pages non essentielles, ou repartez d'un PDF exporté en qualité écran plutôt qu'imprimerie. En dessous de 15–20 Mo, tout va bien."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Consomme-t-il des conversations ? Mes documents sont-ils envoyés quelque part ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non et non. booK est 100 % sans IA et tout se fabrique dans votre navigateur : vos PDF et images ne quittent jamais votre appareil. Zéro conversation consommée, zéro donnée transmise."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Puis-je le partager par un lien ou un QR ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Aujourd'hui, vous partagez le fichier lui-même (e-mail, transfert, votre site). Le lien public hébergé et le QR avec statistiques de lecture arrivent dans une prochaine version."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Comment la marge est-elle calculée ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Simplement, pour que tout le monde puisse la comprendre : la copie sera prête au plus tôt à sa date de remise (ou aujourd'hui si elle est dépassée), puis il faut la relire et la maquetter. La marge est ce qui reste avant le jalon concerné. Un article déjà remis ne dépend plus du bouclage — seulement de la fin de maquette. Quand une page porte plusieurs articles, sa carte affiche la marge la plus serrée."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Que devient un article remplacé ou non utilisé au bouclage ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Il retourne au marbre avec la mention de son report — rien n'est perdu. À l'ouverture du numéro suivant, desK vous signale les articles reportés qui attendent. Un article « daté » avec une date de péremption est signalé quand il doit être publié maintenant ou jamais : fini le stock faussement rassurant plein de papiers morts."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Comment monter un dossier de 10 pages sans le faire page par page ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sélectionnez les pages d'un trait (clic sur la première, Maj+clic sur la dernière), puis « Étaler un article » dans la barre du bas : l'article devient titulaire de toutes les pages, marquées « suite » à partir de la deuxième. La même barre applique une rubrique, un contributeur ou fige des pages, en un seul geste."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Pourquoi certaines pages ne bougent-elles pas quand je repagine ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Ce sont les pages figées (couverture, 4ᵉ de couv, publicités vendues, sommaire) : elles restent ancrées à leur numéro de page et le contenu coule autour d'elles — une pub vendue « page 30 » reste page 30. Pour les déplacer quand même, cochez « déplacer aussi les figées » dans la barre de sélection."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "desK remplace-t-il InDesign ou la relecture ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non, et c'est voulu. La maquette reste dans InDesign ; la relecture de la copie se fait avec Ghost Writer. desK pilote ce qui manque : qui doit livrer quoi, quand, avec quelle marge — et quoi faire quand ça dérape."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Mes contributeurs doivent-ils utiliser l'application ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Jamais. Ils continuent d'envoyer leurs textes par e-mail comme ils l'ont toujours fait. Vous pointez « copie reçue » en un clic. L'adresse de dépôt qui range toute seule les contributions arrive dans une prochaine version."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Peut-on gérer plusieurs revues ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui, dès le premier jour : chaque publication a son équipe, ses rubriques, ses numéros. Le sélecteur en haut passe de l'une à l'autre."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Consomme-t-il des conversations ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non. Le cœur de desK — grille, marges, marbre, pointage, bascule, équipe — fonctionne sans aucune intelligence artificielle, à volonté."
+      }
     }
   ]
 }
     </script>
 <!-- TOOL-NOTICES:END -->
     </div>
-    <p class="tools-more reveal">… et <b>de nouveaux outils chaque mois</b> dans le Key-Store.</p>
   </div>
 </section>
 
-<!-- 5 · INNOVATION VEDETTE -->
-<section class="hl"><div class="hl-inner reveal" id="hlqr">
-  <span class="eyebrow">Exclusivité Keystone</span>
-  <h2 class="h2">Smart QR — un QR qui ouvre une expérience, pas juste un lien.</h2>
-  <p class="lead">Compte à rebours, jeu à gratter, carte de fidélité, quiz qui oriente… Le même QR, des expériences pilotées par template métier. Innovation déposée.</p>
-  <canvas class="scratch" id="scratchCanvas" aria-hidden="true"></canvas>
-</div>
-<div class="hl-cta reveal"><a class="btn btn-ghost" href="#plans">Voir les offres <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a></div>
-</section>
 
-<!-- 5.7 · PAR METIER (cas d'usage) -->
-<section class="sec metiers reveal" id="metiers">
-  <span class="eyebrow">Cas d'usage</span>
-  <h2 class="h2">Keystone pour votre métier.</h2>
-  <p class="lead" style="margin:14px auto 0; max-width:560px">Les mêmes outils, pensés pour votre quotidien. Trouvez le vôtre :</p>
-  <div class="metiers-grid">
-    <a href="/pour/immobilier" class="metier-card">Immobilier <span>→</span></a>
-    <a href="/pour/restaurants" class="metier-card">Restaurants &amp; cafés <span>→</span></a>
-    <a href="/pour/commercants" class="metier-card">Commerçants <span>→</span></a>
-    <a href="/pour/artisans" class="metier-card">Artisans du bâtiment <span>→</span></a>
-    <a href="/pour/hotellerie" class="metier-card">Hôtellerie &amp; locations <span>→</span></a>
-    <a href="/pour/beaute" class="metier-card">Coiffure &amp; beauté <span>→</span></a>
-    <a href="/pour/sante" class="metier-card">Santé &amp; bien-être <span>→</span></a>
-    <a href="/pour/artistes" class="metier-card">Artistes &amp; créatifs <span>→</span></a>
-    <a href="/pour/associations" class="metier-card">Associations &amp; clubs <span>→</span></a>
-    <a href="/pour/evenementiel" class="metier-card">Événementiel &amp; mariage <span>→</span></a>
-    <a href="/pour/consultants" class="metier-card">Consultants &amp; formateurs <span>→</span></a>
-    <a href="/pour/culture" class="metier-card">Musées &amp; culture <span>→</span></a>
-    <a href="/pour/sport" class="metier-card">Sport &amp; remise en forme <span>→</span></a>
-    <a href="/pour/automobile" class="metier-card">Garages &amp; automobile <span>→</span></a>
-  </div>
-  <p class="lead" style="margin:40px auto 0; max-width:560px">Et des <b>expériences QR</b> qu'on ne trouve pas ailleurs :</p>
-  <div class="metiers-grid" style="max-width:760px">
-    <a href="/cas-usage/carte-fidelite" class="metier-card">Carte de fidélité dématérialisée <span>→</span></a>
-    <a href="/cas-usage/qr-sonnette" class="metier-card">QR Ring — sonnette par QR Code <span>→</span></a>
-    <a href="/cas-usage/concierge" class="metier-card">QR Concierge virtuel <span>→</span></a>
-  </div>
-</section>
+
+
+
+
 
 <!-- 6 · PRIX -->
-<!-- 5.5 · CAPTURE EMAIL BETA -->
-<section class="sec beta-capture reveal" id="beta">
-  <span class="eyebrow">Newsletter</span>
-  <h2 class="h2">Pas encore prêt ? Gardons le contact.</h2>
-  <p class="lead" style="margin:14px auto 0; max-width:480px">Inscrivez-vous à la newsletter : toutes les nouveautés et les nouveaux outils Keystone, directement par e-mail. Rien d'autre.</p>
-  <form class="beta-form" id="betaForm" novalidate>
-    <input type="text" class="beta-hp" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">
-    <input type="email" id="betaEmail" name="email" placeholder="vous@exemple.com" autocomplete="email" required aria-label="Votre adresse e-mail">
-    <button class="btn btn-primary" type="submit" id="betaSubmit">M'inscrire</button>
-  </form>
-  <p class="beta-msg" id="betaMsg" role="status" aria-live="polite"></p>
-  <p class="beta-fine">Pas de spam · désinscription en un clic · données en Europe.</p>
-</section>
+
 
 <section class="sec pricing" id="plans">
   <div class="tools-head reveal"><span class="eyebrow">Tarifs</span><h2 class="h2">Un tarif simple. Tout compris.</h2>
-    <p class="lead" style="margin:14px auto 0; max-width:480px">Commencez gratuitement, ajoutez ce qu'il vous faut, quand il le faut.</p></div>
+    <p class="lead" style="margin:14px auto 0; max-width:480px">Commencez gratuitement.<br>Ajoutez le reste quand vous en avez besoin.</p></div>
   <div class="plans" id="plansGrid"></div>
   <div class="plans-trust-row reveal">
     <span class="plans-trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Hébergement Europe · RGPD</span>
@@ -1792,38 +2460,69 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 </script>
 
 <!-- 7 · CTA FINAL -->
+<!-- 5.5 · CAPTURE EMAIL BETA -->
+<section class="sec beta-capture reveal" id="beta">
+  <span class="eyebrow">Newsletter</span>
+  <h2 class="h2">Pas encore prêt ? Gardons le contact.</h2>
+  <p class="lead" style="margin:14px auto 0; max-width:480px">Inscrivez-vous à la newsletter : toutes les nouveautés et les nouveaux outils Keystone, directement par e-mail. Rien d'autre.</p>
+  <form class="beta-form" id="betaForm" novalidate>
+    <input type="text" class="beta-hp" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <input type="email" id="betaEmail" name="email" placeholder="vous@exemple.com" autocomplete="email" required aria-label="Votre adresse e-mail">
+    <button class="btn btn-primary" type="submit" id="betaSubmit">M'inscrire</button>
+  </form>
+  <p class="beta-msg" id="betaMsg" role="status" aria-live="polite"></p>
+  <p class="beta-fine">Pas de spam · désinscription en un clic · données en Europe.</p>
+</section>
+
+<!-- 8.5 · LES 3 OUTILS GRATUITS -->
+<section class="sec freeapps reveal" id="gratuites">
+  <span class="eyebrow">Pour commencer</span>
+  <h2 class="h2">Trois outils offerts.<br>Pour toujours.</h2>
+  <p class="lead" style="margin:14px auto 0; max-width:520px">Pas de carte bancaire, pas d'essai qui expire. Ils sont à vous, point.</p>
+  <div class="free-grid">
+<div class="free-card" style="--fam:#34d399"><div class="free-top"><span class="free-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><g transform="scale(0.03) translate(-120.0,-121.8) scale(1.3)" fill="currentColor" stroke="none"><path d="M344.9,229.5c-21.7,7-43.3,14.6-64.6,22.8c-4,1.5-6.9,5.5-7.5,10.4c-12.6,110.6,16.5,191.2,51.3,244.4 c14.7,22.7,32.3,42.7,52.1,59.4c7.9,6.5,14.9,11.2,20.3,14.2c2.7,1.5,5,2.5,6.7,3.1c0.7,0.3,1.5,0.5,2.3,0.7 c0.8-0.1,1.5-0.4,2.3-0.7c1.7-0.6,4-1.6,6.7-3.1c5.5-3,12.5-7.7,20.3-14.2c19.8-16.6,37.4-36.7,52.1-59.4 c34.8-53.1,64-133.8,51.3-244.4c-0.6-4.8-3.5-8.9-7.5-10.4c-14.8-5.7-39.9-14.9-64.6-22.7c-25.3-8-48.6-13.9-60.7-13.9 C393.5,215.6,370.2,221.5,344.9,229.5L344.9,229.5z M338.8,202.1c24.7-7.8,51-14.9,66.7-14.9s42,7,66.7,14.9 c25.3,8,50.8,17.4,65.8,23.1c12.8,4.9,22,18,23.8,33.6c13.6,119.1-17.9,207.3-56.2,265.7c-16.2,25-35.5,47-57.4,65.2 c-7.5,6.3-15.5,11.9-23.9,16.6c-6.4,3.5-13.2,6.4-18.9,6.4s-12.5-2.9-18.9-6.4c-8.4-4.7-16.3-10.3-23.9-16.6 c-21.8-18.3-41.1-40.3-57.4-65.2c-38.2-58.4-69.8-146.6-56.2-265.7c1.8-15.6,11-28.6,23.8-33.6 C294.8,216.9,316.7,209.2,338.8,202.1z"/><path d="M493.8,315.6c5.7,5.7,5.7,14.9,0,20.6c0,0,0,0,0,0l-87.5,87.5c-5.7,5.7-14.9,5.7-20.6,0c0,0,0,0,0,0L341.9,380 c-5.7-5.7-5.7-14.9,0-20.6s14.9-5.7,20.6,0l33.4,33.4l77.2-77.2C478.8,309.9,488,309.9,493.8,315.6 C493.8,315.6,493.8,315.6,493.8,315.6z"/><path d="M328,533.5c-22.8-11.6-36.7-32.4-38.7-51.9C278.4,377.5,104,370.3,11.7,269.3l0,0C21.1,401.9,166.9,396,255.1,459.4 c-56.4-22-147.3-13.4-214.8-53.8c34.4,98.8,142.9,61.9,224.4,86.1c-48.1-2.9-110.4,26.5-171,7.2c55.8,81.3,122.3,23.2,188.7,21.3 c-33.2,9.7-66.4,48.3-112.7,46.5c58.3,52.1,85.9-1.5,125.5-23.2c-3.9,5-6.2,11.3-6.3,18.1c-0.1,16.5,13.1,29.9,29.6,30 c16.5,0.1,29.9-13.1,30-29.6C348.7,548.7,340,537.4,328,533.5L328,533.5z"/><path d="M472,533.5c-12,3.9-20.7,15.3-20.6,28.6c0.1,16.5,13.6,29.7,30,29.6c16.5-0.1,29.7-13.6,29.6-30 c-0.1-6.8-2.4-13.1-6.3-18.1c39.6,21.6,67.2,75.3,125.5,23.2c-46.3,1.8-79.6-36.8-112.7-46.5c66.4,1.9,132.9,60,188.7-21.3 c-60.6,19.2-122.9-10.1-171-7.2c81.5-24.2,190,12.7,224.4-86.1c-67.5,40.4-158.3,31.7-214.8,53.8c88.3-63.4,234-57.5,243.4-190.1 l0,0c-92.3,101-266.7,108.2-277.5,212.3C508.7,501.1,494.9,521.9,472,533.5L472,533.5z"/></g></svg></span><span class="free-badge">Gratuit</span></div><h3>Missive</h3><p class="free-hook">Un secret lu une fois, puis détruit.</p><ul><li>Fini les mots de passe qui traînent dans les e-mails.</li><li>Chiffré sur votre appareil : même Keystone ne peut pas le lire.</li></ul></div>
+<div class="free-card" style="--fam:#fbbf24"><div class="free-top"><span class="free-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="7" r="2.4"/><circle cx="17.5" cy="6" r="2"/><circle cx="13.5" cy="17" r="2.7"/><path d="M7.7 8.6l4.6 6.4"/><path d="M8.3 6.4l7.2-.2"/></svg></span><span class="free-badge">Gratuit</span></div><h3>Keynapse</h3><p class="free-hook">On y voit enfin clair.</p><ul><li>Des notes en bulles, reliées sur un canevas sans fin.</li><li>Idées, captures, notes vocales, rappels : tout se retrouve d'un regard.</li></ul></div>
+<div class="free-card" style="--fam:#34d399"><div class="free-top"><span class="free-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span><span class="free-badge">Gratuit</span></div><h3>booK</h3><p class="free-hook">Votre PDF devient un livret à feuilleter.</p><ul><li>Votre livret est un simple fichier : il vous appartient et s'ouvre partout.</li><li>Une fois exporté, il vit tout seul — sans serveur ni abonnement. Personne d'autre ne fait ça.</li></ul></div>
+  </div>
+</section>
+
 <section class="cta-final reveal">
-  <h2 class="h2">Vos outils métier, enfin réunis.</h2>
+  <h2 class="h2">Récupérez votre temps. Dès à présent.</h2>
   <p class="lead" style="margin:14px auto 26px">Démo gratuite, sans carte. Activez votre accès en 2 minutes.</p>
   <a class="btn btn-hero" href="/activate?free=1">Commencer gratuitement <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
 </section>
 
-<footer class="foot">
-  <div class="foot-brand">
-    <img src="keystone-puce.svg" alt="" class="foot-puce">
-    Keystone
+<footer class="foot foot-v2">
+  <div class="fo2-top">
+    <div class="fo2-brand">
+      <div class="foot-brand"><img src="keystone-puce.svg" alt="" class="foot-puce">Keystone</div>
+      <p class="fo2-tagline">Vos outils métier, réunis sur une seule plateforme. Conçu et hébergé en Europe.</p>
+    </div>
+    <nav class="fo2-cols" aria-label="Pied de page">
+      <div class="foot-col"><h4>Produit</h4><a href="#outils">Les outils</a><a href="#plans">Tarifs</a><a href="#faq">FAQ</a><a href="/changelog">Nouveautés</a><a href="/activate">Se connecter</a></div>
+      <div class="foot-col"><h4>Métiers</h4><a href="/pour/immobilier">Immobilier</a><a href="/pour/restaurants">Restaurants</a><a href="/pour/commercants">Commerçants</a><a href="/pour/artisans">Artisans</a><a href="/#metiers">Tous les métiers →</a></div>
+      <div class="foot-col"><h4>Contact</h4>
+        <a href="mailto:contact@protein-keystone.com">contact@protein-keystone.com</a>
+        <a href="tel:+33675590797">06 75 59 07 97</a>
+        <span class="foot-meta">SAV : lun.–sam. 10h–19h (hors jours fériés)</span>
+      </div>
+    </nav>
   </div>
-  <div class="foot-cols">
-    <div class="foot-col"><h4>Produit</h4><a href="#outils">Outils</a><a href="#plans">Tarifs</a><a href="#faq">FAQ</a><a href="/activate">Se connecter</a></div>
-    <div class="foot-col"><h4>Cas d'usage</h4><a href="/pour/immobilier">Immobilier</a><a href="/pour/restaurants">Restaurants</a><a href="/pour/commercants">Commerçants</a><a href="/pour/artisans">Artisans</a><a href="/#metiers">Tous les métiers →</a></div>
-    <div class="foot-col"><h4>Confiance</h4><a href="/a-propos">À propos</a><a href="/securite">Sécurité</a><a href="/confidentialite">Confidentialité</a><a href="/mentions-legales">Mentions légales</a><a href="/cgu">CGU</a><a href="/cgv">CGV</a><a href="/dpa">DPA & sous-traitants</a><a href="/reversibilite">Réversibilité</a><a href="/changelog">Nouveautés</a><a href="/roadmap">Feuille de route</a><a href="/status">État du service</a></div>
-    <div class="foot-col"><h4>Contact</h4>
-      <a href="mailto:contact@protein-keystone.com">contact@protein-keystone.com</a>
-      <a href="tel:+33675590797">06 75 59 07 97</a>
-      <span class="foot-meta">SAV : lun.–sam. 10h–19h<br>(hors jours fériés)</span>
+  <div class="fo2-bottom">
+    <div class="fo2-legal">
+      <a href="/a-propos">À propos</a><a href="/securite">Sécurité</a><a href="/confidentialite">Confidentialité</a><a href="/mentions-legales">Mentions légales</a><a href="/cgu">CGU</a><a href="/cgv">CGV</a><a href="/dpa">DPA &amp; sous-traitants</a><a href="/reversibilite">Réversibilité</a><a href="/status">État du service</a><a href="/roadmap">Feuille de route</a>
     </div>
-    <div class="foot-col"><h4>Éditeur</h4>
-      <address>Protein Studio<br>83190 Ollioules<br>France<br>SIRET 520 721 853 00023</address>
-    </div>
-    <div class="foot-col"><h4>Suivez-nous</h4>
-      <a href="https://www.facebook.com/profile.php?id=61589585807395" target="_blank" rel="noopener">Facebook</a>
-      <a href="https://www.instagram.com/benedettistephane/" target="_blank" rel="noopener">Instagram</a>
-      <a href="https://www.linkedin.com/in/st%C3%A9phane-benedetti-197605282/" target="_blank" rel="noopener">LinkedIn</a>
-      <a href="https://www.threads.com/@benedettistephane" target="_blank" rel="noopener">Threads</a>
-      <a href="https://t.me/protein_keystone_annonces" target="_blank" rel="noopener">Telegram</a>
+    <div class="fo2-meta">
+      <div class="foot-copy">© 2026 Keystone OS — édité par Protein Studio (Stéphane Benedetti), 83190 Ollioules · SIRET 520 721 853 00023</div>
+      <div class="fo2-social">
+        <a href="https://www.facebook.com/profile.php?id=61589585807395" target="_blank" rel="noopener">Facebook</a>
+        <a href="https://www.instagram.com/benedettistephane/" target="_blank" rel="noopener">Instagram</a>
+        <a href="https://www.linkedin.com/in/st%C3%A9phane-benedetti-197605282/" target="_blank" rel="noopener">LinkedIn</a>
+        <a href="https://www.threads.com/@benedettistephane" target="_blank" rel="noopener">Threads</a>
+        <a href="https://t.me/protein_keystone_annonces" target="_blank" rel="noopener">Telegram</a>
+      </div>
     </div>
   </div>
-  <div class="foot-copy">© 2026 Keystone OS — édité par Protein Studio (entreprise individuelle, Stéphane Benedetti), SIRET 520 721 853 00023, Ollioules.</div>
 </footer>
 
 <div class="mega-wordmark" aria-hidden="true">
@@ -1864,6 +2563,10 @@ const TOOLS = [
   { name:"Sentinel", app:"O-GEO-001", fam:"Web", tag:"Audit web + suivi : SEO, sécurité, visibilité IA.", icon:'<path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/>' },
   { name:"Keynapse", app:"O-Keyn-001", fam:"Idéation", tag:"Vos idées en constellation, reliées et vivantes.", icon:'<circle cx="6" cy="7" r="2.4"/><circle cx="17.5" cy="6" r="2"/><circle cx="13.5" cy="17" r="2.7"/><path d="M7.7 8.6l4.6 6.4"/><path d="M8.3 6.4l7.2-.2"/>' },
   { name:"Missive", app:"O-SEC-001", fam:"Communication", tag:"Un secret transmis, lu une fois, puis détruit.", icon:'<g transform="scale(0.03) translate(-120.0,-121.8) scale(1.3)" fill="currentColor" stroke="none"><path d="M344.9,229.5c-21.7,7-43.3,14.6-64.6,22.8c-4,1.5-6.9,5.5-7.5,10.4c-12.6,110.6,16.5,191.2,51.3,244.4 c14.7,22.7,32.3,42.7,52.1,59.4c7.9,6.5,14.9,11.2,20.3,14.2c2.7,1.5,5,2.5,6.7,3.1c0.7,0.3,1.5,0.5,2.3,0.7 c0.8-0.1,1.5-0.4,2.3-0.7c1.7-0.6,4-1.6,6.7-3.1c5.5-3,12.5-7.7,20.3-14.2c19.8-16.6,37.4-36.7,52.1-59.4 c34.8-53.1,64-133.8,51.3-244.4c-0.6-4.8-3.5-8.9-7.5-10.4c-14.8-5.7-39.9-14.9-64.6-22.7c-25.3-8-48.6-13.9-60.7-13.9 C393.5,215.6,370.2,221.5,344.9,229.5L344.9,229.5z M338.8,202.1c24.7-7.8,51-14.9,66.7-14.9s42,7,66.7,14.9 c25.3,8,50.8,17.4,65.8,23.1c12.8,4.9,22,18,23.8,33.6c13.6,119.1-17.9,207.3-56.2,265.7c-16.2,25-35.5,47-57.4,65.2 c-7.5,6.3-15.5,11.9-23.9,16.6c-6.4,3.5-13.2,6.4-18.9,6.4s-12.5-2.9-18.9-6.4c-8.4-4.7-16.3-10.3-23.9-16.6 c-21.8-18.3-41.1-40.3-57.4-65.2c-38.2-58.4-69.8-146.6-56.2-265.7c1.8-15.6,11-28.6,23.8-33.6 C294.8,216.9,316.7,209.2,338.8,202.1z"/><path d="M493.8,315.6c5.7,5.7,5.7,14.9,0,20.6c0,0,0,0,0,0l-87.5,87.5c-5.7,5.7-14.9,5.7-20.6,0c0,0,0,0,0,0L341.9,380 c-5.7-5.7-5.7-14.9,0-20.6s14.9-5.7,20.6,0l33.4,33.4l77.2-77.2C478.8,309.9,488,309.9,493.8,315.6 C493.8,315.6,493.8,315.6,493.8,315.6z"/><path d="M328,533.5c-22.8-11.6-36.7-32.4-38.7-51.9C278.4,377.5,104,370.3,11.7,269.3l0,0C21.1,401.9,166.9,396,255.1,459.4 c-56.4-22-147.3-13.4-214.8-53.8c34.4,98.8,142.9,61.9,224.4,86.1c-48.1-2.9-110.4,26.5-171,7.2c55.8,81.3,122.3,23.2,188.7,21.3 c-33.2,9.7-66.4,48.3-112.7,46.5c58.3,52.1,85.9-1.5,125.5-23.2c-3.9,5-6.2,11.3-6.3,18.1c-0.1,16.5,13.1,29.9,29.6,30 c16.5,0.1,29.9-13.1,30-29.6C348.7,548.7,340,537.4,328,533.5L328,533.5z"/><path d="M472,533.5c-12,3.9-20.7,15.3-20.6,28.6c0.1,16.5,13.6,29.7,30,29.6c16.5-0.1,29.7-13.6,29.6-30 c-0.1-6.8-2.4-13.1-6.3-18.1c39.6,21.6,67.2,75.3,125.5,23.2c-46.3,1.8-79.6-36.8-112.7-46.5c66.4,1.9,132.9,60,188.7-21.3 c-60.6,19.2-122.9-10.1-171-7.2c81.5-24.2,190,12.7,224.4-86.1c-67.5,40.4-158.3,31.7-214.8,53.8c88.3-63.4,234-57.5,243.4-190.1 l0,0c-92.3,101-266.7,108.2-277.5,212.3C508.7,501.1,494.9,521.9,472,533.5L472,533.5z"/></g>' },
+  { name:"Key Brand", app:"O-BRD-001", fam:"Image", tag:"Votre image de marque, toujours cohérente.", icon:'<g fill="currentColor" stroke="none"><path d="M17,6 L17,16.2792476 L18.5,17.7902865 L20,16.2792476 L20,6 L17,6 Z M17,5 L20,5 L20,3.01471863 L17,3.01471863 L17,5 Z M21,7 L21,16.4852814 C21,16.6172545 20.9478236,16.7438756 20.8548472,16.8375362 L18.8548472,18.8522548 C18.6592928,19.0492484 18.3407072,19.0492484 18.1451528,18.8522548 L16.1451528,16.8375362 C16.0521764,16.7438756 16,16.6172545 16,16.4852814 L16,14 L15.5,14 C14.6715729,14 14,13.3284271 14,12.5 L14,9.5 C14,8.67157288 14.6715729,8 15.5,8 L16,8 L16,7 L6,7 L6,14.5 C6,14.7761424 5.77614237,15 5.5,15 L5,15 C3.34314575,15 2,16.3431458 2,18 C2,19.6568542 3.34314575,21 5,21 L22,21 L22,7 L21,7 Z M21,6 L22.5,6 C22.7761424,6 23,6.22385763 23,6.5 L23,21.5 C23,21.7761424 22.7761424,22 22.5,22 L5,22 C2.790861,22 1,20.209139 1,18 L1,6.5 C1,4.01471863 3.01471863,2 5.5,2 C5.77614237,2 6,2.22385763 6,2.5 L6,6 L16,6 L16,2.51471863 C16,2.23857625 16.2238576,2.01471863 16.5,2.01471863 L20.5,2.01471863 C20.7761424,2.01471863 21,2.23857625 21,2.51471863 L21,6 Z M16,9 L15.5,9 C15.2238576,9 15,9.22385763 15,9.5 L15,12.5 C15,12.7761424 15.2238576,13 15.5,13 L16,13 L16,9 Z M2,15.3541756 C2.73294445,14.5237549 3.80530747,14 5,14 L5,3.03544443 C3.30385293,3.27805926 2,4.73676405 2,6.5 L2,15.3541756 L2,15.3541756 Z M8.5,8 L11.5,8 C12.3284271,8 13,8.67157288 13,9.5 L13,12.5 C13,13.3284271 12.3284271,14 11.5,14 L8.5,14 C7.67157288,14 7,13.3284271 7,12.5 L7,9.5 C7,8.67157288 7.67157288,8 8.5,8 Z M8.5,9 C8.22385763,9 8,9.22385763 8,9.5 L8,12.5 C8,12.7761424 8.22385763,13 8.5,13 L11.5,13 C11.7761424,13 12,12.7761424 12,12.5 L12,9.5 C12,9.22385763 11.7761424,9 11.5,9 L8.5,9 Z M7.5,17 C7.22385763,17 7,16.7761424 7,16.5 C7,16.2238576 7.22385763,16 7.5,16 L14.5,16 C14.7761424,16 15,16.2238576 15,16.5 C15,16.7761424 14.7761424,17 14.5,17 L7.5,17 Z M7.5,19 C7.22385763,19 7,18.7761424 7,18.5 C7,18.2238576 7.22385763,18 7.5,18 L15.5,18 C15.7761424,18 16,18.2238576 16,18.5 C16,18.7761424 15.7761424,19 15.5,19 L7.5,19 Z"/></g>' },
+  { name:"networK", app:"O-NET-001", fam:"Relationnel", tag:"Le bon contact, relancé au bon moment.", icon:'<circle cx="4" cy="12" r="2.3" fill="currentColor"/><circle cx="18.4" cy="5.6" r="1.8" fill="currentColor"/><circle cx="19.4" cy="12" r="1.8" fill="currentColor"/><circle cx="18.4" cy="18.4" r="1.8" fill="currentColor"/><path d="M6 11 Q13 5.5 16.6 5.7"/><path d="M6.3 12 H17.4"/><path d="M6 13 Q13 18.5 16.6 18.3"/>' },
+  { name:"booK", app:"O-BOK-001", fam:"Diffusion", tag:"Vos PDF en livrets à feuilleter.", icon:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>' },
+  { name:"desK", app:"O-DSK-001", fam:"Édition", tag:"Votre revue, montée page par page.", icon:'<rect x="2" y="7" width="5.5" height="10" rx="1"/><rect x="9.25" y="4.5" width="5.5" height="15" rx="1"/><rect x="16.5" y="7" width="5.5" height="10" rx="1"/>' },
 ];
 const FAM_COLOR = { "Communication":"var(--accent)", "Web":"var(--green)", "Idéation":"var(--p-starter)" };
 /* Couleur par CATÉGORIE K-Store (2026-07-26) — mêmes teintes que l'app :
@@ -2083,7 +2786,7 @@ function __keystonePostHero(){
   const grid=document.getElementById('toolsGrid');
   if(grid){ // une seule grille, sans en-têtes de catégorie (2 familles seulement) — chaque carte garde sa couleur d'accent
     grid.className='tgrid reveal';
-    const SLUG={'A-COM-001':'smart-qr','A-COM-002':'brief-prod','A-COM-003':'brainstorming','A-COM-004':'key-form','A-COM-005':'ghost-writer','O-AGT-001':'smart-agent','O-SOC-001':'social-manager','O-GEO-001':'sentinel','O-Keyn-001':'keynapse','O-SEC-001':'missive'};
+    const SLUG={'A-COM-001':'smart-qr','A-COM-002':'brief-prod','A-COM-003':'brainstorming','A-COM-004':'key-form','A-COM-005':'ghost-writer','O-AGT-001':'smart-agent','O-SOC-001':'social-manager','O-GEO-001':'sentinel','O-Keyn-001':'keynapse','O-SEC-001':'missive','O-BRD-001':'key-brand','O-NET-001':'network','O-BOK-001':'book','O-DSK-001':'desk'};
     grid.innerHTML=TOOLS.map(t=>'<a class="tcard" href="/outils/'+SLUG[t.app]+'" aria-label="En savoir plus sur '+t.name+'" style="--fam:'+catColorOf(t)+'"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+t.icon+'</svg></div><h3>'+t.name+'</h3><p>'+t.tag+'</p><span class="tcard-more">Découvrir <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span></a>').join('');
   }
 })();
@@ -2452,7 +3155,7 @@ function cascadeItems(items, delay){
     ctx.fillStyle='rgba(255,255,255,.94)'; ctx.font='800 24px -apple-system,"Inter",sans-serif';
     ctx.fillText('✦  Gratter ici', W/2, H/2-10);
     ctx.fillStyle='rgba(255,255,255,.6)'; ctx.font='500 14px -apple-system,"Inter",sans-serif';
-    ctx.fillText("révélez l'exclusivité Keystone", W/2, H/2+18);
+    ctx.fillText("vos clients feront pareil — et ils adorent", W/2, H/2+18);
     ctx.globalCompositeOperation='destination-out';
   }
   function size(){ const r=card.getBoundingClientRect(); W=r.width; H=r.height;

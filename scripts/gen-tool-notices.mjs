@@ -40,6 +40,10 @@ const TOOLS = [
   'O-GEO-001', // Sentinel
   'O-Keyn-001',// Keynapse
   'O-SEC-001', // Missive
+  'O-BRD-001', // Key Brand
+  'O-NET-001', // networK
+  'O-BOK-001', // booK
+  'O-DSK-001', // desK
 ];
 
 const START = '<!-- TOOL-NOTICES:START -->';
