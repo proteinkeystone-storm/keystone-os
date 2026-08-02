@@ -49,272 +49,272 @@ const ue = (exp, name, line) => ({ exp, name, line }); // usage relie a une page
 const VERTICALS = [
   {
     slug: 'immobilier', metier: 'Immobilier',
-    h1a: 'Vendez plus vite,', h1b: 'sans noyer vos journees dans l’administratif.',
-    title: 'Keystone pour l’immobilier — agent IA, QR, visibilite | Keystone OS',
-    desc: 'Agences, promoteurs, mandataires : un agent IA qui repond a vos acquereurs 24/7 derriere un QR, un concierge virtuel pour vos programmes neufs, et le suivi de votre visibilite web et IA.',
-    intro: 'Entre les questions des acquereurs a toute heure, les visites a organiser et la presence en ligne, le metier deborde. Keystone fait repondre un agent IA a votre place, accueille vos prospects par QR et surveille votre visibilite — pour vous garder sur le terrain.',
+    h1a: 'Vendez plus vite,', h1b: 'sans noyer vos journées dans l’administratif.',
+    title: 'Keystone pour l’immobilier — agent IA, QR, visibilité | Keystone OS',
+    desc: 'Agences, promoteurs, mandataires : un agent IA qui répond à vos acquéreurs 24/7 derrière un QR, un concierge virtuel pour vos programmes neufs, et le suivi de votre visibilité web et IA.',
+    intro: 'Entre les questions des acquéreurs à toute heure, les visites à organiser et la présence en ligne, le métier déborde. Keystone fait répondre un agent IA à votre place, accueille vos prospects par QR et surveille votre visibilité — pour vous garder sur le terrain.',
     uses: [
-      u('smart-agent', 'Un agent IA qui repond aux acquereurs (dispo du bien, charges, DPE, financement) derriere un QR sur la vitrine ou la bache chantier — sans inventer.'),
-      u('sentinel', 'Surveillez votre visibilite en ligne et dans les IA : quand un prospect demande « agence a [ville] » a ChatGPT, etes-vous cite ?'),
-      ue('concierge', 'QR Concierge virtuel','Un seul QR par programme neuf : page d’accueil a votre marque, cartes de comparaison des lots et chat qui repond depuis un bloc valide.'),
-      ue('qr-sonnette', 'QR Ring','Un QR sur le portail d’un bien a visiter ou sans interphone : le visiteur vous joint d’un geste (appel, SMS, WhatsApp), sans electricite.'),
+      u('smart-agent', 'Un agent IA qui répond aux acquéreurs (dispo du bien, charges, DPE, financement) derrière un QR sur la vitrine ou la bâche chantier — sans inventer.'),
+      u('sentinel', 'Surveillez votre visibilité en ligne et dans les IA : quand un prospect demande « agence à [ville] » à ChatGPT, êtes-vous cité ?'),
+      ue('concierge', 'QR Concierge virtuel','Un seul QR par programme neuf : page d’accueil à votre marque, cartes de comparaison des lots et chat qui répond depuis un bloc validé.'),
+      ue('qr-sonnette', 'QR Ring','Un QR sur le portail d’un bien à visiter ou sans interphone : le visiteur vous joint d’un geste (appel, SMS, WhatsApp), sans électricité.'),
     ],
-    scenario: 'Un prospect scanne le QR sur la bache d’un programme neuf a 22h. L’agent IA lui detaille les surfaces, les prestations et les disponibilites, capte sa demande de visite via un formulaire, et vous retrouvez le lead qualifie le lendemain matin — sans avoir decroche votre telephone.',
+    scenario: 'Un prospect scanne le QR sur la bâche d’un programme neuf à 22h. L’agent IA lui détaille les surfaces, les prestations et les disponibilités, capte sa demande de visite via un formulaire, et vous retrouvez le lead qualifié le lendemain matin — sans avoir décroché votre téléphone.',
     faq: [
-      ['L’agent IA peut-il inventer des informations sur un bien ?', 'Non. Il ne repond qu’a partir des fiches que vous avez validees (descriptif, charges, diagnostics). S’il ne sait pas, il le dit et la question remonte dans sa liste a completer.'],
+      ['L’agent IA peut-il inventer des informations sur un bien ?', 'Non. Il ne répond qu’à partir des fiches que vous avez validées (descriptif, charges, diagnostics). S’il ne sait pas, il le dit et la question remonte dans sa liste à compléter.'],
     ],
   },
   {
-    slug: 'restaurants', metier: 'Restaurants & cafes',
+    slug: 'restaurants', metier: 'Restaurants & cafés',
     h1a: 'Une carte qui change,', h1b: 'des clients qui ont toujours la bonne info.',
-    title: 'Keystone pour les restaurants & cafes — menu QR, agent IA, reseaux | Keystone OS',
-    desc: 'Restaurants, cafes, food-trucks : un menu QR modifiable sans reimprimer, un agent IA qui repond (horaires, allergenes, reservation) et vos plats du jour publies partout en un clic.',
-    intro: 'La carte evolue, les questions reviennent (vous etes ouverts ? vegan ? terrasse ?), et il faut nourrir les reseaux. Keystone met tout en pilote automatique sans perdre l’ame de la maison.',
+    title: 'Keystone pour les restaurants & cafés — menu QR, agent IA, réseaux | Keystone OS',
+    desc: 'Restaurants, cafés, food-trucks : un menu QR modifiable sans réimprimer, un agent IA qui répond (horaires, allergènes, réservation) et vos plats du jour publiés partout en un clic.',
+    intro: 'La carte évolue, les questions reviennent (vous êtes ouverts ? vegan ? terrasse ?), et il faut nourrir les réseaux. Keystone met tout en pilote automatique sans perdre l’âme de la maison.',
     uses: [
-      u('smart-qr', 'Un QR sur la table qui pointe vers votre menu : changez un plat ou un prix sans reimprimer un seul flyer.'),
-      u('smart-agent', 'Un agent IA qui repond 24/7 aux questions recurrentes : horaires, allergenes, menu enfant, reservation de groupe.'),
-      u('social-manager', 'Le plat du jour publie d’un coup sur Facebook, Instagram et Threads — ou programme pour 11h pile.'),
-      u('sentinel', 'Suivez vos avis et votre presence locale, et voyez si les IA vous recommandent quand on cherche « ou manger a [ville] ».'),
-      ue('carte-fidelite', 'Carte de fidélité dématérialisée','La fidelite sans carte plastique : le client cumule des tampons en scannant, la recompense se debloque toute seule (le 10e cafe offert, par ex.).'),
+      u('smart-qr', 'Un QR sur la table qui pointe vers votre menu : changez un plat ou un prix sans réimprimer un seul flyer.'),
+      u('smart-agent', 'Un agent IA qui répond 24/7 aux questions récurrentes : horaires, allergènes, menu enfant, réservation de groupe.'),
+      u('social-manager', 'Le plat du jour publié d’un coup sur Facebook, Instagram et Threads — ou programmé pour 11h pile.'),
+      u('sentinel', 'Suivez vos avis et votre présence locale, et voyez si les IA vous recommandent quand on cherche « où manger à [ville] ».'),
+      ue('carte-fidelite', 'Carte de fidélité dématérialisée','La fidélité sans carte plastique : le client cumule des tampons en scannant, la récompense se débloque toute seule (le 10e café offert, par ex.).'),
     ],
-    scenario: 'Vendredi, vous changez l’ardoise du midi : deux clics, le menu QR est a jour et le plat du jour part sur tous vos reseaux. A 19h, un client demande au QR s’il y a une option sans gluten — l’agent repond instantanement, table reservee, sans interrompre le service.',
+    scenario: 'Vendredi, vous changez l’ardoise du midi : deux clics, le menu QR est à jour et le plat du jour part sur tous vos réseaux. À 19h, un client demande au QR s’il y a une option sans gluten — l’agent répond instantanément, table réservée, sans interrompre le service.',
     faq: [
-      ['Dois-je reimprimer mes QR a chaque changement de carte ?', 'Non. Le QR est dynamique : il pointe vers une page que vous modifiez quand vous voulez. Le meme QR imprime reste valable.'],
-      ['L’agent peut-il prendre une reservation ?', 'Il repond aux questions et oriente vers votre canal de reservation (formulaire, telephone, lien). Il ne remplace pas un logiciel de caisse ou de booking, il filtre et qualifie en amont.'],
-      ['Quels reseaux sont geres ?', 'Facebook, Instagram, Threads et Telegram, en publication immediate ou programmee.'],
+      ['Dois-je réimprimer mes QR à chaque changement de carte ?', 'Non. Le QR est dynamique : il pointe vers une page que vous modifiez quand vous voulez. Le même QR imprimé reste valable.'],
+      ['L’agent peut-il prendre une réservation ?', 'Il répond aux questions et oriente vers votre canal de réservation (formulaire, téléphone, lien). Il ne remplace pas un logiciel de caisse ou de booking, il filtre et qualifie en amont.'],
+      ['Quels réseaux sont gérés ?', 'Facebook, Instagram, Threads et Telegram, en publication immédiate ou programmée.'],
     ],
   },
   {
-    slug: 'commercants', metier: 'Commercants & boutiques',
-    h1a: 'Votre boutique repond,', h1b: 'meme rideau baisse.',
-    title: 'Keystone pour les commercants — QR vitrine, agent IA, fidelite, reseaux | Keystone OS',
-    desc: 'Boutiques et commerces de proximite : un QR vitrine qui annonce vos promos, un agent IA qui repond apres la fermeture, des formulaires de fidelite et vos posts sur tous vos reseaux.',
-    intro: 'Un client passe devant a 21h, a une question, et repart. Keystone transforme votre vitrine et vos reseaux en vendeur disponible en permanence.',
+    slug: 'commercants', metier: 'Commerçants & boutiques',
+    h1a: 'Votre boutique répond,', h1b: 'même rideau baissé.',
+    title: 'Keystone pour les commerçants — QR vitrine, agent IA, fidélité, réseaux | Keystone OS',
+    desc: 'Boutiques et commerces de proximité : un QR vitrine qui annonce vos promos, un agent IA qui répond après la fermeture, des formulaires de fidélité et vos posts sur tous vos réseaux.',
+    intro: 'Un client passe devant à 21h, a une question, et repart. Keystone transforme votre vitrine et vos réseaux en vendeur disponible en permanence.',
     uses: [
-      u('smart-qr', 'Un QR en vitrine vers la promo du moment, modifiable a la volee — affiche une fois, mis a jour autant que vous voulez.'),
-      u('smart-agent', 'Un agent IA qui repond hors horaires : stock, tailles, click-and-collect, retours.'),
-      u('key-form', 'Un formulaire d’inscription au programme de fidelite ou a la liste des arrivages, partageable par lien ou QR.'),
-      u('social-manager', 'Vos nouveautes publiees sur tous vos reseaux en un clic, ou programmees pour le matin.'),
-      ue('carte-fidelite', 'Carte de fidélité dématérialisée','Un programme de fidelite dematerialise : tampons cumules par scan, recompense automatique au Ne passage, zero carte a imprimer ni a perdre.'),
+      u('smart-qr', 'Un QR en vitrine vers la promo du moment, modifiable à la volée — affiché une fois, mis à jour autant que vous voulez.'),
+      u('smart-agent', 'Un agent IA qui répond hors horaires : stock, tailles, click-and-collect, retours.'),
+      u('key-form', 'Un formulaire d’inscription au programme de fidélité ou à la liste des arrivages, partageable par lien ou QR.'),
+      u('social-manager', 'Vos nouveautés publiées sur tous vos réseaux en un clic, ou programmées pour le matin.'),
+      ue('carte-fidelite', 'Carte de fidélité dématérialisée','Un programme de fidélité dématérialisé : tampons cumulés par scan, récompense automatique une fois la carte pleine, zéro carte à imprimer ni à perdre.'),
     ],
-    scenario: 'Le dimanche, boutique fermee : un passant scanne la vitrine, decouvre la promo en cours, pose une question sur une taille a l’agent IA, et s’inscrit a votre liste d’arrivages via un mini-formulaire. Lundi, vous avez un nouveau client fidele sans avoir leve le petit doigt.',
+    scenario: 'Le dimanche, boutique fermée : un passant scanne la vitrine, découvre la promo en cours, pose une question sur une taille à l’agent IA, et s’inscrit à votre liste d’arrivages via un mini-formulaire. Lundi, vous avez un nouveau client fidèle sans avoir levé le petit doigt.',
     faq: [
-      ['Faut-il un site web pour utiliser tout ca ?', 'Non. Le QR, l’agent et les formulaires fonctionnent par simple lien ou QR — aucun site requis. Si vous avez un site, ca s’y integre aussi.'],
-      ['Mes clients doivent-ils creer un compte ?', 'Non. Ils posent leurs questions a l’agent et remplissent les formulaires sans compte, de maniere anonyme.'],
-      ['Mes donnees clients sont-elles protegees ?', 'Oui : hebergement en Europe, conformite RGPD native, conservation parametrable, aucune revente.'],
+      ['Faut-il un site web pour utiliser tout ça ?', 'Non. Le QR, l’agent et les formulaires fonctionnent par simple lien ou QR — aucun site requis. Si vous avez un site, ça s’y intègre aussi.'],
+      ['Mes clients doivent-ils créer un compte ?', 'Non. Ils posent leurs questions à l’agent et remplissent les formulaires sans compte, de manière anonyme.'],
+      ['Mes données clients sont-elles protégées ?', 'Oui : hébergement en Europe, conformité RGPD native, conservation paramétrable, aucune revente.'],
     ],
   },
   {
-    slug: 'artisans', metier: 'Artisans du batiment',
-    h1a: 'Vous etes sur le chantier.', h1b: 'Vos devis ne s’envolent plus.',
-    title: 'Keystone pour les artisans — demandes de devis, agent IA, QR vehicule | Keystone OS',
-    desc: 'Plombiers, electriciens, menuisiers, macons : captez les demandes de devis 24/7, laissez un agent IA repondre aux premieres questions et soignez vos courriers pro.',
-    intro: 'Quand vous etes les mains dans le cambouis, vous ne decrochez pas — et le client appelle le suivant. Keystone capte la demande pendant que vous travaillez.',
+    slug: 'artisans', metier: 'Artisans du bâtiment',
+    h1a: 'Vous êtes sur le chantier.', h1b: 'Vos devis ne s’envolent plus.',
+    title: 'Keystone pour les artisans — demandes de devis, agent IA, QR véhicule | Keystone OS',
+    desc: 'Plombiers, électriciens, menuisiers, maçons : captez les demandes de devis 24/7, laissez un agent IA répondre aux premières questions et soignez vos courriers pro.',
+    intro: 'Quand vous êtes les mains dans le cambouis, vous ne décrochez pas — et le client appelle le suivant. Keystone capte la demande pendant que vous travaillez.',
     uses: [
-      u('key-form', 'Un formulaire de demande de devis structure (type de travaux, photos via lien, urgence, adresse) que le client remplit seul.'),
-      u('smart-agent', 'Un agent IA qui repond aux questions recurrentes (zone d’intervention, delais, types de prestations) et qualifie avant de vous deranger.'),
-      u('smart-qr', 'Un QR sur le vehicule et la carte de visite qui mene direct au formulaire de demande.'),
-      u('ghost-writer', 'Vos mails et relances de devis reecrits dans un ton pro et clair, sans y passer la soiree.'),
-      ue('qr-sonnette', 'QR Ring','Un QR sur un acces de chantier sans electricite ni interphone : client, livreur ou riverain vous joint d’un geste (appel, SMS, WhatsApp).'),
+      u('key-form', 'Un formulaire de demande de devis structuré (type de travaux, photos via lien, urgence, adresse) que le client remplit seul.'),
+      u('smart-agent', 'Un agent IA qui répond aux questions récurrentes (zone d’intervention, délais, types de prestations) et qualifie avant de vous déranger.'),
+      u('smart-qr', 'Un QR sur le véhicule et la carte de visite qui mène direct au formulaire de demande.'),
+      u('ghost-writer', 'Vos mails et relances de devis réécrits dans un ton pro et clair, sans y passer la soirée.'),
+      ue('qr-sonnette', 'QR Ring','Un QR sur un accès de chantier sans électricité ni interphone : client, livreur ou riverain vous joint d’un geste (appel, SMS, WhatsApp).'),
     ],
-    scenario: 'Un particulier voit votre camion, scanne le QR a un feu rouge, decrit sa fuite et joint une photo via le formulaire. L’agent confirme votre zone d’intervention et le delai indicatif. Le soir, vous traitez une demande deja qualifiee au lieu d’un appel manque.',
+    scenario: 'Un particulier voit votre camion, scanne le QR à un feu rouge, décrit sa fuite et joint une photo via le formulaire. L’agent confirme votre zone d’intervention et le délai indicatif. Le soir, vous traitez une demande déjà qualifiée au lieu d’un appel manqué.',
     faq: [
-      ['Je n’ai pas le temps de configurer un truc complique.', 'Le formulaire et l’agent partent d’un gabarit metier pre-rempli : vous ajustez deux-trois champs et c’est en ligne. Pas de code, pas de site a construire.'],
-      ['L’agent va-t-il s’engager sur un prix a ma place ?', 'Non. Il informe (zone, delais, prestations) et collecte la demande. Le chiffrage reste le votre.'],
-      ['Comment je recois les demandes ?', 'Par e-mail, des qu’un formulaire est rempli. Vous gardez l’historique au meme endroit.'],
+      ['Je n’ai pas le temps de configurer un truc compliqué.', 'Le formulaire et l’agent partent d’un gabarit métier pré-rempli : vous ajustez deux-trois champs et c’est en ligne. Pas de code, pas de site à construire.'],
+      ['L’agent va-t-il s’engager sur un prix à ma place ?', 'Non. Il informe (zone, délais, prestations) et collecte la demande. Le chiffrage reste le vôtre.'],
+      ['Comment je reçois les demandes ?', 'Par e-mail, dès qu’un formulaire est rempli. Vous gardez l’historique au même endroit.'],
     ],
   },
   {
-    slug: 'hotellerie', metier: 'Hotellerie & locations saisonnieres',
+    slug: 'hotellerie', metier: 'Hôtellerie & locations saisonnières',
     h1a: 'Un concierge qui ne dort jamais,', h1b: 'pour des voyageurs autonomes.',
-    title: 'Keystone pour l’hotellerie & les locations — livret QR, concierge IA | Keystone OS',
-    desc: 'Hotels, gites, chambres d’hotes, locations Airbnb : un livret d’accueil et un Wi-Fi en QR, un concierge IA qui repond aux voyageurs et un suivi de votre reputation en ligne.',
-    intro: 'Les memes questions, a toute heure : le code Wi-Fi, l’heure du check-out, ou diner. Keystone repond a votre place et libere vos soirees.',
+    title: 'Keystone pour l’hôtellerie & les locations — livret QR, concierge IA | Keystone OS',
+    desc: 'Hôtels, gîtes, chambres d’hôtes, locations Airbnb : un livret d’accueil et un Wi-Fi en QR, un concierge IA qui répond aux voyageurs et un suivi de votre réputation en ligne.',
+    intro: 'Les mêmes questions, à toute heure : le code Wi-Fi, l’heure du check-out, où dîner. Keystone répond à votre place et libère vos soirées.',
     uses: [
       u('smart-qr', 'Un QR « livret d’accueil » + un QR Wi-Fi dans le logement : tout ce qu’il faut savoir, sans classeur papier.'),
-      u('smart-agent', 'Un concierge IA qui repond aux voyageurs (check-in, equipements, recommandations locales) en plusieurs langues, par lien ou QR.'),
-      u('key-form', 'Un formulaire d’arrivee (heure d’arrivee, demandes speciales) ou un mini etat des lieux, sans paperasse.'),
-      u('sentinel', 'Gardez un oeil sur votre reputation et votre visibilite, y compris quand un voyageur demande conseil a une IA.'),
-      ue('qr-sonnette', 'QR Ring','Un QR a l’entree d’un gite sans interphone : le voyageur vous joint d’un geste a l’arrivee (appel, SMS, WhatsApp), sans electricite.'),
+      u('smart-agent', 'Un concierge IA qui répond aux voyageurs (check-in, équipements, recommandations locales) en plusieurs langues, par lien ou QR.'),
+      u('key-form', 'Un formulaire d’arrivée (heure d’arrivée, demandes spéciales) ou un mini état des lieux, sans paperasse.'),
+      u('sentinel', 'Gardez un œil sur votre réputation et votre visibilité, y compris quand un voyageur demande conseil à une IA.'),
+      ue('qr-sonnette', 'QR Ring','Un QR à l’entrée d’un gîte sans interphone : le voyageur vous joint d’un geste à l’arrivée (appel, SMS, WhatsApp), sans électricité.'),
     ],
-    scenario: 'Un voyageur arrive a 23h, scanne le QR de l’entree : code d’acces, Wi-Fi, fonctionnement du chauffage. Il demande au concierge IA un bon restaurant ouvert — reponse immediate. Vous n’avez pas eu a decrocher, et son sejour commence sans accroc.',
+    scenario: 'Un voyageur arrive à 23h, scanne le QR de l’entrée : code d’accès, Wi-Fi, fonctionnement du chauffage. Il demande au concierge IA un bon restaurant ouvert — réponse immédiate. Vous n’avez pas eu à décrocher, et son séjour commence sans accroc.',
     faq: [
-      ['Le concierge IA gere-t-il plusieurs langues ?', 'Oui, il repond dans la langue du voyageur a partir du savoir que vous lui avez fourni.'],
-      ['Puis-je avoir un agent par logement ?', 'Oui. Vous pouvez regrouper vos logements et donner a chacun son savoir propre, plus un socle commun (regles maison, contacts).'],
+      ['Le concierge IA gère-t-il plusieurs langues ?', 'Oui, il répond dans la langue du voyageur à partir du savoir que vous lui avez fourni.'],
+      ['Puis-je avoir un agent par logement ?', 'Oui. Vous pouvez regrouper vos logements et donner à chacun son savoir propre, plus un socle commun (règles maison, contacts).'],
       ['Les voyageurs doivent-ils installer une application ?', 'Non. Tout passe par un simple QR ou lien, sans compte ni application.'],
     ],
   },
   {
-    slug: 'beaute', metier: 'Coiffure & beaute',
-    h1a: 'Moins de telephone,', h1b: 'plus de clients au fauteuil.',
-    title: 'Keystone pour la coiffure & la beaute — QR RDV, agent IA, avant/apres | Keystone OS',
-    desc: 'Salons de coiffure, instituts, estheticiennes, barbiers : un agent IA qui repond aux demandes, un QR vers vos prestations et vos avant/apres publies sur tous vos reseaux.',
-    intro: 'Le telephone sonne pendant une coupe, on rappelle rarement. Keystone repond a la place du salon et alimente vos reseaux sans y penser.',
+    slug: 'beaute', metier: 'Coiffure & beauté',
+    h1a: 'Moins de téléphone,', h1b: 'plus de clients au fauteuil.',
+    title: 'Keystone pour la coiffure & la beauté — QR RDV, agent IA, avant/après | Keystone OS',
+    desc: 'Salons de coiffure, instituts, esthéticiennes, barbiers : un agent IA qui répond aux demandes, un QR vers vos prestations et vos avant/après publiés sur tous vos réseaux.',
+    intro: 'Le téléphone sonne pendant une coupe, on rappelle rarement. Keystone répond à la place du salon et alimente vos réseaux sans y penser.',
     uses: [
-      u('smart-agent', 'Un agent IA qui repond aux questions (tarifs, prestations, duree, disponibilites generales) pendant que vous coiffez.'),
-      u('smart-qr', 'Un QR a l’accueil et sur le miroir vers vos prestations, votre lien d’avis ou de prise de contact.'),
-      u('social-manager', 'Vos avant/apres et offres publies d’un clic sur Instagram, Facebook et Threads.'),
+      u('smart-agent', 'Un agent IA qui répond aux questions (tarifs, prestations, durée, disponibilités générales) pendant que vous coiffez.'),
+      u('smart-qr', 'Un QR à l’accueil et sur le miroir vers vos prestations, votre lien d’avis ou de prise de contact.'),
+      u('social-manager', 'Vos avant/après et offres publiés d’un clic sur Instagram, Facebook et Threads.'),
       u('key-form', 'Un formulaire de diagnostic capillaire ou de demande de RDV, rempli par la cliente avant de venir.'),
-      ue('carte-fidelite', 'Carte de fidélité dématérialisée','La carte de fidelite sans carte : la cliente cumule ses passages en scannant, la prestation offerte se debloque toute seule.'),
+      ue('carte-fidelite', 'Carte de fidélité dématérialisée','La carte de fidélité sans carte : la cliente cumule ses passages en scannant, la prestation offerte se débloque toute seule.'),
     ],
-    scenario: 'En plein shampoing, une cliente potentielle ecrit a l’agent depuis votre lien Instagram : prix d’un balayage, duree. Reponse immediate, formulaire de contact rempli. Le soir, vous publiez l’avant/apres du jour sur trois reseaux en un clic.',
+    scenario: 'En plein shampoing, une cliente potentielle écrit à l’agent depuis votre lien Instagram : prix d’un balayage, durée. Réponse immédiate, formulaire de contact rempli. Le soir, vous publiez l’avant/après du jour sur trois réseaux en un clic.',
     faq: [
-      ['L’agent prend-il les rendez-vous ?', 'Il informe et collecte les demandes (via formulaire ou lien). Pour l’agenda, il oriente vers votre outil de reservation habituel.'],
-      ['Je n’ai pas le temps de gerer les reseaux.', 'C’est l’idee : un post, une image, et ca part sur tous vos reseaux d’un coup — ou programme pour le bon creneau.'],
-      ['Et si je veux juste essayer un outil ?', 'Keystone est modulaire : vous activez seulement ce qui vous sert, vous etendez quand vous voulez.'],
+      ['L’agent prend-il les rendez-vous ?', 'Il informe et collecte les demandes (via formulaire ou lien). Pour l’agenda, il oriente vers votre outil de réservation habituel.'],
+      ['Je n’ai pas le temps de gérer les réseaux.', 'C’est l’idée : un post, une image, et ça part sur tous vos réseaux d’un coup — ou programmé pour le bon créneau.'],
+      ['Et si je veux juste essayer un outil ?', 'Keystone est modulaire : vous activez seulement ce qui vous sert, vous étendez quand vous voulez.'],
     ],
   },
   {
-    slug: 'sante', metier: 'Professions de sante & bien-etre',
-    h1a: 'Votre secretariat repond,', h1b: 'vous restez concentre sur le soin.',
-    title: 'Keystone pour les professionnels de sante & bien-etre — agent IA, formulaires | Keystone OS',
-    desc: 'Praticiens, cabinets, therapeutes, coachs bien-etre : un agent IA qui repond aux questions pratiques (jamais medicales), des formulaires d’admission et une presence locale soignee.',
-    intro: 'Les appels pour des questions pratiques saturent le standard. Keystone repond a ce qui est administratif et vous laisse le soin — sans jamais donner d’avis medical.',
+    slug: 'sante', metier: 'Professions de santé & bien-être',
+    h1a: 'Votre secrétariat répond,', h1b: 'vous restez concentré sur le soin.',
+    title: 'Keystone pour les professionnels de santé & bien-être — agent IA, formulaires | Keystone OS',
+    desc: 'Praticiens, cabinets, thérapeutes, coachs bien-être : un agent IA qui répond aux questions pratiques (jamais médicales), des formulaires d’admission et une présence locale soignée.',
+    intro: 'Les appels pour des questions pratiques saturent le standard. Keystone répond à ce qui est administratif et vous laisse le soin — sans jamais donner d’avis médical.',
     uses: [
-      u('smart-agent', 'Un agent IA cadre sur le pratique : horaires, adresse, documents a apporter, deroulement d’une premiere seance — et qui renvoie vers vous pour tout le reste.'),
-      u('key-form', 'Un questionnaire d’admission ou de pre-consultation, rempli en amont, en toute confidentialite.'),
-      u('sentinel', 'Soignez votre presence locale (fiche, avis) et votre visibilite quand on cherche un praticien dans votre ville.'),
-      u('ghost-writer', 'Vos courriers et informations patients reecrits clairement, dans le bon ton.'),
+      u('smart-agent', 'Un agent IA cadré sur le pratique : horaires, adresse, documents à apporter, déroulement d’une première séance — et qui renvoie vers vous pour tout le reste.'),
+      u('key-form', 'Un questionnaire d’admission ou de pré-consultation, rempli en amont, en toute confidentialité.'),
+      u('sentinel', 'Soignez votre présence locale (fiche, avis) et votre visibilité quand on cherche un praticien dans votre ville.'),
+      u('ghost-writer', 'Vos courriers et informations patients réécrits clairement, dans le bon ton.'),
     ],
-    scenario: 'Avant un premier rendez-vous, le patient remplit le formulaire d’admission depuis un lien. Il demande a l’agent ce qu’il doit apporter et combien de temps dure la seance : reponse immediate. Le standard n’a pas sonne, et vous arrivez en consultation avec le dossier deja pret.',
+    scenario: 'Avant un premier rendez-vous, le patient remplit le formulaire d’admission depuis un lien. Il demande à l’agent ce qu’il doit apporter et combien de temps dure la séance : réponse immédiate. Le standard n’a pas sonné, et vous arrivez en consultation avec le dossier déjà prêt.',
     faq: [
-      ['L’agent donne-t-il des conseils medicaux ?', 'Non, jamais. Il est volontairement limite au pratique et a l’administratif (horaires, documents, deroulement) et renvoie systematiquement vers le professionnel pour tout le reste.'],
-      ['Les donnees des formulaires sont-elles confidentielles ?', 'Oui : hebergement en Europe, RGPD natif, duree de conservation que vous fixez, suppression automatique a l’echeance.'],
-      ['Est-ce adapte a un cabinet de groupe ?', 'Oui. Vous pouvez regrouper plusieurs praticiens avec un socle d’informations commun et des reponses propres a chacun.'],
+      ['L’agent donne-t-il des conseils médicaux ?', 'Non, jamais. Il est volontairement limité au pratique et à l’administratif (horaires, documents, déroulement) et renvoie systématiquement vers le professionnel pour tout le reste.'],
+      ['Les données des formulaires sont-elles confidentielles ?', 'Oui : hébergement en Europe, RGPD natif, durée de conservation que vous fixez, suppression automatique à l’échéance.'],
+      ['Est-ce adapté à un cabinet de groupe ?', 'Oui. Vous pouvez regrouper plusieurs praticiens avec un socle d’informations commun et des réponses propres à chacun.'],
     ],
   },
   {
-    slug: 'artistes', metier: 'Artistes & creatifs',
-    h1a: 'Creez.', h1b: 'On s’occupe du reste.',
-    title: 'Keystone pour les artistes & creatifs — candidatures, briefs, reseaux | Keystone OS',
-    desc: 'Musiciens, photographes, plasticiens, illustrateurs : recevez candidatures et soumissions par formulaire, cadrez vos briefs imprimeur, et diffusez votre actu sur tous vos reseaux.',
-    intro: 'Le talent ne suffit pas : il faut gerer les soumissions, briefer les prestataires, animer ses reseaux. Keystone prend la logistique pour vous laisser creer.',
+    slug: 'artistes', metier: 'Artistes & créatifs',
+    h1a: 'Créez.', h1b: 'On s’occupe du reste.',
+    title: 'Keystone pour les artistes & créatifs — candidatures, briefs, réseaux | Keystone OS',
+    desc: 'Musiciens, photographes, plasticiens, illustrateurs : recevez candidatures et soumissions par formulaire, cadrez vos briefs imprimeur, et diffusez votre actu sur tous vos réseaux.',
+    intro: 'Le talent ne suffit pas : il faut gérer les soumissions, briefer les prestataires, animer ses réseaux. Keystone prend la logistique pour vous laisser créer.',
     uses: [
-      u('key-form', 'Un formulaire de candidature ou de soumission (appels a projets, demos, commandes) partageable par lien — fini les e-mails eparpilles.'),
-      u('brief-prod', 'Un brief beton pour votre graphiste ou imprimeur : evitez l’erreur d’impression qui coute cher.'),
-      u('social-manager', 'Votre actu (concert, expo, sortie) publiee d’un clic sur tous vos reseaux, ou programmee.'),
-      u('smart-qr', 'Un QR sur vos flyers, pochettes ou cartels d’expo vers votre lien du moment, modifiable sans reimprimer.'),
+      u('key-form', 'Un formulaire de candidature ou de soumission (appels à projets, démos, commandes) partageable par lien — fini les e-mails éparpillés.'),
+      u('brief-prod', 'Un brief béton pour votre graphiste ou imprimeur : évitez l’erreur d’impression qui coûte cher.'),
+      u('social-manager', 'Votre actu (concert, expo, sortie) publiée d’un clic sur tous vos réseaux, ou programmée.'),
+      u('smart-qr', 'Un QR sur vos flyers, pochettes ou cartels d’expo vers votre lien du moment, modifiable sans réimprimer.'),
     ],
-    scenario: 'Vous lancez un appel a collaboration : un formulaire centralise toutes les propositions. Pour l’affiche, Brief Prod cadre les specs imprimeur en deux minutes. Le jour J, le QR sur le flyer pointe vers la billetterie, et l’annonce part sur tous vos reseaux.',
+    scenario: 'Vous lancez un appel à collaboration : un formulaire centralise toutes les propositions. Pour l’affiche, Brief Prod cadre les specs imprimeur en deux minutes. Le jour J, le QR sur le flyer pointe vers la billetterie, et l’annonce part sur tous vos réseaux.',
     faq: [
-      ['Le formulaire gere-t-il des fichiers lourds (audio, video) ?', 'Le repondant colle un lien (WeTransfer, Drive, Dropbox, Vimeo) plutot qu’un upload direct — simple et sans limite de taille.'],
-      ['Brief Prod, c’est pour quoi exactement ?', 'Transformer votre intention creative en cahier des charges technique clair pour le graphiste ou l’imprimeur, pour eviter les mauvaises surprises a l’impression.'],
-      ['Je peux tout garder a ma main ?', 'Oui. Keystone produit des brouillons et automatise le repetitif ; vous validez et publiez ce que vous voulez.'],
+      ['Le formulaire gère-t-il des fichiers lourds (audio, vidéo) ?', 'Le répondant colle un lien (WeTransfer, Drive, Dropbox, Vimeo) plutôt qu’un upload direct — simple et sans limite de taille.'],
+      ['Brief Prod, c’est pour quoi exactement ?', 'Transformer votre intention créative en cahier des charges technique clair pour le graphiste ou l’imprimeur, pour éviter les mauvaises surprises à l’impression.'],
+      ['Je peux tout garder à ma main ?', 'Oui. Keystone produit des brouillons et automatise le répétitif ; vous validez et publiez ce que vous voulez.'],
     ],
   },
   {
     slug: 'associations', metier: 'Associations & clubs',
     h1a: 'Plus de membres,', h1b: 'moins de paperasse.',
-    title: 'Keystone pour les associations & clubs — adhesions, evenements, reseaux | Keystone OS',
-    desc: 'Associations, clubs sportifs, collectifs : gerez adhesions et inscriptions par formulaire, animez vos reseaux, affichez vos evenements en QR et faites bouillonner les idees.',
-    intro: 'Les benevoles n’ont pas le temps. Keystone simplifie adhesions, communication et organisation pour que l’energie aille au projet, pas a l’administratif.',
+    title: 'Keystone pour les associations & clubs — adhésions, événements, réseaux | Keystone OS',
+    desc: 'Associations, clubs sportifs, collectifs : gérez adhésions et inscriptions par formulaire, animez vos réseaux, affichez vos événements en QR et faites bouillonner les idées.',
+    intro: 'Les bénévoles n’ont pas le temps. Keystone simplifie adhésions, communication et organisation pour que l’énergie aille au projet, pas à l’administratif.',
     uses: [
-      u('key-form', 'Adhesions, inscriptions aux evenements, appels a benevoles : des formulaires partageables, sans tableur a la main.'),
-      u('social-manager', 'Vos actualites et evenements publies sur tous vos reseaux d’un clic.'),
-      u('smart-qr', 'Un QR sur vos affiches d’evenement vers l’inscription ou le programme, mis a jour sans reimprimer.'),
-      u('brainstorming', 'Une table ronde d’IA pour faire emerger des idees d’actions, de financement ou de communication.'),
+      u('key-form', 'Adhésions, inscriptions aux événements, appels à bénévoles : des formulaires partageables, sans tableur à la main.'),
+      u('social-manager', 'Vos actualités et événements publiés sur tous vos réseaux d’un clic.'),
+      u('smart-qr', 'Un QR sur vos affiches d’événement vers l’inscription ou le programme, mis à jour sans réimprimer.'),
+      u('brainstorming', 'Une table ronde d’IA pour faire émerger des idées d’actions, de financement ou de communication.'),
     ],
-    scenario: 'Pour la fete annuelle, vous creez un formulaire d’inscription en cinq minutes, l’affiche porte un QR qui pointe dessus, et l’evenement part sur tous vos reseaux. En amont, Brainstorming vous a souffle trois idees d’animations auxquelles personne n’avait pense.',
+    scenario: 'Pour la fête annuelle, vous créez un formulaire d’inscription en cinq minutes, l’affiche porte un QR qui pointe dessus, et l’événement part sur tous vos réseaux. En amont, Brainstorming vous a soufflé trois idées d’animations auxquelles personne n’avait pensé.',
     faq: [
-      ['Est-ce adapte a une petite association sans budget tech ?', 'Oui. Pas de site requis, pas de code : des formulaires et des liens, modulaires, que vous activez selon vos besoins.'],
-      ['Peut-on recolter des inscriptions sans compte pour les membres ?', 'Oui, les formulaires sont ouverts et anonymes par defaut, avec un code d’acces optionnel si besoin.'],
-      ['Comment recupere-t-on les inscriptions ?', 'Par e-mail a chaque envoi, et export possible pour vos suivis.'],
+      ['Est-ce adapté à une petite association sans budget tech ?', 'Oui. Pas de site requis, pas de code : des formulaires et des liens, modulaires, que vous activez selon vos besoins.'],
+      ['Peut-on récolter des inscriptions sans compte pour les membres ?', 'Oui, les formulaires sont ouverts et anonymes par défaut, avec un code d’accès optionnel si besoin.'],
+      ['Comment récupère-t-on les inscriptions ?', 'Par e-mail à chaque envoi, et export possible pour vos suivis.'],
     ],
   },
   {
-    slug: 'evenementiel', metier: 'Evenementiel & mariage',
+    slug: 'evenementiel', metier: 'Événementiel & mariage',
     h1a: 'Le jour J est parfait.', h1b: 'Les coulisses aussi.',
-    title: 'Keystone pour l’evenementiel & le mariage — RSVP, briefs, QR programme | Keystone OS',
-    desc: 'Wedding planners, traiteurs, agences evenementielles : centralisez les RSVP et preferences, cadrez vos briefs prestataires et affichez programme et plan de table en QR.',
-    intro: 'Un evenement, c’est mille details et zero droit a l’erreur. Keystone centralise l’info et fiabilise les echanges avec invites et prestataires.',
+    title: 'Keystone pour l’événementiel & le mariage — RSVP, briefs, QR programme | Keystone OS',
+    desc: 'Wedding planners, traiteurs, agences événementielles : centralisez les RSVP et préférences, cadrez vos briefs prestataires et affichez programme et plan de table en QR.',
+    intro: 'Un événement, c’est mille détails et zéro droit à l’erreur. Keystone centralise l’info et fiabilise les échanges avec invités et prestataires.',
     uses: [
-      u('key-form', 'RSVP, regimes alimentaires, chansons demandees, navette : tout centralise dans un formulaire, plus de relances par SMS.'),
-      u('brief-prod', 'Des briefs nets pour vos prestataires (imprimeur, decorateur, papeterie) — zero malentendu sur les specs.'),
-      u('smart-qr', 'Un QR sur le faire-part ou a l’entree vers le programme, le plan de table ou la galerie photo, modifiable jusqu’au dernier moment.'),
-      u('social-manager', 'Vos realisations publiees sur tous vos reseaux pour attirer les prochains clients.'),
+      u('key-form', 'RSVP, régimes alimentaires, chansons demandées, navette : tout centralisé dans un formulaire, plus de relances par SMS.'),
+      u('brief-prod', 'Des briefs nets pour vos prestataires (imprimeur, décorateur, papeterie) — zéro malentendu sur les specs.'),
+      u('smart-qr', 'Un QR sur le faire-part ou à l’entrée vers le programme, le plan de table ou la galerie photo, modifiable jusqu’au dernier moment.'),
+      u('social-manager', 'Vos réalisations publiées sur tous vos réseaux pour attirer les prochains clients.'),
     ],
-    scenario: 'Les invites confirment leur presence et indiquent leurs allergies via un formulaire unique. Le faire-part porte un QR qui menera au plan de table — que vous ajustez la veille sans rien reimprimer. Cote prestataires, le brief imprimeur ne laisse aucune place au doute.',
+    scenario: 'Les invités confirment leur présence et indiquent leurs allergies via un formulaire unique. Le faire-part porte un QR qui mènera au plan de table — que vous ajustez la veille sans rien réimprimer. Côté prestataires, le brief imprimeur ne laisse aucune place au doute.',
     faq: [
-      ['Peut-on modifier le programme apres impression des faire-part ?', 'Oui : le QR est dynamique, il pointe vers une page que vous mettez a jour quand vous voulez, meme apres impression.'],
-      ['Le formulaire gere-t-il beaucoup d’invites ?', 'Oui, avec logique conditionnelle (afficher des questions selon les reponses) et export des reponses.'],
-      ['Mes clients voient-ils un outil a leur image ?', 'Vous personnalisez couleurs et logo ; l’ensemble reste sobre et premium.'],
+      ['Peut-on modifier le programme après impression des faire-part ?', 'Oui : le QR est dynamique, il pointe vers une page que vous mettez à jour quand vous voulez, même après impression.'],
+      ['Le formulaire gère-t-il beaucoup d’invités ?', 'Oui, avec logique conditionnelle (afficher des questions selon les réponses) et export des réponses.'],
+      ['Mes clients voient-ils un outil à leur image ?', 'Vous personnalisez couleurs et logo ; l’ensemble reste sobre et premium.'],
     ],
   },
   {
     slug: 'consultants', metier: 'Consultants & formateurs',
-    h1a: 'Votre expertise rayonne,', h1b: 'sans que vous redigiez toute la nuit.',
-    title: 'Keystone pour les consultants & formateurs — propositions, agent IA, visibilite | Keystone OS',
-    desc: 'Consultants, coachs, formateurs, freelances : redigez propositions et contenus plus vite, laissez un agent IA presenter votre offre et soignez votre visibilite, IA comprise.',
-    intro: 'Vous vendez votre temps — chaque heure passee a rediger une proposition ou un post est une heure non facturee. Keystone vous en rend une bonne partie.',
+    h1a: 'Votre expertise rayonne,', h1b: 'sans que vous rédigiez toute la nuit.',
+    title: 'Keystone pour les consultants & formateurs — propositions, agent IA, visibilité | Keystone OS',
+    desc: 'Consultants, coachs, formateurs, freelances : rédigez propositions et contenus plus vite, laissez un agent IA présenter votre offre et soignez votre visibilité, IA comprise.',
+    intro: 'Vous vendez votre temps — chaque heure passée à rédiger une proposition ou un post est une heure non facturée. Keystone vous en rend une bonne partie.',
     uses: [
-      u('ghost-writer', 'Propositions commerciales, e-mails et posts reecrits dans votre ton, en une fraction du temps.'),
-      u('smart-agent', 'Un agent IA qui presente votre offre, repond aux questions frequentes et qualifie les prospects via votre lien ou QR.'),
-      u('brainstorming', 'Une table ronde d’IA pour structurer une intervention, un programme de formation ou une strategie de contenu.'),
-      u('sentinel', 'Suivez votre visibilite et verifiez si les IA vous citent comme expert sur votre sujet (GEO).'),
+      u('ghost-writer', 'Propositions commerciales, e-mails et posts réécrits dans votre ton, en une fraction du temps.'),
+      u('smart-agent', 'Un agent IA qui présente votre offre, répond aux questions fréquentes et qualifie les prospects via votre lien ou QR.'),
+      u('brainstorming', 'Une table ronde d’IA pour structurer une intervention, un programme de formation ou une stratégie de contenu.'),
+      u('sentinel', 'Suivez votre visibilité et vérifiez si les IA vous citent comme expert sur votre sujet (GEO).'),
     ],
-    scenario: 'Un prospect arrive sur votre lien, interroge l’agent sur votre methode et vos tarifs, et laisse ses coordonnees. Pendant ce temps, Ghost Writer vous a degrossi la proposition, et Brainstorming a charpente votre prochain atelier. Vous validez, vous envoyez, vous facturez.',
+    scenario: 'Un prospect arrive sur votre lien, interroge l’agent sur votre méthode et vos tarifs, et laisse ses coordonnées. Pendant ce temps, Ghost Writer vous a dégrossi la proposition, et Brainstorming a charpenté votre prochain atelier. Vous validez, vous envoyez, vous facturez.',
     faq: [
-      ['L’agent peut-il parler a ma place sans dire de betises ?', 'Il ne repond qu’a partir de ce que vous avez valide (offre, methode, FAQ). Hors de ce perimetre, il le dit et renvoie vers vous.'],
-      ['Ghost Writer ecrit-il a ma place ou avec moi ?', 'Avec vous : il propose des variantes calibrees (e-mail, marketing, texte long) et corrige ; vous gardez la decision finale.'],
-      ['C’est quoi la « visibilite dans les IA » ?', 'De plus en plus de gens posent leurs questions a ChatGPT, Perplexity ou Gemini. Sentinel verifie si vous etes cite dans leurs reponses et comment vous y gagner en presence.'],
+      ['L’agent peut-il parler à ma place sans dire de bêtises ?', 'Il ne répond qu’à partir de ce que vous avez validé (offre, méthode, FAQ). Hors de ce périmètre, il le dit et renvoie vers vous.'],
+      ['Ghost Writer écrit-il à ma place ou avec moi ?', 'Avec vous : il propose des variantes calibrées (e-mail, marketing, texte long) et corrige ; vous gardez la décision finale.'],
+      ['C’est quoi la « visibilité dans les IA » ?', 'De plus en plus de gens posent leurs questions à ChatGPT, Perplexity ou Gemini. Sentinel vérifie si vous êtes cité dans leurs réponses et comment y gagner en présence.'],
     ],
   },
   {
-    slug: 'culture', metier: 'Musees & lieux culturels',
-    h1a: 'Un guide pour chaque visiteur,', h1b: 'sans audioguide a distribuer.',
-    title: 'Keystone pour les musees & lieux culturels — guide IA, QR parcours | Keystone OS',
-    desc: 'Musees, galeries, monuments, offices de tourisme : un guide IA accessible par QR, des parcours enrichis et une diffusion de votre programmation sur tous vos reseaux.',
-    intro: 'Chaque visiteur a ses questions, dans sa langue, a son rythme. Keystone met un mediateur disponible derriere un simple QR, sans materiel a gerer.',
+    slug: 'culture', metier: 'Musées & lieux culturels',
+    h1a: 'Un guide pour chaque visiteur,', h1b: 'sans audioguide à distribuer.',
+    title: 'Keystone pour les musées & lieux culturels — guide IA, QR parcours | Keystone OS',
+    desc: 'Musées, galeries, monuments, offices de tourisme : un guide IA accessible par QR, des parcours enrichis et une diffusion de votre programmation sur tous vos réseaux.',
+    intro: 'Chaque visiteur a ses questions, dans sa langue, à son rythme. Keystone met un médiateur disponible derrière un simple QR, sans matériel à gérer.',
     uses: [
-      u('smart-agent', 'Un guide IA derriere un QR (par salle ou par oeuvre) qui raconte, repond et lit ses reponses a voix haute, dans la langue du visiteur.'),
-      u('smart-qr', 'Des QR de parcours sur les cartels, modifiables a chaque nouvelle expo — sans reimprimer la signaletique.'),
-      u('social-manager', 'Votre programmation et vos coulisses publiees sur tous vos reseaux d’un clic.'),
-      u('key-form', 'Inscriptions aux visites guidees, ateliers ou newsletters, sans file d’attente a l’accueil.'),
+      u('smart-agent', 'Un guide IA derrière un QR (par salle ou par œuvre) qui raconte, répond et lit ses réponses à voix haute, dans la langue du visiteur.'),
+      u('smart-qr', 'Des QR de parcours sur les cartels, modifiables à chaque nouvelle expo — sans réimprimer la signalétique.'),
+      u('social-manager', 'Votre programmation et vos coulisses publiées sur tous vos réseaux d’un clic.'),
+      u('key-form', 'Inscriptions aux visites guidées, ateliers ou newsletters, sans file d’attente à l’accueil.'),
     ],
-    scenario: 'Devant une oeuvre, un visiteur etranger scanne le cartel : le guide IA lui en raconte l’histoire dans sa langue, a voix haute, et repond a sa question. A la prochaine expo, vous mettez a jour les parcours sans changer un seul panneau, et l’evenement part sur tous vos reseaux.',
+    scenario: 'Devant une œuvre, un visiteur étranger scanne le cartel : le guide IA lui en raconte l’histoire dans sa langue, à voix haute, et répond à sa question. À la prochaine expo, vous mettez à jour les parcours sans changer un seul panneau, et l’événement part sur tous vos réseaux.',
     faq: [
-      ['Le guide IA fonctionne-t-il sans application ?', 'Oui, uniquement par QR ou lien. Le visiteur n’installe rien et n’a pas de compte a creer.'],
-      ['La lecture a voix haute est-elle payante ?', 'Non. La voix neuronale s’execute dans le navigateur du visiteur, sans cout recurrent.'],
-      ['Peut-on tout mettre a jour a chaque exposition ?', 'Oui : le savoir du guide et les parcours QR se modifient autant que necessaire, sans toucher a la signaletique imprimee.'],
+      ['Le guide IA fonctionne-t-il sans application ?', 'Oui, uniquement par QR ou lien. Le visiteur n’installe rien et n’a pas de compte à créer.'],
+      ['La lecture à voix haute est-elle payante ?', 'Non. La voix neuronale s’exécute dans le navigateur du visiteur, sans coût récurrent.'],
+      ['Peut-on tout mettre à jour à chaque exposition ?', 'Oui : le savoir du guide et les parcours QR se modifient autant que nécessaire, sans toucher à la signalétique imprimée.'],
     ],
   },
   {
     slug: 'sport', metier: 'Sport & remise en forme',
-    h1a: 'Vos adherents informes,', h1b: 'votre energie sur le terrain.',
+    h1a: 'Vos adhérents informés,', h1b: 'votre énergie sur le terrain.',
     title: 'Keystone pour le sport & la remise en forme — inscriptions, agent IA, plannings | Keystone OS',
-    desc: 'Salles de sport, coachs, clubs, studios : inscriptions et bilans par formulaire, un agent IA qui repond (tarifs, horaires, cours), des plannings en QR et des reseaux nourris.',
-    intro: 'Entre les cours, vous n’etes pas a l’accueil. Keystone informe vos adherents et capte les nouveaux pendant que vous coachez.',
+    desc: 'Salles de sport, coachs, clubs, studios : inscriptions et bilans par formulaire, un agent IA qui répond (tarifs, horaires, cours), des plannings en QR et des réseaux nourris.',
+    intro: 'Entre les cours, vous n’êtes pas à l’accueil. Keystone informe vos adhérents et capte les nouveaux pendant que vous coachez.',
     uses: [
-      u('smart-agent', 'Un agent IA qui repond aux questions (formules, horaires, niveau requis, essai gratuit) a toute heure.'),
-      u('key-form', 'Inscriptions, questionnaire sante/objectifs, reservation d’un cours d’essai — remplis en amont.'),
-      u('smart-qr', 'Un QR a l’accueil et sur les machines vers le planning, une video d’exercice ou le lien d’avis.'),
-      u('social-manager', 'Vos seances, defis et resultats publies sur tous vos reseaux pour entretenir la communaute.'),
-      ue('carte-fidelite', 'Carte de fidélité dématérialisée','Recompensez l’assiduite sans carte plastique : vos adherents cumulent leurs venues par scan, la seance offerte se debloque automatiquement.'),
+      u('smart-agent', 'Un agent IA qui répond aux questions (formules, horaires, niveau requis, essai gratuit) à toute heure.'),
+      u('key-form', 'Inscriptions, questionnaire santé/objectifs, réservation d’un cours d’essai — remplis en amont.'),
+      u('smart-qr', 'Un QR à l’accueil et sur les machines vers le planning, une vidéo d’exercice ou le lien d’avis.'),
+      u('social-manager', 'Vos séances, défis et résultats publiés sur tous vos réseaux pour entretenir la communauté.'),
+      ue('carte-fidelite', 'Carte de fidélité dématérialisée','Récompensez l’assiduité sans carte plastique : vos adhérents cumulent leurs venues par scan, la séance offerte se débloque automatiquement.'),
     ],
-    scenario: 'Un curieux passe devant le studio, scanne le QR : tarifs, planning, et il reserve un cours d’essai via le formulaire apres avoir pose deux questions a l’agent. Pendant votre cours, tout s’est fait sans vous, et le defi de la semaine est deja parti sur les reseaux.',
+    scenario: 'Un curieux passe devant le studio, scanne le QR : tarifs, planning, et il réserve un cours d’essai via le formulaire après avoir posé deux questions à l’agent. Pendant votre cours, tout s’est fait sans vous, et le défi de la semaine est déjà parti sur les réseaux.',
     faq: [
-      ['L’agent gere-t-il les reservations de cours ?', 'Il informe et collecte les demandes (formulaire, lien). Pour le planning en temps reel, il renvoie vers votre outil de reservation.'],
-      ['Le questionnaire sante est-il confidentiel ?', 'Oui : RGPD natif, hebergement en Europe, conservation parametrable et suppression automatique a l’echeance.'],
-      ['Je debute, c’est complique a mettre en place ?', 'Non : gabarits pre-remplis, aucun code, et vous n’activez que les outils utiles.'],
+      ['L’agent gère-t-il les réservations de cours ?', 'Il informe et collecte les demandes (formulaire, lien). Pour le planning en temps réel, il renvoie vers votre outil de réservation.'],
+      ['Le questionnaire santé est-il confidentiel ?', 'Oui : RGPD natif, hébergement en Europe, conservation paramétrable et suppression automatique à l’échéance.'],
+      ['Je débute, c’est compliqué à mettre en place ?', 'Non : gabarits pré-remplis, aucun code, et vous n’activez que les outils utiles.'],
     ],
   },
   {
     slug: 'automobile', metier: 'Garages & automobile',
-    h1a: 'L’atelier tourne,', h1b: 'les demandes ne tombent plus a l’eau.',
+    h1a: 'L’atelier tourne,', h1b: 'les demandes ne tombent plus à l’eau.',
     title: 'Keystone pour les garages & l’automobile — demandes, agent IA, QR | Keystone OS',
-    desc: 'Garages, carrossiers, centres auto, loueurs : captez les demandes d’intervention 24/7, laissez un agent IA repondre aux questions courantes et soignez votre reputation locale.',
-    intro: 'Les mains dans le moteur, vous ne repondez pas — et le client appelle le garage d’a cote. Keystone capte et qualifie la demande sans vous interrompre.',
+    desc: 'Garages, carrossiers, centres auto, loueurs : captez les demandes d’intervention 24/7, laissez un agent IA répondre aux questions courantes et soignez votre réputation locale.',
+    intro: 'Les mains dans le moteur, vous ne répondez pas — et le client appelle le garage d’à côté. Keystone capte et qualifie la demande sans vous interrompre.',
     uses: [
-      u('key-form', 'Un formulaire de demande d’intervention (vehicule, panne, photos via lien, disponibilites) rempli par le client.'),
-      u('smart-agent', 'Un agent IA qui repond aux questions courantes (prestations, horaires, vehicule de pret, delais) et qualifie avant de vous deranger.'),
-      u('smart-qr', 'Un QR sur la devanture et le vehicule de courtoisie vers la prise de contact ou le lien d’avis.'),
-      u('sentinel', 'Suivez vos avis et votre presence locale, decisifs pour etre choisi dans votre zone.'),
+      u('key-form', 'Un formulaire de demande d’intervention (véhicule, panne, photos via lien, disponibilités) rempli par le client.'),
+      u('smart-agent', 'Un agent IA qui répond aux questions courantes (prestations, horaires, véhicule de prêt, délais) et qualifie avant de vous déranger.'),
+      u('smart-qr', 'Un QR sur la devanture et le véhicule de courtoisie vers la prise de contact ou le lien d’avis.'),
+      u('sentinel', 'Suivez vos avis et votre présence locale, décisifs pour être choisi dans votre zone.'),
     ],
-    scenario: 'Un automobiliste tombe en panne, cherche un garage, vous trouve grace a votre presence locale soignee, et decrit son probleme via le formulaire avec photos. L’agent confirme vos horaires et la dispo d’un vehicule de pret. Vous rappelez un client deja qualifie, dossier en main.',
+    scenario: 'Un automobiliste tombe en panne, cherche un garage, vous trouve grâce à votre présence locale soignée, et décrit son problème via le formulaire avec photos. L’agent confirme vos horaires et la dispo d’un véhicule de prêt. Vous rappelez un client déjà qualifié, dossier en main.',
     faq: [
-      ['L’agent va-t-il annoncer un prix de reparation ?', 'Non. Il informe (prestations, horaires, delais indicatifs) et collecte la demande ; le devis reste de votre ressort apres diagnostic.'],
-      ['Comment recevoir les demandes d’intervention ?', 'Par e-mail des qu’un formulaire est rempli, avec les photos et infos du vehicule.'],
-      ['Les avis comptent-ils vraiment pour un garage ?', 'Beaucoup : la presence locale et les avis pesent fort dans le choix. Sentinel vous aide a les suivre et a vous ameliorer.'],
+      ['L’agent va-t-il annoncer un prix de réparation ?', 'Non. Il informe (prestations, horaires, délais indicatifs) et collecte la demande ; le devis reste de votre ressort après diagnostic.'],
+      ['Comment recevoir les demandes d’intervention ?', 'Par e-mail dès qu’un formulaire est rempli, avec les photos et infos du véhicule.'],
+      ['Les avis comptent-ils vraiment pour un garage ?', 'Beaucoup : la présence locale et les avis pèsent fort dans le choix. Sentinel vous aide à les suivre et à vous améliorer.'],
     ],
   },
 ];
@@ -328,62 +328,62 @@ const EXPERIENCES = [
   {
     slug: 'qr-sonnette', label: 'QR Ring',
     h1a: 'Un QR. Un geste.', h1b: 'On vous joint, même sans sonnette ni électricité.',
-    title: 'QR Ring — sonnette par QR Code, sans electricite | Keystone OS',
-    desc: 'Un QR pose sur un portail ou une porte, sans electricite : on tape « Sonner » et vous — plus les proches que vous ajoutez (conjoint, gardien…) — etes prevenu par notification push, meme application fermee. Repli e-mail et contacts directs inclus.',
-    intro: 'Un portail sans interphone, un acces sans electricite, ou l’envie qu’un cercle de proches soit prevenu en un instant : on tape « Sonner » sur le QR Ring, et vous — avec les proches que vous avez ajoutes — recevez une notification, meme application fermee.',
-    what: 'Une page hebergee derriere un QR a imprimer, sans electricite. Le visiteur tape « Sonner » et, en un instant, une notification push part vers TOUS les appareils que vous avez abonnes — le votre et ceux des proches ajoutes (conjoint, gardien, voisin…), meme application fermee — avec un repli par e-mail si une notification se perd. Vous pouvez meme repondre : le visiteur voit votre reponse. Et si vous preferez, les contacts directs (appel, SMS, WhatsApp, e-mail) avec message pre-rempli restent disponibles.',
+    title: 'QR Ring — sonnette par QR Code, sans électricité | Keystone OS',
+    desc: 'Un QR posé sur un portail ou une porte, sans électricité : on tape « Sonner » et vous — plus les proches que vous ajoutez (conjoint, gardien…) — êtes prévenu par notification push, même application fermée. Repli e-mail et contacts directs inclus.',
+    intro: 'Un portail sans interphone, un accès sans électricité, ou l’envie qu’un cercle de proches soit prévenu en un instant : on tape « Sonner » sur le QR Ring, et vous — avec les proches que vous avez ajoutés — recevez une notification, même application fermée.',
+    what: 'Une page hébergée derrière un QR à imprimer, sans électricité. Le visiteur tape « Sonner » et, en un instant, une notification push part vers TOUS les appareils que vous avez abonnés — le vôtre et ceux des proches ajoutés (conjoint, gardien, voisin…), même application fermée — avec un repli par e-mail si une notification se perd. Vous pouvez même répondre : le visiteur voit votre réponse. Et si vous préférez, les contacts directs (appel, SMS, WhatsApp, e-mail) avec message pré-rempli restent disponibles.',
     scenarios: [
-      ['Alerter un cercle de proches', 'Un QR pres de la porte d’un parent age ou isole : il tape « Sonner », et tous les proches ajoutes (vous, un frere, un voisin de confiance) sont prevenus par notification au meme moment. Un point d’appel partage et rassurant.'],
-      ['Portail ou accès sans interphone', 'Un QR sur le portail : le visiteur tape « Sonner », vous etes prevenu a l’instant sur votre telephone — meme appli fermee. Pas de cablage, pas de boitier, pas d’electricite.'],
-      ['Chantier ou lieu sans courant', 'Sur un acces de chantier, un depot, un local en travaux : client, livreur ou riverain vous joint d’un tap, et vous pouvez meme repondre depuis la notification.'],
-      ['Accueil quand c’est ferme', 'Boutique fermee, gite, cabinet : on sonne, l’equipe est prevenue ; sinon, contact direct (appel, SMS, WhatsApp) avec message pre-rempli.'],
+      ['Alerter un cercle de proches', 'Un QR près de la porte d’un parent âgé ou isolé : il tape « Sonner », et tous les proches ajoutés (vous, un frère, un voisin de confiance) sont prévenus par notification au même moment. Un point d’appel partagé et rassurant.'],
+      ['Portail ou accès sans interphone', 'Un QR sur le portail : le visiteur tape « Sonner », vous êtes prévenu à l’instant sur votre téléphone — même appli fermée. Pas de câblage, pas de boîtier, pas d’électricité.'],
+      ['Chantier ou lieu sans courant', 'Sur un accès de chantier, un dépôt, un local en travaux : client, livreur ou riverain vous joint d’un tap, et vous pouvez même répondre depuis la notification.'],
+      ['Accueil quand c’est fermé', 'Boutique fermée, gîte, cabinet : on sonne, l’équipe est prévenue ; sinon, contact direct (appel, SMS, WhatsApp) avec message pré-rempli.'],
     ],
     metiers: ['immobilier', 'hotellerie', 'artisans', 'commercants'],
     faq: [
-      ['Comment suis-je prevenu quand on sonne ?', 'Par notification push sur tous les appareils que vous avez abonnes — votre telephone, votre ordinateur, et ceux des proches que vous ajoutez — meme application fermee. Un e-mail de secours peut aussi etre envoye au cas ou une notification se perde.'],
-      ['Puis-je alerter plusieurs proches a la fois ?', 'Oui. Dans l’onglet Sonneries, vous ajoutez autant d’appareils que vous voulez (conjoint, gardien, voisin…) ; tous recoivent l’alerte quand on sonne, et chacun peut repondre.'],
-      ['Est-ce un dispositif d’urgence ou de teleassistance medicale ?', 'Non. C’est un systeme de notification (push, avec repli e-mail), tres pratique pour prevenir vite un cercle de proches — mais la reception n’est pas garantie comme une teleassistance medicale surveillee ; ne le presentez pas comme tel.'],
-      ['Faut-il de l’electricite ou une application cote visiteur ?', 'Non. Le visiteur scanne un QR imprime et tape « Sonner » depuis son propre telephone, sans rien installer.'],
+      ['Comment suis-je prévenu quand on sonne ?', 'Par notification push sur tous les appareils que vous avez abonnés — votre téléphone, votre ordinateur, et ceux des proches que vous ajoutez — même application fermée. Un e-mail de secours peut aussi être envoyé au cas où une notification se perde.'],
+      ['Puis-je alerter plusieurs proches à la fois ?', 'Oui. Dans l’onglet Sonneries, vous ajoutez autant d’appareils que vous voulez (conjoint, gardien, voisin…) ; tous reçoivent l’alerte quand on sonne, et chacun peut répondre.'],
+      ['Est-ce un dispositif d’urgence ou de téléassistance médicale ?', 'Non. C’est un système de notification (push, avec repli e-mail), très pratique pour prévenir vite un cercle de proches — mais la réception n’est pas garantie comme une téléassistance médicale surveillée ; ne le présentez pas comme tel.'],
+      ['Faut-il de l’électricité ou une application côté visiteur ?', 'Non. Le visiteur scanne un QR imprimé et tape « Sonner » depuis son propre téléphone, sans rien installer.'],
     ],
   },
   {
     slug: 'carte-fidelite', label: 'Carte de fidélité dématérialisée',
     h1a: 'La carte de fidélité,', h1b: 'sans la carte.',
-    title: 'Carte de fidelite par QR, sans support physique | Keystone OS',
-    desc: 'Une carte de fidelite dematerialisee : vos clients cumulent des tampons en scannant un QR, la recompense se debloque toute seule au Ne passage. Zero carte plastique a imprimer ni a perdre.',
-    intro: 'Les cartes a tampons en carton se perdent, s’oublient et coutent a imprimer. Le meme principe, en un QR : vos clients cumulent leurs passages sans rien sortir de leur poche.',
-    what: 'Vos clients scannent le QR a chaque passage ; les tampons se cumulent automatiquement, l’etat etant tenu cote serveur (pas sur un bout de carton). Au Ne tampon, la recompense se debloque avec un code a presenter en caisse. Vous fixez le nombre de tampons (de 3 a 30) et la duree de validite. Aucune carte physique, aucune application a installer.',
+    title: 'Carte de fidélité par QR, sans support physique | Keystone OS',
+    desc: 'Une carte de fidélité dématérialisée : vos clients cumulent des tampons en scannant un QR, la récompense se débloque toute seule une fois la carte pleine. Zéro carte plastique à imprimer ni à perdre.',
+    intro: 'Les cartes à tampons en carton se perdent, s’oublient et coûtent à imprimer. Le même principe, en un QR : vos clients cumulent leurs passages sans rien sortir de leur poche.',
+    what: 'Vos clients scannent le QR à chaque passage ; les tampons se cumulent automatiquement, l’état étant tenu côté serveur (pas sur un bout de carton). Quand le compte de tampons est atteint, la récompense se débloque avec un code à présenter en caisse. Vous fixez le nombre de tampons (de 3 à 30) et la durée de validité. Aucune carte physique, aucune application à installer.',
     scenarios: [
-      ['Cafés & restaurants', 'Le 10e cafe offert, la formule midi fidelite : le compteur tourne tout seul a chaque scan en caisse.'],
-      ['Boutiques & commerces', 'Recompensez les passages reguliers sans gerer un fichier ni imprimer des cartes a perdre.'],
-      ['Coiffure & beauté', 'La prestation offerte au bout de N visites, debloquee automatiquement, code en caisse.'],
-      ['Sport & loisirs', 'Recompensez l’assiduite : la seance offerte se debloque apres N venues scannees.'],
+      ['Cafés & restaurants', 'Le 10e café offert, la formule midi fidélité : le compteur tourne tout seul à chaque scan en caisse.'],
+      ['Boutiques & commerces', 'Récompensez les passages réguliers sans gérer un fichier ni imprimer des cartes à perdre.'],
+      ['Coiffure & beauté', 'La prestation offerte au bout de N visites, débloquée automatiquement, code en caisse.'],
+      ['Sport & loisirs', 'Récompensez l’assiduité : la séance offerte se débloque après N venues scannées.'],
     ],
     metiers: ['restaurants', 'commercants', 'beaute', 'sport'],
     faq: [
       ['Le client doit-il installer une application ?', 'Non. Il scanne le QR, c’est tout. Le cumul se fait automatiquement, sans compte ni appli.'],
-      ['Comment la recompense est-elle validee ?', 'Au Ne tampon, un code s’affiche cote client, a presenter ou saisir en caisse pour debloquer la recompense.'],
-      ['Combien de tampons puis-je demander ?', 'De 3 a 30, avec une duree de validite que vous fixez vous-meme.'],
+      ['Comment la récompense est-elle validée ?', 'Quand la carte est pleine, un code s’affiche sur le téléphone du client : il le présente ou le saisit en caisse pour débloquer sa récompense.'],
+      ['Combien de tampons puis-je demander ?', 'De 3 à 30, avec une durée de validité que vous fixez vous-même.'],
       ['Faut-il un site web ?', 'Non. Il suffit du QR : sur le comptoir, le ticket de caisse, la vitrine ou un flyer.'],
     ],
   },
   {
     slug: 'concierge', label: 'QR Concierge virtuel',
-    h1a: 'Un QR.', h1b: 'Un programme entier qui se présente et répond tout seul.',
-    title: 'QR Concierge virtuel — un programme qui se presente et repond, en marque blanche | Keystone OS',
-    desc: 'Un QR concierge white-label : page d’accueil a votre marque, cartes de comparaison et chat qui repond depuis un bloc de connaissance valide. 1 QR = 1 programme complet. Pense d’abord pour l’immobilier neuf.',
-    intro: 'Vos prospects veulent tout savoir, tout de suite, a toute heure. Le QR Concierge met un point d’information complet derriere un seul code, a votre marque.',
-    what: 'Derriere un seul QR : une page d’accueil a votre marque, des cartes de comparaison deterministes (lots, prestations, options…) et un chat qui repond UNIQUEMENT depuis un bloc de connaissance que vous avez valide — jamais d’invention. Pense d’abord pour les programmes immobiliers neufs (VEFA) : 1 QR = 1 programme complet, en marque blanche.',
+    h1a: 'Un QR.', h1b: 'Un lieu entier qui se présente et répond tout seul.',
+    title: 'QR Concierge virtuel — un lieu qui se présente et répond, en marque blanche | Keystone OS',
+    desc: 'Un QR concierge white-label : page d’accueil à votre marque, cartes de comparaison et chat qui répond depuis un bloc de connaissance validé. La logique : un QR = un lieu à présenter — programme immobilier, gîte, salle, showroom.',
+    intro: 'Vos prospects veulent tout savoir, tout de suite, à toute heure. Le QR Concierge met un point d’information complet derrière un seul code, à votre marque.',
+    what: 'Derrière un seul QR : une page d’accueil à votre marque, des cartes de comparaison déterministes (lots, prestations, options…) et un chat qui répond UNIQUEMENT depuis un bloc de connaissance que vous avez validé — jamais d’invention. La logique : un QR = un lieu à présenter, en marque blanche — un programme immobilier neuf, un gîte, une salle à louer, un showroom.',
     scenarios: [
-      ['Programme immobilier neuf', 'Un QR sur la bache de chantier ou la bulle de vente : le prospect compare les lots et pose ses questions, jour et nuit, sans mobiliser un commercial.'],
-      ['Bulle de vente & salons', 'Un point d’information autonome, a votre marque, qui complete l’equipe sans la remplacer.'],
-      ['Residences & lieux a presenter', 'Tout ce qu’il faut savoir sur un lieu, structure et a jour, derriere un seul code.'],
+      ['Programme immobilier neuf', 'Un QR sur la bâche de chantier ou la bulle de vente : le prospect compare les lots et pose ses questions, jour et nuit, sans mobiliser un commercial.'],
+      ['Bulle de vente & salons', 'Un point d’information autonome, à votre marque, qui complète l’équipe sans la remplacer.'],
+      ['Résidences & lieux à présenter', 'Tout ce qu’il faut savoir sur un lieu, structuré et à jour, derrière un seul code.'],
     ],
     metiers: ['immobilier', 'hotellerie'],
     faq: [
-      ['Le chat invente-t-il des reponses ?', 'Non. Il repond uniquement depuis le bloc de connaissance que vous avez valide. Hors de ce perimetre, il le dit plutot que d’inventer.'],
-      ['Pour quel secteur est-ce concu ?', 'D’abord pour l’immobilier neuf (VEFA) : un QR par programme. La logique « 1 QR = 1 lieu a presenter » s’etend a d’autres contextes.'],
-      ['Est-ce a ma marque ?', 'Oui, c’est du white-label : logo, couleurs et contenu sont les votres.'],
+      ['Le chat invente-t-il des réponses ?', 'Non. Il répond uniquement depuis le bloc de connaissance que vous avez validé. Hors de ce périmètre, il le dit plutôt que d’inventer.'],
+      ['Pour quel secteur est-ce conçu ?', 'Pour tous les secteurs : la logique est « un QR = un lieu à présenter ». Résidence, gîte, salle à louer, stand de salon, showroom… chaque lieu a sa page d’accueil, ses cartes de comparaison et son chat.'],
+      ['Est-ce à ma marque ?', 'Oui, c’est du white-label : logo, couleurs et contenu sont les vôtres.'],
     ],
   },
 ];
@@ -578,7 +578,7 @@ ${STYLE}
       <a class="btn btn-primary" href="/activate">Commencer ${ARROW}</a>
       <a class="btn btn-ghost" href="/#outils">Voir tous les outils</a>
     </div>
-    <p class="trust">Sans carte bancaire · vos donnees restent a vous, hebergees en Europe</p>
+    <p class="trust">Sans carte bancaire · vos données restent à vous, hébergées en Europe</p>
   </header>
 
   <section class="block" aria-labelledby="outils">
@@ -591,29 +591,29 @@ ${uses}
 
   <section class="block" aria-labelledby="exemple">
     <span class="eyebrow-l">Un exemple concret</span>
-    <h2 id="exemple">A quoi ca ressemble, en vrai</h2>
+    <h2 id="exemple">À quoi ça ressemble, en vrai</h2>
     <div class="scenario">${esc(v.scenario)}</div>
   </section>
 
   <section class="block" aria-labelledby="faq">
-    <span class="eyebrow-l">Bon a savoir</span>
-    <h2 id="faq">Questions frequentes</h2>
+    <span class="eyebrow-l">Bon à savoir</span>
+    <h2 id="faq">Questions fréquentes</h2>
     <div class="faq">
 ${v.faq.map(([q, a]) => `      <details><summary>${esc(q)}</summary><div class="a">${esc(a)}</div></details>`).join('\n')}
     </div>
   </section>
 
   <section class="block" aria-labelledby="autres">
-    <span class="eyebrow-l">Autres metiers</span>
-    <h2 id="autres">Keystone s'adapte aussi a…</h2>
+    <span class="eyebrow-l">Autres métiers</span>
+    <h2 id="autres">Keystone s'adapte aussi à…</h2>
     <div class="chips">
 ${others}
     </div>
   </section>
 
   <section class="band">
-    <h2>Pret a alleger votre quotidien ?</h2>
-    <p>Activez les outils utiles a votre metier dans un seul cockpit. Demarrez en quelques minutes, sans carte bancaire.</p>
+    <h2>Prêt à alléger votre quotidien ?</h2>
+    <p>Activez les outils utiles à votre métier dans un seul cockpit. Démarrez en quelques minutes, sans carte bancaire.</p>
     <a class="btn btn-primary" href="/activate">Commencer ${ARROW}</a>
   </section>
 
@@ -696,7 +696,7 @@ ${STYLE}
       <a class="btn btn-primary" href="/activate">Commencer ${ARROW}</a>
       <a class="btn btn-ghost" href="/outils/smart-qr">Découvrir Smart QR</a>
     </div>
-    <p class="trust">Sans carte bancaire · vos donnees restent a vous, hebergees en Europe</p>
+    <p class="trust">Sans carte bancaire · vos données restent à vous, hébergées en Europe</p>
   </header>
 
   <section class="block" aria-labelledby="cest">
@@ -714,16 +714,16 @@ ${scen}
   </section>
 
   <section class="block" aria-labelledby="faq">
-    <span class="eyebrow-l">Bon a savoir</span>
-    <h2 id="faq">Questions frequentes</h2>
+    <span class="eyebrow-l">Bon à savoir</span>
+    <h2 id="faq">Questions fréquentes</h2>
     <div class="faq">
 ${x.faq.map(([q, a]) => `      <details><summary>${esc(q)}</summary><div class="a">${esc(a)}</div></details>`).join('\n')}
     </div>
   </section>
 
   <section class="block" aria-labelledby="metiers">
-    <span class="eyebrow-l">Pour quels metiers</span>
-    <h2 id="metiers">Particulierement utile pour…</h2>
+    <span class="eyebrow-l">Pour quels métiers</span>
+    <h2 id="metiers">Particulièrement utile pour…</h2>
     <div class="chips">
 ${metiers}
     </div>
@@ -731,7 +731,7 @@ ${metiers}
 
   <section class="band">
     <h2>Envie d'essayer ?</h2>
-    <p>Cette experience fait partie de Smart QR, dans votre OS Keystone. Activez ce qu'il vous faut, demarrez en quelques minutes.</p>
+    <p>Cette expérience fait partie de Smart QR, dans votre OS Keystone. Activez ce qu'il vous faut, démarrez en quelques minutes.</p>
     <a class="btn btn-primary" href="/activate">Commencer ${ARROW}</a>
   </section>
 
