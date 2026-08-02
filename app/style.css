@@ -6857,6 +6857,33 @@ html.light-mode .artifact-raw { background: rgba(17,24,39,.05); color: rgba(17,2
     margin: 0 0 8px;
 }
 .ksfs-detail-block p:last-child { margin-bottom: 0; }
+/* Mise en forme riche (paragraphify) : puces « - » et **gras**.
+   Le carré de puce reprend la couleur de la catégorie (--ks-cat,
+   posée sur .ksfs-detail) ; repli indigo si absente. */
+.ksfs-detail-block .ksfs-rich {
+    list-style: none;
+    margin: 12px 0;
+    padding: 0;
+    display: grid;
+    gap: 9px;
+}
+.ksfs-detail-block .ksfs-rich li {
+    position: relative;
+    padding-left: 22px;
+    line-height: 1.65;
+}
+.ksfs-detail-block .ksfs-rich li::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 9px;
+    width: 6px;
+    height: 6px;
+    border-radius: 2px;
+    background: var(--ks-cat, #818cf8);
+}
+.ksfs-detail-block b { color: #fff; font-weight: 600; }
+html.light-mode .ksfs-detail-block b { color: #0f172a; }
 
 /* ── Également pour vous ──────────────────────────────────── */
 .ksfs-detail-related {

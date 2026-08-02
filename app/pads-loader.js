@@ -164,7 +164,11 @@ async function _refreshCatalogFromD1() {
     // `published` + `replacedBy` = VISIBILITÉ : le code local est canonique
     // (sinon un D1 obsolète qui garde published:true re-publie une app qu'on a
     // masquée localement — ex. VEFA Studio / Annonces Immo, 2026-06-20).
-    const UI_FIELDS_LOCAL_FIRST = ['icon', 'plan', 'lifetimePrice', 'price', 'timeSaved', 'title', 'subtitle', 'published', 'replacedBy'];
+    // + longDesc (2026-08-02) : les « À propos » des fiches K-Store sont
+    // désormais rédigés en dur dans pads-data.js au format riche de
+    // paragraphify (puces « - », **gras**) — une vieille version D1 saisie
+    // dans l'admin ne doit plus les écraser (cas Ghost Writer).
+    const UI_FIELDS_LOCAL_FIRST = ['icon', 'plan', 'lifetimePrice', 'price', 'timeSaved', 'title', 'subtitle', 'published', 'replacedBy', 'longDesc'];
     const byId = new Map();
     (_catalogCache?.tools || []).forEach(t => byId.set(t.id, t));
     remote.tools.forEach(t => {

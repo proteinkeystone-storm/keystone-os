@@ -1924,11 +1924,24 @@ function _renderKStoreAppDetail(appId) {
     const rgpdTitle = _isPlaceholderTitle(app.rgpdTitle) ? DEFAULT_RGPD_TITLE : app.rgpdTitle;
     const rgpdText  = app.rgpdText  || DEFAULT_RGPD_TEXT;
 
-    // Multi-paragraphe : on respecte les sauts de ligne saisis dans l'admin
-    const paragraphify = (s) => String(s)
-        .split(/\n\s*\n/)
-        .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
-        .join('');
+    // Multi-paragraphe + mise en forme légère (admin ou pads-data) :
+    // ligne vide = nouveau paragraphe, « - » en tête de ligne = puce,
+    // **gras** = <b>. Le texte est échappé AVANT transformation — le
+    // contenu vient d'une saisie admin/D1, rien ne s'injecte tel quel.
+    // Un bloc n'est rendu en liste que s'il est entièrement fait de
+    // puces (pas de mélange texte/puces dans un même bloc).
+    const paragraphify = (s) => {
+        const escT   = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const inline = (t) => escT(t).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+        return String(s).split(/\n\s*\n/).map(block => {
+            const lines = block.split('\n').filter(l => l.trim());
+            if (lines.length && lines.every(l => /^\s*-\s+/.test(l))) {
+                return `<ul class="ksfs-rich">${lines.map(l =>
+                    `<li>${inline(l.replace(/^\s*-\s+/, ''))}</li>`).join('')}</ul>`;
+            }
+            return `<p>${lines.map(inline).join('<br>')}</p>`;
+        }).join('');
+    };
 
     // ── Icône d'app : image uploadée (D1) sinon pictogramme de marque ──
     // On réutilise la palette + le glyph SVG de la card → plus de carré blanc vide.
@@ -1980,7 +1993,7 @@ function _renderKStoreAppDetail(appId) {
     const supportMailto  = `mailto:${SUPPORT_EMAIL}?subject=${supportSubject}&body=${supportBody}`;
 
     content.innerHTML = `
-        <div class="ksfs-detail">
+        <div class="ksfs-detail"${catColor ? ` style="--ks-cat:${catColor}"` : ''}>
             <button class="ksfs-detail-back" id="ksfs-detail-back" aria-label="Retour">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                      style="width:14px;height:14px"><polyline points="15 18 9 12 15 6"/></svg>

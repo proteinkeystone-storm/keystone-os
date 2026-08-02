@@ -75,10 +75,13 @@
       const wait = (ms) => new Promise(r => setTimeout(r, ms));
       frame.addEventListener('load', async () => {
         const doc = frame.contentDocument;
+        // ?app=O-XXX-000 : ouvre cette fiche (defaut Missive). Seule
+        // O-SEC-001 recoit des screenshots via le stub /api/catalog.
+        const appId = new URLSearchParams(location.search).get('app') || 'O-SEC-001';
         await wait(2500); // boot complet (pads, catalogue)
         doc.getElementById('kstore-catalog-btn')?.click();
         await wait(900);
-        doc.querySelector('[data-app-id="O-SEC-001"]')?.click();
+        doc.querySelector('[data-app-id="' + appId + '"]')?.click();
         await wait(600);
         // Les ids hx-* pointent vers le worker (404 en local) : on
         // rebranche vignettes ET visionneuse sur des WebP locaux.
