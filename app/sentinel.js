@@ -419,7 +419,7 @@ function _transparencyHTML(a, platform) {
     parts.push(`<div class="snt-transp-row">${icon('lock', 13)} <b>Gérés par l'hébergeur</b> (${_esc(PLATFORM_LABEL[platform] || 'plateforme')}) : en-têtes ${labels.join(', ')} — non réglables sans serveur dédié, exclus du score.</div>`);
   }
   const cond = a.cwv && a.cwv.conditions;
-  if (cond) parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Conditions de mesure vitesse</b> : ${cond === 'mobile-4g-cpu4x' ? 'mobile émulé, réseau 4G lente, CPU ×4 (comparable à PageSpeed)' : 'datacenter non bridé — chiffres plus favorables que le mobile réel'}.</div>`);
+  if (cond) parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Conditions de mesure vitesse</b> : ${cond === 'mobile-4g-cpu4x' ? 'mobile émulé, réseau 4G lente, CPU ×4 (comparable à PageSpeed)' : 'datacenter non bridé — chiffres plus favorables que le mobile réel'}${a.cwv && a.cwv.runs > 1 ? ` · médiane de ${a.cwv.runs} mesures` : ''}.</div>`);
   if (a.engine) parts.push(`<div class="snt-transp-row snt-dim">Moteur d'audit ${_esc(a.engine)}${a.created_at ? '' : ''} — les scores peuvent évoluer lors des révisions de méthode.</div>`);
   if (!parts.length) return '';
   return `<div class="snt-transp">${parts.join('')}</div>`;
@@ -1149,7 +1149,8 @@ function _exportPdf() {
     : (pTotal && pTotal > auditPages.length) ? `${auditPages.length} pages sur ${pTotal} détectées` : `${auditPages.length} pages`;
   const pagesNote = auditPages.length > 1 ? `<div class="sub2">Audit réalisé sur ${scopeTxt} : ${_esc(auditPages.map((x) => x.path).slice(0, 8).join(', '))}${auditPages.length > 8 ? '…' : ''}${(pTotal && pTotal > auditPages.length) ? ' — le score reflète cet échantillon.' : ''}</div>` : '';
   // S9 — transparence dans le rapport : conditions de mesure + version moteur.
-  const condTxt = (p.audit && p.audit.cwv && p.audit.cwv.conditions === 'mobile-4g-cpu4x') ? 'Vitesse mesurée en conditions mobiles émulées (4G lente, CPU ×4).' : ((p.audit && p.audit.cwv) ? 'Vitesse mesurée depuis un datacenter (non bridé) — plus favorable que le mobile réel.' : '');
+  const _cwvR = p.audit && p.audit.cwv && p.audit.cwv.runs > 1 ? ` Médiane de ${p.audit.cwv.runs} mesures.` : '';
+  const condTxt = (p.audit && p.audit.cwv && p.audit.cwv.conditions === 'mobile-4g-cpu4x') ? `Vitesse mesurée en conditions mobiles émulées (4G lente, CPU ×4).${_cwvR}` : ((p.audit && p.audit.cwv) ? `Vitesse mesurée depuis un datacenter (non bridé) — plus favorable que le mobile réel.${_cwvR}` : '');
   const engTxt = (p.audit && p.audit.engine) ? ` · moteur ${_esc(p.audit.engine)}` : '';
 
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Sentinel — ${_esc(p.name || 'Audit')}</title>

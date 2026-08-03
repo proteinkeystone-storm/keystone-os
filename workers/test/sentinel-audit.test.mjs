@@ -68,7 +68,10 @@ t('mas-home : H1 détecté, LodgingBusiness reconnu, findings = horaires + stagi
 for (const [page, seoAttendu] of [['arbousier', 93], ['escapades', 100], ['myrtes', 100], ['cypres', 100]]) {
   t(`mas-${page} : LodgingBusiness seul suffit, presence 85, seo ${seoAttendu}`, () => {
     const r = analyzePage(load(`wix-studio-mas-${page}`), { skipSite: true, sitemap: true, url: `https://lemasdesbouteillans.com/${page}` });
-    assert.deepEqual(keys(r), ['jsonld_url_mismatch', 'nap_hours']);   // staging présent sur les 5 pages (vérifié)
+    // S11.2 : l'arbousier (méta 1 c.) émet désormais meta_length — le point
+    // perdu a sa ligne d'explication (avant : score baissé en silence).
+    const attendu = page === 'arbousier' ? ['jsonld_url_mismatch', 'meta_length', 'nap_hours'] : ['jsonld_url_mismatch', 'nap_hours'];
+    assert.deepEqual(keys(r), attendu);
     assert.equal(r.scores.seo, seoAttendu);            // arbousier : méta de 1 caractère → 8 pts (défaut réel du site)
     assert.equal(r.scores.presence, 85);
     assert.equal(r.scores.accessibilite, 100);
@@ -80,7 +83,7 @@ for (const [page, seoAttendu] of [['arbousier', 93], ['escapades', 100], ['myrte
 // 100. Méta 166 caractères (les entités HTML comptent) → hors plage → seo 93.
 t('pks : ProfessionalService reconnu, presence 100, meta 166c → seo 93', () => {
   const r = analyzePage(load('static-vercel-pks'), { sitemap: true, url: 'https://protein-keystone.com/' });
-  assert.deepEqual(keys(r), []);
+  assert.deepEqual(keys(r), ['meta_length']);          // 166 c. — hors norme d'1 caractère, dit explicitement (S11.2)
   assert.equal(r.scores.presence, 100);
   assert.equal(r.scores.seo, 93);
   assert.equal(r.scores.accessibilite, 100);

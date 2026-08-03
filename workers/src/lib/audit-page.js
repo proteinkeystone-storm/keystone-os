@@ -316,6 +316,15 @@ export function analyzePage(html, opts = {}) {
   item('seo', 15, metaDesc ? true : (truncated ? null : false), metaDesc ? ((metaDesc.length >= 50 && metaDesc.length <= 165) ? 15 : 8) : 0,
     () => add('seo', 'high', 'meta_missing', 'Méta description absente', 'Rédigez 50-160 caractères qui donnent envie de cliquer.'));
   if (!metaDesc && truncated) undet('meta_missing');
+  // S11.2 — une méta HORS NORME perdait 7 points en silence : le score
+  // baissait sans qu'aucun finding ne l'explique (constaté sur le crawl
+  // complet du Mas : SEO 99 → 90 sans nouvelle ligne dans le rapport).
+  // Un point de score doit toujours avoir sa ligne d'explication.
+  if (metaDesc && (metaDesc.length < 50 || metaDesc.length > 165)) {
+    add('seo', 'low', 'meta_length',
+      metaDesc.length < 50 ? `Méta description trop courte (${metaDesc.length} c.)` : `Méta description trop longue (${metaDesc.length} c.)`,
+      'Visez 50-160 caractères : c\'est le texte qui donne envie de cliquer dans Google.');
+  }
   // H1 — préuve asymétrique : 1 trouvé = OK ; >1 trouvés = défaut avéré même
   // tronqué ; 0 trouvé sur tronqué = indéterminé (le bug d'origine : H1 à
   // 2,3 Mo, coupe à 500 Ko → « Aucun H1 » émis à tort sur 5 pages).

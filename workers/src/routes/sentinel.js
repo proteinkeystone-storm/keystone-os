@@ -45,7 +45,7 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S11.1';
+const SENTINEL_ENGINE_VERSION = 'S11.2';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -586,6 +586,7 @@ function _headSteps(platform) {
 function _wixFix(key, ctx) {
   let origin = ctx.url || ''; try { origin = new URL(ctx.url).origin; } catch (_) {}
   switch (key) {
+    case 'meta_length':
     case 'meta_missing': return { steps: [
       'Tableau de bord Wix › Marketing et SEO › « Outils SEO » (ou, dans l\'éditeur, ouvrez la page et cliquez l\'icône SEO).',
       'Section « Aperçu sur Google » › champ « Description » : rédigez 50 à 160 caractères qui donnent envie de cliquer.',
@@ -704,6 +705,7 @@ function _fixFor(key, ctx, f) {
   "priceRange": "€€"
 }
 </script>` };
+    case 'meta_length':
     case 'meta_missing': return {
       steps: ctx.platform === 'wordpress' ? ['Avec Yoast SEO ou Rank Math : ouvrez la page › encart SEO › « Méta description ».', 'Collez le texte ci-dessous (personnalisez-le), enregistrez.']
            : ctx.platform === 'wix' ? ['Wix : ouvrez la page › Réglages SEO (SEO de base) › « Description ».', 'Collez le texte ci-dessous, enregistrez et publiez.']
@@ -1006,8 +1008,6 @@ async function _measurePerf(env, url) {
     const page = await browser.newPage();
     try { await page.setViewport({ width: 390, height: 844, isMobile: true, deviceScaleFactor: 2 }); } catch (_) {}
     // S9/C14 — throttling type Lighthouse (Slow 4G + CPU ×4), best-effort.
-    // Sans lui, un LCP « 0,8 s » mesuré depuis un datacenter sur-promettait :
-    // le premier client qui croise PageSpeed voit 3 s et ne croit plus l'outil.
     // Les CONDITIONS réelles de mesure sont étiquetées dans cwv.conditions.
     let throttled = false;
     try {
@@ -1024,29 +1024,46 @@ async function _measurePerf(env, url) {
       try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__cwv.lcp = e.startTime; }).observe({ type: 'largest-contentful-paint', buffered: true }); } catch (e) {}
       try { new PerformanceObserver((l) => { for (const e of l.getEntries()) { if (!e.hadRecentInput) window.__cwv.cls += e.value; } }).observe({ type: 'layout-shift', buffered: true }); } catch (e) {}
     });
-    // S9/C15 — networkidle2 attrape les candidats LCP tardifs que le sleep
-    // fixe de 2,5 s manquait ; repli sur 'load' si la page ne s'apaise jamais.
-    try { await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 }); }
-    catch (_) { await page.goto(url, { waitUntil: 'load', timeout: 25000 }); }
-    await new Promise((r) => setTimeout(r, 1500));   // marge de stabilisation LCP/CLS
-    const m = await page.evaluate(() => {
-      const nav = performance.getEntriesByType('navigation')[0] || {};
-      const fcpE = performance.getEntriesByType('paint').find((p) => p.name === 'first-contentful-paint');
-      const res = performance.getEntriesByType('resource');
-      let weight = nav.transferSize || 0, count = 1;
-      for (const r of res) { weight += (r.transferSize || 0); count++; }
-      return {
-        lcp: Math.round((window.__cwv && window.__cwv.lcp) || 0),
-        cls: Math.round(((window.__cwv && window.__cwv.cls) || 0) * 1000) / 1000,
-        fcp: Math.round(fcpE ? fcpE.startTime : 0),
-        ttfb: Math.round(nav.responseStart || 0),
-        weightKb: Math.round(weight / 1024),
-        requests: count,
-      };
-    });
-    // C14 — traçabilité des conditions : le chiffre affiché dit COMMENT il a été mesuré.
-    m.conditions = throttled ? 'mobile-4g-cpu4x' : 'datacenter-non-throttle';
-    return m;
+
+    // S11.2 — MÉDIANE DE 3 CHARGEMENTS. Une mesure unique en headless
+    // throttlé varie de ±1 s d'un run à l'autre (constaté en prod : LCP
+    // 2,4 s puis 3,5 s à 8 min d'écart → global 94 → 84 sans que le site
+    // change). PageSpeed/WebPageTest font pareil : plusieurs passes, médiane.
+    const runs = [];
+    for (let i = 0; i < 3; i++) {
+      try {
+        try { await page.goto(url, { waitUntil: 'networkidle2', timeout: 15000 }); }
+        catch (_) { await page.goto(url, { waitUntil: 'load', timeout: 10000 }); }
+        await new Promise((r) => setTimeout(r, 1200));   // stabilisation LCP/CLS
+        const m = await page.evaluate(() => {
+          const nav = performance.getEntriesByType('navigation')[0] || {};
+          const fcpE = performance.getEntriesByType('paint').find((p) => p.name === 'first-contentful-paint');
+          const res = performance.getEntriesByType('resource');
+          let weight = nav.transferSize || 0, count = 1;
+          for (const r of res) { weight += (r.transferSize || 0); count++; }
+          return {
+            lcp: Math.round((window.__cwv && window.__cwv.lcp) || 0),
+            cls: Math.round(((window.__cwv && window.__cwv.cls) || 0) * 1000) / 1000,
+            fcp: Math.round(fcpE ? fcpE.startTime : 0),
+            ttfb: Math.round(nav.responseStart || 0),
+            weightKb: Math.round(weight / 1024),
+            requests: count,
+          };
+        });
+        if (m && m.lcp > 0) runs.push(m);
+        else if (m) runs.push(m);                        // LCP absent (page atypique) : garder quand même
+      } catch (_) { /* run raté → on continue avec les autres */ }
+    }
+    if (!runs.length) return null;
+    const med = (arr) => { const s = [...arr].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+    const cwv = {
+      lcp: med(runs.map((r) => r.lcp)), cls: med(runs.map((r) => r.cls)),
+      fcp: med(runs.map((r) => r.fcp)), ttfb: med(runs.map((r) => r.ttfb)),
+      weightKb: med(runs.map((r) => r.weightKb)), requests: med(runs.map((r) => r.requests)),
+      runs: runs.length,                                  // traçabilité : sur combien de passes
+      conditions: throttled ? 'mobile-4g-cpu4x' : 'datacenter-non-throttle',
+    };
+    return cwv;
   } catch (_) {
     return null;
   } finally {
