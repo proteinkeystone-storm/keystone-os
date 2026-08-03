@@ -347,4 +347,49 @@ t('S12 · axe n/a : aucune promesse dessus, renormalisation du reste', () => {
   assert.equal(f[0].gain, 5.6);
 });
 
-console.log(`\n${n} tests OK — moteur S8→S12 conforme à la vérité terrain des fixtures.`);
+// ═══ S13 — les attaques du réquisitoire deviennent des tests permanents ══
+// (règle : chaque attaque qui porte devient une fixture)
+
+t('S13 · ATTAQUE 1 rejouée — SPA : indéterminé, pas dix faux findings ni 40/100', () => {
+  const spa = '<html lang="fr"><head><title>Boutique Martin — artisan depuis 1950</title><meta name="description" content="Boutique artisanale à Lyon, créations uniques faites main depuis trois générations."></head><body><div id="root"></div><script src="/app.js"></script></body></html>';
+  const r = analyzePage(spa, { sitemap: true, url: 'https://boutique-martin.fr/' });
+  assert.equal(r.spaShell, true);
+  assert.deepEqual(keys(r), []);                       // l'ancien moteur : 10 findings
+  assert.ok(r.indeterminate.includes('h1') && r.indeterminate.includes('nap_phone'));
+  assert.notEqual(r.scores.presence, 0);               // null (n/a), plus jamais 0
+});
+t('S13 · ATTAQUE 2 rejouée — H1 commenté : plus de faux « 2 balises »', () => {
+  const html = '<html lang="fr"><head><title>Titre correct de page</title></head><body><h1>Vrai titre</h1><!-- ancien : <h1>Ancien titre</h1> --><p>' + 'contenu réel de la page. '.repeat(20) + '</p></body></html>';
+  const r = analyzePage(html, { url: 'https://x.fr/' });
+  assert.ok(!keys(r).includes('h1'), 'le H1 commenté ne compte plus');
+});
+t('S13 · corollaire — une méta UNIQUEMENT en commentaire ne crédite plus', () => {
+  const html = '<html lang="fr"><head><title>Titre correct de page</title><!-- <meta name="description" content="une description commentée assez longue pour passer le seuil de longueur"> --></head><body><h1>t</h1><p>' + 'x '.repeat(200) + '</p></body></html>';
+  const r = analyzePage(html, { url: 'https://x.fr/' });
+  assert.ok(keys(r).includes('meta_missing'));
+});
+t('S13 · ATTAQUE 3 rejouée — friterie de Namur : téléphone et adresse reconnus', () => {
+  const be = '<html lang="fr"><head><title>Friterie Chez Louise à Namur</title></head><body><h1>Chez Louise</h1><p>Tél : +32 81 22 33 44 · Rue de Fer 12, 5000 Namur. ' + 'Bienvenue chez nous. '.repeat(15) + '</p></body></html>';
+  const r = analyzePage(be, { url: 'https://chezlouise.be/' });
+  const k = keys(r);
+  assert.ok(!k.includes('nap_phone'), '+32 reconnu');
+  assert.ok(!k.includes('nap_address'), 'CP belge à 4 chiffres reconnu');
+  assert.equal(r.scores.presence, 65);                 // 30+35 ; fiche+horaires réellement absents
+});
+t('S13 · un <h1 dans une chaîne de script ne compte pas', () => {
+  const html = '<html lang="fr"><head><title>Titre correct de page</title></head><body><h1>t</h1><script>var tpl = "<h1>gabarit</h1>";</script><p>' + 'x '.repeat(200) + '</p></body></html>';
+  const r = analyzePage(html, { url: 'https://x.fr/' });
+  assert.ok(!keys(r).includes('h1'));
+});
+t('S13 · MANAGED_PLATFORMS : squarespace et shopify scopés comme wix', () => {
+  const r = analyzePage(load('wix-studio-mas-home'), { sitemap: true, headers: { 'strict-transport-security': 'x', 'x-content-type-options': 'nosniff' }, platform: 'shopify', url: 'https://lemasdesbouteillans.com/' });
+  assert.equal(r.scores.securite, 100);
+});
+t('S13 · non-régression : les fixtures Wix réelles sont INSENSIBLES au strip', () => {
+  const r = analyzePage(load('wix-studio-mas-home'), { sitemap: true, url: 'https://lemasdesbouteillans.com/' });
+  assert.deepEqual(keys(r), ['jsonld_url_mismatch', 'nap_hours']);   // identique à S10
+  assert.equal(r.scores.seo, 100);
+  assert.equal(r.spaShell, false);                     // 3,3 Mo de contenu ≠ coquille
+});
+
+console.log(`\n${n} tests OK — moteur S8→S13 conforme à la vérité terrain des fixtures.`);

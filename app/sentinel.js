@@ -411,7 +411,9 @@ const _INDET_LABEL = {
 function _transparencyHTML(a, platform) {
   if (!a) return '';
   const parts = [];
-  const ind = a.indeterminate || [];
+  const indAll = a.indeterminate || [];
+  if (indAll.includes('_spa')) parts.push(`<div class="snt-transp-row">${icon('alert-triangle', 13)} <b>Site en rendu client (JavaScript)</b> : le HTML source ne contient pas le contenu — les points non vérifiables sans rendu ne pénalisent pas le score. Google, lui, exécute le JavaScript.</div>`);
+  const ind = indAll.filter((k) => k !== '_spa');
   if (ind.length) parts.push(`<div class="snt-transp-row">${icon('search', 13)} <b>Non vérifiable</b> (page trop volumineuse pour une lecture complète) : ${ind.map((k) => _esc(_INDET_LABEL[k] || k)).join(', ')} — ces points ne pénalisent pas le score.</div>`);
   const na = a.notApplicable || [];
   if (na.length) {

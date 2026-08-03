@@ -1,6 +1,24 @@
 # 🛰️ SENTINEL — Ordres de reprise (nouvelle conversation)
 
-> ## ✅ S12.0 « PROMESSES TENUES » LIVRÉ (2026-08-04) — `engine:S12.0`, SW `v5.28.462`, 37 tests.
+> ## ✅ S13.0 « LIRE LE WEB TEL QU'IL EST » LIVRÉ (2026-08-04) — `engine:S13.0`, SW `v5.28.463`, 44 tests.
+> Ferme les attaques 1-2-3 du réquisitoire (rejouées telles quelles dans la suite — règle : une attaque qui
+> porte devient une fixture).
+> - **13.1 HTML « visible »** (`visibleHtml`) : commentaires + corps de <script>/<style> hors détections de
+>   contenu (H1/img/NAP/head) — un <h1> commenté comptait comme un vrai, une méta commentée créditait, un
+>   « <h1 » dans une chaîne JS comptait. Le JSON-LD garde le document brut (il VIT dans des <script>).
+>   Blocs non fermés (troncature) purgés. Fixtures Wix réelles : résultats identiques (non-régression testée).
+> - **13.2 Coquille SPA** : texte visible < 200 c. + marqueur framework (#root/#app/__next/__nuxt/reactroot/ng)
+>   → `spaShell`, TOUT « pas trouvé » devient indéterminé (gating `noProof` = tronqué OU SPA), marqueur `_spa`
+>   dans les indéterminés, ligne dédiée cockpit (« site en rendu client — Google exécute le JS »). Fini le
+>   40/100 + dix faux findings sur un site React sain.
+> - **13.3 NAP francophone** : +33/+32/+41/+352 (et 00xx), codes postaux 4-5 chiffres, « chaussée » ajouté.
+>   La friterie de Namur passe de présence 0 (4 faux findings) à 65 (les vrais manques restants).
+> - **13.4 Managé étendu** : `_probe` détecte squarespace/shopify → scoping en-têtes C8 appliqué (plus
+>   seulement Wix).
+> **RESTE DU RÉQUISITOIRE → S14 GEO** (triangulation Perplexity, lissage/alertes, contrôle « présence dans
+> les sources citées »).
+>
+> > ## ✅ S12.0 « PROMESSES TENUES » LIVRÉ (2026-08-04) — `engine:S12.0`, SW `v5.28.462`, 37 tests.
 > **Origine** : exercice de détracteur demandé par Stéphane — 6 attaques portées sur 8. Ce sprint ferme les 4
 > qui touchent aux promesses chiffrées ; S13 (parsing) et S14 (GEO) fermeront le reste. **Règle nouvelle actée :
 > chaque sprint se clôt par une passe adverse, chaque attaque qui porte devient une fixture.**

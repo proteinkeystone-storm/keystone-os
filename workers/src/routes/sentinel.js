@@ -45,7 +45,7 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S12.0';
+const SENTINEL_ENGINE_VERSION = 'S13.0';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -212,6 +212,8 @@ async function _probe(url) {
     let platform = 'custom';
     if (headerHint === 'wix' || html.includes('static.wixstatic.com') || html.includes('wix.com') || html.includes('_wixcssstate') || html.includes('wixbisession')) platform = 'wix';
     else if (html.includes('/wp-content/') || html.includes('/wp-json') || html.includes('wp-includes') || html.includes('content="wordpress')) platform = 'wordpress';
+    else if (html.includes('squarespace.com') || html.includes('content="squarespace')) platform = 'squarespace';   // S13.4 — managé : scoping en-têtes
+    else if (html.includes('cdn.shopify.com') || html.includes('shopify.theme') || html.includes('x-shopify')) platform = 'shopify';
     return { ok, status, ms, error: ok ? null : `HTTP ${status}`, platform };
   } catch (e) {
     return { ok: 0, status: 0, ms: Date.now() - t0, error: (e && e.name === 'AbortError') ? 'Délai dépassé' : (e && e.message || 'Inaccessible'), platform: 'unknown' };
@@ -322,6 +324,9 @@ async function _audit(url, opts = {}) {
 
   // Analyse pure (lib/audit-page.js) — testée sur fixtures réelles (S8).
   const a = analyzePage(html, { truncated, headers, skipSite: opts.skipSite, sitemap, url, platform: opts.platform });
+  // S13.2 — coquille SPA : marqueur dédié dans les indéterminés (persiste,
+  // le front l'affiche comme « site en rendu client », pas comme un défaut).
+  if (a.spaShell && !a.indeterminate.includes('_spa')) a.indeterminate.unshift('_spa');
   return { reachable, ...a, sitemap };
 }
 

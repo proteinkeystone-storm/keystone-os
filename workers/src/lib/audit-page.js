@@ -23,7 +23,7 @@ export const SEC_HEADERS = [
 // disait lui-même « non réglable sans serveur dédié »… en comptant -60).
 // Sur ces plateformes : en-tête exempté absent → « non applicable »,
 // l'axe se renormalise sur les en-têtes réellement contrôlables.
-export const MANAGED_PLATFORMS = new Set(['wix']);
+export const MANAGED_PLATFORMS = new Set(['wix', 'squarespace', 'shopify']);
 export const MANAGED_HEADER_EXEMPT = new Set(['CSP', 'X-Frame-Options', 'Referrer-Policy']);
 
 // S9/C7 — pondération FIXE du score global. L'ancienne moyenne à
@@ -268,6 +268,20 @@ export function extractJsonLd(html) {
   return { nodes, types };
 }
 
+
+// S13.1 — HTML « visible » : retire commentaires, <script> et <style> (y
+// compris un bloc final non fermé sur document tronqué). Les détections de
+// CONTENU (H1, images, NAP, balises head) travaillent là-dessus ; le
+// JSON-LD, lui, vit dans des <script> et garde le document brut.
+export function visibleHtml(html) {
+  return String(html || '')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<!--[^]*$/g, ' ')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, ' ')
+    .replace(/<script\b[^>]*>[^]*$/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, ' ');
+}
+
 // itemtype microdata → mêmes familles que le JSON-LD (fallback).
 function _microdataTypes(html) {
   const out = new Set();
@@ -290,7 +304,7 @@ function _microdataTypes(html) {
 //            indeterminate: [keys], truncated }
 // Un axe dont TOUS les points sont indéterminés vaut null (n/a).
 export function analyzePage(html, opts = {}) {
-  const truncated = !!opts.truncated;
+  const truncated = !!opts.truncated;   // noProof (S13) = truncated OU coquille SPA, défini plus bas
   const findings = [];
   const indeterminate = [];
   const add = (axis, sev, key, title, detail) => findings.push({ axis, sev, key, title, detail });
@@ -298,26 +312,42 @@ export function analyzePage(html, opts = {}) {
   // complet. Sur un tronqué → indéterminé (pas de finding, hors dénominateur).
   const undet = (key) => indeterminate.push(key);
 
-  // ── Détections (regex /i sur le document original — pas de copie lowercase,
-  //    5 pages sont analysées en parallèle dans le Worker : mémoire comptée) ──
-  const title = _between(html, /<title[^>]*>([\s\S]*?)<\/title>/i);
-  const metaDesc = _between(html, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)
-                || _between(html, /<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["']/i);
-  const h1 = (html.match(/<h1[\s>]/gi) || []).length;
+  // ── S13.1 · détections de CONTENU sur le HTML « VISIBLE » ────────────────
+  // (sans commentaires ni corps de script/style : un <h1> commenté comptait
+  // comme un vrai H1, un numéro dans du SVG inline comme un téléphone).
+  // Le JSON-LD, lui, vit DANS des <script> → extrait du document brut.
+  const vis = visibleHtml(html);
+
+  // ── S13.2 · coquille SPA (rendu client) ─────────────────────────────────
+  // Un site React/Vue livre un HTML quasi vide que le navigateur remplit.
+  // L'ancien moteur le notait 40/100 avec dix faux findings. Principe S8 :
+  // ce qu'on n'a pas PU voir est indéterminé, pas absent — Googlebot, lui,
+  // exécute le JavaScript.
+  const _visText = vis.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const spaShell = _visText.length < 200
+    && /id=["'](root|app|__next|__nuxt)["']|data-reactroot|ng-version|ng-app/i.test(html);
+  // « pas trouvé » n'est une absence que si on a pu lire le document ENTIER
+  // et RENDU ; tronqué OU coquille SPA → indéterminé.
+  const noProof = truncated || spaShell;
+
+  const title = _between(vis, /<title[^>]*>([\s\S]*?)<\/title>/i);
+  const metaDesc = _between(vis, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)
+                || _between(vis, /<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["']/i);
+  const h1 = (vis.match(/<h1[\s>]/gi) || []).length;
   // S10/C18 — le canonical se juge sur sa VALEUR, pas sa présence.
-  const canonicalHref = _between(html, /<link[^>]+rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)
-                     || _between(html, /<link[^>]+href=["']([^"']+)["'][^>]*rel=["']canonical["']/i);
-  const canonical = !!canonicalHref || /<link[^>]+rel=["']canonical["']/i.test(html);
-  const ogTitle = /<meta[^>]+property=["']og:title["']/i.test(html);
-  const ogImage = /<meta[^>]+property=["']og:image["']/i.test(html);
-  const viewport = /<meta[^>]+name=["']viewport["']/i.test(html);
-  const lang = /<html[^>]+lang=/i.test(html);
-  const imgs = (html.match(/<img\b/gi) || []).length;
-  const imgsAlt = (html.match(/<img\b[^>]*\balt=/gi) || []).length;
+  const canonicalHref = _between(vis, /<link[^>]+rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)
+                     || _between(vis, /<link[^>]+href=["']([^"']+)["'][^>]*rel=["']canonical["']/i);
+  const canonical = !!canonicalHref || /<link[^>]+rel=["']canonical["']/i.test(vis);
+  const ogTitle = /<meta[^>]+property=["']og:title["']/i.test(vis);
+  const ogImage = /<meta[^>]+property=["']og:image["']/i.test(vis);
+  const viewport = /<meta[^>]+name=["']viewport["']/i.test(vis);
+  const lang = /<html[^>]+lang=/i.test(vis);
+  const imgs = (vis.match(/<img\b/gi) || []).length;
+  const imgsAlt = (vis.match(/<img\b[^>]*\balt=/gi) || []).length;
   const imgsMissing = Math.max(0, imgs - imgsAlt);
 
   const ld = extractJsonLd(html);
-  const micro = _microdataTypes(html);
+  const micro = _microdataTypes(vis);
   const jsonld = ld.nodes.length > 0;
 
   // ── NAP structuré (S8/C5) — la donnée PARSÉE d'abord, les regex de texte
@@ -331,13 +361,16 @@ export function analyzePage(html, opts = {}) {
   const isLodging = [...ld.types].some((t) => LODGING_TYPES.has(t)) || [...micro].some((t) => LODGING_TYPES.has(t));
   const ldHours = ld.nodes.some((n) => n.openingHours || n.openingHoursSpecification)
     || (isLodging && ld.nodes.some((n) => n.checkinTime || n.checkoutTime))
-    || micro.has('OpeningHoursSpecification') || /itemprop=["']openingHours["']/i.test(html);
-  const napPhone = /href=["']tel:/i.test(html) || ldPhone
-    || /itemprop=["']telephone["']/i.test(html)
-    || /(?:\+33|0033)[\s.\-]?[1-9](?:[\s.\-]?\d{2}){4}/.test(html);   // +33 requis : le motif 0X.. matchait du SVG
-  const napAddress = ldAddress || /<address[\s>]/i.test(html)
-    // rue/avenue/… suivi d'un code postal dans le même nœud de texte (≤ 80 c.)
-    || /\b(?:rue|avenue|boulevard|impasse|chemin|all[ée]e|quai|route)\b[^<>]{0,80}\b\d{5}\b/i.test(html);
+    || micro.has('OpeningHoursSpecification') || /itemprop=["']openingHours["']/i.test(vis);
+  // S13.3 — francophonie, pas seulement la France : +33/+32/+41/+352 et
+  // codes postaux à 4 chiffres (BE/CH/LU). Une friterie de Namur avait
+  // présence 0/100 et quatre faux findings.
+  const napPhone = /href=["']tel:/i.test(vis) || ldPhone
+    || /itemprop=["']telephone["']/i.test(vis)
+    || /(?:\+|00)(?:33|32|41|352)[\s.\-/]?\d(?:[\s.\-/]?\d){5,10}/.test(vis);   // indicatif requis : le motif 0X.. matchait du SVG
+  const napAddress = ldAddress || /<address[\s>]/i.test(vis)
+    // rue/avenue/… suivi d'un code postal (4-5 chiffres) dans le même nœud de texte (≤ 80 c.)
+    || /\b(?:rue|avenue|boulevard|impasse|chemin|all[ée]e|quai|route|chauss[ée]e)\b[^<>]{0,80}\b\d{4,5}\b/i.test(vis);
   const napLocalBiz = [...ld.types].some((t) => LOCALBUSINESS_TYPES.has(t))
     || [...micro].some((t) => LOCALBUSINESS_TYPES.has(t));
   const napHours = ldHours;
@@ -363,9 +396,9 @@ export function analyzePage(html, opts = {}) {
   item('seo', 15, !!title, title ? ((title.length >= 10 && title.length <= 70) ? 15 : 8) : 0,
     () => add('seo', 'high', 'title_missing', 'Balise <title> absente', 'Le titre est le premier signal SEO.'));
   if (title && title.length > 70) add('seo', 'low', 'title_long', 'Balise title trop longue', `${title.length} caractères — visez 50-60.`);
-  item('seo', 15, metaDesc ? true : (truncated ? null : false), metaDesc ? ((metaDesc.length >= 50 && metaDesc.length <= 165) ? 15 : 8) : 0,
+  item('seo', 15, metaDesc ? true : (noProof ? null : false), metaDesc ? ((metaDesc.length >= 50 && metaDesc.length <= 165) ? 15 : 8) : 0,
     () => add('seo', 'high', 'meta_missing', 'Méta description absente', 'Rédigez 50-160 caractères qui donnent envie de cliquer.'));
-  if (!metaDesc && truncated) undet('meta_missing');
+  if (!metaDesc && noProof) undet('meta_missing');
   // S11.2 — une méta HORS NORME perdait 7 points en silence : le score
   // baissait sans qu'aucun finding ne l'explique (constaté sur le crawl
   // complet du Mas : SEO 99 → 90 sans nouvelle ligne dans le rapport).
@@ -378,24 +411,24 @@ export function analyzePage(html, opts = {}) {
   // H1 — préuve asymétrique : 1 trouvé = OK ; >1 trouvés = défaut avéré même
   // tronqué ; 0 trouvé sur tronqué = indéterminé (le bug d'origine : H1 à
   // 2,3 Mo, coupe à 500 Ko → « Aucun H1 » émis à tort sur 5 pages).
-  item('seo', 15, h1 === 1 ? true : (h1 > 1 ? false : (truncated ? null : false)), 15,
+  item('seo', 15, h1 === 1 ? true : (h1 > 1 ? false : (noProof ? null : false)), 15,
     () => add('seo', 'medium', 'h1', h1 === 0 ? 'Aucun <h1>' : `${h1} balises <h1>`, 'Une page = un seul titre H1.'));
-  if (h1 === 0 && truncated) undet('h1');
-  item('seo', 10, canonical ? true : (truncated ? null : false), 10,
+  if (h1 === 0 && noProof) undet('h1');
+  item('seo', 10, canonical ? true : (noProof ? null : false), 10,
     () => add('seo', 'low', 'canonical', 'Balise canonical absente', 'Évite le contenu dupliqué aux yeux de Google.'));
-  if (!canonical && truncated) undet('canonical');
-  item('seo', 10, viewport ? true : (truncated ? null : false), 10,
+  if (!canonical && noProof) undet('canonical');
+  item('seo', 10, viewport ? true : (noProof ? null : false), 10,
     () => add('seo', 'high', 'viewport', 'Pas de balise viewport', 'Indispensable pour le mobile.'));
-  if (!viewport && truncated) undet('viewport');
-  item('seo', 8, ogTitle ? true : (truncated ? null : false), 8,
+  if (!viewport && noProof) undet('viewport');
+  item('seo', 8, ogTitle ? true : (noProof ? null : false), 8,
     () => add('seo', 'low', 'og_title', 'Open Graph titre absent', 'Améliore l\'aperçu lors des partages.'));
-  if (!ogTitle && truncated) undet('og_title');
-  item('seo', 7, ogImage ? true : (truncated ? null : false), 7,
+  if (!ogTitle && noProof) undet('og_title');
+  item('seo', 7, ogImage ? true : (noProof ? null : false), 7,
     () => add('seo', 'low', 'og_image', 'Open Graph image absente', 'Une image d\'aperçu augmente les clics sur les réseaux.'));
-  if (!ogImage && truncated) undet('og_image');
-  item('seo', 10, jsonld ? true : (truncated ? null : false), 10,
+  if (!ogImage && noProof) undet('og_image');
+  item('seo', 10, jsonld ? true : (noProof ? null : false), 10,
     () => add('seo', 'medium', 'jsonld', 'Données structurées (Schema.org) absentes', 'Sans elles, les IA et Google comprennent mal votre activité.'));
-  if (!jsonld && truncated) undet('jsonld');
+  if (!jsonld && noProof) undet('jsonld');
   // Sitemap : contrôle réseau site-level, résultat toujours déterminé.
   item('seo', 10, !!opts.sitemap, 10,
     () => { if (!opts.skipSite) add('seo', 'low', 'sitemap', 'Sitemap introuvable', 'Aide les moteurs à explorer toutes vos pages.'); });
@@ -464,36 +497,36 @@ export function analyzePage(html, opts = {}) {
   }
 
   // ── Accessibilité (35 lang + 25 viewport + 40 alt = 100) ─────────────────
-  item('accessibilite', 35, lang ? true : (truncated ? null : false), 35,
+  item('accessibilite', 35, lang ? true : (noProof ? null : false), 35,
     () => add('accessibilite', 'low', 'lang', 'Langue de la page non déclarée', 'Ajoutez lang="fr" sur <html>.'));
-  if (!lang && truncated) undet('lang');
-  item('accessibilite', 25, viewport ? true : (truncated ? null : false), 25);
+  if (!lang && noProof) undet('lang');
+  item('accessibilite', 25, viewport ? true : (noProof ? null : false), 25);
   if (imgs > 0) {
     // Des alt manquants VUS sont un défaut avéré (même tronqué) ; un sans-faute
     // sur un buffer partiel ne prouve rien → indéterminé.
-    const altState = imgsMissing > 0 ? false : (truncated ? null : true);
+    const altState = imgsMissing > 0 ? false : (noProof ? null : true);
     item('accessibilite', 40, altState, Math.round(40 * imgsAlt / Math.max(1, imgs)),
       () => add('accessibilite', 'medium', 'img_alt', `${imgsMissing} image${imgsMissing > 1 ? 's' : ''} sans texte alternatif`, 'Le texte alt aide l\'accessibilité et le SEO images.'));
     if (imgsMissing > 0) { axes.accessibilite.earned += Math.round(40 * imgsAlt / imgs); }  // crédit partiel des alt présents
     if (altState === null) undet('img_alt');
   } else {
-    item('accessibilite', 40, truncated ? null : true, 40);   // « aucune image » ne se conclut pas d'un tronqué
-    if (truncated) undet('img_alt');
+    item('accessibilite', 40, noProof ? null : true, 40);   // « aucune image » ne se conclut pas d'un tronqué/SPA
+    if (noProof) undet('img_alt');
   }
 
   // ── Présence locale (30 tél + 35 adresse + 20 fiche + 15 horaires = 100) ──
-  item('presence', 30, napPhone ? true : (truncated ? null : false), 30,
+  item('presence', 30, napPhone ? true : (noProof ? null : false), 30,
     () => add('presence', 'low', 'nap_phone', 'Téléphone non détecté sur la page', 'Affichez un numéro cliquable (lien tel:) — clé pour les recherches locales et les IA.'));
-  if (!napPhone && truncated) undet('nap_phone');
-  item('presence', 35, napAddress ? true : (truncated ? null : false), 35,
+  if (!napPhone && noProof) undet('nap_phone');
+  item('presence', 35, napAddress ? true : (noProof ? null : false), 35,
     () => add('presence', 'low', 'nap_address', 'Adresse postale non structurée', 'Affichez votre adresse complète, idéalement en données structurées (PostalAddress).'));
-  if (!napAddress && truncated) undet('nap_address');
-  item('presence', 20, napLocalBiz ? true : (truncated ? null : false), 20,
+  if (!napAddress && noProof) undet('nap_address');
+  item('presence', 20, napLocalBiz ? true : (noProof ? null : false), 20,
     () => add('presence', 'medium', 'nap_localbiz', 'Fiche établissement (LocalBusiness) absente', 'Décrivez votre établissement en Schema.org LocalBusiness : nom, adresse, téléphone, horaires.'));
-  if (!napLocalBiz && truncated) undet('nap_localbiz');
+  if (!napLocalBiz && noProof) undet('nap_localbiz');
   // S10/C19 — le finding « horaires » parle la langue de l'entité : conseiller
   // openingHours à un gîte était un conseil faux pour toute la verticale.
-  item('presence', 15, napHours ? true : (truncated ? null : false), 15,
+  item('presence', 15, napHours ? true : (noProof ? null : false), 15,
     () => {
       if (isLodging) {
         findings.push({ axis: 'presence', sev: 'medium', key: 'nap_hours', entity: 'lodging',
@@ -503,7 +536,7 @@ export function analyzePage(html, opts = {}) {
         add('presence', 'medium', 'nap_hours', 'Horaires d\'ouverture non déclarés', 'Publiez vos horaires (openingHours) — repris par Google et les assistants IA.');
       }
     });
-  if (!napHours && truncated) undet('nap_hours');
+  if (!napHours && noProof) undet('nap_hours');
 
   // ── S10/C21 — indices GEO extraits du balisage (ville + activité) ────────
   // Tout était déjà là sur le Mas : addressLocality + @type LodgingBusiness.
@@ -528,7 +561,7 @@ export function analyzePage(html, opts = {}) {
 
   return {
     scores: { seo: norm('seo'), securite, accessibilite: norm('accessibilite'), presence: norm('presence') },
-    findings, indeterminate, notApplicable, truncated,
+    findings, indeterminate, notApplicable, truncated, spaShell,
     canonicalHost: canonicalHref ? _hostOfUrl(canonicalHref) : null,   // S10/C18 — cohérence inter-pages (agrégation)
     canonicalHrefHost: canonicalHref ? (() => { try { return new URL(canonicalHref).hostname.toLowerCase(); } catch (_) { return null; } })() : null,  // avec www — pour le check www/apex
     geoHints: { city: geoCity, activity: geoActivity },                // S10/C21 — pré-remplissage GEO
