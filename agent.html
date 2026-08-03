@@ -263,11 +263,14 @@
     }
 
     /* ── Mode embed (?embed=1) — la landing embarque la page dans un
-       téléphone et porte SA PROPRE barre de saisie (postMessage) : on
-       n'affiche que la conversation, header épuré. Opt-in par query,
-       zéro impact sur la page publique normale. ── */
-    .sa-embed .sa-composer { display: none; }
+       cadre et porte SA PROPRE barre de saisie (postMessage) : rendu v2
+       COMPLET (cartes, voix, thème) depuis 2026-08, seuls le composer et
+       la ligne RGPD (déjà énoncée par la landing) sont masqués. Opt-in
+       par query, zéro impact sur la page publique normale. ── */
+    .sa-embed .sa-composer { display: none; }      /* legacy, sans objet en v2 */
     .sa-embed .sa-head-tag { display: none; }
+    .sa-embed .sav2-composer { display: none; }
+    .sa-embed .sav2-rgpd { display: none; }
 
     /* ═══════════════════════════════════════════════════════════════
        MODE PUBLIC v2 (refonte 2026-06) — thème sombre, réponse unique.
@@ -457,7 +460,7 @@
       background: linear-gradient(135deg,#6f6cf0,#a8a6ff); }
   </style>
   <!-- Très tôt : thème sombre par défaut (public v2), ancien rendu clair pour l'embed. Évite le flash de fond. -->
-  <script>(function(){ var e = new URLSearchParams(location.search).has('embed'); document.documentElement.classList.add(e ? 'sa-embed' : 'sa-v2'); })();</script>
+  <script>(function(){ var e = new URLSearchParams(location.search).has('embed'); document.documentElement.classList.add('sa-v2'); if (e) document.documentElement.classList.add('sa-embed'); })();</script>
 </head>
 <body>
   <div id="sa-root">
@@ -487,11 +490,12 @@
     const IS_EMBED = new URLSearchParams(location.search).has('embed');
     if (IS_EMBED) document.documentElement.classList.add('sa-embed');
 
-    // Refonte 2026-06 : le public normal passe sur le design v2 (sombre,
-    // réponse unique). L'embed (landing) garde l'ancien rendu fil → vitrine
-    // intacte. NEW_UI ne change QUE le rendu ; la logique réseau / session /
-    // voix reste commune et inchangée.
-    const NEW_UI = !IS_EMBED;
+    // Refonte 2026-06 : design v2 (sombre, réponse unique) partout —
+    // l'embed (landing) y est passé aussi en 2026-08 : même rendu que la
+    // vraie page (cartes-photos comprises), composer masqué par CSS car la
+    // saisie vit dans la landing. NEW_UI ne change QUE le rendu ; la
+    // logique réseau / session / voix reste commune et inchangée.
+    const NEW_UI = true;
     // Démo (?preview=1) : montre le design v2 SANS worker (réponses simulées),
     // pour valider l'écran sur un vrai appareil. Opt-in, invisible aux visiteurs.
     const IS_PREVIEW = new URLSearchParams(location.search).has('preview');

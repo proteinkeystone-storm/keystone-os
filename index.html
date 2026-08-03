@@ -409,13 +409,16 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 .metier-card:hover span{transform:translateX(3px)}
 .tools-rise{transform-origin:center center}   /* zoom « depuis le fond » piloté au scroll (desktop) — voir JS */
 
-/* KEYSTONE AU QUOTIDIEN : téléphone + chat concierge */
-.daily-visual{display:flex; flex-direction:column; justify-content:center; align-items:center}
-.phone{width:280px; height:572px; border-radius:42px; padding:13px; position:relative;
+/* KEYSTONE AU QUOTIDIEN : fenêtre agent + chat concierge */
+.daily-visual{display:flex; flex-direction:column; justify-content:center; align-items:center; width:100%; min-width:0}
+/* Refonte 2026-08 : le gabarit iPhone (280px, texte écrasé) cède la place à
+   une fenêtre large — la vraie page v2 de l'agent (cartes-photos comprises)
+   s'y affiche à taille lisible. `.phone` garde son NOM : la parallaxe et la
+   file postMessage s'y accrochent. */
+.phone{width:min(440px,100%); height:clamp(540px,72vh,680px); border-radius:30px; padding:10px; position:relative;
   background:linear-gradient(165deg,#11162a,#05080f); border:1px solid var(--border-strong);
   box-shadow:0 60px 120px -50px rgba(0,0,0,.9), inset 0 0 0 1px rgba(255,255,255,.03), inset 0 1px 0 rgba(255,255,255,.08)}
-.phone::after{content:''; position:absolute; top:13px; left:50%; transform:translateX(-50%); width:118px; height:24px; background:#05080f; border-radius:0 0 16px 16px; z-index:3}
-.phone-screen{width:100%; height:100%; border-radius:30px; overflow:hidden; background:var(--bg); display:flex; flex-direction:column}
+.phone-screen{width:100%; height:100%; border-radius:22px; overflow:hidden; background:var(--bg); display:flex; flex-direction:column}
 /* Démo LIVE : la vraie page publique de l'agent embarquée dans le téléphone
    (mode ?embed = conversation seule). La saisie vit ICI, dans la colonne de
    gauche : la barre ci-dessous pilote l'agent par postMessage. */
@@ -451,7 +454,9 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 .msg.in{opacity:1; transform:none}
 .msg.user{align-self:flex-end; background:var(--accent); color:#0b1020; font-weight:500; border-bottom-right-radius:5px}
 .msg.bot{align-self:flex-start; background:var(--bg-3); color:var(--text); border:1px solid var(--border); border-bottom-left-radius:5px}
-@media (max-width:820px){ .phone{width:262px; height:544px} }
+/* Mobile/tablette (1 colonne) : la fenêtre prend la largeur de la colonne,
+   hauteur bornée pour laisser la barre de saisie visible sous elle. */
+@media (max-width:820px){ .phone{height:clamp(500px,68vh,620px)} }
 /* En etroit, le champ tombait a 195 px et rognait « Posez votre question… ».
    Boutons et gouttieres resserres : le champ repasse a 211 px et la phrase
    tient entiere. Le champ garde 16 px de corps — en dessous, iOS zoome
@@ -1202,7 +1207,7 @@ void main(){
       <span class="eyebrow">Smart Agent · la preuve, en direct</span>
       <h2 class="h2">Vos clients ont une question.<br>Votre agent IA répond. Sans vous.</h2>
       <p class="lead">Confiez votre savoir-faire au Smart Agent : il répond à vos clients par chat ou à la voix, derrière un simple lien ou un QR — et uniquement avec ce que vous lui avez appris, sans rien inventer.</p>
-      <p class="lead" style="margin-top:10px">Celui-ci, c'est le nôtre, <b>en direct</b>. Posez votre question ci-dessous — à l'écrit ou au micro — et regardez-le répondre dans le téléphone. Activez le haut-parleur pour l'entendre.</p>
+      <p class="lead" style="margin-top:10px">Celui-ci, c'est le nôtre, <b>en direct</b>. Posez votre question ci-dessous — à l'écrit ou au micro — ou touchez une des applications en haut de la fenêtre, et regardez-le répondre. Activez le haut-parleur pour l'entendre.</p>
       <p style="margin:14px 0 0;font-size:12.5px;color:rgba(220,225,240,.55)">Gratuit, sans compte — c'est lui qui vous répond, pas un script. Questions anonymes, effacées après 90&nbsp;jours.</p>
     </div>
     <div class="daily-visual">

@@ -55,7 +55,13 @@ const DOC_SECTIONS = [
   },
   {
     title: 'Les formules',
-    body: `<p>Votre formule détermine les outils accessibles : <strong>Démo</strong> (découverte), <strong>Starter</strong>, <strong>Pro</strong> et <strong>Max</strong> (accès complet). Le badge coloré d'un outil dans le K-Store indique la formule requise. Votre statut, votre clé et votre renouvellement sont dans la section <strong>« Ma Licence »</strong>.</p>`,
+    body: `<p>Trois façons d'utiliser Keystone :</p>
+    <ul>
+      <li><strong>Gratuit</strong> — trois applications complètes, sans limite de durée et sans carte bancaire : Missive, booK et Keynapse.</li>
+      <li><strong>À la carte</strong> — vous payez uniquement les applications qui vous servent, <strong>19, 49 ou 99 €</strong> par mois selon l'application. Plusieurs applications ? Leurs conversations s'additionnent.</li>
+      <li><strong>L'OS complet</strong> — <strong>129 €</strong> par mois : les 14 applications, nouveautés comprises.</li>
+    </ul>
+    <p>Le badge d'un outil dans le K-Store indique ce qu'il demande. Votre statut, vos applications et votre renouvellement sont dans la section <strong>« Ma Licence »</strong>.</p>`,
   },
   {
     title: 'Besoin d\'aide ?',
