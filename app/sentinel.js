@@ -1096,7 +1096,7 @@ function _exportPdf() {
   const sslTxt = p.ssl && p.ssl.valid ? 'Valide' : (p.ssl && p.ssl.https ? 'À vérifier' : 'HTTP');
   const kpi = (l, v, s, c) => `<td style="padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;vertical-align:top"><div style="font-size:11px;color:#64748b">${l}</div><div style="font-size:22px;font-weight:800;color:${c || '#0f172a'};margin-top:3px">${v}</div><div style="font-size:11px;color:#64748b;margin-top:3px">${s}</div></td>`;
   const kpis = `<table style="width:100%;border-collapse:separate;border-spacing:8px 0;margin:14px 0 4px"><tr>
-    ${kpi('Disponibilité · 30 j', up, p.uptimeTrend === 'down' ? 'en baisse' : (p.uptimeTrend === 'up' ? 'en hausse' : 'stable'))}
+    ${kpi(`Disponibilité · ${(p.uptimeWindowDays && p.uptimeWindowDays < 30) ? p.uptimeWindowDays + ' j' : '30 j'}`, up, p.uptimeTrend === 'down' ? 'en baisse' : (p.uptimeTrend === 'up' ? 'en hausse' : (p.uptimeTrend === 'stable' ? 'stable' : '—')))}
     ${kpi('Score global', `${g != null ? g : '—'}<span style="font-size:12px;color:#94a3b8">/100</span>`, scTrend, col(g))}
     ${kpi('Chargement (LCP)', lcpTxt, lcp == null ? 'relancer l\'audit' : (lcp <= 2500 ? 'bon' : 'à améliorer'))}
     ${kpi('Certificat SSL', sslTxt, p.ssl && p.ssl.valid ? 'vérifié à l\'instant' : '')}
