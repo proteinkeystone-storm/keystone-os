@@ -1,5 +1,30 @@
 # 🛰️ SENTINEL — Ordres de reprise (nouvelle conversation)
 
+> ## ✅ S9.0 « INTÉGRITÉ DU SCORE » LIVRÉ (2026-08-03) — `engine:S9.0`, commit `c933292`, SW `v5.28.458`.
+> **Principe** : chaque chiffre affiché est défendable — devant le client ET devant son prestataire.
+> - **C7** Pondération FIXE du global (`AXIS_WEIGHTS` : seo .25 / perf .20 / sécu .15 / a11y .15 / présence .15 / dispo .10),
+>   axe n/a → renormalisation (un n/a ne déplace plus le score). `globalScore()`/`perfScore()` extraits dans `lib/audit-page.js`.
+> - **C8** Sécurité scopée hébergeur : sur Wix, CSP/X-Frame-Options/Referrer-Policy = **non applicables**
+>   (champ `notApplicable`, colonne `not_applicable`) — l'axe se joue sur HSTS + X-Content-Type-Options. Mas : sécu 40 → 100.
+> - **C9** Le poids de page entre au score perf (15 %, seuils 2/6 Mo) — fin du « 100/100 + Page lourde ».
+> - **C14/C15** CWV **throttlés** best-effort (CDP : Slow 4G + CPU ×4) + `networkidle2` ; conditions étiquetées
+>   dans `cwv.conditions` (`mobile-4g-cpu4x` | `datacenter-non-throttle`) et affichées (cockpit + PDF).
+>   ⚠ CDP pas garanti sur Browser Rendering — 1er audit réel = smoke ; si non throttlé, le rapport le DIT.
+> - **C10** GEO non configuré (ni activité, ni ville, ni prompts perso) → **refus de scorer** (`GEO_NOT_CONFIGURED`,
+>   cron stoppé `next_geo_at=NULL` jusqu'à config). Fin du 0/100 sur « meilleur établissement ? » sans lieu.
+> - **C16** Libellé de confiance GEO : « N moteur(s) × M requêtes — indicatif si 1 seul moteur ».
+> - **C11-C13** Dispo : fenêtre RÉELLE (« sur N j » si historique < 30 j, `uptimeWindowDays`), couverture < 50 %
+>   des relevés attendus → « historique insuffisant » (axe n/a), tendance null sans 2×7 j de données (front : « — »).
+> - **Périmètre** : `_discoverPages` → `{urls, total}` + sélection priorisée (/contact, /nos-offres… puis
+>   diversité de gabarits par 1er segment d'URL) ; « X pages auditées sur N détectées » (cockpit + PDF, `pages_total`).
+> - **C23** Version moteur estampillée : colonne `engine` sur chaque audit, visible cockpit + pied de PDF.
+> - **Front** : bloc **transparence** (`_transparencyHTML` : non vérifiable / gérés par l'hébergeur / conditions
+>   de mesure / version) + libellés dispo dynamiques + fix de la phrase orpheline « FAQ ci-dessus » du bandeau.
+> - Tests : **19** (13 S8 + 6 S9) — `npm run test:sentinel`. Dry-run réel Mas : sécu 100, global **97-98** (vs 82 au départ).
+> **RESTE (prochains sprints)** : **S10 contrôles à valeur** (cohérence url/@id JSON-LD vs domaine — le check qui a
+> trouvé l'URL de staging du Mas ; canonical par valeur ; recos typées par entité ; sitemap non vide ; préremplissage
+> GEO depuis JSON-LD) puis **S11 couverture complète** (crawl asynchrone pattern sweepDue). Cf BRIEF §12.
+>
 > ## ✅ S8.0 « VÉRITÉ DU PARSING » LIVRÉ (2026-08-03) — version `91816085`, `engine:S8.0`, smokes 20 VERT.
 > **Origine** : rapport client Mas des Bouteillans (Wix Studio) = 5 faux négatifs — « Aucun H1 » ×5 pages
 > (coupe du HTML à 500 Ko, H1 Wix à ~2,3 Mo) et « LocalBusiness absent » ×4 (allowlist sans `LodgingBusiness`).
