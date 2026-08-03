@@ -45,7 +45,7 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S11.0';
+const SENTINEL_ENGINE_VERSION = 'S11.1';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -1408,6 +1408,15 @@ function _defaultGeoPrompts(activity, city) {
 }
 function _normalizePrompts(arr, activity, city) {
   let list = Array.isArray(arr) ? arr.map((s) => String(s || '').trim()).filter(Boolean) : [];
+  // S11.1 — purge des fallbacks GÉNÉRIQUES persistés : l'ancien code (S5)
+  // sauvegardait les prompts normalisés, donc « Quel est le meilleur
+  // établissement ? » (sans lieu ni activité) s'est retrouvé en base comme
+  // s'il était choisi par l'utilisateur — et gagnait ensuite sur la config
+  // ville/activité fraîchement remplie. Ces textes sont les nôtres, jamais
+  // une requête légitime : on les écarte, les défauts se régénèrent avec
+  // le contexte actuel.
+  const generic = new Set(_defaultGeoPrompts('', ''));
+  list = list.filter((s) => !generic.has(s));
   list = list.map((s) => s.slice(0, 200)).slice(0, GEO_MAX_PROMPTS);
   return list.length ? list : _defaultGeoPrompts(activity, city);
 }
