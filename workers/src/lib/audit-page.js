@@ -163,6 +163,56 @@ export function sitemapLooksValid(text) {
 export const SITE_LEVEL_KEYS = new Set(['sitemap', 'wix_subdomain', 'canonical_inconsistent',
   'sec_HSTS', 'sec_CSP', 'sec_X-Frame-Options', 'sec_X-Content-Type-Options', 'sec_Referrer-Policy']);
 
+// ═══ S12.1 — GAIN RÉEL par finding ════════════════════════════════════════
+// L'ancien « gain estimé » du front était une constante par sévérité
+// (high +5, medium +3, low +1) : le rapport promettait des points que la
+// correction ne rendait pas (les findings informatifs S10 pèsent ZÉRO au
+// barème). Règle : le gain affiché = delta EXACT du score global si le
+// point est corrigé, calculé depuis le barème et la pondération des axes.
+// [axe, points] — points du barème par page ; un finding peut créditer
+// plusieurs axes (viewport : SEO +10 ET a11y +25).
+export const FINDING_POINTS = {
+  title_missing: [['seo', 15]], meta_missing: [['seo', 15]], meta_length: [['seo', 7]],
+  h1: [['seo', 15]], canonical: [['seo', 10]], viewport: [['seo', 10], ['accessibilite', 25]],
+  og_title: [['seo', 8]], og_image: [['seo', 7]], jsonld: [['seo', 10]], sitemap: [['seo', 10]],
+  lang: [['accessibilite', 35]],
+  nap_phone: [['presence', 30]], nap_address: [['presence', 35]],
+  nap_localbiz: [['presence', 20]], nap_hours: [['presence', 15]],
+};
+// Informatifs : réels et importants, mais HORS barème — gain 0, dit tel quel.
+export const INFO_GAIN_KEYS = new Set(['jsonld_url_mismatch', 'canonical_mismatch', 'canonical_inconsistent', 'wix_subdomain', 'title_long']);
+// Variables : le gain dépend du résultat de l'optimisation (continu) — pas de promesse chiffrée.
+export const VARIABLE_GAIN_KEYS = new Set(['perf_lcp', 'perf_cls', 'perf_weight', 'img_alt']);
+
+// Mute les findings : f.gain = points de score global récupérables (1 déc.),
+// 0 (informatif) ou null (variable). `scores` = axes agrégés courants,
+// pageCount = pages auditées, notApplicable = clés sec_* exemptées (managé).
+export function attachGains(findings, { scores, pageCount, notApplicable }) {
+  const wsum = Object.entries(AXIS_WEIGHTS).reduce((a, [ax, w]) => a + (typeof (scores || {})[ax] === 'number' ? w : 0), 0) || 1;
+  const naCount = (notApplicable || []).length;
+  const n = Math.max(1, pageCount || 1);
+  for (const f of findings || []) {
+    if (INFO_GAIN_KEYS.has(f.key)) { f.gain = 0; continue; }
+    if (VARIABLE_GAIN_KEYS.has(f.key)) { f.gain = null; continue; }
+    let pts = FINDING_POINTS[f.key];
+    if (!pts && /^sec_/.test(f.key)) {
+      // Sécurité renormalisée : chaque en-tête exigible vaut 100/(5-naCount).
+      pts = [['securite', Math.round(100 / Math.max(1, 5 - naCount))]];
+    }
+    if (!pts) { f.gain = null; continue; }
+    const affected = (f.pages && f.pages.length) ? f.pages.length : n;   // site-level → toutes les pages
+    let gain = 0;
+    for (const [ax, p] of pts) {
+      const cur = (scores || {})[ax];
+      if (typeof cur !== 'number') continue;                             // axe n/a : pas de promesse dessus
+      const axisGain = Math.min(p * affected / n, 100 - cur);            // borné : un axe ne dépasse pas 100
+      gain += Math.max(0, axisGain) * (AXIS_WEIGHTS[ax] || 0) / wsum;
+    }
+    f.gain = Math.round(gain * 10) / 10;
+  }
+  return findings;
+}
+
 export function aggregatePages(pagesAudited) {
   const scores = {};
   for (const ax of ['seo', 'securite', 'accessibilite', 'presence']) {

@@ -368,3 +368,8 @@
 .snt-transp-row { display: flex; align-items: baseline; gap: 7px; font-size: 12.5px; color: var(--ws-text-soft, #94a3b8); line-height: 1.5; }
 .snt-transp-row b { color: var(--ws-text, #e2e8f0); font-weight: 600; }
 .snt-transp-row svg { flex: none; transform: translateY(1px); opacity: .7; }
+
+/* S12 — gain réel par finding + pastille couverture complète sur la vignette. */
+.snt-find-gain { font-size: 11px; font-weight: 700; color: #34d399; background: rgba(52,211,153,.12); border-radius: 20px; padding: 2px 8px; white-space: nowrap; }
+.snt-find-gain-0 { color: var(--ws-text-soft, #94a3b8); background: rgba(148,163,184,.10); font-weight: 600; }
+.snt-cov-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: currentColor; margin-left: 4px; vertical-align: 2px; opacity: .85; }

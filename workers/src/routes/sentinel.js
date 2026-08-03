@@ -43,9 +43,9 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 // S5 — GEO (visibilité IA) : clé du propriétaire via le coffre BYOK si dispo,
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
-import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages } from '../lib/audit-page.js';
+import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S11.2';
+const SENTINEL_ENGINE_VERSION = 'S12.0';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -153,6 +153,8 @@ async function _ensureSchema(env) {
   try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN not_applicable TEXT").run(); } catch (_) { /* déjà présent */ }
   try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN engine TEXT").run(); } catch (_) { /* déjà présent */ }
   try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN pages_total INTEGER").run(); } catch (_) { /* déjà présent */ }
+  // S12.2 — couverture du DERNIER score affiché sur la vignette (sample|full).
+  try { await env.DB.prepare("ALTER TABLE sentinel_sites ADD COLUMN last_coverage TEXT").run(); } catch (_) { /* déjà présent */ }
   // S11 — couverture de l'audit : 'sample' (express, 5 pages) | 'full' (crawl complet).
   try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN coverage TEXT").run(); } catch (_) { /* déjà présent */ }
   // S11 — crawl complet asynchrone : 1 job par site + file de pages (pattern sweepDue).
@@ -525,7 +527,8 @@ async function _finalizeCrawl(env, c) {
   const pages = pagesAudited.map((p) => ({ path: p.path, score: _globalScore({ ...p.scores }) }));
   const up = await _uptimeWindow(env, site.id);
   const dispo = up.pct == null ? null : Math.round(up.pct);
-  const cwv = await _measurePerf(env, site.url);
+  let cwv = await _measurePerf(env, site.url);
+  if (!cwv) cwv = await _lastCwv(env, site.id);      // S12.3 — repli étiqueté (stale_from)
   const perf = _perfScore(cwv);
   const scores = { disponibilite: dispo, performance: perf, ...agg.scores };
   const findings = agg.findings.slice();
@@ -537,11 +540,12 @@ async function _finalizeCrawl(env, c) {
   }
   _attachFixes(findings, { url: site.url, host: _hostOf(site.url), platform: site.platform });
   const global = _globalScore(scores);
+  attachGains(findings, { scores, pageCount: pagesAudited.length, notApplicable: agg.notApplicable });   // S12.1
   await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total, coverage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'full')")
     .bind(generateId(), c.tenant_id, site.id, global, JSON.stringify(scores), JSON.stringify(findings),
           cwv ? JSON.stringify(cwv) : null, JSON.stringify(pages), JSON.stringify(agg.indeterminate),
           JSON.stringify(agg.notApplicable), SENTINEL_ENGINE_VERSION, pagesAudited.length).run();
-  await env.DB.prepare("UPDATE sentinel_sites SET last_score = ?, last_scores = ?, last_audit_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
+  await env.DB.prepare("UPDATE sentinel_sites SET last_score = ?, last_scores = ?, last_coverage = 'full', last_audit_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
     .bind(global, JSON.stringify(scores), site.id).run();
   await env.DB.prepare("UPDATE sentinel_crawls SET status = 'done', finished_at = datetime('now') WHERE id = ?").bind(c.id).run();
 }
@@ -867,7 +871,7 @@ function _validEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e |
 function _reportEmail({ name, url, score, scores, findings, date, platform }) {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const sevLabel = { high: 'Priorité haute', medium: 'Priorité moyenne', low: 'À optimiser' };
-  const axisLabel = { disponibilite: 'Disponibilité', performance: 'Performance', seo: 'SEO technique', securite: 'Sécurité', accessibilite: 'Accessibilité', presence: 'Présence locale', geo: 'Visibilité IA (GEO)' };
+  const axisLabel = { disponibilite: 'Disponibilité', performance: 'Performance', seo: 'SEO technique', securite: 'Sécurité (en-têtes)', accessibilite: 'Accessibilité de base', presence: 'Présence locale', geo: 'Visibilité IA (GEO)' };
   const order = { high: 0, medium: 1, low: 2 };
   const sorted = [...(findings || [])].sort((a, b) => (order[a.sev] ?? 3) - (order[b.sev] ?? 3));
   const platTxt = PLAT_LABEL[platform] || platform || '';
@@ -926,7 +930,7 @@ export async function handleSitesList(request, env) {
   if (g.error) return g.error;
   const rows = (await env.DB.prepare(
     `SELECT id, url, label, platform, last_checked_at, last_ok, last_status, last_ms, consecutive_fails,
-            last_score, last_scores, last_audit_at, created_at
+            last_score, last_scores, last_audit_at, last_coverage, created_at
        FROM sentinel_sites WHERE tenant_id = ? ORDER BY created_at ASC`
   ).bind(g.tenant).all()).results || [];
   for (const s of rows) {
@@ -1071,11 +1075,21 @@ async function _measurePerf(env, url) {
   }
 }
 
+// S12.3 — derniere mesure CWV exploitable (≤ 7 j) : quand Browser Rendering
+// est indisponible (quota, panne), on réutilise la mesure récente ÉTIQUETÉE
+// plutôt que de laisser l'axe disparaître et le score global sauter de +10
+// en silence (renormalisation) — la plainte « 94 puis 84 » à l'envers.
+async function _lastCwv(env, siteId) {
+  const row = await env.DB.prepare("SELECT cwv, created_at FROM sentinel_audits WHERE site_id = ? AND cwv IS NOT NULL AND created_at >= datetime('now','-7 day') ORDER BY created_at DESC LIMIT 1").bind(siteId).first();
+  if (!row || !row.cwv) return null;
+  try { const c = JSON.parse(row.cwv); c.stale_from = row.created_at; return c; } catch (_) { return null; }
+}
+
 export async function handleSiteAudit(request, env, id) {
   const origin = getAllowedOrigin(env, request);
   const g = await _gate(request, env, origin);
   if (g.error) return g.error;
-  const site = await env.DB.prepare("SELECT id, url, label, platform FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  const site = await env.DB.prepare("SELECT id, url, label, platform, last_coverage, last_audit_at FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
   if (!site) return err('Site introuvable.', 404, origin);
 
   const a = await _auditSite(site.url, site.platform);   // V2 — crawl : home + pages internes, agrégé (S9 : plateforme → scoping sécurité)
@@ -1090,7 +1104,13 @@ export async function handleSiteAudit(request, env, id) {
   // S9/C11-C12 — axe dispo : fenêtre réelle + garde de couverture.
   const up = await _uptimeWindow(env, site.id);
   const dispo = up.pct == null ? null : Math.round(up.pct);
-  const cwv = await _measurePerf(env, site.url);   // perf (CWV) = home seule (coût borné)
+  let cwv = await _measurePerf(env, site.url);   // perf (CWV) = home seule (coût borné)
+  let scoreNote = null;
+  if (!cwv) {                                       // S12.3 — repli étiqueté, jamais de saut silencieux
+    cwv = await _lastCwv(env, site.id);
+    if (cwv) scoreNote = 'cwv-reprise';
+    else scoreNote = 'sans-axe-vitesse';
+  }
   const perf = _perfScore(cwv);                     // S9/C9 : poids de page inclus
   const scores = { disponibilite: dispo, performance: perf, ...a.scores };   // null = axe « n/a »
   const findings = a.findings.slice();
@@ -1102,6 +1122,8 @@ export async function handleSiteAudit(request, env, id) {
   }
   _attachFixes(findings, { url: site.url, host: _hostOf(site.url), platform: site.platform });
   const global = _globalScore(scores);              // S9/C7 : pondération fixe (lib)
+  // S12.1 — gain RÉEL par finding (delta exact de barème, jamais une constante).
+  attachGains(findings, { scores, pageCount: a.pageCount, notApplicable: a.notApplicable });
   const scoresJson = JSON.stringify(scores);
   const findingsJson = JSON.stringify(findings);
   const pagesJson = JSON.stringify(a.pages || []);
@@ -1111,8 +1133,16 @@ export async function handleSiteAudit(request, env, id) {
   // score bouge après une révision de méthode, l'historique doit le dire.
   await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total, coverage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sample')")
     .bind(generateId(), g.tenant, site.id, global, scoresJson, findingsJson, cwv ? JSON.stringify(cwv) : null, pagesJson, indetJson, naJson, SENTINEL_ENGINE_VERSION, a.pagesTotal || null).run();
-  await env.DB.prepare("UPDATE sentinel_sites SET last_score = ?, last_scores = ?, last_audit_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?")
-    .bind(global, scoresJson, site.id, g.tenant).run();
+  // S12.2 — un audit express (échantillon) n'écrase PAS le score d'un crawl
+  // complet récent (< 7 j) : sinon la vignette fait 84 → 94 en un clic sans
+  // que le site change (constaté le soir même du S11). L'express reste dans
+  // l'historique ; la vignette garde le chiffre au périmètre le plus vrai.
+  const keepFull = site.last_coverage === 'full' && site.last_audit_at
+    && (Date.now() - new Date(String(site.last_audit_at).replace(' ', 'T') + 'Z').getTime()) < 7 * 86400000;
+  if (!keepFull) {
+    await env.DB.prepare("UPDATE sentinel_sites SET last_score = ?, last_scores = ?, last_coverage = 'sample', last_audit_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?")
+      .bind(global, scoresJson, site.id, g.tenant).run();
+  }
 
   // S10/C21 — pré-remplissage GEO depuis le JSON-LD du site (ville + activité),
   // UNIQUEMENT si la config est vide : on n'écrase jamais un choix utilisateur.
@@ -1132,7 +1162,8 @@ export async function handleSiteAudit(request, env, id) {
 
   return json({ audit: { score: global, scores, findings, cwv, pages: a.pages, pagesTotal: a.pagesTotal || null,
     reachable: a.reachable, indeterminate: a.indeterminate || [], notApplicable: a.notApplicable || [],
-    truncated: !!a.truncated, engine: SENTINEL_ENGINE_VERSION,
+    truncated: !!a.truncated, engine: SENTINEL_ENGINE_VERSION, coverage: 'sample',
+    scoreNote, scoreKept: keepFull ? 'full-recent' : null,
     dispoWindow: { days: up.windowDays, n: up.n, insufficient: !!up.insufficient } } }, 200, origin);
 }
 
@@ -1187,7 +1218,9 @@ export async function handleSiteCockpit(request, env, id) {
   const scoreHistory = histRows.reverse().map((r) => { let sc = null; try { sc = r.scores ? JSON.parse(r.scores) : null; } catch (_) {} return { at: r.created_at, score: r.score, scores: sc }; });
   let scoreTrend = null;
   if (audit && audit.score != null) {
-    const prev = await env.DB.prepare("SELECT score FROM sentinel_audits WHERE site_id = ? AND created_at <= datetime('now','-7 day') ORDER BY created_at DESC LIMIT 1").bind(id).first();
+    // S12.2 — comparer à PÉRIMÈTRE ÉGAL : un 94 (échantillon) vs 84 (complet)
+    // n'est pas une tendance, c'est deux mesures différentes.
+    const prev = await env.DB.prepare("SELECT score FROM sentinel_audits WHERE site_id = ? AND created_at <= datetime('now','-7 day') AND COALESCE(coverage,'sample') = COALESCE(?, 'sample') ORDER BY created_at DESC LIMIT 1").bind(id, auditRow && auditRow.coverage).first();
     if (prev && prev.score != null) scoreTrend = audit.score - prev.score;
   }
 

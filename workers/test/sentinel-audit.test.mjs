@@ -305,4 +305,46 @@ t('S11 · aggregatePages : hôtes canoniques mélangés → canonical_inconsiste
   assert.ok(SITE_LEVEL_KEYS.has('canonical_inconsistent'));
 });
 
-console.log(`\n${n} tests OK — moteur S8+S9+S10+S11 conforme à la vérité terrain des fixtures.`);
+// ═══ S12.1 — gain RÉEL par finding (fin des +5/+3/+1 inventés) ═══════════
+import { attachGains } from '../src/lib/audit-page.js';
+
+t('S12 · finding informatif (staging) : gain 0 — l\'ancien front promettait +5', () => {
+  const f = [{ key: 'jsonld_url_mismatch', sev: 'high' }, { key: 'canonical_mismatch', sev: 'high' }, { key: 'title_long', sev: 'low' }];
+  attachGains(f, { scores: { seo: 90, securite: 100, accessibilite: 100, presence: 85, performance: 80, disponibilite: 100 }, pageCount: 5, notApplicable: [] });
+  for (const x of f) assert.equal(x.gain, 0, x.key);
+});
+t('S12 · gain = delta exact : nap_hours sur 5/5 pages d\'un site 6 axes', () => {
+  const f = [{ key: 'nap_hours', sev: 'medium', pages: ['/', '/a', '/b', '/c', '/d'] }];
+  const scores = { seo: 99, securite: 100, accessibilite: 100, presence: 85, performance: 80, disponibilite: 100 };
+  attachGains(f, { scores, pageCount: 5, notApplicable: [] });
+  // +15 pts d'axe présence sur toutes les pages × poids 0,15 = +2,25 → 2,3
+  assert.equal(f[0].gain, 2.3);
+});
+t('S12 · gain proportionnel aux pages touchées + borné à 100 d\'axe', () => {
+  const f = [{ key: 'meta_length', sev: 'low', pages: ['/a'] }];                   // 1 page sur 4
+  attachGains(f, { scores: { seo: 98, securite: 100, accessibilite: 100, presence: 100, performance: 100, disponibilite: 100 }, pageCount: 4, notApplicable: [] });
+  // 7 pts × 1/4 = 1,75 d'axe, mais l'axe est à 98 → borné à +2 d'axe → min(1.75, 2) = 1,75 × 0,25 = 0,4
+  assert.equal(f[0].gain, 0.4);
+  const f2 = [{ key: 'h1', sev: 'medium', pages: ['/a'] }];                        // 15 × 1/4 = 3,75 > borne 2
+  attachGains(f2, { scores: { seo: 98, securite: 100, accessibilite: 100, presence: 100, performance: 100, disponibilite: 100 }, pageCount: 4, notApplicable: [] });
+  assert.equal(f2[0].gain, 0.5);                                                   // borné : 2 × 0,25
+});
+t('S12 · sécurité renormalisée (Wix) : un en-tête vaut 50 pts d\'axe, pas 20', () => {
+  const f = [{ key: 'sec_HSTS', sev: 'medium' }];                                   // site-level (pas de pages)
+  attachGains(f, { scores: { seo: 100, securite: 50, accessibilite: 100, presence: 100, performance: 100, disponibilite: 100 }, pageCount: 5, notApplicable: ['sec_CSP', 'sec_X-Frame-Options', 'sec_Referrer-Policy'] });
+  // 100/(5-3) = 50 pts d'axe × 0,15 = 7,5
+  assert.equal(f[0].gain, 7.5);
+});
+t('S12 · perf et img_alt : gain « variable », jamais un chiffre promis', () => {
+  const f = [{ key: 'perf_weight', sev: 'low' }, { key: 'img_alt', sev: 'medium' }];
+  attachGains(f, { scores: { seo: 100, securite: 100, accessibilite: 90, presence: 100, performance: 60, disponibilite: 100 }, pageCount: 5, notApplicable: [] });
+  assert.equal(f[0].gain, null); assert.equal(f[1].gain, null);
+});
+t('S12 · axe n/a : aucune promesse dessus, renormalisation du reste', () => {
+  const f = [{ key: 'nap_phone', sev: 'low', pages: ['/'] }];
+  attachGains(f, { scores: { seo: 100, securite: 100, accessibilite: 100, presence: 70, performance: null, disponibilite: 100 }, pageCount: 1, notApplicable: [] });
+  // 30 pts × 0,15 / wsum 0,80 = 5,625 → 5,6
+  assert.equal(f[0].gain, 5.6);
+});
+
+console.log(`\n${n} tests OK — moteur S8→S12 conforme à la vérité terrain des fixtures.`);

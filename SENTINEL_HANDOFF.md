@@ -1,6 +1,26 @@
 # 🛰️ SENTINEL — Ordres de reprise (nouvelle conversation)
 
-> ## ✅ S11.2 « FIABILITÉ DES MESURES » LIVRÉ (2026-08-03) — `engine:S11.2`, SW `v5.28.461`, 31 tests.
+> ## ✅ S12.0 « PROMESSES TENUES » LIVRÉ (2026-08-04) — `engine:S12.0`, SW `v5.28.462`, 37 tests.
+> **Origine** : exercice de détracteur demandé par Stéphane — 6 attaques portées sur 8. Ce sprint ferme les 4
+> qui touchent aux promesses chiffrées ; S13 (parsing) et S14 (GEO) fermeront le reste. **Règle nouvelle actée :
+> chaque sprint se clôt par une passe adverse, chaque attaque qui porte devient une fixture.**
+> - **12.1 Gain RÉEL** : `FINDING_POINTS`/`attachGains` (lib, 6 tests) — le gain affiché = delta exact du
+>   barème pondéré (arrondi 0,1). Informatifs (staging, canonical…) → « hors score · impact externe » ;
+>   perf/img_alt → « gain variable ». Fini les +5/+3/+1 cosmétiques qui promettaient des points intenables.
+>   En-tête : « gain au score : jusqu'à +X pts » (somme = plafond). Anciens audits sans f.gain → pas de chiffre.
+> - **12.2 Fin du yo-yo** : colonne `last_coverage` ; un express n'écrase pas un score « complet » < 7 j
+>   (`scoreKept:'full-recent'` dans la réponse) ; badge de périmètre sur la vignette (point ·) ET sous le
+>   score du cockpit (« échantillon » / « couverture complète ») ; **tendance à périmètre égal** (COALESCE coverage).
+> - **12.3 Perf indisponible** : `_lastCwv` — réutilisation de la mesure ≤ 7 j étiquetée (`cwv.stale_from`,
+>   affichée cockpit + PDF) ; sinon axe n/a + mention « score calculé sans l'axe vitesse — non comparable ».
+>   Fini le +10 silencieux par renormalisation quand le quota Browser Rendering meurt.
+> - **12.4 Axes honnêtes** : « Sécurité (en-têtes) », « Accessibilité de base » (front, radar, PDF, e-mail) ;
+>   **pondérations imprimées** dans le pied de PDF (25/20/15/15/15/10, axe non mesuré retiré du calcul).
+> **RESTE DU RÉQUISITOIRE → S13** (commentaires HTML comptés, SPA notée 40 au lieu d'indéterminée, NAP
+> mono-France, scoping managé limité à Wix, fixtures hostiles) **et S14** (GEO : triangulation Perplexity,
+> lissage/alertes, contrôle « présence dans les sources citées » — le vrai remède, cf. leçon Perplexity du 03/08).
+>
+> > ## ✅ S11.2 « FIABILITÉ DES MESURES » LIVRÉ (2026-08-03) — `engine:S11.2`, SW `v5.28.461`, 31 tests.
 > **Déclencheur** : retour Stéphane — 94 puis 84 à 8 min d'écart sans toucher au site. Décomposition sur les
 > deux rapports réels : ~3 pts = échantillon 5/11 vs couverture 11/11 (information vraie, déjà libellée) ;
 > ~7 pts = variance d'une mesure CWV UNIQUE (LCP 2,4 s → 3,5 s d'un run à l'autre en headless throttlé).

@@ -27,8 +27,8 @@ const AXES = [
   { k: 'disponibilite', label: 'Disponibilité' },
   { k: 'performance',   label: 'Performance' },
   { k: 'seo',           label: 'SEO technique' },
-  { k: 'securite',      label: 'Sécurité' },
-  { k: 'accessibilite', label: 'Accessibilité' },
+  { k: 'securite',      label: 'Sécurité (en-têtes)' },
+  { k: 'accessibilite', label: 'Accessibilité de base' },
   { k: 'presence',      label: 'Présence locale' },
   { k: 'keywords',      label: 'Mots-clés' },   // V2 — Search Console (positions Google réelles)
 ];
@@ -242,7 +242,7 @@ function _siteCard(s) {
       <div class="snt-card-top">
         <span class="snt-dot ${st.cls}"></span>
         <span class="snt-host">${_esc(s.label || host)}</span>
-        ${s.last_score != null ? `<button class="snt-score ${_scoreClass(s.last_score)}" data-act="score" data-id="${id}" title="Voir le dernier audit">${s.last_score}</button>` : ''}
+        ${s.last_score != null ? `<button class="snt-score ${_scoreClass(s.last_score)}" data-act="score" data-id="${id}" title="${s.last_coverage === 'full' ? 'Score sur couverture complète' : 'Score sur échantillon de pages'}">${s.last_score}${s.last_coverage === 'full' ? '<i class="snt-cov-dot" aria-hidden="true"></i>' : ''}</button>` : ''}
         <button class="snt-icon" data-act="follow" data-id="${id}" aria-label="${followed ? 'Ne plus suivre' : 'Suivre sur le tableau de bord'}" title="${followed ? 'Ne plus suivre sur le tableau de bord' : 'Suivre sur le tableau de bord'}"${followed ? ' style="color:#6c6cf5"' : ''}>${icon('pin', 16)}</button>
         <button class="snt-icon" data-act="del" data-id="${id}" aria-label="Retirer ce site" title="Retirer">${icon('trash-2', 16)}</button>
       </div>
@@ -420,7 +420,9 @@ function _transparencyHTML(a, platform) {
   }
   const cond = a.cwv && a.cwv.conditions;
   if (cond) parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Conditions de mesure vitesse</b> : ${cond === 'mobile-4g-cpu4x' ? 'mobile émulé, réseau 4G lente, CPU ×4 (comparable à PageSpeed)' : 'datacenter non bridé — chiffres plus favorables que le mobile réel'}${a.cwv && a.cwv.runs > 1 ? ` · médiane de ${a.cwv.runs} mesures` : ''}.</div>`);
-  if (a.engine) parts.push(`<div class="snt-transp-row snt-dim">Moteur d'audit ${_esc(a.engine)}${a.created_at ? '' : ''} — les scores peuvent évoluer lors des révisions de méthode.</div>`);
+  if (a.cwv && a.cwv.stale_from) parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Vitesse</b> : mesure du jour indisponible — reprise de celle du ${_esc(new Date(String(a.cwv.stale_from).replace(' ', 'T') + 'Z').toLocaleDateString('fr-FR'))}.</div>`);
+  if (!a.cwv && a.scores && a.scores.performance == null) parts.push(`<div class="snt-transp-row">${icon('alert-triangle', 13)} <b>Score calculé sans l'axe vitesse</b> (mesure indisponible) — il n'est pas comparable à un score qui l'inclut.</div>`);
+  if (a.engine) parts.push(`<div class="snt-transp-row snt-dim">Moteur d'audit ${_esc(a.engine)} — les scores peuvent évoluer lors des révisions de méthode.</div>`);
   if (!parts.length) return '';
   return `<div class="snt-transp">${parts.join('')}</div>`;
 }
@@ -429,9 +431,12 @@ function _findingsHTML(list, platform) {
   if (!list || !list.length) return `<div class="snt-okmsg">${icon('check', 16)} Aucun problème détecté sur les axes audités.</div>`;
   const order = { high: 0, medium: 1, low: 2 };
   const sorted = [...list].sort((a, b) => (order[a.sev] ?? 3) - (order[b.sev] ?? 3));
-  const totalGain = sorted.reduce((s, f) => s + ((_SEV_PRIO[f.sev] || {}).gain || 0), 0);
+  // S12.1 — gain RÉEL (f.gain, calculé au barème par le worker). Audits
+  // antérieurs sans f.gain → pas de chiffre (plutôt rien qu'un chiffre faux).
+  const hasGains = sorted.some((f) => f.gain !== undefined);
+  const totalGain = hasGains ? Math.round(sorted.reduce((s, f) => s + (typeof f.gain === 'number' ? f.gain : 0), 0) * 10) / 10 : null;
   const platLabel = PLATFORM_LABEL[platform] || '';
-  const head = `<div class="snt-find-h"><span>À corriger en priorité — solutions clé en main</span><span class="snt-find-sum">${sorted.length} action${sorted.length > 1 ? 's' : ''} · gain estimé +${totalGain} pts</span></div>`;
+  const head = `<div class="snt-find-h"><span>À corriger en priorité — solutions clé en main</span><span class="snt-find-sum">${sorted.length} action${sorted.length > 1 ? 's' : ''}${totalGain ? ` · gain au score : jusqu'à +${String(totalGain).replace('.', ',')} pts` : ''}</span></div>`;
   return head + `<div class="snt-finds">` + sorted.map((f, i) => {
     const prio = _SEV_PRIO[f.sev] || _SEV_PRIO.low;
     const fix = f.fix;
@@ -445,7 +450,7 @@ function _findingsHTML(list, platform) {
       <summary>
         <span class="snt-find-ic">${icon(_AXIS_ICON[f.axis] || 'alert-triangle', 16)}</span>
         <span class="snt-find-t">${_esc(f.title)}</span>
-        ${tag}<span class="snt-prio ${prio.cls}">${prio.label}</span>
+        ${tag}${f.gain !== undefined ? (typeof f.gain === 'number' && f.gain > 0 ? `<span class="snt-find-gain">+${String(f.gain).replace('.', ',')} pt${f.gain >= 2 ? 's' : ''}</span>` : (f.gain === 0 ? `<span class="snt-find-gain snt-find-gain-0">hors score · impact externe</span>` : `<span class="snt-find-gain snt-find-gain-0">gain variable</span>`)) : ''}<span class="snt-prio ${prio.cls}">${prio.label}</span>
         <span class="snt-find-chev">${icon('chevron-down', 16)}</span>
       </summary>
       ${f.detail ? `<div class="snt-find-d">${_esc(f.detail)}</div>` : ''}
@@ -573,7 +578,8 @@ function _kpiCardsHTML(c) {
   const upTrend = c.uptimeTrend === 'up' ? '↑ en hausse' : (c.uptimeTrend === 'down' ? '↓ en baisse' : (c.uptimeTrend === 'stable' ? 'stable' : '—'));
   const upWin = (c.uptimeWindowDays && c.uptimeWindowDays < 30) ? `${c.uptimeWindowDays} j` : '30 j';
   const st = c.scoreTrend;
-  const scoreTrendTxt = (st == null) ? 'première mesure' : (st > 0 ? `↑ +${st} cette semaine` : (st < 0 ? `↓ ${st} cette semaine` : 'stable'));
+  const covTxt = (c.audit && c.audit.coverage === 'full') ? 'couverture complète' : (c.audit && c.audit.coverage ? 'échantillon' : '');
+  const scoreTrendTxt = ((st == null) ? 'première mesure' : (st > 0 ? `↑ +${st} cette semaine` : (st < 0 ? `↓ ${st} cette semaine` : 'stable'))) + (covTxt ? ` · ${covTxt}` : '');
   const sslSub = c.ssl ? (c.ssl.valid ? 'vérifié à l\'instant' : (c.ssl.https ? 'à vérifier' : 'non sécurisé (HTTP)')) : '—';
   return `<div class="snt-kpis">
     <div class="snt-kpi"><div class="snt-kpi-l">Disponibilité · ${upWin}</div><div class="snt-kpi-v">${upTxt}</div><div class="snt-kpi-t">${upTrend}</div></div>
@@ -587,7 +593,7 @@ function _kpiCardsHTML(c) {
 function _radarSVG(scores, geoScore, gscScore) {
   const axes = [
     ['Performance', scores.performance], ['SEO technique', scores.seo], ['Mots-clés', (gscScore != null ? gscScore : null)],
-    ['Visibilité IA', geoScore], ['Présence locale', scores.presence], ['Sécurité', scores.securite], ['Accessibilité', scores.accessibilite],
+    ['Visibilité IA', geoScore], ['Présence locale', scores.presence], ['Sécurité en-têtes', scores.securite], ['Accessibilité base', scores.accessibilite],
   ];
   const N = axes.length, W = 520, H = 380, cx = 260, cy = 188, R = 122, OBJ = 85;
   const ang = (i) => (-Math.PI / 2) + i * (2 * Math.PI / N);
@@ -644,7 +650,7 @@ function _fmtDay(at) {
 }
 const _HIST_AXES = [
   { key: 'performance', label: 'Performance' }, { key: 'seo', label: 'SEO technique' },
-  { key: 'securite', label: 'Sécurité' }, { key: 'accessibilite', label: 'Accessibilité' },
+  { key: 'securite', label: 'Sécurité (en-têtes)' }, { key: 'accessibilite', label: 'Accessibilité de base' },
   { key: 'presence', label: 'Présence locale' },
 ];
 // Mini-graphe gradué (repère 50) d'une jauge dans le temps.
@@ -1104,7 +1110,7 @@ function _exportPdf() {
 
   // ── Profil (axes + mini-barres) ──
   const RADAR_AXES = [
-    ['Performance', scores.performance], ['SEO technique', scores.seo], ['Sécurité', scores.securite],
+    ['Performance', scores.performance], ['SEO technique', scores.seo], ['Sécurité (en-têtes)', scores.securite],
     ['Accessibilité', scores.accessibilite], ['Présence locale', scores.presence],
     ['Mots-clés (Google)', (p.gsc && p.gsc.connected && p.gsc.score != null) ? p.gsc.score : null],
     ['Visibilité IA (GEO)', (p.geo && p.geo.score != null) ? p.geo.score : null], ['Disponibilité', p.uptime30d != null ? Math.round(p.uptime30d) : scores.disponibilite],
@@ -1131,7 +1137,10 @@ function _exportPdf() {
   // ── À corriger en priorité ──
   const order = { high: 0, medium: 1, low: 2 };
   const sorted = [...(p.findings || [])].sort((a, b) => (order[a.sev] ?? 3) - (order[b.sev] ?? 3));
-  const totalGain = sorted.reduce((s, f) => s + ((_SEV_PRIO[f.sev] || {}).gain || 0), 0);
+  // S12.1 — gain RÉEL (f.gain, calculé au barème par le worker). Audits
+  // antérieurs sans f.gain → pas de chiffre (plutôt rien qu'un chiffre faux).
+  const hasGains = sorted.some((f) => f.gain !== undefined);
+  const totalGain = hasGains ? Math.round(sorted.reduce((s, f) => s + (typeof f.gain === 'number' ? f.gain : 0), 0) * 10) / 10 : null;
   const finds = sorted.map((f) => {
     const prio = _SEV_PRIO[f.sev] || _SEV_PRIO.low;
     const pc = f.sev === 'high' ? '#dc2626' : (f.sev === 'medium' ? '#d97706' : '#64748b');
@@ -1150,6 +1159,8 @@ function _exportPdf() {
   const pagesNote = auditPages.length > 1 ? `<div class="sub2">Audit réalisé sur ${scopeTxt} : ${_esc(auditPages.map((x) => x.path).slice(0, 8).join(', '))}${auditPages.length > 8 ? '…' : ''}${(pTotal && pTotal > auditPages.length) ? ' — le score reflète cet échantillon.' : ''}</div>` : '';
   // S9 — transparence dans le rapport : conditions de mesure + version moteur.
   const _cwvR = p.audit && p.audit.cwv && p.audit.cwv.runs > 1 ? ` Médiane de ${p.audit.cwv.runs} mesures.` : '';
+  const staleTxt = (p.audit && p.audit.cwv && p.audit.cwv.stale_from) ? ` Vitesse : reprise de la mesure du ${new Date(String(p.audit.cwv.stale_from).replace(' ', 'T') + 'Z').toLocaleDateString('fr-FR')} (mesure du jour indisponible).` : '';
+  const weightsTxt = 'Pondération du score global : SEO 25 % · Vitesse 20 % · Sécurité (en-têtes) 15 % · Accessibilité de base 15 % · Présence locale 15 % · Disponibilité 10 % — un axe non mesuré est retiré du calcul.';
   const condTxt = (p.audit && p.audit.cwv && p.audit.cwv.conditions === 'mobile-4g-cpu4x') ? `Vitesse mesurée en conditions mobiles émulées (4G lente, CPU ×4).${_cwvR}` : ((p.audit && p.audit.cwv) ? `Vitesse mesurée depuis un datacenter (non bridé) — plus favorable que le mobile réel.${_cwvR}` : '');
   const engTxt = (p.audit && p.audit.engine) ? ` · moteur ${_esc(p.audit.engine)}` : '';
 
@@ -1172,7 +1183,7 @@ function _exportPdf() {
   ${geoHtml}
   <h2>À corriger en priorité — solutions clé en main <span style="font-size:12px;font-weight:600;color:#64748b">· ${sorted.length} action${sorted.length > 1 ? 's' : ''} · gain estimé +${totalGain} pts</span></h2>
   ${finds || '<p>Aucun problème détecté sur les axes audités.</p>'}
-  <div class="foot">Généré par Keystone Sentinel${engTxt} — chaque correctif inclut les étapes et le code prêt à coller.${condTxt ? ' ' + condTxt : ''}</div></body></html>`;
+  <div class="foot">Généré par Keystone Sentinel${engTxt} — chaque correctif inclut les étapes et le code prêt à coller.${condTxt ? ' ' + condTxt : ''}${staleTxt}<br>${weightsTxt}</div></body></html>`;
   const w = window.open('', '_blank');
   if (!w) { alert('Autorisez les fenêtres pop-up pour exporter le PDF.'); return; }
   w.document.write(html); w.document.close();
