@@ -1148,17 +1148,7 @@ export default {
       if (path === '/api/admin/export'       && method === 'GET')    return handleExport(request, env);
       if (path === '/api/admin/purge-tenant' && method === 'POST')   return handlePurgeTenant(request, env);
 
-      // Sentinel S11 — crawl complet : file de pages, lot borné par tick (1 min).
-    // No-op quasi gratuit quand aucune page n'est en attente.
-    if (cron === '* * * * *') {
-      ctx.waitUntil(
-        sweepDueCrawls(env)
-          .then(r => { if (r && (r.pages || r.finalized)) console.log('[sentinel-crawl-sweep]', JSON.stringify(r)); })
-          .catch(e => console.warn('[sentinel-crawl-sweep] failed', e?.message || e))
-      );
-    }
-
-    // ── Sauvegardes D1 hors-plateforme (OPS-1) ────────────────
+      // ── Sauvegardes D1 hors-plateforme (OPS-1) ────────────────
       if (path === '/api/admin/backup/run'     && method === 'POST')  return handleBackupRun(request, env);
       if (path === '/api/admin/backup/list'    && method === 'GET')   return handleBackupList(request, env);
       if (path === '/api/admin/backup/object'  && method === 'GET')   return handleBackupObject(request, env);
@@ -1273,6 +1263,16 @@ export default {
         sweepDueChecks(env)
           .then(r => console.log('[sentinel-sweep]', JSON.stringify(r)))
           .catch(e => console.warn('[sentinel-sweep] failed', e?.message || e))
+      );
+    }
+
+    // Sentinel S11 — crawl complet : file de pages, lot borné par tick (1 min).
+    // No-op quasi gratuit quand aucune page n'est en attente.
+    if (cron === '* * * * *') {
+      ctx.waitUntil(
+        sweepDueCrawls(env)
+          .then(r => { if (r && (r.pages || r.finalized)) console.log('[sentinel-crawl-sweep]', JSON.stringify(r)); })
+          .catch(e => console.warn('[sentinel-crawl-sweep] failed', e?.message || e))
       );
     }
 
