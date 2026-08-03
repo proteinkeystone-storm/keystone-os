@@ -118,7 +118,43 @@ export const LOCALBUSINESS_TYPES = new Set([
   'SportingGoodsStore', 'TireShop', 'ToyStore', 'WholesaleStore',
 ]);
 
+
+// S14.2 — extraction d'ATTRIBUT respectant le guillemet ouvrant.
+// L'ancien motif `content=["']([^"']*)["']` excluait les DEUX guillemets de
+// la classe : toute apostrophe DANS une valeur entre guillemets doubles
+// coupait la capture. « L'Arbousier : appartement climatisé… » (149 c.)
+// était lu « L » (1 c.) → finding « méta trop courte » FAUX et 7 pts de
+// barème perdus. Bug francophone au pire endroit : nos clients écrivent
+// « d'Azur », « l'hôtel », « L'Arbousier ». Trouvé le 04/08 en préparant
+// les correctifs du Mas — sur des données réelles, comme toujours.
+function _attr(tag, name) {
+  const re = new RegExp(name + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i');
+  const m = String(tag || '').match(re);
+  if (!m) return '';
+  return (m[1] !== undefined ? m[1] : (m[2] !== undefined ? m[2] : (m[3] || ''))).trim();
+}
+// Première balise `tagName` dont l'attribut `attr` vaut `value` (ex. le
+// <meta name="description">), rendue entière pour lecture de ses attributs.
+function _findTag(html, tagName, attr, value) {
+  const re = new RegExp('<' + tagName + '\\b[^>]*>', 'gi');
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    if (_attr(m[0], attr).toLowerCase() === value.toLowerCase()) return m[0];
+  }
+  return '';
+}
+
 const _between = (html, re) => { const m = html.match(re); return m ? (m[1] || '').trim() : ''; };
+// S14.2 — longueurs comptées sur le texte RÉEL : &#39; &amp; &nbsp; … valent
+// 1 caractère pour Google, pas 5. (Le title du Mas « L'Arbousier – gîte… »
+// arrivait gonflé par les entités.)
+function _decodeEntities(s) {
+  return String(s || '')
+    .replace(/&#(\d+);/g, (_, d) => { try { return String.fromCodePoint(+d); } catch (_) { return ' '; } })
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch (_) { return ' '; } })
+    .replace(/&nbsp;/gi, ' ').replace(/&quot;/gi, '"').replace(/&apos;/gi, "'")
+    .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&amp;/gi, '&');
+}
 
 // ═══ S10 — contrôles à valeur ═════════════════════════════════════════════
 
@@ -330,13 +366,11 @@ export function analyzePage(html, opts = {}) {
   // et RENDU ; tronqué OU coquille SPA → indéterminé.
   const noProof = truncated || spaShell;
 
-  const title = _between(vis, /<title[^>]*>([\s\S]*?)<\/title>/i);
-  const metaDesc = _between(vis, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)
-                || _between(vis, /<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["']/i);
+  const title = _decodeEntities(_between(vis, /<title[^>]*>([\s\S]*?)<\/title>/i));   // S14.2
+  const metaDesc = _decodeEntities(_attr(_findTag(vis, 'meta', 'name', 'description'), 'content'));   // S14.2 — apostrophes + entités
   const h1 = (vis.match(/<h1[\s>]/gi) || []).length;
   // S10/C18 — le canonical se juge sur sa VALEUR, pas sa présence.
-  const canonicalHref = _between(vis, /<link[^>]+rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)
-                     || _between(vis, /<link[^>]+href=["']([^"']+)["'][^>]*rel=["']canonical["']/i);
+  const canonicalHref = _attr(_findTag(vis, 'link', 'rel', 'canonical'), 'href');    // S14.2
   const canonical = !!canonicalHref || /<link[^>]+rel=["']canonical["']/i.test(vis);
   const ogTitle = /<meta[^>]+property=["']og:title["']/i.test(vis);
   const ogImage = /<meta[^>]+property=["']og:image["']/i.test(vis);

@@ -65,14 +65,16 @@ t('mas-home : H1 détecté, LodgingBusiness reconnu, findings = horaires + stagi
 });
 
 // ── Les 4 pages gîtes (le cœur du faux négatif : LodgingBusiness SEUL) ───
-for (const [page, seoAttendu] of [['arbousier', 93], ['escapades', 100], ['myrtes', 100], ['cypres', 100]]) {
+// RÉVISION S14.2 (re-vérifiée À LA MAIN le 2026-08-04, cf. règle d'en-tête) :
+// l'arbousier a une méta de **149 caractères**, parfaitement dans la norme.
+// Les « 1 caractère » de S11.2 étaient une CAPTURE TRONQUÉE À L'APOSTROPHE
+// (« L'Arbousier » → « L »), pas un défaut du site. Le finding meta_length
+// disparaît et l'axe SEO repasse à 100 : le site n'a jamais eu ce défaut.
+for (const [page, seoAttendu] of [['arbousier', 100], ['escapades', 100], ['myrtes', 100], ['cypres', 100]]) {
   t(`mas-${page} : LodgingBusiness seul suffit, presence 85, seo ${seoAttendu}`, () => {
     const r = analyzePage(load(`wix-studio-mas-${page}`), { skipSite: true, sitemap: true, url: `https://lemasdesbouteillans.com/${page}` });
-    // S11.2 : l'arbousier (méta 1 c.) émet désormais meta_length — le point
-    // perdu a sa ligne d'explication (avant : score baissé en silence).
-    const attendu = page === 'arbousier' ? ['jsonld_url_mismatch', 'meta_length', 'nap_hours'] : ['jsonld_url_mismatch', 'nap_hours'];
-    assert.deepEqual(keys(r), attendu);
-    assert.equal(r.scores.seo, seoAttendu);            // arbousier : méta de 1 caractère → 8 pts (défaut réel du site)
+    assert.deepEqual(keys(r), ['jsonld_url_mismatch', 'nap_hours']);
+    assert.equal(r.scores.seo, seoAttendu);
     assert.equal(r.scores.presence, 85);
     assert.equal(r.scores.accessibilite, 100);
   });
@@ -80,10 +82,13 @@ for (const [page, seoAttendu] of [['arbousier', 93], ['escapades', 100], ['myrte
 
 // ── PKS (statique Vercel — le site du dogfooding) ────────────────────────
 // Vérité terrain : ProfessionalService + tel + adresse + horaires → presence
-// 100. Méta 166 caractères (les entités HTML comptent) → hors plage → seo 93.
-t('pks : ProfessionalService reconnu, presence 100, meta 166c → seo 93', () => {
+// 100. Méta **240 caractères** (mesure S14.2, apostrophes et entités
+// comprises) → trop longue pour de bon → seo 93. NB : les « 166 c. » notés
+// en S11.2 étaient eux aussi une capture tronquée — le finding était juste
+// par accident, il l'est maintenant pour la bonne raison.
+t('pks : ProfessionalService reconnu, presence 100, meta 240c (trop longue) → seo 93', () => {
   const r = analyzePage(load('static-vercel-pks'), { sitemap: true, url: 'https://protein-keystone.com/' });
-  assert.deepEqual(keys(r), ['meta_length']);          // 166 c. — hors norme d'1 caractère, dit explicitement (S11.2)
+  assert.deepEqual(keys(r), ['meta_length']);
   assert.equal(r.scores.presence, 100);
   assert.equal(r.scores.seo, 93);
   assert.equal(r.scores.accessibilite, 100);
@@ -415,6 +420,35 @@ t('S14 · presenceMatch : nom accentué, casse, domaine — et pas de faux posit
   assert.equal(presenceMatch('<a href="https://www.lemasdesbouteillans.com">ici</a>', 'Autre Nom', 'lemasdesbouteillans.com'), true);  // lien vers le domaine suffit
   assert.equal(presenceMatch('<script>var x="le mas des bouteillans"</script>', 'Le Mas des Bouteillans', 'autre.fr'), false);  // les scripts ne comptent pas
   assert.equal(presenceMatch('page qui parle de mas et de bouteilles', 'Mas', 'x.fr'), false);    // nom trop court → jamais de conclusion
+});
+
+// ═══ S14.2 — apostrophes et entités (bug FRANCOPHONE, données réelles) ═══
+t('S14.2 · ATTAQUE 4 — apostrophe dans la méta : longueur RÉELLE', () => {
+  // Cas réel /l-arbousier : 149 c. lus « L » (1 c.) par l'ancien motif
+  // content=["\']([^"\']*)["\'] → finding « trop courte » FAUX.
+  const d = "L'Arbousier : appartement climatisé 50 m², 5 personnes, jardin clos et terrasse couverte. Piscine partagée, Wi-Fi. La Cadière-d'Azur, près de Bandol.";
+  const html = `<html lang="fr"><head><title>L'Arbousier – gîte 5 pers. avec jardin</title><meta name="description" content="${d}"></head><body><h1>t</h1></body></html>`;
+  const r = analyzePage(html, { url: 'https://x.fr/' });
+  assert.ok(!keys(r).includes('meta_length'), `149 c. ne doit pas être « trop courte » (findings: ${keys(r).join(',')})`);
+});
+t('S14.2 · entités HTML : &#39; et &amp; comptent 1 caractère, pas 5', () => {
+  const html = `<html lang="fr"><head><title>Contact &amp; réservation – Le Mas des Bouteillans</title><meta name="description" content="Contactez-nous à La Cadière-d&#39;Azur pour réserver votre gîte : téléphone, e-mail ou formulaire dédié."></head><body><h1>t</h1></body></html>`;
+  const r = analyzePage(html, { url: 'https://x.fr/' });
+  assert.ok(!keys(r).includes('meta_length'));
+  assert.ok(!keys(r).includes('title_long'));
+});
+t('S14.2 · attribut en guillemets simples contenant une apostrophe échappée', () => {
+  const html = `<html lang="fr"><head><title>Titre correct de la page</title><meta name='description' content='Une description en guillemets simples, assez longue pour passer le seuil des cinquante caracteres.'></head><body><h1>t</h1></body></html>`;
+  const r = analyzePage(html, { url: 'https://x.fr/' });
+  assert.ok(!keys(r).includes('meta_missing'));
+  assert.ok(!keys(r).includes('meta_length'));
+});
+t('S14.2 · canonical avec apostrophe dans l\'URL voisine : href intact', () => {
+  const html = `<html lang="fr"><head><title>Titre correct de la page</title><link rel="canonical" href="https://exemple.fr/l-hotel-d-azur"></head><body><h1>t</h1></body></html>`;
+  const r = analyzePage(html, { url: 'https://exemple.fr/l-hotel-d-azur' });
+  assert.equal(r.canonicalHrefHost, 'exemple.fr');
+  assert.ok(!keys(r).includes('canonical'));
+  assert.ok(!keys(r).includes('canonical_mismatch'));
 });
 
 console.log(`\n${n} tests OK — moteur S8→S14 conforme à la vérité terrain des fixtures.`);
