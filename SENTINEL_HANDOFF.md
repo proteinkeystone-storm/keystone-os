@@ -1,6 +1,20 @@
 # 🛰️ SENTINEL — Ordres de reprise (nouvelle conversation)
 
-> ## ✅ S11.0 « COUVERTURE COMPLÈTE » LIVRÉ (2026-08-03) — `engine:S11.0`, SW `v5.28.459`, 31 tests.
+> ## ✅ S11.2 « FIABILITÉ DES MESURES » LIVRÉ (2026-08-03) — `engine:S11.2`, SW `v5.28.461`, 31 tests.
+> **Déclencheur** : retour Stéphane — 94 puis 84 à 8 min d'écart sans toucher au site. Décomposition sur les
+> deux rapports réels : ~3 pts = échantillon 5/11 vs couverture 11/11 (information vraie, déjà libellée) ;
+> ~7 pts = variance d'une mesure CWV UNIQUE (LCP 2,4 s → 3,5 s d'un run à l'autre en headless throttlé).
+> - **Médiane de 3 chargements** dans `_measurePerf` (pattern PageSpeed/WebPageTest) ; `cwv.runs` tracé ;
+>   libellé « médiane de 3 mesures » (bloc transparence cockpit + pied de PDF). Timeouts resserrés
+>   (goto 15 s / repli 10 s / settle 1,2 s) pour tenir dans les 70 s du POST audit.
+> - **`meta_length`** (low) : une méta hors 50-165 c. perdait 7 pts EN SILENCE (SEO 99→90 sur le crawl
+>   complet sans nouvelle ligne au rapport). Règle : **tout point perdu a sa ligne d'explication.**
+> - S11.1 (même soirée) : purge des prompts GEO génériques persistés par l'ère S5 (4 lignes nettoyées en D1)
+>   — la config ville/activité reprend la main sur les fallbacks stockés à tort comme requêtes utilisateur.
+> **Règle de lecture des scores** : à périmètre égal → stable (sinon bug) ; entre périmètres → l'écart est
+> de l'information (le complet est plus vrai que l'échantillon).
+>
+> > ## ✅ S11.0 « COUVERTURE COMPLÈTE » LIVRÉ (2026-08-03) — `engine:S11.0`, SW `v5.28.459`, 31 tests.
 > **Fin du plan S8→S11.** L'audit express (5 pages, synchrone) échantillonne ; le **crawl complet** audite
 > TOUT le site en tâche de fond, sur le pattern sweepDue :
 > - **Tables** `sentinel_crawls` (1 job/site : status/total/done) + `sentinel_crawl_pages` (file, résultat JSON par page).
