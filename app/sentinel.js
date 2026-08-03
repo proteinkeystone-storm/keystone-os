@@ -1204,7 +1204,7 @@ function _exportPdf() {
   ${kpis}
   <h2>Profil du site</h2><table style="width:100%;border-collapse:collapse">${axisRows}</table>
   ${geoHtml}
-  <h2>À corriger en priorité — solutions clé en main <span style="font-size:12px;font-weight:600;color:#64748b">· ${sorted.length} action${sorted.length > 1 ? 's' : ''} · gain estimé +${totalGain} pts</span></h2>
+  <h2>${sorted.length ? 'À corriger en priorité — solutions clé en main' : 'Points de contrôle'} <span style="font-size:12px;font-weight:600;color:#64748b">· ${sorted.length ? `${sorted.length} action${sorted.length > 1 ? 's' : ''}${totalGain ? ` · gain au score : jusqu'à +${String(totalGain).replace('.', ',')} pts` : ''}` : 'aucune action requise'}</span></h2>
   ${finds || '<p>Aucun problème détecté sur les axes audités.</p>'}
   <div class="foot">Généré par Keystone Sentinel${engTxt} — chaque correctif inclut les étapes et le code prêt à coller.${condTxt ? ' ' + condTxt : ''}${staleTxt}${cacheTxt}<br>${weightsTxt}</div></body></html>`;
   const w = window.open('', '_blank');
