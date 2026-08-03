@@ -45,7 +45,7 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S14.0';
+const SENTINEL_ENGINE_VERSION = 'S14.1';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -174,6 +174,8 @@ async function _ensureSchema(env) {
     status TEXT NOT NULL DEFAULT 'pending', result TEXT,
     PRIMARY KEY (crawl_id, url))`).run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sentinel_crawl_pages_status ON sentinel_crawl_pages(status, crawl_id)").run();
+  // S14.1 — crédit sitemap propagé aux pages du crawl (comme l'express le fait).
+  try { await env.DB.prepare("ALTER TABLE sentinel_crawls ADD COLUMN has_sitemap INTEGER").run(); } catch (_) { /* déjà présent */ }
   _schemaReady = true;
 }
 
@@ -460,9 +462,21 @@ export async function handleSiteCrawlStart(request, env, id) {
     const d = await _discoverAllPages(site.url, Math.max(0, limit - 1));
     urls = [site.url, ...d.urls];
   } catch (_) {}
+  // S14.1 — le contrôle sitemap est SITE-level : fait une fois ici, propagé
+  // à chaque page du crawl (sitemapKnown). Sans ça, les pages internes
+  // perdaient 10 pts SEO chacune EN SILENCE : le crawl complet du Mas
+  // affichait SEO 90 vs 99 en express, inexpliqué — violation de la règle
+  // S12 « tout point perdu a sa ligne », constatée sur les rapports réels.
+  let hasSitemap = 0;
+  try {
+    const origin2 = new URL(site.url).origin;
+    const rb = await _exists(`${origin2}/robots.txt`, true);
+    if (rb.text && /sitemap:/i.test(rb.text)) hasSitemap = 1;
+    if (!hasSitemap) { const sm = await _exists(`${origin2}/sitemap.xml`, true); hasSitemap = (sm.ok && sitemapLooksValid(sm.text)) ? 1 : 0; }
+  } catch (_) {}
   const crawlId = generateId();
-  await env.DB.prepare("INSERT INTO sentinel_crawls (id, tenant_id, site_id, status, total, done) VALUES (?, ?, ?, 'running', ?, 0)")
-    .bind(crawlId, g.tenant, id, urls.length).run();
+  await env.DB.prepare("INSERT INTO sentinel_crawls (id, tenant_id, site_id, status, total, done, has_sitemap) VALUES (?, ?, ?, 'running', ?, 0, ?)")
+    .bind(crawlId, g.tenant, id, urls.length, hasSitemap).run();
   // Lot d'INSERT bornés (D1 batch) — la home est la 1re page de la file.
   const stmts = urls.map((u) => env.DB.prepare("INSERT OR IGNORE INTO sentinel_crawl_pages (crawl_id, tenant_id, url) VALUES (?, ?, ?)").bind(crawlId, g.tenant, u));
   await env.DB.batch(stmts);
@@ -487,7 +501,7 @@ export async function handleSiteCrawlStatus(request, env, id) {
 export async function sweepDueCrawls(env) {
   await _ensureSchema(env);
   const due = (await env.DB.prepare(
-    `SELECT p.crawl_id, p.tenant_id, p.url, c.site_id
+    `SELECT p.crawl_id, p.tenant_id, p.url, c.site_id, c.has_sitemap
        FROM sentinel_crawl_pages p JOIN sentinel_crawls c ON c.id = p.crawl_id
       WHERE p.status = 'pending' AND c.status = 'running'
       ORDER BY c.created_at ASC LIMIT ${CRAWL_TICK_PAGES}`
@@ -498,7 +512,7 @@ export async function sweepDueCrawls(env) {
     try {
       const site = await env.DB.prepare("SELECT url, platform FROM sentinel_sites WHERE id = ?").bind(row.site_id).first();
       const isHome = site && _pathOf(row.url) === _pathOf(site.url);
-      const r = await _audit(row.url, { skipSite: !isHome, platform: site && site.platform });
+      const r = await _audit(row.url, { skipSite: !isHome, platform: site && site.platform, sitemapKnown: !!row.has_sitemap });   // S14.1
       result = { path: _pathOf(row.url), reachable: r.reachable, scores: r.scores, findings: r.findings,
                  indeterminate: r.indeterminate, notApplicable: r.notApplicable, truncated: r.truncated,
                  canonicalHrefHost: r.canonicalHrefHost || null, sitemap: r.sitemap, geoHints: isHome ? r.geoHints : null };
@@ -539,7 +553,12 @@ async function _finalizeCrawl(env, c) {
   const pages = pagesAudited.map((p) => ({ path: p.path, score: _globalScore({ ...p.scores }) }));
   const up = await _uptimeWindow(env, site.id);
   const dispo = up.pct == null ? null : Math.round(up.pct);
-  let cwv = await _measurePerf(env, site.url);
+  // S14.1 — la perf se mesure sur la home : si une mesure < 6 h existe
+  // (l'audit express de tout à l'heure), on la RÉUTILISE au lieu de relancer
+  // 3 chargements — deux médianes à 7 min d'écart donnaient perf 80 vs 64
+  // sur la même page (variance gratuite entre express et complet).
+  let cwv = await _lastCwv(env, site.id, "-6 hours");
+  if (!cwv) cwv = await _measurePerf(env, site.url);
   if (!cwv) cwv = await _lastCwv(env, site.id);      // S12.3 — repli étiqueté (stale_from)
   const perf = _perfScore(cwv);
   const scores = { disponibilite: dispo, performance: perf, ...agg.scores };
@@ -1091,8 +1110,8 @@ async function _measurePerf(env, url) {
 // est indisponible (quota, panne), on réutilise la mesure récente ÉTIQUETÉE
 // plutôt que de laisser l'axe disparaître et le score global sauter de +10
 // en silence (renormalisation) — la plainte « 94 puis 84 » à l'envers.
-async function _lastCwv(env, siteId) {
-  const row = await env.DB.prepare("SELECT cwv, created_at FROM sentinel_audits WHERE site_id = ? AND cwv IS NOT NULL AND created_at >= datetime('now','-7 day') ORDER BY created_at DESC LIMIT 1").bind(siteId).first();
+async function _lastCwv(env, siteId, interval = '-7 day') {
+  const row = await env.DB.prepare(`SELECT cwv, created_at FROM sentinel_audits WHERE site_id = ? AND cwv IS NOT NULL AND created_at >= datetime('now','${interval}') ORDER BY created_at DESC LIMIT 1`).bind(siteId).first();
   if (!row || !row.cwv) return null;
   try { const c = JSON.parse(row.cwv); c.stale_from = row.created_at; return c; } catch (_) { return null; }
 }
