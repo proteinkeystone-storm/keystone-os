@@ -422,6 +422,7 @@ function _transparencyHTML(a, platform) {
   }
   const cond = a.cwv && a.cwv.conditions;
   if (cond) parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Conditions de mesure vitesse</b> : ${cond === 'mobile-4g-cpu4x' ? 'mobile émulé, réseau 4G lente, CPU ×4 (comparable à PageSpeed)' : 'datacenter non bridé — chiffres plus favorables que le mobile réel'}${a.cwv && a.cwv.runs > 1 ? ` · médiane de ${a.cwv.runs} mesures` : ''}.</div>`);
+  if (a.cacheAgeMax > 300) parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Cache de l'hébergeur</b> : certaines pages ont été servies depuis une copie datant de ${Math.round(a.cacheAgeMax / 60)} min. Un correctif tout juste appliqué peut ne pas encore apparaître ici — ni chez Google. Republier le site purge ce cache.</div>`);
   if (a.cwv && a.cwv.stale_from) parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Vitesse</b> : mesure du jour indisponible — reprise de celle du ${_esc(new Date(String(a.cwv.stale_from).replace(' ', 'T') + 'Z').toLocaleDateString('fr-FR'))}.</div>`);
   if (!a.cwv && a.scores && a.scores.performance == null) parts.push(`<div class="snt-transp-row">${icon('alert-triangle', 13)} <b>Score calculé sans l'axe vitesse</b> (mesure indisponible) — il n'est pas comparable à un score qui l'inclut.</div>`);
   if (a.engine) parts.push(`<div class="snt-transp-row snt-dim">Moteur d'audit ${_esc(a.engine)} — les scores peuvent évoluer lors des révisions de méthode.</div>`);
@@ -1181,6 +1182,7 @@ function _exportPdf() {
   // S9 — transparence dans le rapport : conditions de mesure + version moteur.
   const _cwvR = p.audit && p.audit.cwv && p.audit.cwv.runs > 1 ? ` Médiane de ${p.audit.cwv.runs} mesures.` : '';
   const staleTxt = (p.audit && p.audit.cwv && p.audit.cwv.stale_from) ? ` Vitesse : reprise de la mesure du ${new Date(String(p.audit.cwv.stale_from).replace(' ', 'T') + 'Z').toLocaleDateString('fr-FR')} (mesure du jour indisponible).` : '';
+  const cacheTxt = (p.audit && p.audit.cacheAgeMax > 300) ? ` Certaines pages étaient servies depuis le cache de l'hébergeur (jusqu'à ${Math.round(p.audit.cacheAgeMax / 60)} min) — un correctif récent peut ne pas encore y figurer.` : '';
   const weightsTxt = 'Pondération du score global : SEO 25 % · Vitesse 20 % · Sécurité (en-têtes) 15 % · Accessibilité de base 15 % · Présence locale 15 % · Disponibilité 10 % — un axe non mesuré est retiré du calcul.';
   const condTxt = (p.audit && p.audit.cwv && p.audit.cwv.conditions === 'mobile-4g-cpu4x') ? `Vitesse mesurée en conditions mobiles émulées (4G lente, CPU ×4).${_cwvR}` : ((p.audit && p.audit.cwv) ? `Vitesse mesurée depuis un datacenter (non bridé) — plus favorable que le mobile réel.${_cwvR}` : '');
   const engTxt = (p.audit && p.audit.engine) ? ` · moteur ${_esc(p.audit.engine)}` : '';
@@ -1204,7 +1206,7 @@ function _exportPdf() {
   ${geoHtml}
   <h2>À corriger en priorité — solutions clé en main <span style="font-size:12px;font-weight:600;color:#64748b">· ${sorted.length} action${sorted.length > 1 ? 's' : ''} · gain estimé +${totalGain} pts</span></h2>
   ${finds || '<p>Aucun problème détecté sur les axes audités.</p>'}
-  <div class="foot">Généré par Keystone Sentinel${engTxt} — chaque correctif inclut les étapes et le code prêt à coller.${condTxt ? ' ' + condTxt : ''}${staleTxt}<br>${weightsTxt}</div></body></html>`;
+  <div class="foot">Généré par Keystone Sentinel${engTxt} — chaque correctif inclut les étapes et le code prêt à coller.${condTxt ? ' ' + condTxt : ''}${staleTxt}${cacheTxt}<br>${weightsTxt}</div></body></html>`;
   const w = window.open('', '_blank');
   if (!w) { alert('Autorisez les fenêtres pop-up pour exporter le PDF.'); return; }
   w.document.write(html); w.document.close();

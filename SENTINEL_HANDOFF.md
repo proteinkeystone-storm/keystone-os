@@ -1,6 +1,24 @@
 # 🛰️ SENTINEL — Ordres de reprise (nouvelle conversation)
 
-> ## ✅ S14.0 « GEO QUI DIT VRAI » LIVRÉ (2026-08-04) — `engine:S14.0`, SW `v5.28.464`, 46 tests. **RÉQUISITOIRE SOLDÉ (8/8).**
+> ## ✅ S15.0 « COHÉRENCE D'URL & TRANSPARENCE DU CACHE » LIVRÉ (2026-08-04) — `engine:S15.0`, SW `v5.28.465`.
+> **Incident fondateur** : correctif staging appliqué à la source (Custom Embed rev.4 via API Wix), rapport
+> suivant → « URL de staging » toujours là sur 10 pages. Causes réelles : (1) le crawl lisait la home en APEX
+> et les pages internes en WWW (sitemap) → couches de cache CDN différentes (Wix Varnish vs Fastly) dans le
+> même rapport ; (2) pages servies depuis un cache de 15-40 min, et Sentinel jette l'en-tête `age` ; (3) seul
+> « Publier » purge le cache Wix, et le rapport ne le disait pas.
+> - **15.1 Un audit = UN hôte** : `res.url` capté (redirections suivies) → `_rehost()` de toutes les pages sur
+>   l'hôte final de la home (express ET crawl, `_resolveFinalUrl` au démarrage du crawl). Garde-fou : jamais de
+>   réécriture cross-domaine.
+> - **15.2 En-tête `age` capté** (`cacheAge` par page, `cache_age` max stocké par audit) → ligne transparence
+>   cockpit + PDF quand > 5 min : « copie datant de X min — un correctif récent peut ne pas encore apparaître,
+>   ni ici ni chez Google ».
+> - **15.3** Fix staging : étape « IMPORTANT : Publier purge le cache Wix (sinon jusqu'à 24 h) » ; finding
+>   `jsonld_url_mismatch` PARTIEL (X pages sur N) → indice « probablement le cache, republiez et relancez ».
+> À noter aussi (même journée) : **S14.2** — bug francophone majeur, apostrophe coupait la capture des attributs
+> (« L'Arbousier » → méta lue 1 c. au lieu de 149) → parseur `_attr`/`_findTag` + décodage d'entités, fixtures
+> re-vérifiées À LA MAIN (l'arbousier n'a JAMAIS eu de défaut de méta ; PKS 240 c. réellement trop longue).
+>
+> > ## ✅ S14.0 « GEO QUI DIT VRAI » LIVRÉ (2026-08-04) — `engine:S14.0`, SW `v5.28.464`, 46 tests. **RÉQUISITOIRE SOLDÉ (8/8).**
 > - **14.1 Triangulation** : le chemin Perplexity/ChatGPT (S5.1) est prêt — activation = `wrangler secret put
 >   PERPLEXITY_API_KEY` (geste Stéphane, secret jamais manipulé par l'agent). Libellé « 1 moteur — indicatif »
 >   disparaît de lui-même.

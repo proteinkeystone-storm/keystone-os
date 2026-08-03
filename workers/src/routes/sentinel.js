@@ -45,7 +45,7 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S14.2';
+const SENTINEL_ENGINE_VERSION = 'S15.0';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -164,6 +164,8 @@ async function _ensureSchema(env) {
   try { await env.DB.prepare("ALTER TABLE sentinel_sites ADD COLUMN last_coverage TEXT").run(); } catch (_) { /* déjà présent */ }
   // S11 — couverture de l'audit : 'sample' (express, 5 pages) | 'full' (crawl complet).
   try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN coverage TEXT").run(); } catch (_) { /* déjà présent */ }
+  // S15.2 — âge max du cache CDN observé pendant l'audit (transparence).
+  try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN cache_age INTEGER").run(); } catch (_) { /* déjà présent */ }
   // S11 — crawl complet asynchrone : 1 job par site + file de pages (pattern sweepDue).
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS sentinel_crawls (
     id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default', site_id TEXT NOT NULL,
@@ -263,6 +265,9 @@ async function _recordCheck(env, tenant, siteId, r) {
 
 // ── Alertes web push (S1.5) ─────────────────────────────────────
 function _hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (_) { return u; } }
+// S15.1 — hôte complet (www conservé) et ré-hébergement d'une URL sur cet hôte.
+function _fullHostOf(u) { try { return new URL(u).hostname; } catch (_) { return ''; } }
+function _rehost(u, host) { try { const x = new URL(u); if (host && x.hostname.replace(/^www\./, '') === host.replace(/^www\./, '')) x.hostname = host; return x.href; } catch (_) { return u; } }
 async function _alert(env, tenant, site, kind) {
   if (!env.VAPID_PUBLIC || !env.VAPID_PRIVATE_JWK) return;
   let vapid;
@@ -303,6 +308,15 @@ async function _audit(url, opts = {}) {
     const res = await fetch(url, { method: 'GET', redirect: 'follow', headers: { 'User-Agent': UA }, signal: ctrl.signal });
     headers = {}; for (const [k, v] of res.headers) headers[k.toLowerCase()] = v;
     reachable = _classify(res.status) === 1;
+    // S15.1 — l'URL EFFECTIVE après redirections (apex → www…) : c'est elle
+    // qui dit sur quel hôte le contenu vit vraiment.
+    var effectiveUrl = res.url || url;
+    // S15.2 — l'en-tête `age` dit depuis combien de temps le CDN sert cette
+    // copie. Incident fondateur (04/08, Mas) : correctif appliqué à la
+    // source, rapport « inchangé » — trois pages servies depuis un cache de
+    // 15-40 min. Sans cette donnée, le client conclut que l'outil se trompe
+    // ou que son correctif a échoué.
+    var cacheAge = parseInt(headers['age'] || '0', 10) || 0;
     const raw = await res.text();                    // corps déjà bufferisé entier
     truncated = raw.length > MAX_HTML;               // S8 : on le SAIT, on le dit
     html = truncated ? raw.slice(0, MAX_HTML) : raw;
@@ -336,7 +350,7 @@ async function _audit(url, opts = {}) {
   // S13.2 — coquille SPA : marqueur dédié dans les indéterminés (persiste,
   // le front l'affiche comme « site en rendu client », pas comme un défaut).
   if (a.spaShell && !a.indeterminate.includes('_spa')) a.indeterminate.unshift('_spa');
-  return { reachable, ...a, sitemap };
+  return { reachable, ...a, sitemap, effectiveUrl: typeof effectiveUrl !== 'undefined' ? effectiveUrl : url, cacheAge: typeof cacheAge !== 'undefined' ? cacheAge : 0 };
 }
 
 // ── V2 · Crawl multi-pages — découverte + agrégation ────────────
@@ -414,8 +428,17 @@ async function _discoverPages(url, max) {
 // avec la finalisation du crawl complet.
 async function _auditSite(url, platform) {
   const home = await _audit(url, { platform });
+  // S15.1 — UN SEUL hôte pour tout l'audit : celui où la home vit réellement
+  // (redirections suivies). Avant : home sur l'URL enregistrée (apex), pages
+  // internes sur celles du sitemap (www) → deux couches de cache CDN
+  // différentes dans le même rapport, incohérences possibles sans défaut réel.
+  const canonHost = _fullHostOf(home.effectiveUrl || url);
   let extraUrls = [], pagesTotal = 1;
-  try { const d = await _discoverPages(url, MAX_AUDIT_PAGES - 1); extraUrls = d.urls; pagesTotal = d.total; } catch (_) {}
+  try {
+    const d = await _discoverPages(url, MAX_AUDIT_PAGES - 1);
+    extraUrls = d.urls.map((u) => _rehost(u, canonHost));
+    pagesTotal = d.total;
+  } catch (_) {}
   const extras = (await Promise.all(extraUrls.map((u) =>
     _audit(u, { skipSite: true, sitemapKnown: home.sitemap, platform }).then((r) => ({ url: u, ...r })).catch(() => null)
   ))).filter((p) => p && p.reachable);
@@ -423,7 +446,8 @@ async function _auditSite(url, platform) {
 
   const agg = aggregatePages(pagesAudited);
   const pages = pagesAudited.map((p) => ({ path: p.path, score: _globalScore({ ...p.scores }) }));
-  return { reachable: home.reachable, ...agg, pages, pageCount: pagesAudited.length,
+  const cacheAgeMax = Math.max(0, ...pagesAudited.map((p) => p.cacheAge || 0));   // S15.2
+  return { reachable: home.reachable, ...agg, pages, pageCount: pagesAudited.length, cacheAgeMax,
            pagesTotal: Math.max(pagesTotal, pagesAudited.length), geoHints: home.geoHints || null };
 }
 
@@ -438,6 +462,16 @@ function _crawlLimit(plan) {
   if (p === 'MAX' || p === 'BETA') return 50;
   if (p === 'PRO') return 25;
   return 10;
+}
+
+// S15.1 — URL finale après redirections (sans télécharger le corps).
+async function _resolveFinalUrl(url) {
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), SUB_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { method: 'GET', redirect: 'follow', headers: { 'User-Agent': UA }, signal: ctrl.signal });
+    try { await res.body?.cancel?.(); } catch (_) {}
+    return res.url || url;
+  } catch (_) { return url; } finally { clearTimeout(timer); }
 }
 
 // Découverte EXHAUSTIVE (sitemap prioritaire + liens de la home), bornée.
@@ -457,10 +491,16 @@ export async function handleSiteCrawlStart(request, env, id) {
   if (running) return json({ crawl: { id: running.id, status: 'running', done: running.done, total: running.total } }, 200, origin);
 
   const limit = _crawlLimit(g.plan);
-  let urls = [site.url];
+  // S15.1 — un crawl = UN hôte : celui où la home vit après redirections.
+  // Avant : home en apex + pages internes en www (sitemap) → deux couches de
+  // cache CDN dans le même rapport (incident du 04/08 : 1 page propre, 10
+  // « fautives » alors que le correctif était partout à la source).
+  const finalHome = await _resolveFinalUrl(site.url);
+  const crawlHost = _fullHostOf(finalHome) || _fullHostOf(site.url);
+  let urls = [finalHome];
   try {
     const d = await _discoverAllPages(site.url, Math.max(0, limit - 1));
-    urls = [site.url, ...d.urls];
+    urls = [finalHome, ...d.urls.map((u) => _rehost(u, crawlHost))];
   } catch (_) {}
   // S14.1 — le contrôle sitemap est SITE-level : fait une fois ici, propagé
   // à chaque page du crawl (sitemapKnown). Sans ça, les pages internes
@@ -515,7 +555,7 @@ export async function sweepDueCrawls(env) {
       const r = await _audit(row.url, { skipSite: !isHome, platform: site && site.platform, sitemapKnown: !!row.has_sitemap });   // S14.1
       result = { path: _pathOf(row.url), reachable: r.reachable, scores: r.scores, findings: r.findings,
                  indeterminate: r.indeterminate, notApplicable: r.notApplicable, truncated: r.truncated,
-                 canonicalHrefHost: r.canonicalHrefHost || null, sitemap: r.sitemap, geoHints: isHome ? r.geoHints : null };
+                 canonicalHrefHost: r.canonicalHrefHost || null, sitemap: r.sitemap, cacheAge: r.cacheAge || 0, geoHints: isHome ? r.geoHints : null };
     } catch (_) { /* page en échec → 'failed', le crawl continue */ }
     await env.DB.prepare("UPDATE sentinel_crawl_pages SET status = ?, result = ? WHERE crawl_id = ? AND url = ?")
       .bind(result && result.reachable ? 'done' : 'failed', result ? JSON.stringify(result) : null, row.crawl_id, row.url).run();
@@ -551,6 +591,7 @@ async function _finalizeCrawl(env, c) {
   }
   const agg = aggregatePages(pagesAudited);
   const pages = pagesAudited.map((p) => ({ path: p.path, score: _globalScore({ ...p.scores }) }));
+  const cacheAgeMax = Math.max(0, ...pagesAudited.map((p) => p.cacheAge || 0));   // S15.2
   const up = await _uptimeWindow(env, site.id);
   const dispo = up.pct == null ? null : Math.round(up.pct);
   // S14.1 — la perf se mesure sur la home : si une mesure < 6 h existe
@@ -569,13 +610,14 @@ async function _finalizeCrawl(env, c) {
     if (cwv.cls >= 0.25) findings.push({ axis: 'performance', sev: 'medium', key: 'perf_cls', title: `La page saute au chargement (CLS ${cwv.cls})`, detail: 'Réservez les dimensions des images, bannières et publicités.' });
     if (cwv.weightKb >= 3072) findings.push({ axis: 'performance', sev: 'low', key: 'perf_weight', title: `Page lourde (${(cwv.weightKb / 1024).toFixed(1)} Mo)`, detail: 'Allégez images et scripts pour accélérer le mobile.' });
   }
+  _cacheHint(findings, pagesAudited.length);        // S15.3
   _attachFixes(findings, { url: site.url, host: _hostOf(site.url), platform: site.platform });
   const global = _globalScore(scores);
   attachGains(findings, { scores, pageCount: pagesAudited.length, notApplicable: agg.notApplicable });   // S12.1
-  await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total, coverage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'full')")
+  await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total, coverage, cache_age) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'full', ?)")
     .bind(generateId(), c.tenant_id, site.id, global, JSON.stringify(scores), JSON.stringify(findings),
           cwv ? JSON.stringify(cwv) : null, JSON.stringify(pages), JSON.stringify(agg.indeterminate),
-          JSON.stringify(agg.notApplicable), SENTINEL_ENGINE_VERSION, pagesAudited.length).run();
+          JSON.stringify(agg.notApplicable), SENTINEL_ENGINE_VERSION, pagesAudited.length, cacheAgeMax || 0).run();
   await env.DB.prepare("UPDATE sentinel_sites SET last_score = ?, last_scores = ?, last_coverage = 'full', last_audit_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
     .bind(global, JSON.stringify(scores), site.id).run();
   await env.DB.prepare("UPDATE sentinel_crawls SET status = 'done', finished_at = datetime('now') WHERE id = ?").bind(c.id).run();
@@ -709,7 +751,8 @@ function _fixFor(key, ctx, f) {
       'Ouvrez le bloc de données structurées (JSON-LD) de vos pages — sur Wix : Réglages › Code personnalisé, ou l\'embed HTML qui le contient.',
       `Remplacez la valeur du champ "url" (et "@id" le cas échéant) par l'adresse RÉELLE du site : ${ctx.url || 'votre domaine de production'}.`,
       'Bonnes pratiques : donnez le même "@id" (ex. ' + (ctx.url || 'https://votre-domaine.fr') + '#business) à tous les blocs décrivant votre établissement pour que les moteurs les fusionnent.',
-      'Publiez, puis vérifiez avec l\'outil de test des résultats enrichis de Google.'],
+      'IMPORTANT : cliquez « Publier » après la modification — c\'est la publication qui purge le cache Wix (sinon l\'ancienne version peut être servie jusqu\'à 24 h, à vous comme à Google).',
+      'Vérifiez ensuite avec l\'outil de test des résultats enrichis de Google.'],
       codeLabel: 'Champs à corriger dans votre JSON-LD', code:
 `"url": "${ctx.url || 'https://votre-domaine.fr'}",
 "@id": "${ctx.url || 'https://votre-domaine.fr'}#business"` };
@@ -1106,6 +1149,19 @@ async function _measurePerf(env, url) {
   }
 }
 
+
+// S15.3 — un finding issu d'un embed SITE-LEVEL présent sur une partie des
+// pages seulement est la signature d'un cache CDN en cours de purge, pas
+// d'un défaut partiel. On le dit, sinon le client refait un correctif déjà
+// appliqué (vécu le 04/08 sur le Mas).
+function _cacheHint(findings, pageCount) {
+  for (const f of findings || []) {
+    if (f.key === 'jsonld_url_mismatch' && f.pages && f.pages.length > 0 && f.pages.length < pageCount) {
+      f.detail += ` — Présent sur ${f.pages.length} page(s) sur ${pageCount} : si vous venez d'appliquer le correctif, il s'agit probablement du cache de l'hébergeur. Republiez le site (purge le cache) puis relancez l'audit.`;
+    }
+  }
+}
+
 // S12.3 — derniere mesure CWV exploitable (≤ 7 j) : quand Browser Rendering
 // est indisponible (quota, panne), on réutilise la mesure récente ÉTIQUETÉE
 // plutôt que de laisser l'axe disparaître et le score global sauter de +10
@@ -1151,6 +1207,7 @@ export async function handleSiteAudit(request, env, id) {
     if (cwv.cls >= 0.25) findings.push({ axis: 'performance', sev: 'medium', key: 'perf_cls', title: `La page saute au chargement (CLS ${cwv.cls})`, detail: 'Réservez les dimensions des images, bannières et publicités.' });
     if (cwv.weightKb >= 3072) findings.push({ axis: 'performance', sev: 'low', key: 'perf_weight', title: `Page lourde (${(cwv.weightKb / 1024).toFixed(1)} Mo)`, detail: 'Allégez images et scripts pour accélérer le mobile.' });
   }
+  _cacheHint(findings, a.pageCount);                // S15.3
   _attachFixes(findings, { url: site.url, host: _hostOf(site.url), platform: site.platform });
   const global = _globalScore(scores);              // S9/C7 : pondération fixe (lib)
   // S12.1 — gain RÉEL par finding (delta exact de barème, jamais une constante).
@@ -1162,8 +1219,8 @@ export async function handleSiteAudit(request, env, id) {
   const naJson = JSON.stringify(a.notApplicable || []);
   // S9/C23 — l'audit porte la version du moteur qui l'a produit : quand un
   // score bouge après une révision de méthode, l'historique doit le dire.
-  await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total, coverage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sample')")
-    .bind(generateId(), g.tenant, site.id, global, scoresJson, findingsJson, cwv ? JSON.stringify(cwv) : null, pagesJson, indetJson, naJson, SENTINEL_ENGINE_VERSION, a.pagesTotal || null).run();
+  await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total, coverage, cache_age) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sample', ?)")
+    .bind(generateId(), g.tenant, site.id, global, scoresJson, findingsJson, cwv ? JSON.stringify(cwv) : null, pagesJson, indetJson, naJson, SENTINEL_ENGINE_VERSION, a.pagesTotal || null, a.cacheAgeMax || 0).run();
   // S12.2 — un audit express (échantillon) n'écrase PAS le score d'un crawl
   // complet récent (< 7 j) : sinon la vignette fait 84 → 94 en un clic sans
   // que le site change (constaté le soir même du S11). L'express reste dans
@@ -1193,7 +1250,7 @@ export async function handleSiteAudit(request, env, id) {
 
   return json({ audit: { score: global, scores, findings, cwv, pages: a.pages, pagesTotal: a.pagesTotal || null,
     reachable: a.reachable, indeterminate: a.indeterminate || [], notApplicable: a.notApplicable || [],
-    truncated: !!a.truncated, engine: SENTINEL_ENGINE_VERSION, coverage: 'sample',
+    truncated: !!a.truncated, engine: SENTINEL_ENGINE_VERSION, coverage: 'sample', cacheAgeMax: a.cacheAgeMax || 0,
     scoreNote, scoreKept: keepFull ? 'full-recent' : null,
     dispoWindow: { days: up.windowDays, n: up.n, insufficient: !!up.insufficient } } }, 200, origin);
 }
@@ -1242,9 +1299,9 @@ export async function handleSiteCockpit(request, env, id) {
   const series30d = seriesRows.map((r) => ({ d: r.d, ms: Math.round(r.ms || 0), up: r.up }));
 
   // Dernier audit + historique + tendance de score (vs ~7 j).
-  const auditRow = await env.DB.prepare("SELECT score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total, coverage, created_at FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 1").bind(id).first();
+  const auditRow = await env.DB.prepare("SELECT score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total, coverage, cache_age, created_at FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 1").bind(id).first();
   let audit = null;
-  if (auditRow) { let sc = null, fd = [], cw = null, pg = null, ind = [], na = []; try { sc = JSON.parse(auditRow.scores); } catch (_) {} try { fd = JSON.parse(auditRow.findings); } catch (_) {} try { cw = auditRow.cwv ? JSON.parse(auditRow.cwv) : null; } catch (_) {} try { pg = auditRow.pages ? JSON.parse(auditRow.pages) : null; } catch (_) {} try { ind = auditRow.indeterminate ? JSON.parse(auditRow.indeterminate) : []; } catch (_) {} try { na = auditRow.not_applicable ? JSON.parse(auditRow.not_applicable) : []; } catch (_) {} audit = { score: auditRow.score, scores: sc, findings: fd, cwv: cw, pages: pg, pagesTotal: auditRow.pages_total, indeterminate: ind, notApplicable: na, engine: auditRow.engine, coverage: auditRow.coverage || 'sample', created_at: auditRow.created_at }; }
+  if (auditRow) { let sc = null, fd = [], cw = null, pg = null, ind = [], na = []; try { sc = JSON.parse(auditRow.scores); } catch (_) {} try { fd = JSON.parse(auditRow.findings); } catch (_) {} try { cw = auditRow.cwv ? JSON.parse(auditRow.cwv) : null; } catch (_) {} try { pg = auditRow.pages ? JSON.parse(auditRow.pages) : null; } catch (_) {} try { ind = auditRow.indeterminate ? JSON.parse(auditRow.indeterminate) : []; } catch (_) {} try { na = auditRow.not_applicable ? JSON.parse(auditRow.not_applicable) : []; } catch (_) {} audit = { score: auditRow.score, scores: sc, findings: fd, cwv: cw, pages: pg, pagesTotal: auditRow.pages_total, indeterminate: ind, notApplicable: na, engine: auditRow.engine, coverage: auditRow.coverage || 'sample', cacheAgeMax: auditRow.cache_age || 0, created_at: auditRow.created_at }; }
   const histRows = (await env.DB.prepare("SELECT created_at, score, scores FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 20").bind(id).all()).results || [];
   const scoreHistory = histRows.reverse().map((r) => { let sc = null; try { sc = r.scores ? JSON.parse(r.scores) : null; } catch (_) {} return { at: r.created_at, score: r.score, scores: sc }; });
   let scoreTrend = null;
