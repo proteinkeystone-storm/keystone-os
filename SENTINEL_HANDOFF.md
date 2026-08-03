@@ -1,6 +1,13 @@
 # 🛰️ SENTINEL — Ordres de reprise (nouvelle conversation)
 
-> ## ✅ S15.0 « COHÉRENCE D'URL & TRANSPARENCE DU CACHE » LIVRÉ (2026-08-04) — `engine:S15.0`, SW `v5.28.465`.
+> ## ✅ S15.0/S15.1 « COHÉRENCE D'URL & TRANSPARENCE DU CACHE » LIVRÉ (2026-08-04) — `engine:S15.0`, SW `v5.28.466`, smokes 20 VERT.
+> **DoD atteinte le soir même** : audit du Mas en couverture complète 11/11 → **96/100, ZÉRO finding**
+> (SEO 100, sécurité 100, présence 100 ; reste vitesse 80 et GEO 0 = absence des annuaires, pas un défaut de site).
+> **S15.1** — « gain estimé +null pts » sur un audit PARFAIT : S12.1 avait branché le gain réel sur le calcul
+> du PDF mais pas sur son rendu (le cockpit avait son ternaire, pas le PDF). Bug **inatteignable jusqu'à ce
+> qu'un site soit sans défaut** → titre « Points de contrôle · aucune action requise ».
+> ⚠ **RÈGLE AJOUTÉE À LA PASSE ADVERSE : tester aussi l'ÉTAT DE SUCCÈS** (0 finding, tous axes verts) — l'écran
+> que voit le client satisfait est le moins testé et doit être irréprochable.
 > **Incident fondateur** : correctif staging appliqué à la source (Custom Embed rev.4 via API Wix), rapport
 > suivant → « URL de staging » toujours là sur 10 pages. Causes réelles : (1) le crawl lisait la home en APEX
 > et les pages internes en WWW (sitemap) → couches de cache CDN différentes (Wix Varnish vs Fastly) dans le
