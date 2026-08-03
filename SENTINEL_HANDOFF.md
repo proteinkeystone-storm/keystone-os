@@ -16,7 +16,7 @@
 > **DoD Mas** : 11 pages détectées → crawl 11/11 en ~2-3 min, dont /contact et /nos-offres jamais auditées
 > avant (4 gîtes sur 7 étaient hors échantillon). ⚠ 1er crawl réel = smoke du cron (lot, finalisation, badge).
 >
-> > ## ✅ S10.0 « CONTRÔLES À VALEUR » LIVRÉ (2026-08-03) — `engine:S10.0`, smokes 20 VERT, 29 tests.
+> ## ✅ S10.0 « CONTRÔLES À VALEUR » LIVRÉ (2026-08-03) — `engine:S10.0`, smokes 20 VERT, 29 tests.
 > **Principe** : trouver ce que les autres outils ne trouvent pas — et parler la langue de l'entité auditée.
 > - **C17 · Cohérence url/@id JSON-LD vs domaine audité** (`jsonld_url_mismatch`, high) — LE check signature.
 >   Détecte les URL de staging (`STAGING_HOSTS` : wixstudio/wixsite/vercel.app/netlify.app/myshopify…) et les
