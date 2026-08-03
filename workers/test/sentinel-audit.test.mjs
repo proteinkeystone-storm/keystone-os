@@ -270,4 +270,36 @@ t('C21 · wordpress-org : aucun hint inventé (Organization sans adresse)', () =
   assert.equal(r.geoHints.activity, '');
 });
 
-console.log(`\n${n} tests OK — moteur S8+S9+S10 conforme à la vérité terrain des fixtures.`);
+// ═══ S11 — agrégation multi-pages (partagée express/crawl) ═══════════════
+import { aggregatePages, SITE_LEVEL_KEYS } from '../src/lib/audit-page.js';
+
+t('S11 · aggregatePages : moyenne des axes, findings tagués, site-level dédupliqués', () => {
+  const pages = [
+    { path: '/', scores: { seo: 100, securite: 100, accessibilite: 100, presence: 85 },
+      findings: [{ axis: 'presence', sev: 'medium', key: 'nap_hours', title: 'h', detail: 'd' },
+                 { axis: 'seo', sev: 'low', key: 'sitemap', title: 's', detail: 'd' }],
+      indeterminate: [], notApplicable: ['sec_CSP'], truncated: false, canonicalHrefHost: 'www.exemple.fr' },
+    { path: '/a', scores: { seo: 90, securite: 100, accessibilite: 100, presence: 85 },
+      findings: [{ axis: 'presence', sev: 'medium', key: 'nap_hours', title: 'h', detail: 'd' }],
+      indeterminate: ['img_alt'], notApplicable: ['sec_CSP'], truncated: true, canonicalHrefHost: 'www.exemple.fr' },
+  ];
+  const agg = aggregatePages(pages);
+  assert.equal(agg.scores.seo, 95);
+  const hours = agg.findings.find((f) => f.key === 'nap_hours');
+  assert.deepEqual(hours.pages, ['/', '/a']);                    // page-level : tagué
+  const sm = agg.findings.find((f) => f.key === 'sitemap');
+  assert.equal(sm.pages, null);                                  // site-level : dédupliqué, pas de tag
+  assert.deepEqual(agg.indeterminate, ['img_alt']);
+  assert.deepEqual(agg.notApplicable, ['sec_CSP']);
+  assert.equal(agg.truncated, true);
+  assert.ok(!agg.findings.some((f) => f.key === 'canonical_inconsistent'), 'hôtes canoniques homogènes');
+});
+t('S11 · aggregatePages : hôtes canoniques mélangés → canonical_inconsistent', () => {
+  const mk = (path, host) => ({ path, scores: { seo: 100 }, findings: [], indeterminate: [], notApplicable: [], truncated: false, canonicalHrefHost: host });
+  const agg = aggregatePages([mk('/', 'www.exemple.fr'), mk('/a', 'exemple.fr')]);
+  const f = agg.findings.find((x) => x.key === 'canonical_inconsistent');
+  assert.ok(f && f.sev === 'medium');
+  assert.ok(SITE_LEVEL_KEYS.has('canonical_inconsistent'));
+});
+
+console.log(`\n${n} tests OK — moteur S8+S9+S10+S11 conforme à la vérité terrain des fixtures.`);

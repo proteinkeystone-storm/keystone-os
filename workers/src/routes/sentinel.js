@@ -43,9 +43,9 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 // S5 — GEO (visibilité IA) : clé du propriétaire via le coffre BYOK si dispo,
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
-import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid } from '../lib/audit-page.js';
+import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S10.0';
+const SENTINEL_ENGINE_VERSION = 'S11.0';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -153,6 +153,18 @@ async function _ensureSchema(env) {
   try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN not_applicable TEXT").run(); } catch (_) { /* déjà présent */ }
   try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN engine TEXT").run(); } catch (_) { /* déjà présent */ }
   try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN pages_total INTEGER").run(); } catch (_) { /* déjà présent */ }
+  // S11 — couverture de l'audit : 'sample' (express, 5 pages) | 'full' (crawl complet).
+  try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN coverage TEXT").run(); } catch (_) { /* déjà présent */ }
+  // S11 — crawl complet asynchrone : 1 job par site + file de pages (pattern sweepDue).
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS sentinel_crawls (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'default', site_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running', total INTEGER NOT NULL DEFAULT 0, done INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')), finished_at TEXT)`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS sentinel_crawl_pages (
+    crawl_id TEXT NOT NULL, tenant_id TEXT NOT NULL DEFAULT 'default', url TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending', result TEXT,
+    PRIMARY KEY (crawl_id, url))`).run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sentinel_crawl_pages_status ON sentinel_crawl_pages(status, crawl_id)").run();
   _schemaReady = true;
 }
 
@@ -382,6 +394,8 @@ async function _discoverPages(url, max) {
 }
 
 // Audite la home + N pages internes en parallèle, agrège scores + findings.
+// S11 : l'agrégation vit dans lib/audit-page.js (aggregatePages) — partagée
+// avec la finalisation du crawl complet.
 async function _auditSite(url, platform) {
   const home = await _audit(url, { platform });
   let extraUrls = [], pagesTotal = 1;
@@ -389,43 +403,147 @@ async function _auditSite(url, platform) {
   const extras = (await Promise.all(extraUrls.map((u) =>
     _audit(u, { skipSite: true, sitemapKnown: home.sitemap, platform }).then((r) => ({ url: u, ...r })).catch(() => null)
   ))).filter((p) => p && p.reachable);
-  const pagesAudited = [{ url, ...home }].concat(extras);
+  const pagesAudited = [{ url, ...home }].concat(extras).map((p) => ({ ...p, path: _pathOf(p.url) }));
 
-  // Scores = moyenne par axe sur les pages atteintes.
-  const scores = {};
-  for (const ax of ['seo', 'securite', 'accessibilite', 'presence']) {
-    const vals = pagesAudited.map((p) => p.scores && p.scores[ax]).filter((v) => typeof v === 'number');
-    scores[ax] = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+  const agg = aggregatePages(pagesAudited);
+  const pages = pagesAudited.map((p) => ({ path: p.path, score: _globalScore({ ...p.scores }) }));
+  return { reachable: home.reachable, ...agg, pages, pageCount: pagesAudited.length,
+           pagesTotal: Math.max(pagesTotal, pagesAudited.length), geoHints: home.geoHints || null };
+}
+
+// ═══ S11 · Crawl complet asynchrone (pattern sweepDue) ═════════════════
+// L'audit express (5 pages, synchrone) échantillonne ; le crawl audite TOUT
+// (borné par plan) en tâche de fond : file D1, N pages par tick de cron,
+// agrégation finale = un audit « coverage:full » dans l'historique.
+const CRAWL_TICK_PAGES = 5;      // pages auditées par tick (1 min) — mémoire bornée (séquentiel)
+function _crawlLimit(plan) {
+  const p = String(plan || '').toUpperCase();
+  if (p === 'ADMIN') return 100;
+  if (p === 'MAX' || p === 'BETA') return 50;
+  if (p === 'PRO') return 25;
+  return 10;
+}
+
+// Découverte EXHAUSTIVE (sitemap prioritaire + liens de la home), bornée.
+async function _discoverAllPages(url, max) {
+  const d = await _discoverPages(url, max);
+  return d;   // _discoverPages est déjà borné/normalisé ; max élevé = quasi-exhaustif sur sitemap
+}
+
+// POST /sites/:id/crawl — démarre un crawl complet (409 si déjà en cours).
+export async function handleSiteCrawlStart(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _gate(request, env, origin);
+  if (g.error) return g.error;
+  const site = await env.DB.prepare("SELECT id, url, label, platform FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  if (!site) return err('Site introuvable.', 404, origin);
+  const running = await env.DB.prepare("SELECT id, done, total FROM sentinel_crawls WHERE site_id = ? AND tenant_id = ? AND status = 'running'").bind(id, g.tenant).first();
+  if (running) return json({ crawl: { id: running.id, status: 'running', done: running.done, total: running.total } }, 200, origin);
+
+  const limit = _crawlLimit(g.plan);
+  let urls = [site.url];
+  try {
+    const d = await _discoverAllPages(site.url, Math.max(0, limit - 1));
+    urls = [site.url, ...d.urls];
+  } catch (_) {}
+  const crawlId = generateId();
+  await env.DB.prepare("INSERT INTO sentinel_crawls (id, tenant_id, site_id, status, total, done) VALUES (?, ?, ?, 'running', ?, 0)")
+    .bind(crawlId, g.tenant, id, urls.length).run();
+  // Lot d'INSERT bornés (D1 batch) — la home est la 1re page de la file.
+  const stmts = urls.map((u) => env.DB.prepare("INSERT OR IGNORE INTO sentinel_crawl_pages (crawl_id, tenant_id, url) VALUES (?, ?, ?)").bind(crawlId, g.tenant, u));
+  await env.DB.batch(stmts);
+  return json({ crawl: { id: crawlId, status: 'running', done: 0, total: urls.length,
+    note: `Crawl lancé : ${urls.length} pages (plafond ${limit} sur votre plan). Progression ~${CRAWL_TICK_PAGES} pages/min.` } }, 200, origin);
+}
+
+// GET /sites/:id/crawl — état du dernier crawl (progression ou résultat).
+export async function handleSiteCrawlStatus(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _gate(request, env, origin);
+  if (g.error) return g.error;
+  const own = await env.DB.prepare("SELECT id FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  if (!own) return err('Site introuvable.', 404, origin);
+  const c = await env.DB.prepare("SELECT id, status, total, done, created_at, finished_at FROM sentinel_crawls WHERE site_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1").bind(id, g.tenant).first();
+  return json({ crawl: c || null }, 200, origin);
+}
+
+// Sweep cron (1 min) — audite un lot de pages en attente, SÉQUENTIEL
+// (1 document de ≤ 4 Mo en mémoire à la fois), puis finalise les crawls
+// dont la file est vide. No-op à coût quasi nul quand rien n'est dû.
+export async function sweepDueCrawls(env) {
+  await _ensureSchema(env);
+  const due = (await env.DB.prepare(
+    `SELECT p.crawl_id, p.tenant_id, p.url, c.site_id
+       FROM sentinel_crawl_pages p JOIN sentinel_crawls c ON c.id = p.crawl_id
+      WHERE p.status = 'pending' AND c.status = 'running'
+      ORDER BY c.created_at ASC LIMIT ${CRAWL_TICK_PAGES}`
+  ).all()).results || [];
+  let audited = 0;
+  for (const row of due) {
+    let result = null;
+    try {
+      const site = await env.DB.prepare("SELECT url, platform FROM sentinel_sites WHERE id = ?").bind(row.site_id).first();
+      const isHome = site && _pathOf(row.url) === _pathOf(site.url);
+      const r = await _audit(row.url, { skipSite: !isHome, platform: site && site.platform });
+      result = { path: _pathOf(row.url), reachable: r.reachable, scores: r.scores, findings: r.findings,
+                 indeterminate: r.indeterminate, notApplicable: r.notApplicable, truncated: r.truncated,
+                 canonicalHrefHost: r.canonicalHrefHost || null, sitemap: r.sitemap, geoHints: isHome ? r.geoHints : null };
+    } catch (_) { /* page en échec → 'failed', le crawl continue */ }
+    await env.DB.prepare("UPDATE sentinel_crawl_pages SET status = ?, result = ? WHERE crawl_id = ? AND url = ?")
+      .bind(result && result.reachable ? 'done' : 'failed', result ? JSON.stringify(result) : null, row.crawl_id, row.url).run();
+    await env.DB.prepare("UPDATE sentinel_crawls SET done = done + 1 WHERE id = ?").bind(row.crawl_id).run();
+    audited++;
   }
 
-  // Findings : site-level dédupliqués ; page-level taggés des pages concernées.
-  const SITE_LEVEL = new Set(['sitemap', 'wix_subdomain', 'sec_HSTS', 'sec_CSP', 'sec_X-Frame-Options', 'sec_X-Content-Type-Options', 'sec_Referrer-Policy']);
-  const byKey = new Map();
-  for (const p of pagesAudited) {
-    const path = _pathOf(p.url);
-    for (const f of (p.findings || [])) {
-      const ex = byKey.get(f.key);
-      if (ex) { if (ex.pages) ex.pages.push(path); }
-      else byKey.set(f.key, { axis: f.axis, sev: f.sev, key: f.key, title: f.title, detail: f.detail, pages: SITE_LEVEL.has(f.key) ? null : [path] });
-    }
+  // Finalisation des crawls sans page en attente.
+  const finishable = (await env.DB.prepare(
+    `SELECT c.id, c.tenant_id, c.site_id FROM sentinel_crawls c
+      WHERE c.status = 'running'
+        AND NOT EXISTS (SELECT 1 FROM sentinel_crawl_pages p WHERE p.crawl_id = c.id AND p.status = 'pending')`
+  ).all()).results || [];
+  let finalized = 0;
+  for (const c of finishable) {
+    try { await _finalizeCrawl(env, c); finalized++; }
+    catch (_) { await env.DB.prepare("UPDATE sentinel_crawls SET status = 'failed', finished_at = datetime('now') WHERE id = ?").bind(c.id).run().catch(() => {}); }
   }
-  // S10/C18 — cohérence des canonicals ENTRE les pages : un site qui déclare
-  // tantôt www tantôt apex éparpille ses signaux (Google voit 2 sites).
-  const canonHosts = [...new Set(pagesAudited.map((p) => p.canonicalHrefHost).filter(Boolean))];
-  if (canonHosts.length > 1) {
-    byKey.set('canonical_inconsistent', { axis: 'seo', sev: 'medium', key: 'canonical_inconsistent',
-      title: 'Canonicals incohérents entre les pages',
-      detail: `Les pages déclarent des hôtes canoniques différents (${canonHosts.join(' vs ')}) : choisissez UNE forme (www ou non) et appliquez-la partout.`, pages: null });
+  return { pages: audited, finalized };
+}
+
+// Agrège les pages du crawl → un audit « coverage:full » complet (mêmes
+// champs que l'audit express : CWV home, dispo fenêtrée, version moteur).
+async function _finalizeCrawl(env, c) {
+  const rows = (await env.DB.prepare("SELECT url, status, result FROM sentinel_crawl_pages WHERE crawl_id = ?").bind(c.id).all()).results || [];
+  const pagesAudited = rows.filter((r) => r.status === 'done' && r.result)
+    .map((r) => { try { return JSON.parse(r.result); } catch (_) { return null; } })
+    .filter((p) => p && p.reachable);
+  const site = await env.DB.prepare("SELECT id, url, label, platform FROM sentinel_sites WHERE id = ?").bind(c.site_id).first();
+  if (!site || !pagesAudited.length) {
+    await env.DB.prepare("UPDATE sentinel_crawls SET status = 'failed', finished_at = datetime('now') WHERE id = ?").bind(c.id).run();
+    return;
   }
-  const findings = [...byKey.values()].map((f) => { if (f.pages) f.pages = [...new Set(f.pages)]; return f; });
-  const pages = pagesAudited.map((p) => ({ path: _pathOf(p.url), score: _globalScore({ ...p.scores }) }));
-  // S8 — contrôles indéterminés (union sur les pages) : « non vérifiable »
-  // n'est ni un défaut ni un blanc-seing, le rapport doit pouvoir le dire.
-  const indeterminate = [...new Set(pagesAudited.flatMap((p) => p.indeterminate || []))];
-  // S9/C8 — en-têtes non applicables (plateforme managée), union.
-  const notApplicable = [...new Set(pagesAudited.flatMap((p) => p.notApplicable || []))];
-  const truncated = pagesAudited.some((p) => p.truncated);
-  return { reachable: home.reachable, scores, findings, pages, pageCount: pagesAudited.length, pagesTotal: Math.max(pagesTotal, pagesAudited.length), indeterminate, notApplicable, truncated, geoHints: home.geoHints || null };
+  const agg = aggregatePages(pagesAudited);
+  const pages = pagesAudited.map((p) => ({ path: p.path, score: _globalScore({ ...p.scores }) }));
+  const up = await _uptimeWindow(env, site.id);
+  const dispo = up.pct == null ? null : Math.round(up.pct);
+  const cwv = await _measurePerf(env, site.url);
+  const perf = _perfScore(cwv);
+  const scores = { disponibilite: dispo, performance: perf, ...agg.scores };
+  const findings = agg.findings.slice();
+  if (cwv) {
+    if (cwv.lcp >= 4000) findings.push({ axis: 'performance', sev: 'high', key: 'perf_lcp', title: `Chargement lent (LCP ${(cwv.lcp / 1000).toFixed(1)} s)`, detail: 'Cible : moins de 2,5 s — compressez images et scripts.' });
+    else if (cwv.lcp >= 2500) findings.push({ axis: 'performance', sev: 'medium', key: 'perf_lcp', title: `Chargement à améliorer (LCP ${(cwv.lcp / 1000).toFixed(1)} s)`, detail: 'Cible : moins de 2,5 s.' });
+    if (cwv.cls >= 0.25) findings.push({ axis: 'performance', sev: 'medium', key: 'perf_cls', title: `La page saute au chargement (CLS ${cwv.cls})`, detail: 'Réservez les dimensions des images, bannières et publicités.' });
+    if (cwv.weightKb >= 3072) findings.push({ axis: 'performance', sev: 'low', key: 'perf_weight', title: `Page lourde (${(cwv.weightKb / 1024).toFixed(1)} Mo)`, detail: 'Allégez images et scripts pour accélérer le mobile.' });
+  }
+  _attachFixes(findings, { url: site.url, host: _hostOf(site.url), platform: site.platform });
+  const global = _globalScore(scores);
+  await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total, coverage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'full')")
+    .bind(generateId(), c.tenant_id, site.id, global, JSON.stringify(scores), JSON.stringify(findings),
+          cwv ? JSON.stringify(cwv) : null, JSON.stringify(pages), JSON.stringify(agg.indeterminate),
+          JSON.stringify(agg.notApplicable), SENTINEL_ENGINE_VERSION, pagesAudited.length).run();
+  await env.DB.prepare("UPDATE sentinel_sites SET last_score = ?, last_scores = ?, last_audit_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
+    .bind(global, JSON.stringify(scores), site.id).run();
+  await env.DB.prepare("UPDATE sentinel_crawls SET status = 'done', finished_at = datetime('now') WHERE id = ?").bind(c.id).run();
 }
 
 // Disponibilité (axe S1) — % de relevés OK sur 24 h.
@@ -974,7 +1092,7 @@ export async function handleSiteAudit(request, env, id) {
   const naJson = JSON.stringify(a.notApplicable || []);
   // S9/C23 — l'audit porte la version du moteur qui l'a produit : quand un
   // score bouge après une révision de méthode, l'historique doit le dire.
-  await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+  await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total, coverage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sample')")
     .bind(generateId(), g.tenant, site.id, global, scoresJson, findingsJson, cwv ? JSON.stringify(cwv) : null, pagesJson, indetJson, naJson, SENTINEL_ENGINE_VERSION, a.pagesTotal || null).run();
   await env.DB.prepare("UPDATE sentinel_sites SET last_score = ?, last_scores = ?, last_audit_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?")
     .bind(global, scoresJson, site.id, g.tenant).run();
@@ -1045,9 +1163,9 @@ export async function handleSiteCockpit(request, env, id) {
   const series30d = seriesRows.map((r) => ({ d: r.d, ms: Math.round(r.ms || 0), up: r.up }));
 
   // Dernier audit + historique + tendance de score (vs ~7 j).
-  const auditRow = await env.DB.prepare("SELECT score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total, created_at FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 1").bind(id).first();
+  const auditRow = await env.DB.prepare("SELECT score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total, coverage, created_at FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 1").bind(id).first();
   let audit = null;
-  if (auditRow) { let sc = null, fd = [], cw = null, pg = null, ind = [], na = []; try { sc = JSON.parse(auditRow.scores); } catch (_) {} try { fd = JSON.parse(auditRow.findings); } catch (_) {} try { cw = auditRow.cwv ? JSON.parse(auditRow.cwv) : null; } catch (_) {} try { pg = auditRow.pages ? JSON.parse(auditRow.pages) : null; } catch (_) {} try { ind = auditRow.indeterminate ? JSON.parse(auditRow.indeterminate) : []; } catch (_) {} try { na = auditRow.not_applicable ? JSON.parse(auditRow.not_applicable) : []; } catch (_) {} audit = { score: auditRow.score, scores: sc, findings: fd, cwv: cw, pages: pg, pagesTotal: auditRow.pages_total, indeterminate: ind, notApplicable: na, engine: auditRow.engine, created_at: auditRow.created_at }; }
+  if (auditRow) { let sc = null, fd = [], cw = null, pg = null, ind = [], na = []; try { sc = JSON.parse(auditRow.scores); } catch (_) {} try { fd = JSON.parse(auditRow.findings); } catch (_) {} try { cw = auditRow.cwv ? JSON.parse(auditRow.cwv) : null; } catch (_) {} try { pg = auditRow.pages ? JSON.parse(auditRow.pages) : null; } catch (_) {} try { ind = auditRow.indeterminate ? JSON.parse(auditRow.indeterminate) : []; } catch (_) {} try { na = auditRow.not_applicable ? JSON.parse(auditRow.not_applicable) : []; } catch (_) {} audit = { score: auditRow.score, scores: sc, findings: fd, cwv: cw, pages: pg, pagesTotal: auditRow.pages_total, indeterminate: ind, notApplicable: na, engine: auditRow.engine, coverage: auditRow.coverage || 'sample', created_at: auditRow.created_at }; }
   const histRows = (await env.DB.prepare("SELECT created_at, score, scores FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 20").bind(id).all()).results || [];
   const scoreHistory = histRows.reverse().map((r) => { let sc = null; try { sc = r.scores ? JSON.parse(r.scores) : null; } catch (_) {} return { at: r.created_at, score: r.score, scores: sc }; });
   let scoreTrend = null;

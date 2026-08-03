@@ -155,6 +155,44 @@ export function sitemapLooksValid(text) {
   return !!text && /<\s*(urlset|sitemapindex|loc)\b/i.test(text);
 }
 
+// ═══ S11 — agrégation multi-pages (partagée : audit express ET crawl) ═════
+// Entrée : [{ path, scores, findings, indeterminate, notApplicable,
+//             truncated, canonicalHrefHost }]  (pages ATTEINTES uniquement).
+// Sortie : scores moyens par axe, findings fusionnés (site-level dédupliqués,
+// page-level tagués), unions indéterminé/non-applicable, cohérence canonicals.
+export const SITE_LEVEL_KEYS = new Set(['sitemap', 'wix_subdomain', 'canonical_inconsistent',
+  'sec_HSTS', 'sec_CSP', 'sec_X-Frame-Options', 'sec_X-Content-Type-Options', 'sec_Referrer-Policy']);
+
+export function aggregatePages(pagesAudited) {
+  const scores = {};
+  for (const ax of ['seo', 'securite', 'accessibilite', 'presence']) {
+    const vals = pagesAudited.map((p) => p.scores && p.scores[ax]).filter((v) => typeof v === 'number');
+    scores[ax] = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+  }
+  const byKey = new Map();
+  for (const p of pagesAudited) {
+    for (const f of (p.findings || [])) {
+      const ex = byKey.get(f.key);
+      if (ex) { if (ex.pages) ex.pages.push(p.path); }
+      else byKey.set(f.key, { ...f, pages: SITE_LEVEL_KEYS.has(f.key) ? null : [p.path] });
+    }
+  }
+  // S10/C18 — cohérence des hôtes canoniques entre pages (www vs apex mélangés).
+  const canonHosts = [...new Set(pagesAudited.map((p) => p.canonicalHrefHost).filter(Boolean))];
+  if (canonHosts.length > 1) {
+    byKey.set('canonical_inconsistent', { axis: 'seo', sev: 'medium', key: 'canonical_inconsistent',
+      title: 'Canonicals incohérents entre les pages',
+      detail: `Les pages déclarent des hôtes canoniques différents (${canonHosts.join(' vs ')}) : choisissez UNE forme (www ou non) et appliquez-la partout.`, pages: null });
+  }
+  const findings = [...byKey.values()].map((f) => { if (f.pages) f.pages = [...new Set(f.pages)]; return f; });
+  return {
+    scores, findings,
+    indeterminate: [...new Set(pagesAudited.flatMap((p) => p.indeterminate || []))],
+    notApplicable: [...new Set(pagesAudited.flatMap((p) => p.notApplicable || []))],
+    truncated: pagesAudited.some((p) => p.truncated),
+  };
+}
+
 // ── JSON-LD : extraction + parsing tolérant ──────────────────────────────
 // Renvoie { nodes, types } : nodes = objets aplatis (tableaux et @graph à
 // un niveau), types = Set des @type rencontrés (chaînes et tableaux).

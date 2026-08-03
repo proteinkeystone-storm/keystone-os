@@ -1,6 +1,22 @@
 # 🛰️ SENTINEL — Ordres de reprise (nouvelle conversation)
 
-> ## ✅ S10.0 « CONTRÔLES À VALEUR » LIVRÉ (2026-08-03) — `engine:S10.0`, smokes 20 VERT, 29 tests.
+> ## ✅ S11.0 « COUVERTURE COMPLÈTE » LIVRÉ (2026-08-03) — `engine:S11.0`, SW `v5.28.459`, 31 tests.
+> **Fin du plan S8→S11.** L'audit express (5 pages, synchrone) échantillonne ; le **crawl complet** audite
+> TOUT le site en tâche de fond, sur le pattern sweepDue :
+> - **Tables** `sentinel_crawls` (1 job/site : status/total/done) + `sentinel_crawl_pages` (file, résultat JSON par page).
+> - **Endpoints** : `POST /sites/:id/crawl` (démarre ; idempotent si déjà en cours ; plafond par plan via
+>   `_crawlLimit` : STARTER 10 · PRO 25 · MAX 50 · ADMIN 100) ; `GET /sites/:id/crawl` (progression).
+> - **Cron `* * * * *`** (trigger existant, jusqu'ici inutilisé) : `sweepDueCrawls` audite **5 pages/tick**
+>   (séquentiel — 1 document ≤ 4 Mo en mémoire à la fois), no-op quasi gratuit sans file.
+> - **Finalisation** : agrégation (`aggregatePages`, extraite dans lib — partagée avec l'audit express),
+>   CWV home + dispo fenêtrée + fixes → **audit `coverage:'full'`** dans l'historique + `last_score` du site.
+> - **Front** : bouton « Auditer les N pages (crawl complet) » dans le bloc pages du cockpit, progression
+>   live (poll 15 s, raccrochage au ré-ouvert), badge « couverture complète » (cockpit + PDF). SW bumpé.
+> - L'audit express écrit désormais `coverage:'sample'` — l'historique dit toujours sur quoi un score repose.
+> **DoD Mas** : 11 pages détectées → crawl 11/11 en ~2-3 min, dont /contact et /nos-offres jamais auditées
+> avant (4 gîtes sur 7 étaient hors échantillon). ⚠ 1er crawl réel = smoke du cron (lot, finalisation, badge).
+>
+> > ## ✅ S10.0 « CONTRÔLES À VALEUR » LIVRÉ (2026-08-03) — `engine:S10.0`, smokes 20 VERT, 29 tests.
 > **Principe** : trouver ce que les autres outils ne trouvent pas — et parler la langue de l'entité auditée.
 > - **C17 · Cohérence url/@id JSON-LD vs domaine audité** (`jsonld_url_mismatch`, high) — LE check signature.
 >   Détecte les URL de staging (`STAGING_HOSTS` : wixstudio/wixsite/vercel.app/netlify.app/myshopify…) et les

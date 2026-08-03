@@ -199,7 +199,8 @@ import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDele
          handleSiteGeoGet, handleSiteGeoSave, handleSiteGeoRun, handleSiteGeoManual,
          handleSiteGscConnect, handleGscCallback, handleSiteGscGet, handleSiteGscRun, handleSiteGscDisconnect,
          handlePushSubscribe as handleSentinelPushSub, handlePushUnsubscribe as handleSentinelPushUnsub,
-         sweepDueChecks, sweepDueGeo } from './routes/sentinel.js';
+         sweepDueChecks, sweepDueGeo, sweepDueCrawls,
+         handleSiteCrawlStart, handleSiteCrawlStatus } from './routes/sentinel.js';
 
 // ── Key Brand — charte graphique vivante (Pad O-BRD-001 · KB-0) ──
 import { handleKeyBrandHealth, handleKeyBrandList, handleKeyBrandCreate,
@@ -471,6 +472,9 @@ export default {
       if (sntAudit && method === 'GET')  return handleSiteAuditGet(request, env, sntAudit[1]);
       const sntCockpit = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/cockpit$/);
       if (sntCockpit && method === 'GET') return handleSiteCockpit(request, env, sntCockpit[1]);
+      const sntCrawl = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/crawl$/);
+      if (sntCrawl && method === 'POST') return handleSiteCrawlStart(request, env, sntCrawl[1]);
+      if (sntCrawl && method === 'GET')  return handleSiteCrawlStatus(request, env, sntCrawl[1]);
       const sntSuggest = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/suggest$/);
       if (sntSuggest && method === 'POST') return handleSiteSuggest(request, env, sntSuggest[1]);
       const sntReport = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/send-report$/);
@@ -1144,7 +1148,17 @@ export default {
       if (path === '/api/admin/export'       && method === 'GET')    return handleExport(request, env);
       if (path === '/api/admin/purge-tenant' && method === 'POST')   return handlePurgeTenant(request, env);
 
-      // ── Sauvegardes D1 hors-plateforme (OPS-1) ────────────────
+      // Sentinel S11 — crawl complet : file de pages, lot borné par tick (1 min).
+    // No-op quasi gratuit quand aucune page n'est en attente.
+    if (cron === '* * * * *') {
+      ctx.waitUntil(
+        sweepDueCrawls(env)
+          .then(r => { if (r && (r.pages || r.finalized)) console.log('[sentinel-crawl-sweep]', JSON.stringify(r)); })
+          .catch(e => console.warn('[sentinel-crawl-sweep] failed', e?.message || e))
+      );
+    }
+
+    // ── Sauvegardes D1 hors-plateforme (OPS-1) ────────────────
       if (path === '/api/admin/backup/run'     && method === 'POST')  return handleBackupRun(request, env);
       if (path === '/api/admin/backup/list'    && method === 'GET')   return handleBackupList(request, env);
       if (path === '/api/admin/backup/object'  && method === 'GET')   return handleBackupObject(request, env);

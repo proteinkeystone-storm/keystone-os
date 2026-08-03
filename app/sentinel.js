@@ -384,11 +384,18 @@ function _pagesAuditedHTML(c) {
   if (!pages || pages.length <= 1) return '';
   const chips = pages.map((p) => `<span class="snt-page-chip"><span class="snt-page-path">${_esc(p.path)}</span><span class="snt-page-score ${p.score != null ? _scoreClass(p.score) : ''}">${p.score != null ? p.score : '—'}</span></span>`).join('');
   // S9 — périmètre honnête : « X sur N détectées », jamais un implicite
-  // « tout le site » quand on a échantillonné.
+  // « tout le site » quand on a échantillonné. S11 : le crawl complet est là.
   const total = c.audit.pagesTotal;
-  const scope = (total && total > pages.length)
-    ? `${pages.length} pages auditées sur ${total} détectées · score par page <span class="snt-dim">· les ${total - pages.length} autres seront couvertes par le crawl complet (à venir)</span>`
-    : `${pages.length} pages auditées · score par page`;
+  const full = c.audit.coverage === 'full';
+  const crawling = c.crawlRunning;
+  let scope;
+  if (full) scope = `${pages.length} pages auditées · <b>couverture complète</b> · score par page`;
+  else if (total && total > pages.length) {
+    const action = crawling
+      ? `<span class="snt-dim">· crawl complet en cours… ${crawling.done}/${crawling.total} pages</span>`
+      : `<button class="snt-link-btn" data-act="crawl-full">Auditer les ${total} pages (crawl complet)</button>`;
+    scope = `${pages.length} pages auditées sur ${total} détectées · score par page ${action}`;
+  } else scope = `${pages.length} pages auditées · score par page`;
   return `<div class="snt-pages"><div class="snt-pages-h">${icon('search', 14)} ${scope}</div><div class="snt-pages-list">${chips}</div></div>`;
 }
 
@@ -712,6 +719,12 @@ async function _loadCockpit(id, opts = {}) {
       platform: (c && c.site) ? c.site.platform : null,
     };
     _renderCockpit();
+    // S11 — un crawl lancé puis panneau fermé : on raccroche la progression.
+    _api(`/sites/${encodeURIComponent(id)}/crawl`).then((d) => {
+      if (_panel && _panel.id === id && d.crawl && d.crawl.status === 'running') {
+        _panel.crawlRunning = { done: d.crawl.done, total: d.crawl.total }; _renderCockpit(); _crawlWatch(id);
+      }
+    }).catch(() => {});
   } catch (e) {
     _panel = { id, error: e.message || 'Chargement impossible.' };
     _renderCockpit();
@@ -1132,7 +1145,8 @@ function _exportPdf() {
   // V2 crawl — note « pages auditées » ; S9 : périmètre HONNÊTE (« X sur N »).
   const auditPages = (p.audit && p.audit.pages) || [];
   const pTotal = p.audit && p.audit.pagesTotal;
-  const scopeTxt = (pTotal && pTotal > auditPages.length) ? `${auditPages.length} pages sur ${pTotal} détectées` : `${auditPages.length} pages`;
+  const scopeTxt = (p.audit && p.audit.coverage === 'full') ? `${auditPages.length} pages — couverture complète`
+    : (pTotal && pTotal > auditPages.length) ? `${auditPages.length} pages sur ${pTotal} détectées` : `${auditPages.length} pages`;
   const pagesNote = auditPages.length > 1 ? `<div class="sub2">Audit réalisé sur ${scopeTxt} : ${_esc(auditPages.map((x) => x.path).slice(0, 8).join(', '))}${auditPages.length > 8 ? '…' : ''}${(pTotal && pTotal > auditPages.length) ? ' — le score reflète cet échantillon.' : ''}</div>` : '';
   // S9 — transparence dans le rapport : conditions de mesure + version moteur.
   const condTxt = (p.audit && p.audit.cwv && p.audit.cwv.conditions === 'mobile-4g-cpu4x') ? 'Vitesse mesurée en conditions mobiles émulées (4G lente, CPU ×4).' : ((p.audit && p.audit.cwv) ? 'Vitesse mesurée depuis un datacenter (non bridé) — plus favorable que le mobile réel.' : '');
@@ -1280,6 +1294,29 @@ function _onClick(e) {
   if (a === 'gsc-connect')       return _gscConnect();
   if (a === 'gsc-run')           return _gscRun();
   if (a === 'gsc-disconnect')    return _gscDisconnect();
+  if (a === 'crawl-full')        return _crawlFull();
+}
+
+// ── S11 · Crawl complet — lancement + suivi de progression ──────
+let _crawlTimer = null;
+async function _crawlFull() {
+  if (!_panel || !_panel.id) return;
+  try {
+    const d = await _api(`/sites/${encodeURIComponent(_panel.id)}/crawl`, { method: 'POST' });
+    if (d.crawl) { _panel.crawlRunning = { done: d.crawl.done, total: d.crawl.total }; _renderCockpit(); _crawlWatch(_panel.id); }
+  } catch (e) { alert(e.message || 'Crawl impossible.'); }
+}
+function _crawlWatch(id) {
+  if (_crawlTimer) clearTimeout(_crawlTimer);
+  _crawlTimer = setTimeout(async () => {
+    if (!_panel || _panel.id !== id) return;                      // panneau fermé / autre site
+    try {
+      const d = await _api(`/sites/${encodeURIComponent(id)}/crawl`);
+      const c = d.crawl;
+      if (c && c.status === 'running') { _panel.crawlRunning = { done: c.done, total: c.total }; _renderCockpit(); _crawlWatch(id); }
+      else { _panel.crawlRunning = null; await _loadCockpit(id, { noAutoRun: true }); _load(true); }   // fini → recharge l'audit « couverture complète »
+    } catch (_) { _crawlWatch(id); }
+  }, 15000);                                                       // ~5 pages/min : 15 s suffisent
 }
 async function _onSubmit(e) {
   const form = e.target.closest('[data-form="add"]'); if (!form) return;
