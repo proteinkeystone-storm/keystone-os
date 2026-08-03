@@ -18,7 +18,7 @@ import { gunzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyzePage, extractJsonLd, LOCALBUSINESS_TYPES, globalScore, perfScore, AXIS_WEIGHTS } from '../src/lib/audit-page.js';
+import { analyzePage, extractJsonLd, LOCALBUSINESS_TYPES, globalScore, perfScore, AXIS_WEIGHTS, sitemapLooksValid } from '../src/lib/audit-page.js';
 
 const FIX = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const load = (name) => gunzipSync(readFileSync(join(FIX, `${name}.html.gz`))).toString('utf-8');
@@ -50,11 +50,14 @@ t('LOCALBUSINESS_TYPES : la verticale hébergement est couverte (bug d\'origine)
 // Vérité terrain (main, 2026-08-03) : 1 H1, title 60c, meta 78c, canonical,
 // OG complet, 116/116 img alt, JSON-LD LodgingBusiness+LocalBusiness+WebSite,
 // tel: + telephone, address, PAS d'openingHours.
-t('mas-home : H1 détecté, LodgingBusiness reconnu, seul finding = horaires', () => {
+t('mas-home : H1 détecté, LodgingBusiness reconnu, findings = horaires + staging (S10)', () => {
   const r = analyzePage(load('wix-studio-mas-home'), { sitemap: true, url: 'https://lemasdesbouteillans.com/' });
   assert.equal(r.truncated, false);
-  assert.deepEqual(keys(r), ['nap_hours']);           // NI 'h1' NI 'nap_localbiz' — les 2 faux négatifs du rapport
-  assert.equal(r.scores.seo, 100);
+  // Révision S10 (vérifiée à la main le 2026-08-03) : le JSON-LD LodgingBusiness
+  // du Mas déclare bien url=proteinstd.wixstudio.com — VRAI défaut, le finding
+  // C17 DOIT sortir. Toujours ni 'h1' ni 'nap_localbiz' (les 2 faux négatifs S7).
+  assert.deepEqual(keys(r), ['jsonld_url_mismatch', 'nap_hours']);
+  assert.equal(r.scores.seo, 100);                     // S10 = informatif, ne touche pas au barème
   assert.equal(r.scores.accessibilite, 100);
   assert.equal(r.scores.presence, 85);                 // 30+35+20, horaires absents (réel)
   assert.equal(r.scores.securite, null);               // pas d'en-têtes fournis au moteur pur
@@ -64,8 +67,8 @@ t('mas-home : H1 détecté, LodgingBusiness reconnu, seul finding = horaires', (
 // ── Les 4 pages gîtes (le cœur du faux négatif : LodgingBusiness SEUL) ───
 for (const [page, seoAttendu] of [['arbousier', 93], ['escapades', 100], ['myrtes', 100], ['cypres', 100]]) {
   t(`mas-${page} : LodgingBusiness seul suffit, presence 85, seo ${seoAttendu}`, () => {
-    const r = analyzePage(load(`wix-studio-mas-${page}`), { skipSite: true, sitemap: true });
-    assert.deepEqual(keys(r), ['nap_hours']);
+    const r = analyzePage(load(`wix-studio-mas-${page}`), { skipSite: true, sitemap: true, url: `https://lemasdesbouteillans.com/${page}` });
+    assert.deepEqual(keys(r), ['jsonld_url_mismatch', 'nap_hours']);   // staging présent sur les 5 pages (vérifié)
     assert.equal(r.scores.seo, seoAttendu);            // arbousier : méta de 1 caractère → 8 pts (défaut réel du site)
     assert.equal(r.scores.presence, 85);
     assert.equal(r.scores.accessibilite, 100);
@@ -98,10 +101,12 @@ t('wordpress-org : AUCUN crédit NAP — le contrôle anti-faux-positifs', () =>
 // ── Troncature : reproduction EXACTE du bug d'origine ────────────────────
 // La coupe à 500 Ko sur la home du Mas produisait « Aucun H1 ». Le moteur
 // S8 doit dire « indéterminé » : pas de finding, point hors dénominateur.
-t('mas-home tronquée à 500 Ko : h1 indéterminé, AUCUN faux finding', () => {
-  const r = analyzePage(load('wix-studio-mas-home').slice(0, 500000), { truncated: true, sitemap: true });
+t('mas-home tronquée à 500 Ko : h1 indéterminé, AUCUN faux finding (le vrai reste)', () => {
+  const r = analyzePage(load('wix-studio-mas-home').slice(0, 500000), { truncated: true, sitemap: true, url: 'https://lemasdesbouteillans.com/' });
   assert.equal(r.truncated, true);
-  assert.deepEqual(keys(r), []);                       // l'ancien moteur émettait 'h1' ici — LE bug
+  // Preuve asymétrique S8/S10 : le staging (VU dans le buffer) reste un
+  // finding valable même tronqué ; le H1 (non vu) reste indéterminé.
+  assert.deepEqual(keys(r), ['jsonld_url_mismatch']);  // l'ancien moteur émettait 'h1' ici — LE bug
   assert.ok(r.indeterminate.includes('h1'));
   assert.ok(r.indeterminate.includes('nap_hours'));    // « pas trouvé » sur tronqué ≠ absent
   assert.equal(r.scores.presence, 100);                // renormalisé sur tél+adresse+fiche (trouvés)
@@ -189,4 +194,80 @@ t('C9 · page à 3 Mo : perf < 100 même avec LCP/CLS parfaits (fin de l\'incoh�
   assert.equal(perfScore(null), null);
 });
 
-console.log(`\n${n} tests OK — moteur S8+S9 conforme à la vérité terrain des fixtures.`);
+// ═══ S10 — contrôles à valeur ════════════════════════════════════════════
+
+// ── C17 : LE check signature — l'URL de staging du Mas, enfin détectée ───
+t('C17 · mas : le staging proteinstd.wixstudio.com est détecté et nommé', () => {
+  const r = analyzePage(load('wix-studio-mas-home'), { sitemap: true, url: 'https://lemasdesbouteillans.com/' });
+  const f = r.findings.find((x) => x.key === 'jsonld_url_mismatch');
+  assert.ok(f, 'le finding doit exister');
+  assert.equal(f.sev, 'high');
+  assert.ok(f.title.includes('staging'), 'wixstudio.com doit être reconnu comme staging');
+  assert.ok(f.detail.includes('proteinstd.wixstudio.com'), 'le détail nomme l\'URL fautive');
+});
+t('C17 · sameAs externes légitimes : jamais contrôlés (pas de faux positif réseaux sociaux)', () => {
+  const html = `<html lang="fr"><head><title>Titre correct ici</title><script type="application/ld+json">
+    {"@type":"Restaurant","url":"https://mon-resto.fr","sameAs":["https://facebook.com/monresto","https://instagram.com/monresto"]}
+    </script></head><body><h1>x</h1></body></html>`;
+  const r = analyzePage(html, { url: 'https://mon-resto.fr/' });
+  assert.ok(!keys(r).includes('jsonld_url_mismatch'));
+});
+t('C17 · www vs apex du même domaine : pas un mismatch', () => {
+  const html = `<html><head><script type="application/ld+json">{"@type":"Store","url":"https://www.exemple.fr"}</script></head><body></body></html>`;
+  const r = analyzePage(html, { url: 'https://exemple.fr/' });
+  assert.ok(!keys(r).includes('jsonld_url_mismatch'));
+});
+
+// ── C18 : canonical par valeur ────────────────────────────────────────────
+t('C18 · canonical vers un autre domaine → finding high', () => {
+  const html = `<html lang="fr"><head><title>Titre correct ici</title><link rel="canonical" href="https://ancien-domaine.fr/page"></head><body><h1>x</h1></body></html>`;
+  const r = analyzePage(html, { url: 'https://nouveau-domaine.fr/page' });
+  const f = r.findings.find((x) => x.key === 'canonical_mismatch');
+  assert.ok(f && f.sev === 'high');
+});
+t('C18 · canonical www du même domaine : conforme (cas du Mas)', () => {
+  const r = analyzePage(load('wix-studio-mas-home'), { sitemap: true, url: 'https://lemasdesbouteillans.com/' });
+  assert.ok(!keys(r).includes('canonical_mismatch'));
+  assert.equal(r.canonicalHost, 'lemasdesbouteillans.com');            // exposé pour la cohérence inter-pages
+  assert.equal(r.canonicalHrefHost, 'www.lemasdesbouteillans.com');
+});
+
+// ── C19 : entité typée ────────────────────────────────────────────────────
+t('C19 · lodging avec checkinTime/checkoutTime : horaires satisfaits', () => {
+  const html = `<html lang="fr"><head><title>Titre correct ici</title><script type="application/ld+json">
+    {"@type":"LodgingBusiness","url":"https://gite.fr","telephone":"+33 4 00 00 00 00","address":{"@type":"PostalAddress","addressLocality":"Bandol"},"checkinTime":"16:00","checkoutTime":"10:00"}
+    </script></head><body><h1>x</h1></body></html>`;
+  const r = analyzePage(html, { url: 'https://gite.fr/' });
+  assert.ok(!keys(r).includes('nap_hours'));
+  assert.equal(r.scores.presence, 100);
+});
+t('C19 · lodging SANS checkin : finding typé arrivée/départ, pas openingHours', () => {
+  const r = analyzePage(load('wix-studio-mas-home'), { sitemap: true, url: 'https://lemasdesbouteillans.com/' });
+  const f = r.findings.find((x) => x.key === 'nap_hours');
+  assert.equal(f.entity, 'lodging');
+  assert.ok(f.title.includes('arrivée'), 'le titre parle d\'arrivée/départ');
+  assert.ok(f.detail.includes('checkinTime'));
+});
+
+// ── C20 : sitemap par contenu ─────────────────────────────────────────────
+t('C20 · sitemapLooksValid : urlset/sitemapindex oui, HTML d\'erreur non', () => {
+  assert.ok(sitemapLooksValid('<?xml version="1.0"?><urlset xmlns="…"><url><loc>https://x.fr</loc></url></urlset>'));
+  assert.ok(sitemapLooksValid('<sitemapindex><sitemap><loc>https://x.fr/p.xml</loc></sitemap></sitemapindex>'));
+  assert.ok(!sitemapLooksValid('<!doctype html><html><body>404 Not Found</body></html>'));
+  assert.ok(!sitemapLooksValid(''));
+  assert.ok(!sitemapLooksValid(null));
+});
+
+// ── C21 : pré-remplissage GEO depuis le JSON-LD ──────────────────────────
+t('C21 · mas : ville et activité extraites du balisage', () => {
+  const r = analyzePage(load('wix-studio-mas-home'), { sitemap: true, url: 'https://lemasdesbouteillans.com/' });
+  assert.equal(r.geoHints.city, 'La Cadière-d\'Azur');
+  assert.equal(r.geoHints.activity, 'hébergement');
+});
+t('C21 · wordpress-org : aucun hint inventé (Organization sans adresse)', () => {
+  const r = analyzePage(load('wordpress-org'), { sitemap: true, url: 'https://wordpress.org/' });
+  assert.equal(r.geoHints.city, '');
+  assert.equal(r.geoHints.activity, '');
+});
+
+console.log(`\n${n} tests OK — moteur S8+S9+S10 conforme à la vérité terrain des fixtures.`);

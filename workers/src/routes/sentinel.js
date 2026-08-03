@@ -43,9 +43,9 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 // S5 — GEO (visibilité IA) : clé du propriétaire via le coffre BYOK si dispo,
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
-import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore } from '../lib/audit-page.js';
+import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S9.0';
+const SENTINEL_ENGINE_VERSION = 'S10.0';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -300,7 +300,9 @@ async function _audit(url, opts = {}) {
       const origin = new URL(url).origin;
       const rb = await _exists(`${origin}/robots.txt`, true);
       if (rb.text && /sitemap:/i.test(rb.text)) sitemap = true;
-      if (!sitemap) { const sm = await _exists(`${origin}/sitemap.xml`, false); sitemap = sm.ok; }
+      // S10/C20 — un sitemap doit CONTENIR du sitemap (urlset/sitemapindex/loc),
+      // pas juste répondre 200 (page d'erreur HTML, soft redirect…).
+      if (!sitemap) { const sm = await _exists(`${origin}/sitemap.xml`, true); sitemap = sm.ok && sitemapLooksValid(sm.text); }
     } catch (_) {}
   }
 
@@ -407,6 +409,14 @@ async function _auditSite(url, platform) {
       else byKey.set(f.key, { axis: f.axis, sev: f.sev, key: f.key, title: f.title, detail: f.detail, pages: SITE_LEVEL.has(f.key) ? null : [path] });
     }
   }
+  // S10/C18 — cohérence des canonicals ENTRE les pages : un site qui déclare
+  // tantôt www tantôt apex éparpille ses signaux (Google voit 2 sites).
+  const canonHosts = [...new Set(pagesAudited.map((p) => p.canonicalHrefHost).filter(Boolean))];
+  if (canonHosts.length > 1) {
+    byKey.set('canonical_inconsistent', { axis: 'seo', sev: 'medium', key: 'canonical_inconsistent',
+      title: 'Canonicals incohérents entre les pages',
+      detail: `Les pages déclarent des hôtes canoniques différents (${canonHosts.join(' vs ')}) : choisissez UNE forme (www ou non) et appliquez-la partout.`, pages: null });
+  }
   const findings = [...byKey.values()].map((f) => { if (f.pages) f.pages = [...new Set(f.pages)]; return f; });
   const pages = pagesAudited.map((p) => ({ path: _pathOf(p.url), score: _globalScore({ ...p.scores }) }));
   // S8 — contrôles indéterminés (union sur les pages) : « non vérifiable »
@@ -415,7 +425,7 @@ async function _auditSite(url, platform) {
   // S9/C8 — en-têtes non applicables (plateforme managée), union.
   const notApplicable = [...new Set(pagesAudited.flatMap((p) => p.notApplicable || []))];
   const truncated = pagesAudited.some((p) => p.truncated);
-  return { reachable: home.reachable, scores, findings, pages, pageCount: pagesAudited.length, pagesTotal: Math.max(pagesTotal, pagesAudited.length), indeterminate, notApplicable, truncated };
+  return { reachable: home.reachable, scores, findings, pages, pageCount: pagesAudited.length, pagesTotal: Math.max(pagesTotal, pagesAudited.length), indeterminate, notApplicable, truncated, geoHints: home.geoHints || null };
 }
 
 // Disponibilité (axe S1) — % de relevés OK sur 24 h.
@@ -522,13 +532,42 @@ function _wixFix(key, ctx) {
   }
   return null;
 }
-function _fixFor(key, ctx) {
+function _fixFor(key, ctx, f) {
   const url = ctx.url || '';
   let origin = url; try { origin = new URL(url).origin; } catch (_) {}
   const head = _headSteps(ctx.platform);
   // Site Wix → privilégier le correctif natif Wix (sinon repli sur le générique).
+  // S10/C19 — variante typée AVANT le dispatch plateforme : pour un
+  // hébergement, le correctif « horaires » = checkinTime/checkoutTime.
+  if (key === 'nap_hours' && f && f.entity === 'lodging') {
+    return { steps: [
+      'Pour un hébergement, Google et les IA attendent les heures d\'arrivée et de départ (checkinTime / checkoutTime), pas des horaires d\'ouverture.',
+      'Ajoutez les deux champs ci-dessous à votre bloc JSON-LD existant (celui qui déclare votre LodgingBusiness).',
+      ctx.platform === 'wix' ? 'Sur Wix : Réglages › Code personnalisé — modifiez le bloc de données structurées déjà en place.' : 'Le bloc se trouve dans le <head> de vos pages (ou via votre webmaster).'],
+      codeLabel: 'Champs à ajouter au JSON-LD LodgingBusiness', code:
+`"checkinTime": "16:00",
+"checkoutTime": "10:00"` };
+  }
   if (ctx.platform === 'wix') { const wf = _wixFix(key, ctx); if (wf) return wf; }
   switch (key) {
+    // ── S10 — contrôles à valeur ──────────────────────────────────────────
+    case 'jsonld_url_mismatch': return { steps: [
+      'Ouvrez le bloc de données structurées (JSON-LD) de vos pages — sur Wix : Réglages › Code personnalisé, ou l\'embed HTML qui le contient.',
+      `Remplacez la valeur du champ "url" (et "@id" le cas échéant) par l'adresse RÉELLE du site : ${ctx.url || 'votre domaine de production'}.`,
+      'Bonnes pratiques : donnez le même "@id" (ex. ' + (ctx.url || 'https://votre-domaine.fr') + '#business) à tous les blocs décrivant votre établissement pour que les moteurs les fusionnent.',
+      'Publiez, puis vérifiez avec l\'outil de test des résultats enrichis de Google.'],
+      codeLabel: 'Champs à corriger dans votre JSON-LD', code:
+`"url": "${ctx.url || 'https://votre-domaine.fr'}",
+"@id": "${ctx.url || 'https://votre-domaine.fr'}#business"` };
+    case 'canonical_mismatch': return { steps: [
+      'La balise canonical de la page pointe vers un AUTRE domaine : Google est invité à indexer ce domaine-là à votre place.',
+      'Corrigez le href de <link rel="canonical"> pour qu\'il pointe vers la page elle-même, sur votre domaine.',
+      'Sur plateforme (Wix/WordPress), le canonical est généré automatiquement : vérifiez le domaine connecté et les réglages SEO de la page.'],
+      codeLabel: 'Canonical attendu', code: `<link rel="canonical" href="${ctx.url || 'https://votre-domaine.fr/cette-page'}">` };
+    case 'canonical_inconsistent': return { steps: [
+      'Certaines pages se déclarent en www, d\'autres sans : choisissez UNE forme et tenez-la partout.',
+      'Vérifiez la redirection 301 de la forme non retenue vers la forme canonique (réglage domaine de votre hébergeur).',
+      'Sur Wix : Réglages › Domaines — le domaine « principal » détermine la forme canonique générée.'] };
     case 'wix_subdomain': return { steps: [
       'Votre site est publié sur une adresse Wix gratuite (terminant par .wixsite.com) : Google la classe moins bien et elle inspire moins confiance.',
       'Tableau de bord Wix › Réglages › « Domaines » › « Connecter un domaine » : reliez un nom de domaine à votre marque (ex. votre-entreprise.fr).',
@@ -580,7 +619,7 @@ function _fixFor(key, ctx) {
       return null;
   }
 }
-function _attachFixes(findings, ctx) { for (const f of findings) { try { f.fix = _fixFor(f.key, ctx); } catch (_) { f.fix = null; } } return findings; }
+function _attachFixes(findings, ctx) { for (const f of findings) { try { f.fix = _fixFor(f.key, ctx, f); } catch (_) { f.fix = null; } } return findings; }
 
 // ── S4.1 · A) IA rédactionnel : génère le texte à la place du client ─────
 // Pour les correctifs « texte » (méta description, FAQ AEO), un appel IA
@@ -939,6 +978,22 @@ export async function handleSiteAudit(request, env, id) {
     .bind(generateId(), g.tenant, site.id, global, scoresJson, findingsJson, cwv ? JSON.stringify(cwv) : null, pagesJson, indetJson, naJson, SENTINEL_ENGINE_VERSION, a.pagesTotal || null).run();
   await env.DB.prepare("UPDATE sentinel_sites SET last_score = ?, last_scores = ?, last_audit_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?")
     .bind(global, scoresJson, site.id, g.tenant).run();
+
+  // S10/C21 — pré-remplissage GEO depuis le JSON-LD du site (ville + activité),
+  // UNIQUEMENT si la config est vide : on n'écrase jamais un choix utilisateur.
+  const gh = a.geoHints;
+  if (gh && (gh.city || gh.activity)) {
+    try {
+      const geoRow = await env.DB.prepare("SELECT city, activity FROM sentinel_geo WHERE site_id = ? AND tenant_id = ?").bind(site.id, g.tenant).first();
+      if (!geoRow) {
+        await env.DB.prepare("INSERT INTO sentinel_geo (site_id, tenant_id, business_name, city, activity, prompts, updated_at) VALUES (?, ?, ?, ?, ?, '[]', datetime('now'))")
+          .bind(site.id, g.tenant, site.label || _hostOf(site.url), gh.city || '', gh.activity || '').run();
+      } else if (!String(geoRow.city || '').trim() && !String(geoRow.activity || '').trim()) {
+        await env.DB.prepare("UPDATE sentinel_geo SET city = ?, activity = ?, updated_at = datetime('now') WHERE site_id = ? AND tenant_id = ?")
+          .bind(gh.city || '', gh.activity || '', site.id, g.tenant).run();
+      }
+    } catch (_) { /* best-effort — l'audit ne doit pas échouer sur le confort GEO */ }
+  }
 
   return json({ audit: { score: global, scores, findings, cwv, pages: a.pages, pagesTotal: a.pagesTotal || null,
     reachable: a.reachable, indeterminate: a.indeterminate || [], notApplicable: a.notApplicable || [],

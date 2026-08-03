@@ -1,5 +1,24 @@
 # 🛰️ SENTINEL — Ordres de reprise (nouvelle conversation)
 
+> ## ✅ S10.0 « CONTRÔLES À VALEUR » LIVRÉ (2026-08-03) — `engine:S10.0`, smokes 20 VERT, 29 tests.
+> **Principe** : trouver ce que les autres outils ne trouvent pas — et parler la langue de l'entité auditée.
+> - **C17 · Cohérence url/@id JSON-LD vs domaine audité** (`jsonld_url_mismatch`, high) — LE check signature.
+>   Détecte les URL de staging (`STAGING_HOSTS` : wixstudio/wixsite/vercel.app/netlify.app/myshopify…) et les
+>   domaines étrangers déclarés comme adresse officielle de l'entité (LocalBusiness*/Organization/WebSite).
+>   `sameAs` jamais contrôlé (réseaux sociaux légitimement externes) ; www/apex même domaine = OK.
+>   **Validé sur le cas fondateur : le `proteinstd.wixstudio.com` du Mas est détecté sur ses 5 pages** —
+>   le défaut réel que l'audit S7 avait manqué. Fix clé en main (url + @id commun `#business`).
+> - **C18 · Canonical par VALEUR** : autre domaine → `canonical_mismatch` (high) ; hôtes canoniques mélangés
+>   entre pages (www vs apex) → `canonical_inconsistent` (site-level, agrégation).
+> - **C19 · Recos typées par entité** : hébergement (`LODGING_TYPES`) → les « horaires » = `checkinTime`/
+>   `checkoutTime` (satisfont l'axe présence ; finding et fix reformulés). Fini openingHours conseillé aux gîtes.
+> - **C20 · Sitemap par contenu** : `sitemapLooksValid()` — urlset/sitemapindex/loc exigé, un 200 HTML ne compte plus.
+> - **C21 · Pré-remplissage GEO** : ville (`addressLocality`) + activité (`TYPE_ACTIVITY_FR`, ~30 types sans
+>   ambiguïté) extraites du JSON-LD à chaque audit → upsert dans `sentinel_geo` SI config vide (jamais d'écrasement).
+>   Débloque le verrou C10 (« GEO non configuré ») sans saisie manuelle pour les sites bien balisés.
+> **Scores INCHANGÉS** (les contrôles S10 sont informatifs, hors barème) — pas de re-calibration client.
+> Suite : **S11 couverture complète** (crawl asynchrone pattern sweepDue, cf BRIEF §12) — dernier sprint du plan.
+>
 > ## ✅ S9.0 « INTÉGRITÉ DU SCORE » LIVRÉ (2026-08-03) — `engine:S9.0`, commit `c933292`, SW `v5.28.458`.
 > **Principe** : chaque chiffre affiché est défendable — devant le client ET devant son prestataire.
 > - **C7** Pondération FIXE du global (`AXIS_WEIGHTS` : seo .25 / perf .20 / sécu .15 / a11y .15 / présence .15 / dispo .10),

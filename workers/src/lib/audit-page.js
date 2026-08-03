@@ -120,6 +120,41 @@ export const LOCALBUSINESS_TYPES = new Set([
 
 const _between = (html, re) => { const m = html.match(re); return m ? (m[1] || '').trim() : ''; };
 
+// ═══ S10 — contrôles à valeur ═════════════════════════════════════════════
+
+// Hôtes de staging/brouillon des plateformes — une URL de prod déclarée sur
+// l'un d'eux dans le JSON-LD est l'oubli d'agence LE plus fréquent (cas
+// fondateur : le Mas des Bouteillans déclarait proteinstd.wixstudio.com sur
+// ses 5 pages — passé sous le radar de l'audit S7).
+export const STAGING_HOSTS = /(\.wixstudio\.com|\.wixsite\.com|\.editorx\.io|\.vercel\.app|\.netlify\.app|\.webflow\.io|\.myshopify\.com|\.squarespace\.com|\.github\.io|\.pages\.dev|\.web\.app|\.firebaseapp\.com)$/i;
+
+// Sous-types hébergement (C19) : les « horaires » pertinents sont
+// checkinTime/checkoutTime, pas openingHours.
+export const LODGING_TYPES = new Set(['LodgingBusiness', 'BedAndBreakfast', 'Campground', 'Hostel', 'Hotel', 'Motel', 'Resort', 'SkiResort', 'VacationRental']);
+
+// Type Schema.org → libellé d'activité FR (C21 — pré-remplissage GEO).
+// Volontairement restreint aux types sans ambiguïté ; générique → null.
+export const TYPE_ACTIVITY_FR = {
+  LodgingBusiness: 'hébergement', Hotel: 'hôtel', BedAndBreakfast: "chambre d'hôtes",
+  VacationRental: 'location de vacances', Campground: 'camping', Hostel: 'auberge',
+  Restaurant: 'restaurant', Bakery: 'boulangerie', BarOrPub: 'bar', CafeOrCoffeeShop: 'café',
+  FastFoodRestaurant: 'restauration rapide', Winery: 'domaine viticole', Brewery: 'brasserie',
+  HairSalon: 'salon de coiffure', BeautySalon: 'institut de beauté', DaySpa: 'spa',
+  Dentist: 'dentiste', Physician: 'médecin', Pharmacy: 'pharmacie', VeterinaryCare: 'vétérinaire',
+  RealEstateAgent: 'agence immobilière', TravelAgency: 'agence de voyage', AutoRepair: 'garage auto',
+  Florist: 'fleuriste', JewelryStore: 'bijouterie', BookStore: 'librairie', GroceryStore: 'épicerie',
+  ClothingStore: 'boutique de vêtements', Plumber: 'plombier', Electrician: 'électricien',
+  Attorney: 'avocat', Notary: 'notaire',
+};
+
+const _hostOfUrl = (u) => { try { return new URL(u).hostname.replace(/^www\./, '').toLowerCase(); } catch (_) { return ''; } };
+
+// C20 — un sitemap qui répond 200 mais ne contient ni <urlset> ni
+// <sitemapindex> ni <loc> (page d'erreur HTML, redirect soft) ne compte pas.
+export function sitemapLooksValid(text) {
+  return !!text && /<\s*(urlset|sitemapindex|loc)\b/i.test(text);
+}
+
 // ── JSON-LD : extraction + parsing tolérant ──────────────────────────────
 // Renvoie { nodes, types } : nodes = objets aplatis (tableaux et @graph à
 // un niveau), types = Set des @type rencontrés (chaînes et tableaux).
@@ -181,7 +216,10 @@ export function analyzePage(html, opts = {}) {
   const metaDesc = _between(html, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)
                 || _between(html, /<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["']/i);
   const h1 = (html.match(/<h1[\s>]/gi) || []).length;
-  const canonical = /<link[^>]+rel=["']canonical["']/i.test(html);
+  // S10/C18 — le canonical se juge sur sa VALEUR, pas sa présence.
+  const canonicalHref = _between(html, /<link[^>]+rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)
+                     || _between(html, /<link[^>]+href=["']([^"']+)["'][^>]*rel=["']canonical["']/i);
+  const canonical = !!canonicalHref || /<link[^>]+rel=["']canonical["']/i.test(html);
   const ogTitle = /<meta[^>]+property=["']og:title["']/i.test(html);
   const ogImage = /<meta[^>]+property=["']og:image["']/i.test(html);
   const viewport = /<meta[^>]+name=["']viewport["']/i.test(html);
@@ -200,7 +238,11 @@ export function analyzePage(html, opts = {}) {
   //    et d'une adresse (« place » anglais + 5 chiffres quelconques).
   const ldPhone = ld.nodes.some((n) => n.telephone && String(n.telephone).trim());
   const ldAddress = ld.nodes.some((n) => n.address) || ld.types.has('PostalAddress') || micro.has('PostalAddress');
+  // S10/C19 — entité typée : pour un hébergement, les « horaires » pertinents
+  // sont l'arrivée/départ (checkinTime/checkoutTime), pas openingHours.
+  const isLodging = [...ld.types].some((t) => LODGING_TYPES.has(t)) || [...micro].some((t) => LODGING_TYPES.has(t));
   const ldHours = ld.nodes.some((n) => n.openingHours || n.openingHoursSpecification)
+    || (isLodging && ld.nodes.some((n) => n.checkinTime || n.checkoutTime))
     || micro.has('OpeningHoursSpecification') || /itemprop=["']openingHours["']/i.test(html);
   const napPhone = /href=["']tel:/i.test(html) || ldPhone
     || /itemprop=["']telephone["']/i.test(html)
@@ -268,6 +310,45 @@ export function analyzePage(html, opts = {}) {
       'L\'adresse se termine par .wixsite.com : un domaine personnalisé améliorerait nettement le référencement et la crédibilité.');
   }
 
+  // ── S10/C17 — cohérence url/@id du JSON-LD vs domaine audité ────────────
+  // La fiche déclare l'adresse officielle de l'entité aux moteurs et aux IA.
+  // Si elle pointe ailleurs (staging oublié, ancien domaine), on dit à Google
+  // que l'établissement vit à une autre adresse que celle qu'on indexe.
+  // sameAs (réseaux sociaux) est légitimement externe — jamais contrôlé.
+  const auditedHost = _hostOfUrl(opts.url || '');
+  if (auditedHost) {
+    const offenders = new Map();   // badHost → exemple d'URL
+    for (const nd of ld.nodes) {
+      const t = nd['@type']; const tl = Array.isArray(t) ? t : (t ? [t] : []);
+      const isEntity = tl.some((x) => LOCALBUSINESS_TYPES.has(x) || x === 'Organization' || x === 'WebSite');
+      if (!isEntity) continue;
+      for (const field of ['url', '@id']) {
+        const v = nd[field];
+        if (typeof v !== 'string' || !/^https?:\/\//i.test(v)) continue;
+        const h = _hostOfUrl(v);
+        if (h && h !== auditedHost && !offenders.has(h)) offenders.set(h, v);
+      }
+    }
+    for (const [badHost, example] of offenders) {
+      const staging = STAGING_HOSTS.test('.' + badHost);
+      add('seo', 'high', 'jsonld_url_mismatch',
+        staging ? 'URL de staging dans les données structurées' : 'Données structurées : le domaine déclaré n\'est pas celui du site',
+        `Votre fiche (JSON-LD) déclare « ${example} » comme adresse officielle, alors que le site audité est ${auditedHost}.${staging ? ' C\'est une adresse de brouillon/staging de plateforme — oubli fréquent lors de la mise en ligne.' : ''} Les moteurs et les IA peuvent attribuer votre établissement au mauvais domaine.`);
+    }
+  }
+
+  // ── S10/C18 — canonical : la VALEUR compte ───────────────────────────────
+  // Un canonical vers un AUTRE domaine dit à Google « la vraie page est
+  // ailleurs » : la page auditée sort de l'index au profit de l'autre.
+  // www vs apex du même domaine = normal (géré site-level en agrégation).
+  if (canonicalHref && auditedHost) {
+    const ch = _hostOfUrl(canonicalHref);
+    if (ch && ch !== auditedHost) {
+      add('seo', 'high', 'canonical_mismatch', 'Canonical vers un autre domaine',
+        `La balise canonical pointe vers « ${canonicalHref} » alors que la page vit sur ${auditedHost} : vous demandez à Google d'indexer l'autre domaine à votre place.`);
+    }
+  }
+
   // ── Sécurité (en-têtes de réponse : déterminés même si HTML tronqué) ─────
   // S9/C8 : sur plateforme managée, un en-tête exempté absent est « non
   // applicable » (l'utilisateur n'a pas la main) — hors findings, hors calcul.
@@ -313,9 +394,33 @@ export function analyzePage(html, opts = {}) {
   item('presence', 20, napLocalBiz ? true : (truncated ? null : false), 20,
     () => add('presence', 'medium', 'nap_localbiz', 'Fiche établissement (LocalBusiness) absente', 'Décrivez votre établissement en Schema.org LocalBusiness : nom, adresse, téléphone, horaires.'));
   if (!napLocalBiz && truncated) undet('nap_localbiz');
+  // S10/C19 — le finding « horaires » parle la langue de l'entité : conseiller
+  // openingHours à un gîte était un conseil faux pour toute la verticale.
   item('presence', 15, napHours ? true : (truncated ? null : false), 15,
-    () => add('presence', 'medium', 'nap_hours', 'Horaires d\'ouverture non déclarés', 'Publiez vos horaires (openingHours) — repris par Google et les assistants IA.'));
+    () => {
+      if (isLodging) {
+        findings.push({ axis: 'presence', sev: 'medium', key: 'nap_hours', entity: 'lodging',
+          title: 'Heures d\'arrivée / départ non déclarées',
+          detail: 'Pour un hébergement, déclarez checkinTime et checkoutTime (pas openingHours) — repris par Google et les assistants IA.' });
+      } else {
+        add('presence', 'medium', 'nap_hours', 'Horaires d\'ouverture non déclarés', 'Publiez vos horaires (openingHours) — repris par Google et les assistants IA.');
+      }
+    });
   if (!napHours && truncated) undet('nap_hours');
+
+  // ── S10/C21 — indices GEO extraits du balisage (ville + activité) ────────
+  // Tout était déjà là sur le Mas : addressLocality + @type LodgingBusiness.
+  // Le worker s'en sert pour pré-remplir la config GEO si elle est vide.
+  let geoCity = '';
+  for (const nd of ld.nodes) {
+    const addr = nd.address;
+    const locality = addr && typeof addr === 'object' && !Array.isArray(addr) ? addr.addressLocality
+      : (Array.isArray(addr) ? (addr.find((a) => a && a.addressLocality) || {}).addressLocality : null);
+    if (locality && String(locality).trim()) { geoCity = String(locality).trim(); break; }
+    if (nd['@type'] === 'PostalAddress' && nd.addressLocality) { geoCity = String(nd.addressLocality).trim(); break; }
+  }
+  let geoActivity = '';
+  for (const t of ld.types) { if (TYPE_ACTIVITY_FR[t]) { geoActivity = TYPE_ACTIVITY_FR[t]; break; } }
 
   // ── Scores : renormalisation sur les points déterminés ──────────────────
   const norm = (ax) => {
@@ -327,5 +432,8 @@ export function analyzePage(html, opts = {}) {
   return {
     scores: { seo: norm('seo'), securite, accessibilite: norm('accessibilite'), presence: norm('presence') },
     findings, indeterminate, notApplicable, truncated,
+    canonicalHost: canonicalHref ? _hostOfUrl(canonicalHref) : null,   // S10/C18 — cohérence inter-pages (agrégation)
+    canonicalHrefHost: canonicalHref ? (() => { try { return new URL(canonicalHref).hostname.toLowerCase(); } catch (_) { return null; } })() : null,  // avec www — pour le check www/apex
+    geoHints: { city: geoCity, activity: geoActivity },                // S10/C21 — pré-remplissage GEO
   };
 }
