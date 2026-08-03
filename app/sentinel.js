@@ -865,10 +865,29 @@ function _geoResultsHTML(g) {
     if (repr && repr.snippet) { snip = _cleanSnippet(repr.snippet); if (String(repr.snippet).length >= 278 && snip) snip += '…'; }
     return `<div class="snt-geo-row"><div class="snt-geo-q">${_esc(r.prompt)}</div><div class="snt-geo-engines">${badges}</div>${snip ? `<div class="snt-geo-snip">${_esc(snip)}</div>` : ''}</div>`;
   }).join('');
-  // Pont AEO→GEO : citabilité faible → proposer la génération FAQ (générateur S4.1, carte ci-dessous).
+  // ── S14.3 · Sources citées par les IA — LE levier concret ──────────────
+  // Leçon Perplexity (03/08) : sur « le meilleur X à Y », les IA récitent des
+  // pages-listes (annuaires, offices de tourisme). Être cité = être DANS ces
+  // pages. Sentinel les a vérifiées : présent / absent / non vérifiable.
+  let srcBlock = '';
+  const sck = g.sourcesCheck;
+  if (sck && sck.length) {
+    const rowsS = sck.map((s) => {
+      const st = s.present === true ? `<span class="snt-src-ok">${icon('check', 12)} vous y figurez</span>`
+        : s.present === false ? `<span class="snt-src-ko">${icon('x', 12)} vous n'y figurez pas</span>`
+        : `<span class="snt-dim">non vérifiable</span>`;
+      return `<div class="snt-src-row"><span class="snt-src-dom">${_esc(s.domain)}</span><span class="snt-dim">cité ${s.citations}×</span>${st}</div>`;
+    }).join('');
+    const absents = sck.filter((s) => s.present === false);
+    const reco = absents.length ? `<div class="snt-src-reco">${icon('compass', 13)} <b>Levier n°1</b> : demandez votre inscription sur ${absents.map((s) => `<b>${_esc(s.domain)}</b>`).join(', ')} — ${absents.length > 1 ? 'ce sont les pages' : 'c\'est la page'} que les IA lisent pour répondre. Une fois listé, vous entrez mécaniquement dans leurs réponses.</div>` : '';
+    srcBlock = `<div class="snt-geo-sources"><div class="snt-geo-src-h">Sources que les IA ont citées pour répondre</div>${rowsS}${reco}</div>`;
+  }
+  // Pont AEO→GEO reformulé (S14) : la FAQ sert les requêtes de MARQUE ; le
+  // levier de citation sur les requêtes génériques = les sources ci-dessus.
   const weak = (sc != null && sc < 70) || (g.results || []).some((r) => _geoCells(r).some((c) => !c.error && !c.cited));
-  const cta = weak ? `<div class="snt-geo-cta">${icon('sparkles', 14)}<span>Pas assez cité ? Une FAQ structurée aide les IA à vous citer. <button class="snt-link-btn" data-act="suggest" data-kind="faq" data-slot="snt-ai-faq">Rédiger la FAQ avec l'IA</button> (apparaît juste en dessous).</span></div>` : '';
-  return `<div class="snt-geo-scorewrap"><div class="snt-geo-score ${sc != null ? _scoreClass(sc) : ''}">${sc != null ? sc : '—'}<span>/100</span></div><div class="snt-geo-scorelbl">score de citabilité IA${g.run_at ? ' · ' + _ago(g.run_at) : ''}</div></div>${legend}<div class="snt-geo-rows">${rows}</div>${cta}`;
+  const cta = weak ? `<div class="snt-geo-cta">${icon('sparkles', 14)}<span>En complément : une FAQ structurée aide les IA à bien vous restituer quand on les interroge <i>sur votre nom</i>. <button class="snt-link-btn" data-act="suggest" data-kind="faq" data-slot="snt-ai-faq">Rédiger la FAQ avec l'IA</button>.</span></div>` : '';
+  const lisse = (g.runsN >= 2 && g.scoreSmoothed != null && g.scoreSmoothed !== sc) ? ` · médiane des ${g.runsN} derniers relevés : ${g.scoreSmoothed}/100` : '';
+  return `<div class="snt-geo-scorewrap"><div class="snt-geo-score ${sc != null ? _scoreClass(sc) : ''}">${sc != null ? sc : '—'}<span>/100</span></div><div class="snt-geo-scorelbl">score de citabilité IA${g.run_at ? ' · ' + _ago(g.run_at) : ''}${lisse}</div></div>${legend}<div class="snt-geo-rows">${rows}</div>${srcBlock}${cta}`;
 }
 function _geoFormHTML(g) {
   const prompts = (g.prompts || []).join('\n');

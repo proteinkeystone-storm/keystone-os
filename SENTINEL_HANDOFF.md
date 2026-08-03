@@ -1,6 +1,22 @@
 # 🛰️ SENTINEL — Ordres de reprise (nouvelle conversation)
 
-> ## ✅ S13.0 « LIRE LE WEB TEL QU'IL EST » LIVRÉ (2026-08-04) — `engine:S13.0`, SW `v5.28.463`, 44 tests.
+> ## ✅ S14.0 « GEO QUI DIT VRAI » LIVRÉ (2026-08-04) — `engine:S14.0`, SW `v5.28.464`, 46 tests. **RÉQUISITOIRE SOLDÉ (8/8).**
+> - **14.1 Triangulation** : le chemin Perplexity/ChatGPT (S5.1) est prêt — activation = `wrangler secret put
+>   PERPLEXITY_API_KEY` (geste Stéphane, secret jamais manipulé par l'agent). Libellé « 1 moteur — indicatif »
+>   disparaît de lui-même.
+> - **14.2 Historique lissé** : table `sentinel_geo_history` (score/moteurs/prompts par run) ; le cockpit
+>   affiche « médiane des N derniers relevés » quand elle diffère du dernier — les réponses IA sont
+>   non-déterministes, un relevé isolé ne fait pas une tendance.
+> - **14.3 Présence dans les SOURCES citées** ⭐ (la leçon Perplexity du 03/08 devenue fonctionnalité) :
+>   `topCitedDomains` (titres-domaines Gemini + URLs Perplexity) + `presenceMatch` (nom normalisé accents/casse
+>   dans le TEXTE hors scripts, ou lien vers le domaine client) — top 4 sources fetchées en parallèle
+>   (6 s timeout, best-effort), colonne `last_sources_check`. Cockpit : « cité N× — vous y figurez / n'y
+>   figurez PAS » + **reco levier n°1 : « demandez votre inscription sur X »**. Le pont FAQ reformulé
+>   honnêtement (la FAQ sert les requêtes de MARQUE ; la citation générique vient des sources).
+> **DoD attendue au prochain run GEO du Mas** : tourisme-lacadieredazur.fr détecté cité, présence « non »,
+> reco d'inscription — le conseil donné à la main le 03/08, produit par l'outil.
+>
+> > ## ✅ S13.0 « LIRE LE WEB TEL QU'IL EST » LIVRÉ (2026-08-04) — `engine:S13.0`, SW `v5.28.463`, 44 tests.
 > Ferme les attaques 1-2-3 du réquisitoire (rejouées telles quelles dans la suite — règle : une attaque qui
 > porte devient une fixture).
 > - **13.1 HTML « visible »** (`visibleHtml`) : commentaires + corps de <script>/<style> hors détections de

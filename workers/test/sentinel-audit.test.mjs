@@ -392,4 +392,29 @@ t('S13 · non-régression : les fixtures Wix réelles sont INSENSIBLES au strip'
   assert.equal(r.spaShell, false);                     // 3,3 Mo de contenu ≠ coquille
 });
 
-console.log(`\n${n} tests OK — moteur S8→S13 conforme à la vérité terrain des fixtures.`);
+// ═══ S14 — GEO : sources citées + présence ═══════════════════════════════
+import { topCitedDomains, presenceMatch } from '../src/lib/geo-analyze.js';
+
+t('S14 · topCitedDomains : agrégation par fréquence, titre-domaine (Gemini) et URL (Perplexity)', () => {
+  // Reproduction du cas réel : l\'office de tourisme cité 3×, agrégateurs 1×.
+  const results = [
+    { prompt: 'q1', engines: [{ sources: [{ title: 'tourisme-lacadieredazur', uri: 'https://vertexaisearch.cloud.google.com/redirect/abc' }, { title: '', uri: 'https://www.logic-immo.com/annonce' }] }] },
+    { prompt: 'q2', engines: [{ sources: [{ title: 'tourisme-lacadieredazur.fr', uri: 'https://vertexaisearch.cloud.google.com/redirect/def' }] }] },
+    { prompt: 'q3', engines: [{ sources: [{ title: 'tourisme-lacadieredazur.fr', uri: 'https://vertexaisearch.cloud.google.com/redirect/ghi' }, { title: '', uri: 'https://www.seloger.com/x' }] }] },
+  ];
+  const top = topCitedDomains(results, 4);
+  assert.equal(top[0].domain, 'tourisme-lacadieredazur.fr');   // le titre-domaine gagne sur l\'URI de redirection
+  assert.equal(top[0].citations, 2);                            // q2+q3 (q1 : titre sans TLD → URI redirect google)
+  assert.ok(top.some((s) => s.domain === 'logic-immo.com'));
+  assert.ok(top.some((s) => s.domain === 'seloger.com'));
+});
+t('S14 · presenceMatch : nom accentué, casse, domaine — et pas de faux positif', () => {
+  const page = '<html><body><h2>Locations saisonnières</h2><ul><li>LE MAS DES BOUTEILLANS — gîtes avec piscine</li><li>Maison Zoé</li></ul></body></html>';
+  assert.equal(presenceMatch(page, 'Le Mas des Bouteillans', 'lemasdesbouteillans.com'), true);   // nom, casse ignorée
+  assert.equal(presenceMatch(page, 'Château Inexistant', 'chateau-inexistant.fr'), false);
+  assert.equal(presenceMatch('<a href="https://www.lemasdesbouteillans.com">ici</a>', 'Autre Nom', 'lemasdesbouteillans.com'), true);  // lien vers le domaine suffit
+  assert.equal(presenceMatch('<script>var x="le mas des bouteillans"</script>', 'Le Mas des Bouteillans', 'autre.fr'), false);  // les scripts ne comptent pas
+  assert.equal(presenceMatch('page qui parle de mas et de bouteilles', 'Mas', 'x.fr'), false);    // nom trop court → jamais de conclusion
+});
+
+console.log(`\n${n} tests OK — moteur S8→S14 conforme à la vérité terrain des fixtures.`);

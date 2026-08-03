@@ -39,13 +39,13 @@ import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage } from '../lib/ai-budget.js';
 import { isEnforceEnabled, consumeCredits, refundCredits } from '../lib/ai-credits.js';
 // Analyse GEO pure (citation/rang/sentiment/score), partagée run auto + mode manuel.
-import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as _geoScore, analyzeManual as _analyzeManualGeo, splitManualAnswer as _splitManualAnswer } from '../lib/geo-analyze.js';
+import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as _geoScore, analyzeManual as _analyzeManualGeo, splitManualAnswer as _splitManualAnswer, topCitedDomains, presenceMatch } from '../lib/geo-analyze.js';
 // S5 — GEO (visibilité IA) : clé du propriétaire via le coffre BYOK si dispo,
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S13.0';
+const SENTINEL_ENGINE_VERSION = 'S14.0';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -153,6 +153,13 @@ async function _ensureSchema(env) {
   try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN not_applicable TEXT").run(); } catch (_) { /* déjà présent */ }
   try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN engine TEXT").run(); } catch (_) { /* déjà présent */ }
   try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN pages_total INTEGER").run(); } catch (_) { /* déjà présent */ }
+  // S14.2 — historique GEO (lissage : médiane des derniers relevés, courbes futures).
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS sentinel_geo_history (
+    site_id TEXT NOT NULL, tenant_id TEXT NOT NULL DEFAULT 'default',
+    run_at TEXT DEFAULT (datetime('now')), score INTEGER, engines INTEGER, prompts INTEGER)`).run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sentinel_geo_hist ON sentinel_geo_history(site_id, run_at)").run();
+  // S14.3 — présence dans les sources citées par les IA (JSON).
+  try { await env.DB.prepare("ALTER TABLE sentinel_geo ADD COLUMN last_sources_check TEXT").run(); } catch (_) { /* déjà présent */ }
   // S12.2 — couverture du DERNIER score affiché sur la vignette (sample|full).
   try { await env.DB.prepare("ALTER TABLE sentinel_sites ADD COLUMN last_coverage TEXT").run(); } catch (_) { /* déjà présent */ }
   // S11 — couverture de l'audit : 'sample' (express, 5 pages) | 'full' (crawl complet).
@@ -1248,8 +1255,17 @@ export async function handleSiteCockpit(request, env, id) {
   const geoRow = await _geoConfigRow(env, id, g.tenant);
   let geo = { enabled: _geoEnabled(env), configured: false, business_name: site.label || _hostOf(site.url), city: '', activity: '', prompts: _defaultGeoPrompts('', ''), score: null, results: null, run_at: null };
   if (geoRow) {
-    let prompts = [], results = null; try { prompts = JSON.parse(geoRow.prompts || '[]'); } catch (_) {} try { results = geoRow.last_results ? JSON.parse(geoRow.last_results) : null; } catch (_) {}
-    geo = { enabled: _geoEnabled(env), configured: true, business_name: geoRow.business_name || (site.label || _hostOf(site.url)), city: geoRow.city || '', activity: geoRow.activity || '', prompts: prompts.length ? prompts : _defaultGeoPrompts(geoRow.activity || '', geoRow.city || ''), score: geoRow.last_score, results, run_at: geoRow.last_run_at };
+    let prompts = [], results = null, srcCheck = null; try { prompts = JSON.parse(geoRow.prompts || '[]'); } catch (_) {} try { results = geoRow.last_results ? JSON.parse(geoRow.last_results) : null; } catch (_) {} try { srcCheck = geoRow.last_sources_check ? JSON.parse(geoRow.last_sources_check) : null; } catch (_) {}
+    // S14.2 — score lissé : médiane des 3 derniers relevés (les réponses IA
+    // sont non-déterministes ; un relevé isolé ne fait pas une tendance).
+    let scoreSmoothed = null, runsN = 0;
+    try {
+      const hist = (await env.DB.prepare("SELECT score FROM sentinel_geo_history WHERE site_id = ? ORDER BY run_at DESC LIMIT 3").bind(id).all()).results || [];
+      const vals = hist.map((h) => h.score).filter((v) => typeof v === 'number').sort((a, b) => a - b);
+      runsN = vals.length;
+      if (vals.length) scoreSmoothed = vals[Math.floor(vals.length / 2)];
+    } catch (_) {}
+    geo = { enabled: _geoEnabled(env), configured: true, business_name: geoRow.business_name || (site.label || _hostOf(site.url)), city: geoRow.city || '', activity: geoRow.activity || '', prompts: prompts.length ? prompts : _defaultGeoPrompts(geoRow.activity || '', geoRow.city || ''), score: geoRow.last_score, scoreSmoothed, runsN, sourcesCheck: srcCheck, results, run_at: geoRow.last_run_at };
   }
 
   // V2 — Search Console (config + dernier relevé Mots-clés).
@@ -1605,14 +1621,38 @@ async function _executeGeoRun(env, { id, tenant, site, businessName, city, activ
   const results = prompts.map((p) => ({ prompt: p, engines: byPrompt.get(p) || [] }));
   const score = _geoScore(results);
 
-  await env.DB.prepare("UPDATE sentinel_geo SET last_score = ?, last_results = ?, last_run_at = datetime('now'), next_geo_at = datetime('now', '+7 days'), updated_at = datetime('now') WHERE site_id = ? AND tenant_id = ?")
-    .bind(score, JSON.stringify(results), id, tenant).run();
+  // ── S14.3 · présence dans les SOURCES citées ─────────────────────────────
+  // Les IA citent des pages-listes (annuaires, offices de tourisme) — pas les
+  // sites d'établissements. Le levier n'est pas la FAQ du client : c'est
+  // d'être DANS ces pages. On les fetch (top 4, parallèle, best-effort) et on
+  // vérifie si l'établissement y figure. Reco concrète : « demandez votre
+  // inscription à X, cité N fois par les IA ».
+  let sourcesCheck = null;
+  try {
+    const top = topCitedDomains(results, 4);
+    const checked = await Promise.all(top.map(async (s) => {
+      try {
+        const ctrl = new AbortController(); const tm = setTimeout(() => ctrl.abort(), 6000);
+        const res = await fetch(s.uri, { redirect: 'follow', headers: { 'User-Agent': UA }, signal: ctrl.signal });
+        const body = (await res.text()).slice(0, 500000);
+        clearTimeout(tm);
+        return { domain: s.domain, citations: s.citations, present: presenceMatch(body, businessName, host), checked: true };
+      } catch (_) { return { domain: s.domain, citations: s.citations, present: null, checked: false }; }
+    }));
+    if (checked.length) sourcesCheck = checked;
+  } catch (_) { /* best-effort : le run GEO n'échoue jamais sur ce confort */ }
 
-  return { score, results, engines: engines.map((e) => e.engine) };
+  await env.DB.prepare("UPDATE sentinel_geo SET last_score = ?, last_results = ?, last_sources_check = ?, last_run_at = datetime('now'), next_geo_at = datetime('now', '+7 days'), updated_at = datetime('now') WHERE site_id = ? AND tenant_id = ?")
+    .bind(score, JSON.stringify(results), sourcesCheck ? JSON.stringify(sourcesCheck) : null, id, tenant).run();
+  // S14.2 — historique (lissage + tendance honnête à venir).
+  await env.DB.prepare("INSERT INTO sentinel_geo_history (site_id, tenant_id, score, engines, prompts) VALUES (?, ?, ?, ?, ?)")
+    .bind(id, tenant, score, engines.length, prompts.length).run().catch(() => {});
+
+  return { score, results, engines: engines.map((e) => e.engine), sourcesCheck };
 }
 
 async function _geoConfigRow(env, id, tenant) {
-  return env.DB.prepare("SELECT business_name, city, activity, prompts, last_score, last_results, last_run_at FROM sentinel_geo WHERE site_id = ? AND tenant_id = ?").bind(id, tenant).first();
+  return env.DB.prepare("SELECT business_name, city, activity, prompts, last_score, last_results, last_sources_check, last_run_at FROM sentinel_geo WHERE site_id = ? AND tenant_id = ?").bind(id, tenant).first();
 }
 
 // GET /sites/:id/geo — config + dernier relevé.

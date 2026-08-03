@@ -373,3 +373,13 @@
 .snt-find-gain { font-size: 11px; font-weight: 700; color: #34d399; background: rgba(52,211,153,.12); border-radius: 20px; padding: 2px 8px; white-space: nowrap; }
 .snt-find-gain-0 { color: var(--ws-text-soft, #94a3b8); background: rgba(148,163,184,.10); font-weight: 600; }
 .snt-cov-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: currentColor; margin-left: 4px; vertical-align: 2px; opacity: .85; }
+
+/* S14 — sources citées par les IA (le levier concret) + statut de présence. */
+.snt-geo-sources { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--ws-border, rgba(148,163,184,.18)); border-radius: 12px; }
+.snt-geo-src-h { font-size: 12.5px; font-weight: 700; color: var(--ws-text-soft, #94a3b8); margin-bottom: 8px; }
+.snt-src-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 13px; border-top: 1px solid rgba(148,163,184,.08); }
+.snt-src-row:first-of-type { border-top: none; }
+.snt-src-dom { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.snt-src-ok { color: #34d399; display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+.snt-src-ko { color: #f87171; display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+.snt-src-reco { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: rgba(99,102,241,.10); font-size: 12.5px; line-height: 1.55; display: flex; gap: 8px; align-items: baseline; }

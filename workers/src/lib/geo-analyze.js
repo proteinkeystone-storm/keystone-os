@@ -110,3 +110,48 @@ export function analyzeManual(entries, { engine, businessName, host }) {
   }
   return results;
 }
+
+// ═══ S14.3 — présence dans les SOURCES que les IA citent ═══════════════════
+// Leçon du test Perplexity (Mas des Bouteillans, 2026-08-03) : sur « quel est
+// le meilleur X à Y », les IA ne citent pas les meilleurs X — elles citent
+// les PAGES QUI LISTENT des X (annuaire de l'office de tourisme, cité 3/3).
+// Le vrai levier GEO n'est donc pas sur le site du client : c'est d'être
+// présent dans ces sources-là. Sentinel les connaît déjà (elles sont dans
+// les réponses stockées) — ce module les agrège et vérifie la présence.
+
+// Agrège les domaines cités dans les résultats d'un run GEO, triés par
+// fréquence. Gemini (grounding) sert des URI de redirection — le titre
+// porte alors le domaine réel ; on le préfère quand il y ressemble.
+export function topCitedDomains(results, max = 4) {
+  const counts = new Map();   // domaine → { n, uri }
+  for (const r of results || []) {
+    for (const cell of (r.engines || [])) {
+      for (const s of (cell.sources || [])) {
+        let domain = '';
+        const t = String(s.title || '').trim().toLowerCase();
+        if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(t)) domain = t.replace(/^www\./, '');
+        else { try { domain = new URL(s.uri).hostname.replace(/^www\./, '').toLowerCase(); } catch (_) {} }
+        if (!domain) continue;
+        const e = counts.get(domain) || { n: 0, uri: s.uri };
+        e.n++; counts.set(domain, e);
+      }
+    }
+  }
+  return [...counts.entries()]
+    .map(([domain, e]) => ({ domain, citations: e.n, uri: e.uri }))
+    .sort((a, b) => b.citations - a.citations)
+    .slice(0, max);
+}
+
+// L'établissement figure-t-il dans une page source ? Nom normalisé (accents,
+// casse, espaces) cherché dans le TEXTE, ou domaine du client dans le HTML.
+const _norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+export function presenceMatch(html, businessName, host) {
+  const raw = String(html || '');
+  const h = String(host || '').replace(/^www\./, '').toLowerCase();
+  if (h && raw.toLowerCase().includes(h)) return true;
+  const name = _norm(businessName);
+  if (name.length < 4) return false;                       // nom trop court → pas de conclusion
+  const text = _norm(raw.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, ' ').replace(/<[^>]+>/g, ' '));
+  return text.includes(name);
+}
