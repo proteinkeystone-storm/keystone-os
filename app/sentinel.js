@@ -383,7 +383,39 @@ function _pagesAuditedHTML(c) {
   const pages = c && c.audit && c.audit.pages;
   if (!pages || pages.length <= 1) return '';
   const chips = pages.map((p) => `<span class="snt-page-chip"><span class="snt-page-path">${_esc(p.path)}</span><span class="snt-page-score ${p.score != null ? _scoreClass(p.score) : ''}">${p.score != null ? p.score : '—'}</span></span>`).join('');
-  return `<div class="snt-pages"><div class="snt-pages-h">${icon('search', 14)} ${pages.length} pages auditées · score par page</div><div class="snt-pages-list">${chips}</div></div>`;
+  // S9 — périmètre honnête : « X sur N détectées », jamais un implicite
+  // « tout le site » quand on a échantillonné.
+  const total = c.audit.pagesTotal;
+  const scope = (total && total > pages.length)
+    ? `${pages.length} pages auditées sur ${total} détectées · score par page <span class="snt-dim">· les ${total - pages.length} autres seront couvertes par le crawl complet (à venir)</span>`
+    : `${pages.length} pages auditées · score par page`;
+  return `<div class="snt-pages"><div class="snt-pages-h">${icon('search', 14)} ${scope}</div><div class="snt-pages-list">${chips}</div></div>`;
+}
+
+// S9 — bloc transparence : ce que l'audit n'a PAS pu vérifier (document
+// tronqué) et ce qui n'est PAS exigible (en-têtes gérés par l'hébergeur).
+// Un axe muet sur ces points laisserait croire à un blanc-seing.
+const _INDET_LABEL = {
+  h1: 'Titre H1', meta_missing: 'Méta description', canonical: 'Canonical', viewport: 'Viewport',
+  og_title: 'Open Graph titre', og_image: 'Open Graph image', jsonld: 'Données structurées',
+  lang: 'Langue déclarée', img_alt: 'Textes alternatifs', nap_phone: 'Téléphone',
+  nap_address: 'Adresse', nap_localbiz: 'Fiche établissement', nap_hours: 'Horaires',
+};
+function _transparencyHTML(a, platform) {
+  if (!a) return '';
+  const parts = [];
+  const ind = a.indeterminate || [];
+  if (ind.length) parts.push(`<div class="snt-transp-row">${icon('search', 13)} <b>Non vérifiable</b> (page trop volumineuse pour une lecture complète) : ${ind.map((k) => _esc(_INDET_LABEL[k] || k)).join(', ')} — ces points ne pénalisent pas le score.</div>`);
+  const na = a.notApplicable || [];
+  if (na.length) {
+    const labels = na.map((k) => _esc(k.replace(/^sec_/, '')));
+    parts.push(`<div class="snt-transp-row">${icon('lock', 13)} <b>Gérés par l'hébergeur</b> (${_esc(PLATFORM_LABEL[platform] || 'plateforme')}) : en-têtes ${labels.join(', ')} — non réglables sans serveur dédié, exclus du score.</div>`);
+  }
+  const cond = a.cwv && a.cwv.conditions;
+  if (cond) parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Conditions de mesure vitesse</b> : ${cond === 'mobile-4g-cpu4x' ? 'mobile émulé, réseau 4G lente, CPU ×4 (comparable à PageSpeed)' : 'datacenter non bridé — chiffres plus favorables que le mobile réel'}.</div>`);
+  if (a.engine) parts.push(`<div class="snt-transp-row snt-dim">Moteur d'audit ${_esc(a.engine)}${a.created_at ? '' : ''} — les scores peuvent évoluer lors des révisions de méthode.</div>`);
+  if (!parts.length) return '';
+  return `<div class="snt-transp">${parts.join('')}</div>`;
 }
 // Findings enrichis : icône d'axe + priorité + gain estimé + tag plateforme + total.
 function _findingsHTML(list, platform) {
@@ -442,11 +474,14 @@ function _summaryData(c) {
     : 'Plusieurs corrections sont à prévoir en priorité.';
 
   // Disponibilité (le visiteur a-t-il pu accéder au site ?).
+  // S9/C11 — la phrase dit la fenêtre RÉELLE (« sur N jours »), jamais
+  // « 30 jours » avec 3 jours d'historique.
   if (c.uptime30d != null) {
     const u = String(c.uptime30d).replace('.', ',');
-    if (c.uptime30d >= 99.5) add('good', `Votre site a été accessible <b>${u} %</b> du temps sur 30 jours — excellent.`);
-    else if (c.uptime30d >= 98) add('warn', `Votre site a été accessible ${u} % du temps sur 30 jours — quelques interruptions.`);
-    else add('bad', `Votre site n'a été joignable que ${u} % du temps sur 30 jours — des coupures à investiguer.`);
+    const w = c.uptimeWindowDays && c.uptimeWindowDays < 30 ? `sur ${c.uptimeWindowDays} jour${c.uptimeWindowDays > 1 ? 's' : ''}` : 'sur 30 jours';
+    if (c.uptime30d >= 99.5) add('good', `Votre site a été accessible <b>${u} %</b> du temps ${w} — excellent.`);
+    else if (c.uptime30d >= 98) add('warn', `Votre site a été accessible ${u} % du temps ${w} — quelques interruptions.`);
+    else add('bad', `Votre site n'a été joignable que ${u} % du temps ${w} — des coupures à investiguer.`);
   }
 
   // Sécurité (HTTPS).
@@ -481,7 +516,7 @@ function _summaryData(c) {
   if (c.geo && c.geo.score != null) {
     const g = c.geo.score;
     if (g >= 70) add('good', `Visibilité dans les IA : bonne (${g}/100) — vous êtes cité quand un prospect interroge une IA.`);
-    else add('warn', `Visibilité dans les IA faible (${g}/100) : vous êtes peu ou pas cité par les IA. La FAQ structurée ci-dessus aide à y remédier.`);
+    else add('warn', `Visibilité dans les IA faible (${g}/100) : vous êtes peu ou pas cité par les IA. Le générateur de FAQ (section Visibilité IA du cockpit) aide à y remédier.`);
   }
 
   // Mots-clés Google (Search Console).
@@ -526,13 +561,15 @@ function _kpiCardsHTML(c) {
   const lcp = a.cwv && a.cwv.lcp;
   const lcpTxt = (lcp != null && lcp > 0) ? (lcp / 1000).toFixed(1) + ' s' : 'n/a';
   const lcpAssess = (lcp == null || lcp <= 0) ? ' ' : (lcp <= 2500 ? '✓ bon' : (lcp <= 4000 ? 'à améliorer' : 'lent'));
-  const upTxt = c.uptime30d != null ? String(c.uptime30d).replace('.', ',') + ' %' : 'n/a';
-  const upTrend = c.uptimeTrend === 'up' ? '↑ en hausse' : (c.uptimeTrend === 'down' ? '↓ en baisse' : 'stable');
+  const upTxt = c.uptime30d != null ? String(c.uptime30d).replace('.', ',') + ' %' : 'historique insuffisant';
+  // S9/C13 — tendance null = « pas assez de données », pas « stable ».
+  const upTrend = c.uptimeTrend === 'up' ? '↑ en hausse' : (c.uptimeTrend === 'down' ? '↓ en baisse' : (c.uptimeTrend === 'stable' ? 'stable' : '—'));
+  const upWin = (c.uptimeWindowDays && c.uptimeWindowDays < 30) ? `${c.uptimeWindowDays} j` : '30 j';
   const st = c.scoreTrend;
   const scoreTrendTxt = (st == null) ? 'première mesure' : (st > 0 ? `↑ +${st} cette semaine` : (st < 0 ? `↓ ${st} cette semaine` : 'stable'));
   const sslSub = c.ssl ? (c.ssl.valid ? 'vérifié à l\'instant' : (c.ssl.https ? 'à vérifier' : 'non sécurisé (HTTP)')) : '—';
   return `<div class="snt-kpis">
-    <div class="snt-kpi"><div class="snt-kpi-l">Disponibilité · 30 j</div><div class="snt-kpi-v">${upTxt}</div><div class="snt-kpi-t">${upTrend}</div></div>
+    <div class="snt-kpi"><div class="snt-kpi-l">Disponibilité · ${upWin}</div><div class="snt-kpi-v">${upTxt}</div><div class="snt-kpi-t">${upTrend}</div></div>
     <div class="snt-kpi"><div class="snt-kpi-l">Score global</div><div class="snt-kpi-v ${score != null ? _scoreClass(score) : ''}">${score != null ? score : '—'}<span>/100</span></div><div class="snt-kpi-t">${scoreTrendTxt}</div></div>
     <div class="snt-kpi"><div class="snt-kpi-l">Chargement (LCP)</div><div class="snt-kpi-v">${lcpTxt}</div><div class="snt-kpi-t">${lcpAssess}</div></div>
     <div class="snt-kpi"><div class="snt-kpi-l">Certificat SSL</div><div class="snt-kpi-v snt-kpi-ssl">${icon('lock', 15)} ${c.ssl && c.ssl.valid ? 'Valide' : (c.ssl && c.ssl.https ? '?' : '—')}</div><div class="snt-kpi-t">${sslSub}</div></div>
@@ -729,6 +766,7 @@ function _renderCockpit() {
       ${_pagesAuditedHTML(c)}
       <div id="snt-ck-history" hidden>${_historyHTML(c.scoreHistory)}</div>
       ${a.findings ? _findingsHTML(a.findings, site.platform) : `<div class="snt-okmsg">${icon('search', 16)} <button class="snt-link-btn" data-act="relaunch">Lancer le premier audit</button> pour obtenir le score et les correctifs.</div>`}
+      ${_transparencyHTML(a, site.platform)}
       ${_geoSectionHTML()}
       ${_aeoCardHTML()}
       ${_gscSectionHTML()}
@@ -792,7 +830,12 @@ function _cleanSnippet(s) {
 function _geoResultsHTML(g) {
   const sc = g.score;
   const enginesUsed = (Array.isArray(g.engines) && g.engines.length) ? g.engines : null;
-  const legend = enginesUsed ? `<div class="snt-geo-legend">Moteurs interrogés : ${enginesUsed.map((e) => _esc(_GEO_ENGINE_LABEL[e] || e)).join(' · ')}</div>` : '';
+  // S9/C16 — libellé de confiance : le score dit sur QUOI il repose. Un seul
+  // moteur × 3 requêtes = un sondage, pas un verdict — on l'affiche.
+  const nEng = enginesUsed ? enginesUsed.length : 0;
+  const nReq = (g.results || []).length;
+  const confiance = nEng ? ` · ${nEng} moteur${nEng > 1 ? 's' : ''} × ${nReq} requête${nReq > 1 ? 's' : ''}${nEng < 2 ? ' — mesure indicative, ajoutez un moteur pour trianguler' : ''}` : '';
+  const legend = enginesUsed ? `<div class="snt-geo-legend">Moteurs interrogés : ${enginesUsed.map((e) => _esc(_GEO_ENGINE_LABEL[e] || e)).join(' · ')}${confiance}</div>` : '';
   const rows = (g.results || []).map((r) => {
     const cells = _geoCells(r);
     const badges = cells.map(_geoCellBadge).join('');
@@ -1086,9 +1129,14 @@ function _exportPdf() {
       ? `<div class="fd" style="color:#94a3b8">${f.pages.length} page${f.pages.length > 1 ? 's' : ''} : ${_esc(f.pages.slice(0, 8).join(', '))}${f.pages.length > 8 ? '…' : ''}</div>` : '';
     return `<div class="f"><div class="ft"><b style="color:${pc}">[${prio.label}]</b> ${_esc(f.title)}${tag}</div>${f.detail ? `<div class="fd">${_esc(f.detail)}</div>` : ''}${pages}${steps}${code}</div>`;
   }).join('');
-  // V2 crawl — note « pages auditées ».
+  // V2 crawl — note « pages auditées » ; S9 : périmètre HONNÊTE (« X sur N »).
   const auditPages = (p.audit && p.audit.pages) || [];
-  const pagesNote = auditPages.length > 1 ? `<div class="sub2">Audit réalisé sur ${auditPages.length} pages : ${_esc(auditPages.map((x) => x.path).slice(0, 8).join(', '))}${auditPages.length > 8 ? '…' : ''}</div>` : '';
+  const pTotal = p.audit && p.audit.pagesTotal;
+  const scopeTxt = (pTotal && pTotal > auditPages.length) ? `${auditPages.length} pages sur ${pTotal} détectées` : `${auditPages.length} pages`;
+  const pagesNote = auditPages.length > 1 ? `<div class="sub2">Audit réalisé sur ${scopeTxt} : ${_esc(auditPages.map((x) => x.path).slice(0, 8).join(', '))}${auditPages.length > 8 ? '…' : ''}${(pTotal && pTotal > auditPages.length) ? ' — le score reflète cet échantillon.' : ''}</div>` : '';
+  // S9 — transparence dans le rapport : conditions de mesure + version moteur.
+  const condTxt = (p.audit && p.audit.cwv && p.audit.cwv.conditions === 'mobile-4g-cpu4x') ? 'Vitesse mesurée en conditions mobiles émulées (4G lente, CPU ×4).' : ((p.audit && p.audit.cwv) ? 'Vitesse mesurée depuis un datacenter (non bridé) — plus favorable que le mobile réel.' : '');
+  const engTxt = (p.audit && p.audit.engine) ? ` · moteur ${_esc(p.audit.engine)}` : '';
 
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Sentinel — ${_esc(p.name || 'Audit')}</title>
   <style>body{font-family:-apple-system,system-ui,sans-serif;color:#0f172a;max-width:780px;margin:28px auto;padding:0 24px;line-height:1.5}
@@ -1109,7 +1157,7 @@ function _exportPdf() {
   ${geoHtml}
   <h2>À corriger en priorité — solutions clé en main <span style="font-size:12px;font-weight:600;color:#64748b">· ${sorted.length} action${sorted.length > 1 ? 's' : ''} · gain estimé +${totalGain} pts</span></h2>
   ${finds || '<p>Aucun problème détecté sur les axes audités.</p>'}
-  <div class="foot">Généré par Keystone Sentinel — chaque correctif inclut les étapes et le code prêt à coller.</div></body></html>`;
+  <div class="foot">Généré par Keystone Sentinel${engTxt} — chaque correctif inclut les étapes et le code prêt à coller.${condTxt ? ' ' + condTxt : ''}</div></body></html>`;
   const w = window.open('', '_blank');
   if (!w) { alert('Autorisez les fenêtres pop-up pour exporter le PDF.'); return; }
   w.document.write(html); w.document.close();

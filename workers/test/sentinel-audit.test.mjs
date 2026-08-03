@@ -1,0 +1,192 @@
+// ─────────────────────────────────────────────────────────────────────────
+// SENTINEL · S8 — tests du moteur d'analyse on-page PUR contre des
+// fixtures HTML RÉELLES (capturées le 2026-08-03, UA Sentinel, gzippées).
+//   node workers/test/sentinel-audit.test.mjs   (ou `npm run test:sentinel`)
+//
+// RÈGLE : la vérité terrain de chaque fixture a été établie À LA MAIN
+// (inspection indépendante du moteur). Si un test casse, c'est le moteur
+// qu'on interroge d'abord, pas la fixture. Ne JAMAIS ajuster une valeur
+// attendue pour faire passer le test sans re-vérifier la page à la main.
+//
+// Origine : rapport Mas des Bouteillans (2026-08-03) — 5 faux négatifs
+// (« Aucun H1 » ×5, « LocalBusiness absent » ×4) nés d'une coupe à 500 Ko
+// et d'une allowlist sans LodgingBusiness. Ces fixtures sont le cas de
+// non-régression permanent.
+// ─────────────────────────────────────────────────────────────────────────
+import assert from 'node:assert/strict';
+import { gunzipSync } from 'node:zlib';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { analyzePage, extractJsonLd, LOCALBUSINESS_TYPES, globalScore, perfScore, AXIS_WEIGHTS } from '../src/lib/audit-page.js';
+
+const FIX = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
+const load = (name) => gunzipSync(readFileSync(join(FIX, `${name}.html.gz`))).toString('utf-8');
+const keys = (r) => r.findings.map((f) => f.key).sort();
+
+let n = 0;
+const t = (label, fn) => { fn(); n++; console.log('  ✓', label); };
+
+// ── extractJsonLd : formes et tolérance ──────────────────────────────────
+t('extractJsonLd : objet simple, tableau, @graph, @type tableau, JSON invalide', () => {
+  const html = `
+    <script type="application/ld+json">{"@type":"Hotel","telephone":"+33 1"}</script>
+    <script type="application/ld+json">[{"@type":"WebSite"},{"@type":["Thing","Restaurant"]}]</script>
+    <script type="application/ld+json">{"@graph":[{"@type":"Bakery"}]}</script>
+    <script type="application/ld+json">{pas du json}</script>`;
+  const { nodes, types } = extractJsonLd(html);
+  assert.equal(nodes.length, 4);
+  for (const x of ['Hotel', 'WebSite', 'Thing', 'Restaurant', 'Bakery']) assert.ok(types.has(x), x);
+});
+
+t('LOCALBUSINESS_TYPES : la verticale hébergement est couverte (bug d\'origine)', () => {
+  for (const x of ['LodgingBusiness', 'BedAndBreakfast', 'Campground', 'Hostel', 'Hotel', 'Motel', 'Resort', 'VacationRental', 'ProfessionalService', 'Restaurant'])
+    assert.ok(LOCALBUSINESS_TYPES.has(x), x);
+  assert.ok(!LOCALBUSINESS_TYPES.has('Organization'), 'Organization n\'est PAS un LocalBusiness');
+  assert.ok(!LOCALBUSINESS_TYPES.has('WebSite'));
+});
+
+// ── Mas des Bouteillans — home (Wix Studio, 3,34 Mo, document complet) ───
+// Vérité terrain (main, 2026-08-03) : 1 H1, title 60c, meta 78c, canonical,
+// OG complet, 116/116 img alt, JSON-LD LodgingBusiness+LocalBusiness+WebSite,
+// tel: + telephone, address, PAS d'openingHours.
+t('mas-home : H1 détecté, LodgingBusiness reconnu, seul finding = horaires', () => {
+  const r = analyzePage(load('wix-studio-mas-home'), { sitemap: true, url: 'https://lemasdesbouteillans.com/' });
+  assert.equal(r.truncated, false);
+  assert.deepEqual(keys(r), ['nap_hours']);           // NI 'h1' NI 'nap_localbiz' — les 2 faux négatifs du rapport
+  assert.equal(r.scores.seo, 100);
+  assert.equal(r.scores.accessibilite, 100);
+  assert.equal(r.scores.presence, 85);                 // 30+35+20, horaires absents (réel)
+  assert.equal(r.scores.securite, null);               // pas d'en-têtes fournis au moteur pur
+  assert.deepEqual(r.indeterminate, []);               // document complet : tout est déterminé
+});
+
+// ── Les 4 pages gîtes (le cœur du faux négatif : LodgingBusiness SEUL) ───
+for (const [page, seoAttendu] of [['arbousier', 93], ['escapades', 100], ['myrtes', 100], ['cypres', 100]]) {
+  t(`mas-${page} : LodgingBusiness seul suffit, presence 85, seo ${seoAttendu}`, () => {
+    const r = analyzePage(load(`wix-studio-mas-${page}`), { skipSite: true, sitemap: true });
+    assert.deepEqual(keys(r), ['nap_hours']);
+    assert.equal(r.scores.seo, seoAttendu);            // arbousier : méta de 1 caractère → 8 pts (défaut réel du site)
+    assert.equal(r.scores.presence, 85);
+    assert.equal(r.scores.accessibilite, 100);
+  });
+}
+
+// ── PKS (statique Vercel — le site du dogfooding) ────────────────────────
+// Vérité terrain : ProfessionalService + tel + adresse + horaires → presence
+// 100. Méta 166 caractères (les entités HTML comptent) → hors plage → seo 93.
+t('pks : ProfessionalService reconnu, presence 100, meta 166c → seo 93', () => {
+  const r = analyzePage(load('static-vercel-pks'), { sitemap: true, url: 'https://protein-keystone.com/' });
+  assert.deepEqual(keys(r), []);
+  assert.equal(r.scores.presence, 100);
+  assert.equal(r.scores.seo, 93);
+  assert.equal(r.scores.accessibilite, 100);
+});
+
+// ── wordpress.org — CONTRÔLE NÉGATIF ─────────────────────────────────────
+// Organization n'est pas un LocalBusiness ; pas de téléphone français, pas
+// d'adresse française. L'ancien moteur créditait les trois : la regex
+// téléphone matchait des coordonnées SVG (« 0682 26.5465 ») et l'adresse
+// se déduisait de « place » (mot anglais) + 5 chiffres quelconques du JS.
+t('wordpress-org : AUCUN crédit NAP — le contrôle anti-faux-positifs', () => {
+  const r = analyzePage(load('wordpress-org'), { sitemap: true, url: 'https://wordpress.org/' });
+  assert.deepEqual(keys(r), ['nap_address', 'nap_hours', 'nap_localbiz', 'nap_phone']);
+  assert.equal(r.scores.presence, 0);
+  assert.equal(r.scores.seo, 100);
+});
+
+// ── Troncature : reproduction EXACTE du bug d'origine ────────────────────
+// La coupe à 500 Ko sur la home du Mas produisait « Aucun H1 ». Le moteur
+// S8 doit dire « indéterminé » : pas de finding, point hors dénominateur.
+t('mas-home tronquée à 500 Ko : h1 indéterminé, AUCUN faux finding', () => {
+  const r = analyzePage(load('wix-studio-mas-home').slice(0, 500000), { truncated: true, sitemap: true });
+  assert.equal(r.truncated, true);
+  assert.deepEqual(keys(r), []);                       // l'ancien moteur émettait 'h1' ici — LE bug
+  assert.ok(r.indeterminate.includes('h1'));
+  assert.ok(r.indeterminate.includes('nap_hours'));    // « pas trouvé » sur tronqué ≠ absent
+  assert.equal(r.scores.presence, 100);                // renormalisé sur tél+adresse+fiche (trouvés)
+  assert.equal(r.scores.seo, 100);                     // renormalisé sans le point H1
+});
+
+// ── Preuve asymétrique : un défaut VU sur un tronqué reste un défaut ─────
+t('tronqué : 2 H1 vus = finding valable ; alt manquants vus = finding valable', () => {
+  const html = '<html lang="fr"><head><title>Un titre correct</title></head><body>'
+    + '<h1>a</h1><h1>b</h1><img src="x.jpg"><p>' + 'x'.repeat(1000) + '</p>';
+  const r = analyzePage(html, { truncated: true });
+  const k = keys(r);
+  assert.ok(k.includes('h1'), '2 H1 vus → défaut avéré même tronqué');
+  assert.ok(k.includes('img_alt'), 'alt manquant vu → défaut avéré même tronqué');
+  assert.ok(!k.includes('meta_missing'), 'absence non prouvable sur tronqué');
+  assert.ok(r.indeterminate.includes('meta_missing'));
+});
+
+// ── Document complet : les absences redeviennent des findings normaux ────
+t('complet : les absences réelles sont bien émises (pas de sur-correction)', () => {
+  const r = analyzePage('<html><head></head><body><p>rien</p></body></html>', {});
+  const k = keys(r);
+  for (const x of ['title_missing', 'meta_missing', 'h1', 'canonical', 'viewport', 'jsonld', 'lang', 'nap_phone', 'nap_address', 'nap_localbiz', 'nap_hours'])
+    assert.ok(k.includes(x), x);
+  assert.equal(r.indeterminate.length, 0);
+});
+
+// ── Microdata : fallback itemtype ────────────────────────────────────────
+t('microdata itemtype LocalBusiness reconnu sans JSON-LD', () => {
+  const html = '<html lang="fr"><head><title>Boucherie Sanzot correcte</title></head><body>'
+    + '<div itemscope itemtype="https://schema.org/Restaurant"><span itemprop="telephone">+33 4 94 00 00 00</span></div></body></html>';
+  const r = analyzePage(html, {});
+  const k = keys(r);
+  assert.ok(!k.includes('nap_localbiz'));
+  assert.ok(!k.includes('nap_phone'));
+});
+
+// ═══ S9 — intégrité du score ═════════════════════════════════════════════
+
+// ── C8 : sécurité scopée hébergeur ───────────────────────────────────────
+// Le Mas (Wix) sert HSTS + X-Content-Type-Options ; CSP/XFO/Referrer-Policy
+// ne sont PAS réglables sur Wix → non applicables, axe renormalisé.
+const MAS_HEADERS = { 'strict-transport-security': 'max-age=31556952', 'x-content-type-options': 'nosniff' };
+t('C8 · Wix : en-têtes non réglables → non applicables, sécurité 100', () => {
+  const r = analyzePage(load('wix-studio-mas-home'), { sitemap: true, headers: MAS_HEADERS, platform: 'wix' });
+  assert.equal(r.scores.securite, 100);                      // 2/2 contrôlables présents
+  assert.deepEqual(r.notApplicable.sort(), ['sec_CSP', 'sec_Referrer-Policy', 'sec_X-Frame-Options']);
+  assert.ok(!keys(r).some((k) => k.startsWith('sec_')), 'aucun finding sécurité non actionnable');
+});
+t('C8 · même site déclaré custom : les 3 en-têtes redeviennent exigibles (40)', () => {
+  const r = analyzePage(load('wix-studio-mas-home'), { sitemap: true, headers: MAS_HEADERS, platform: 'custom' });
+  assert.equal(r.scores.securite, 40);                       // 2 × 20 sur 5 exigés
+  assert.equal(keys(r).filter((k) => k.startsWith('sec_')).length, 3);
+  assert.deepEqual(r.notApplicable, []);
+});
+t('C8 · Wix avec un en-tête CONTRÔLABLE manquant : toujours pénalisé', () => {
+  const r = analyzePage(load('wix-studio-mas-home'), { sitemap: true, headers: { 'content-security-policy': "default-src 'self'" }, platform: 'wix' });
+  // HSTS + XCTO manquants (contrôlables) ; CSP présent compte. XFO/RP absents → n/a.
+  assert.equal(r.scores.securite, Math.round(100 * 20 / 60));
+  assert.ok(keys(r).includes('sec_HSTS'));
+});
+
+// ── C7 : pondération fixe + politique n/a ────────────────────────────────
+t('C7 · poids fixes : somme = 1, score pondéré exact', () => {
+  assert.equal(Math.round(Object.values(AXIS_WEIGHTS).reduce((a, b) => a + b, 0) * 100), 100);
+  // cas Mas post-S9 : seo 99, perf 100, sécu 100, a11y 100, présence 85, dispo 100
+  const g = globalScore({ seo: 99, performance: 100, securite: 100, accessibilite: 100, presence: 85, disponibilite: 100 });
+  assert.equal(g, Math.round(99 * .25 + 100 * .20 + 100 * .15 + 100 * .15 + 85 * .15 + 100 * .10));  // 97
+});
+t('C7 · axe n/a : renormalisation (le score ne bouge pas arbitrairement)', () => {
+  const avec = globalScore({ seo: 80, performance: 80, securite: 80, accessibilite: 80, presence: 80, disponibilite: 80 });
+  const sans = globalScore({ seo: 80, performance: null, securite: 80, accessibilite: 80, presence: 80, disponibilite: null });
+  assert.equal(avec, 80); assert.equal(sans, 80);            // un axe n/a ne doit PAS déplacer un score homogène
+  assert.equal(globalScore({}), null);
+  assert.equal(globalScore(null), null);
+});
+
+// ── C9 : le poids de page entre au score perf ────────────────────────────
+t('C9 · page à 3 Mo : perf < 100 même avec LCP/CLS parfaits (fin de l\'incohérence)', () => {
+  const parfaitLeger = perfScore({ lcp: 800, cls: 0, fcp: 700, weightKb: 900 });
+  const parfaitLourd = perfScore({ lcp: 800, cls: 0, fcp: 700, weightKb: 3072 });
+  assert.equal(parfaitLeger, 100);
+  assert.ok(parfaitLourd < 100, `3 Mo doit coûter des points (obtenu ${parfaitLourd})`);
+  assert.ok(parfaitLourd >= 85, 'mais rester secondaire face aux CWV');
+  assert.equal(perfScore(null), null);
+});
+
+console.log(`\n${n} tests OK — moteur S8+S9 conforme à la vérité terrain des fixtures.`);

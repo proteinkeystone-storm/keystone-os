@@ -362,3 +362,9 @@
 .snt-geo select.snt-input { appearance: none; -webkit-appearance: none; height: 44px; padding: 0 38px 0 14px; cursor: pointer; color-scheme: dark; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; }
 /* Bloc-prompt : on revient à la ligne au lieu de scroller horizontalement. */
 #snt-geo-block { white-space: pre-wrap; word-break: break-word; overflow-x: hidden; max-height: 220px; overflow-y: auto; }
+
+/* S9 — bloc transparence (non vérifiable / gérés par l'hébergeur / conditions de mesure). */
+.snt-transp { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--ws-border, rgba(148,163,184,.18)); border-radius: 12px; background: rgba(148,163,184,.05); display: flex; flex-direction: column; gap: 7px; }
+.snt-transp-row { display: flex; align-items: baseline; gap: 7px; font-size: 12.5px; color: var(--ws-text-soft, #94a3b8); line-height: 1.5; }
+.snt-transp-row b { color: var(--ws-text, #e2e8f0); font-weight: 600; }
+.snt-transp-row svg { flex: none; transform: translateY(1px); opacity: .7; }

@@ -43,9 +43,20 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 // S5 — GEO (visibilité IA) : clé du propriétaire via le coffre BYOK si dispo,
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
+import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S7.3';
-const UA = 'KeystoneSentinel/1.0 (+https://protein-keystone.com)';
+const SENTINEL_ENGINE_VERSION = 'S9.0';
+// S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
+// Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
+// est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
+// MAX_HTML qui garantit l'analyse complète, pas l'UA.
+const UA = 'Mozilla/5.0 (compatible; KeystoneSentinel/1.0; +https://protein-keystone.com)';
+// S8 — cap de lecture HTML. L'ancien cap (500 Ko) coupait AVANT le <h1> des
+// pages Wix Studio (2,2-3,4 Mo, H1 vers 2,3 Mo) → « Aucun H1 » émis à tort.
+// 4 Mo couvre les tailles Wix observées ; res.text() a de toute façon déjà
+// bufferisé le corps entier, le slice ne protège que l'analyse aval.
+// Au-delà → flag `truncated` : preuve négative invalide (cf. audit-page.js).
+const MAX_HTML = 4_000_000;
 const MAX_LABEL_LEN = 120;
 const CHECK_TIMEOUT_MS = 15000;
 const SUB_TIMEOUT_MS = 8000;
@@ -136,6 +147,12 @@ async function _ensureSchema(env) {
   try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN cwv TEXT").run(); } catch (_) { /* déjà présent */ }
   // V2 — crawl multi-pages : liste des pages auditées + leur score (JSON).
   try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN pages TEXT").run(); } catch (_) { /* déjà présent */ }
+  // S8 — clés de contrôles indéterminés (document tronqué → « non vérifiable »).
+  try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN indeterminate TEXT").run(); } catch (_) { /* déjà présent */ }
+  // S9 — en-têtes non applicables (plateforme managée), version du moteur, total de pages détectées.
+  try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN not_applicable TEXT").run(); } catch (_) { /* déjà présent */ }
+  try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN engine TEXT").run(); } catch (_) { /* déjà présent */ }
+  try { await env.DB.prepare("ALTER TABLE sentinel_audits ADD COLUMN pages_total INTEGER").run(); } catch (_) { /* déjà présent */ }
   _schemaReady = true;
 }
 
@@ -238,12 +255,7 @@ async function _alert(env, tenant, site, kind) {
   }
 }
 
-// ── Audit on-page (S2) ──────────────────────────────────────────
-const SEC_HEADERS = [
-  ['strict-transport-security', 'HSTS'], ['content-security-policy', 'CSP'],
-  ['x-frame-options', 'X-Frame-Options'], ['x-content-type-options', 'X-Content-Type-Options'],
-  ['referrer-policy', 'Referrer-Policy'],
-];
+// ── Audit on-page (S2 ; moteur pur extrait en S8 → lib/audit-page.js) ──
 async function _exists(url, withText) {
   const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), SUB_TIMEOUT_MS);
   try {
@@ -261,96 +273,40 @@ function _between(html, re) { const m = html.match(re); return m ? (m[1] || '').
 // SEO « sitemap présent » aux pages internes sans re-vérifier.
 async function _audit(url, opts = {}) {
   const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), CHECK_TIMEOUT_MS);
-  let html = '', headers = null, reachable = false;
+  let html = '', headers = null, reachable = false, truncated = false;
   try {
     const res = await fetch(url, { method: 'GET', redirect: 'follow', headers: { 'User-Agent': UA }, signal: ctrl.signal });
-    headers = res.headers; reachable = _classify(res.status) === 1;
-    html = (await res.text()).slice(0, 500000);
-  } catch (_) { /* injoignable → audit minimal */ } finally { clearTimeout(timer); }
+    headers = {}; for (const [k, v] of res.headers) headers[k.toLowerCase()] = v;
+    reachable = _classify(res.status) === 1;
+    const raw = await res.text();                    // corps déjà bufferisé entier
+    truncated = raw.length > MAX_HTML;               // S8 : on le SAIT, on le dit
+    html = truncated ? raw.slice(0, MAX_HTML) : raw;
+  } catch (_) { /* injoignable → traité ci-dessous, PAS d'audit du vide */ } finally { clearTimeout(timer); }
+
+  // S8/C6 — injoignable : aucun score, aucun finding. L'ancien « audit
+  // minimal » notait un site down comme un site sans balises (SEO 10,
+  // findings partout) : indistinguable d'un vrai site vide.
+  if (!reachable) {
+    return { reachable: false, scores: { seo: null, securite: null, accessibilite: null, presence: null },
+             findings: [], indeterminate: [], truncated: false, sitemap: false };
+  }
 
   // robots.txt + sitemap (best effort) — contrôle « site-level », fait sur la home.
-  let robots = false, sitemap = false;
+  let sitemap = false;
   if (opts.skipSite) {
     sitemap = !!opts.sitemapKnown;
   } else {
     try {
       const origin = new URL(url).origin;
-      const rb = await _exists(`${origin}/robots.txt`, true); robots = rb.ok;
+      const rb = await _exists(`${origin}/robots.txt`, true);
       if (rb.text && /sitemap:/i.test(rb.text)) sitemap = true;
       if (!sitemap) { const sm = await _exists(`${origin}/sitemap.xml`, false); sitemap = sm.ok; }
     } catch (_) {}
   }
 
-  const lc = html.toLowerCase();
-  const title = _between(html, /<title[^>]*>([\s\S]*?)<\/title>/i);
-  const metaDesc = _between(html, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)
-                || _between(html, /<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["']/i);
-  const h1 = (lc.match(/<h1[\s>]/g) || []).length;
-  const canonical = /<link[^>]+rel=["']canonical["']/i.test(html);
-  const ogTitle = /<meta[^>]+property=["']og:title["']/i.test(html);
-  const ogImage = /<meta[^>]+property=["']og:image["']/i.test(html);
-  const viewport = /<meta[^>]+name=["']viewport["']/i.test(html);
-  const lang = /<html[^>]+lang=/i.test(html);
-  const jsonld = /application\/ld\+json/i.test(html);
-  const imgs = (lc.match(/<img\b/g) || []).length;
-  const imgsAlt = (html.match(/<img\b[^>]*\balt=/gi) || []).length;
-  const imgsMissing = Math.max(0, imgs - imgsAlt);
-  const sec = {}; if (headers) for (const [h, label] of SEC_HEADERS) sec[label] = !!headers.get(h);
-
-  // ── Présence locale (NAP) — signaux on-page, souverain (S6) ──
-  const napPhone = /href=["']tel:/i.test(html) || /(?:\+33|0033)[\s.\-]?[1-9](?:[\s.\-]?\d{2}){4}/.test(html) || /\b0[1-9](?:[\s.\-]?\d{2}){4}\b/.test(html);
-  const napAddress = /postaladdress/i.test(html) || /<address[\s>]/i.test(html)
-    || (/\b(rue|avenue|boulevard|bd|impasse|chemin|place|all[ée]e|quai|cours)\b/i.test(lc) && /\b\d{5}\b/.test(html));
-  const napLocalBiz = /localbusiness/i.test(html)
-    || /"@type"\s*:\s*"(Restaurant|Store|Hotel|Bakery|CafeOrCoffeeShop|BarOrPub|ProfessionalService|MedicalBusiness|Dentist|Attorney|HairSalon|BeautySalon|AutoRepair|RealEstateAgent|Physician|FoodEstablishment)"/i.test(html);
-  const napHours = /openinghours/i.test(html);
-
-  const findings = [];
-  const add = (axis, sev, key, title2, detail) => findings.push({ axis, sev, key, title: title2, detail });
-
-  // ── SEO technique ──
-  let seo = 0;
-  if (title) { seo += (title.length >= 10 && title.length <= 70) ? 15 : 8; if (title.length > 70) add('seo', 'low', 'title_long', 'Balise title trop longue', `${title.length} caractères — visez 50-60.`); }
-  else add('seo', 'high', 'title_missing', 'Balise <title> absente', 'Le titre est le premier signal SEO.');
-  if (metaDesc) { seo += (metaDesc.length >= 50 && metaDesc.length <= 165) ? 15 : 8; }
-  else add('seo', 'high', 'meta_missing', 'Méta description absente', 'Rédigez 50-160 caractères qui donnent envie de cliquer.');
-  if (h1 === 1) seo += 15; else add('seo', 'medium', 'h1', h1 === 0 ? 'Aucun <h1>' : `${h1} balises <h1>`, 'Une page = un seul titre H1.');
-  if (canonical) seo += 10; else add('seo', 'low', 'canonical', 'Balise canonical absente', 'Évite le contenu dupliqué aux yeux de Google.');
-  if (viewport) seo += 10; else add('seo', 'high', 'viewport', 'Pas de balise viewport', 'Indispensable pour le mobile.');
-  if (ogTitle) seo += 8; else add('seo', 'low', 'og_title', 'Open Graph titre absent', 'Améliore l\'aperçu lors des partages.');
-  if (ogImage) seo += 7; else add('seo', 'low', 'og_image', 'Open Graph image absente', 'Une image d\'aperçu augmente les clics sur les réseaux.');
-  if (jsonld) seo += 10; else add('seo', 'medium', 'jsonld', 'Données structurées (Schema.org) absentes', 'Sans elles, les IA et Google comprennent mal votre activité.');
-  if (sitemap) seo += 10; else if (!opts.skipSite) add('seo', 'low', 'sitemap', 'Sitemap introuvable', 'Aide les moteurs à explorer toutes vos pages.');
-  // Wix — sous-domaine gratuit (…wixsite.com) : pénalité SEO + crédibilité (détectable via l'URL ; site-level).
-  let _host = ''; try { _host = new URL(url).hostname; } catch (_) {}
-  if (!opts.skipSite && /\.wixsite\.com$/i.test(_host)) add('seo', 'high', 'wix_subdomain', 'Site sur une adresse Wix gratuite', 'L\'adresse se termine par .wixsite.com : un domaine personnalisé améliorerait nettement le référencement et la crédibilité.');
-  seo = Math.min(100, seo);
-
-  // ── Sécurité ──
-  let securite = 0;
-  for (const [, label] of SEC_HEADERS) {
-    if (sec[label]) securite += 20;
-    else add('securite', label === 'HSTS' || label === 'CSP' ? 'medium' : 'low', `sec_${label}`, `En-tête ${label} absent`, 'Renforce la protection des visiteurs.');
-  }
-
-  // ── Accessibilité ──
-  let accessibilite = 0;
-  if (lang) accessibilite += 35; else add('accessibilite', 'low', 'lang', 'Langue de la page non déclarée', 'Ajoutez lang="fr" sur <html>.');
-  if (viewport) accessibilite += 25;
-  if (imgs > 0) { accessibilite += Math.round(40 * imgsAlt / imgs); if (imgsMissing > 0) add('accessibilite', 'medium', 'img_alt', `${imgsMissing} image${imgsMissing > 1 ? 's' : ''} sans texte alternatif`, 'Le texte alt aide l\'accessibilité et le SEO images.'); }
-  else accessibilite += 40;
-  accessibilite = Math.min(100, accessibilite);
-
-  // ── Présence locale (NAP + fiche établissement) ──
-  let presence = 0;
-  if (napPhone) presence += 30; else add('presence', 'low', 'nap_phone', 'Téléphone non détecté sur la page', 'Affichez un numéro cliquable (lien tel:) — clé pour les recherches locales et les IA.');
-  if (napAddress) presence += 35; else add('presence', 'low', 'nap_address', 'Adresse postale non structurée', 'Affichez votre adresse complète, idéalement en données structurées (PostalAddress).');
-  if (napLocalBiz) presence += 20; else add('presence', 'medium', 'nap_localbiz', 'Fiche établissement (LocalBusiness) absente', 'Décrivez votre établissement en Schema.org LocalBusiness : nom, adresse, téléphone, horaires.');
-  if (napHours) presence += 15; else add('presence', 'low', 'nap_hours', 'Horaires d\'ouverture non déclarés', 'Publiez vos horaires (openingHours) — repris par Google et les assistants IA.');
-  presence = Math.min(100, presence);
-
-  const scores = { seo, securite, accessibilite, presence };
-  return { reachable, scores, findings, sitemap };
+  // Analyse pure (lib/audit-page.js) — testée sur fixtures réelles (S8).
+  const a = analyzePage(html, { truncated, headers, skipSite: opts.skipSite, sitemap, url, platform: opts.platform });
+  return { reachable, ...a, sitemap };
 }
 
 // ── V2 · Crawl multi-pages — découverte + agrégation ────────────
@@ -397,16 +353,39 @@ async function _discoverPages(url, max) {
   }
   const homeNorm = norm(url);
   // Exclut la home et ses variantes (path « / », ex. www) → pas de doublon.
-  return [...found].filter((u2) => u2 !== homeNorm && _pathOf(u2) !== '/').slice(0, max);
+  const candidates = [...found].filter((u2) => u2 !== homeNorm && _pathOf(u2) !== '/');
+  // S9 — sélection PRIORISÉE (l'ancien slice prenait les N premières, ordre
+  // arbitraire : sur le Mas, /contact et /nos-offres n'étaient jamais vus) :
+  //   1. pages « métier » (contact, offres, à-propos) — le NAP vit sur /contact ;
+  //   2. diversité de gabarits : round-robin sur le 1er segment de chemin,
+  //      plutôt que N pages du même template.
+  const PRIORITY = /\/(contact|nous-contacter|contactez|nos-offres|offres|tarifs|prix|a-propos|apropos|about|qui-sommes-nous)(\/|$)/i;
+  const prio = candidates.filter((u2) => PRIORITY.test(u2));
+  const rest = candidates.filter((u2) => !PRIORITY.test(u2));
+  const bySeg = new Map();
+  for (const u2 of rest) {
+    const seg = (_pathOf(u2).split('/')[1] || '').replace(/-(le|la|les|l)$/, '');
+    if (!bySeg.has(seg)) bySeg.set(seg, []);
+    bySeg.get(seg).push(u2);
+  }
+  const groups = [...bySeg.values()];
+  const diverse = [];
+  for (let i = 0; diverse.length < rest.length; i++) {
+    let took = false;
+    for (const g of groups) { if (g[i]) { diverse.push(g[i]); took = true; } }
+    if (!took) break;
+  }
+  // total = pages internes détectées + la home (pour le « X sur N » du rapport)
+  return { urls: [...prio, ...diverse].slice(0, max), total: candidates.length + 1 };
 }
 
 // Audite la home + N pages internes en parallèle, agrège scores + findings.
-async function _auditSite(url) {
-  const home = await _audit(url);
-  let extraUrls = [];
-  try { extraUrls = await _discoverPages(url, MAX_AUDIT_PAGES - 1); } catch (_) {}
+async function _auditSite(url, platform) {
+  const home = await _audit(url, { platform });
+  let extraUrls = [], pagesTotal = 1;
+  try { const d = await _discoverPages(url, MAX_AUDIT_PAGES - 1); extraUrls = d.urls; pagesTotal = d.total; } catch (_) {}
   const extras = (await Promise.all(extraUrls.map((u) =>
-    _audit(u, { skipSite: true, sitemapKnown: home.sitemap }).then((r) => ({ url: u, ...r })).catch(() => null)
+    _audit(u, { skipSite: true, sitemapKnown: home.sitemap, platform }).then((r) => ({ url: u, ...r })).catch(() => null)
   ))).filter((p) => p && p.reachable);
   const pagesAudited = [{ url, ...home }].concat(extras);
 
@@ -430,13 +409,36 @@ async function _auditSite(url) {
   }
   const findings = [...byKey.values()].map((f) => { if (f.pages) f.pages = [...new Set(f.pages)]; return f; });
   const pages = pagesAudited.map((p) => ({ path: _pathOf(p.url), score: _globalScore({ ...p.scores }) }));
-  return { reachable: home.reachable, scores, findings, pages, pageCount: pagesAudited.length };
+  // S8 — contrôles indéterminés (union sur les pages) : « non vérifiable »
+  // n'est ni un défaut ni un blanc-seing, le rapport doit pouvoir le dire.
+  const indeterminate = [...new Set(pagesAudited.flatMap((p) => p.indeterminate || []))];
+  // S9/C8 — en-têtes non applicables (plateforme managée), union.
+  const notApplicable = [...new Set(pagesAudited.flatMap((p) => p.notApplicable || []))];
+  const truncated = pagesAudited.some((p) => p.truncated);
+  return { reachable: home.reachable, scores, findings, pages, pageCount: pagesAudited.length, pagesTotal: Math.max(pagesTotal, pagesAudited.length), indeterminate, notApplicable, truncated };
 }
 
 // Disponibilité (axe S1) — % de relevés OK sur 24 h.
 async function _uptime24(env, siteId) {
   const up = await env.DB.prepare("SELECT AVG(ok) AS rate, COUNT(*) AS n FROM sentinel_checks WHERE site_id = ? AND checked_at >= datetime('now','-1 day')").bind(siteId).first();
   return (up && up.n) ? Math.round((up.rate || 0) * 100) : null;
+}
+
+// S9/C11-C12 — disponibilité FENÊTRÉE et honnête : « 99,9 % sur 30 jours »
+// n'est affichable que si on a ~30 jours de relevés. Fenêtre réelle =
+// min(30 j, âge de l'historique) ; couverture < 50 % des relevés attendus
+// (1 check / 5 min) → « historique insuffisant » (null, axe n/a).
+async function _uptimeWindow(env, siteId) {
+  const row = await env.DB.prepare(
+    `SELECT AVG(ok) AS rate, COUNT(*) AS n,
+            CAST(julianday('now') - julianday(MIN(checked_at)) AS REAL) AS ageDays
+       FROM sentinel_checks WHERE site_id = ? AND checked_at >= datetime('now','-30 day')`
+  ).bind(siteId).first();
+  if (!row || !row.n) return { pct: null, windowDays: 0, n: 0 };
+  const windowDays = Math.max(1, Math.min(30, Math.ceil(row.ageDays || 1)));
+  const expected = windowDays * 288;                        // 288 relevés/jour à 5 min
+  if (row.n < expected * 0.5) return { pct: null, windowDays, n: row.n, insufficient: true };
+  return { pct: Math.round((row.rate || 0) * 1000) / 10, windowDays, n: row.n };
 }
 
 // ── Handlers ────────────────────────────────────────────────────
@@ -839,23 +841,6 @@ export async function handleSiteHistory(request, env, id) {
 // ── Performance réelle (S3 · Core Web Vitals via Browser Rendering) ──
 // Best-effort : si le binding BROWSER est absent ou le navigateur échoue,
 // renvoie null → l'axe perf passe en « n/a », le reste de l'audit tient.
-function _threshScore(v, good, poor) {
-  if (v == null) return null;
-  if (v <= good) return 100;
-  if (v >= poor) return 0;
-  return Math.round(100 * (poor - v) / (poor - good));
-}
-function _perfScore(cwv) {
-  if (!cwv) return null;
-  const parts = [
-    [_threshScore(cwv.lcp, 2500, 4000), 0.5],
-    [_threshScore(cwv.cls, 0.1, 0.25), 0.3],
-    [_threshScore(cwv.fcp, 1800, 3000), 0.2],
-  ].filter((p) => p[0] != null);
-  if (!parts.length) return null;
-  const wsum = parts.reduce((a, p) => a + p[1], 0);
-  return Math.round(parts.reduce((a, p) => a + p[0] * p[1], 0) / wsum);
-}
 async function _measurePerf(env, url) {
   if (!env || !env.BROWSER) return null;
   let browser = null;
@@ -863,13 +848,30 @@ async function _measurePerf(env, url) {
     browser = await puppeteer.launch(env.BROWSER);
     const page = await browser.newPage();
     try { await page.setViewport({ width: 390, height: 844, isMobile: true, deviceScaleFactor: 2 }); } catch (_) {}
+    // S9/C14 — throttling type Lighthouse (Slow 4G + CPU ×4), best-effort.
+    // Sans lui, un LCP « 0,8 s » mesuré depuis un datacenter sur-promettait :
+    // le premier client qui croise PageSpeed voit 3 s et ne croit plus l'outil.
+    // Les CONDITIONS réelles de mesure sont étiquetées dans cwv.conditions.
+    let throttled = false;
+    try {
+      const cdp = await page.createCDPSession();
+      await cdp.send('Network.enable');
+      await cdp.send('Network.emulateNetworkConditions', {
+        offline: false, latency: 150, downloadThroughput: 1.6 * 1024 * 1024 / 8, uploadThroughput: 750 * 1024 / 8,
+      });
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+      throttled = true;
+    } catch (_) { /* CDP indisponible → mesure non throttlée, étiquetée telle quelle */ }
     await page.evaluateOnNewDocument(() => {
       window.__cwv = { lcp: 0, cls: 0 };
       try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__cwv.lcp = e.startTime; }).observe({ type: 'largest-contentful-paint', buffered: true }); } catch (e) {}
       try { new PerformanceObserver((l) => { for (const e of l.getEntries()) { if (!e.hadRecentInput) window.__cwv.cls += e.value; } }).observe({ type: 'layout-shift', buffered: true }); } catch (e) {}
     });
-    await page.goto(url, { waitUntil: 'load', timeout: 25000 });
-    await new Promise((r) => setTimeout(r, 2500));   // laisse LCP/CLS se stabiliser
+    // S9/C15 — networkidle2 attrape les candidats LCP tardifs que le sleep
+    // fixe de 2,5 s manquait ; repli sur 'load' si la page ne s'apaise jamais.
+    try { await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 }); }
+    catch (_) { await page.goto(url, { waitUntil: 'load', timeout: 25000 }); }
+    await new Promise((r) => setTimeout(r, 1500));   // marge de stabilisation LCP/CLS
     const m = await page.evaluate(() => {
       const nav = performance.getEntriesByType('navigation')[0] || {};
       const fcpE = performance.getEntriesByType('paint').find((p) => p.name === 'first-contentful-paint');
@@ -885,19 +887,14 @@ async function _measurePerf(env, url) {
         requests: count,
       };
     });
+    // C14 — traçabilité des conditions : le chiffre affiché dit COMMENT il a été mesuré.
+    m.conditions = throttled ? 'mobile-4g-cpu4x' : 'datacenter-non-throttle';
     return m;
   } catch (_) {
     return null;
   } finally {
     if (browser) { try { await browser.close(); } catch (_) {} }
   }
-}
-
-// Calcule le score global à partir des axes disponibles (audit + dispo S1).
-function _globalScore(scores) {
-  const vals = Object.values(scores).filter(v => typeof v === 'number');
-  if (!vals.length) return null;
-  return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
 }
 
 export async function handleSiteAudit(request, env, id) {
@@ -907,10 +904,20 @@ export async function handleSiteAudit(request, env, id) {
   const site = await env.DB.prepare("SELECT id, url, label, platform FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
   if (!site) return err('Site introuvable.', 404, origin);
 
-  const a = await _auditSite(site.url);   // V2 — crawl : home + pages internes, agrégé
-  const dispo = await _uptime24(env, site.id);
+  const a = await _auditSite(site.url, site.platform);   // V2 — crawl : home + pages internes, agrégé (S9 : plateforme → scoping sécurité)
+
+  // S8/C6 — site injoignable : pas de verdict. On ne stocke PAS d'audit
+  // (une ligne à score null polluerait l'historique et les tendances) ;
+  // la surveillance uptime (sentinel_checks) trace déjà l'indisponibilité.
+  if (!a.reachable) {
+    return err('Site injoignable au moment de l\'audit — aucun score attribué. Réessayez quand le site répond.', 503, origin);
+  }
+
+  // S9/C11-C12 — axe dispo : fenêtre réelle + garde de couverture.
+  const up = await _uptimeWindow(env, site.id);
+  const dispo = up.pct == null ? null : Math.round(up.pct);
   const cwv = await _measurePerf(env, site.url);   // perf (CWV) = home seule (coût borné)
-  const perf = _perfScore(cwv);
+  const perf = _perfScore(cwv);                     // S9/C9 : poids de page inclus
   const scores = { disponibilite: dispo, performance: perf, ...a.scores };   // null = axe « n/a »
   const findings = a.findings.slice();
   if (cwv) {
@@ -920,17 +927,23 @@ export async function handleSiteAudit(request, env, id) {
     if (cwv.weightKb >= 3072) findings.push({ axis: 'performance', sev: 'low', key: 'perf_weight', title: `Page lourde (${(cwv.weightKb / 1024).toFixed(1)} Mo)`, detail: 'Allégez images et scripts pour accélérer le mobile.' });
   }
   _attachFixes(findings, { url: site.url, host: _hostOf(site.url), platform: site.platform });
-  const global = _globalScore(scores);
+  const global = _globalScore(scores);              // S9/C7 : pondération fixe (lib)
   const scoresJson = JSON.stringify(scores);
   const findingsJson = JSON.stringify(findings);
   const pagesJson = JSON.stringify(a.pages || []);
-
-  await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv, pages) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(generateId(), g.tenant, site.id, global, scoresJson, findingsJson, cwv ? JSON.stringify(cwv) : null, pagesJson).run();
+  const indetJson = JSON.stringify(a.indeterminate || []);
+  const naJson = JSON.stringify(a.notApplicable || []);
+  // S9/C23 — l'audit porte la version du moteur qui l'a produit : quand un
+  // score bouge après une révision de méthode, l'historique doit le dire.
+  await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(generateId(), g.tenant, site.id, global, scoresJson, findingsJson, cwv ? JSON.stringify(cwv) : null, pagesJson, indetJson, naJson, SENTINEL_ENGINE_VERSION, a.pagesTotal || null).run();
   await env.DB.prepare("UPDATE sentinel_sites SET last_score = ?, last_scores = ?, last_audit_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?")
     .bind(global, scoresJson, site.id, g.tenant).run();
 
-  return json({ audit: { score: global, scores, findings, cwv, pages: a.pages, reachable: a.reachable } }, 200, origin);
+  return json({ audit: { score: global, scores, findings, cwv, pages: a.pages, pagesTotal: a.pagesTotal || null,
+    reachable: a.reachable, indeterminate: a.indeterminate || [], notApplicable: a.notApplicable || [],
+    truncated: !!a.truncated, engine: SENTINEL_ENGINE_VERSION,
+    dispoWindow: { days: up.windowDays, n: up.n, insufficient: !!up.insufficient } } }, 200, origin);
 }
 
 export async function handleSiteAuditGet(request, env, id) {
@@ -956,13 +969,18 @@ export async function handleSiteCockpit(request, env, id) {
   const site = await env.DB.prepare("SELECT id, url, label, platform, last_ok, last_status, last_ms, last_checked_at, next_check_at FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
   if (!site) return err('Site introuvable.', 404, origin);
 
-  // Disponibilité 30 j + tendance (7 j vs 7 j précédents)
-  const up30 = await env.DB.prepare("SELECT AVG(ok) rate, COUNT(*) n FROM sentinel_checks WHERE site_id = ? AND checked_at >= datetime('now','-30 day')").bind(id).first();
-  const uptime30d = (up30 && up30.n) ? Math.round((up30.rate || 0) * 1000) / 10 : null;
-  const up7 = await env.DB.prepare("SELECT AVG(ok) rate FROM sentinel_checks WHERE site_id = ? AND checked_at >= datetime('now','-7 day')").bind(id).first();
-  const upPrev7 = await env.DB.prepare("SELECT AVG(ok) rate FROM sentinel_checks WHERE site_id = ? AND checked_at < datetime('now','-7 day') AND checked_at >= datetime('now','-14 day')").bind(id).first();
-  let uptimeTrend = 'stable';
-  if (up7 && upPrev7 && up7.rate != null && upPrev7.rate != null) {
+  // S9/C11-C13 — disponibilité : fenêtre RÉELLE (« sur N j », pas « 30 j »
+  // avec 2 jours d'historique) + garde de couverture ; tendance 7 j vs 7 j
+  // uniquement si les DEUX fenêtres ont assez de relevés (sinon null — un
+  // « stable » par défaut est une affirmation gratuite).
+  const upW = await _uptimeWindow(env, id);
+  const uptime30d = upW.pct;                                 // null si couverture < 50 %
+  const uptimeWindowDays = upW.windowDays;
+  const up7 = await env.DB.prepare("SELECT AVG(ok) rate, COUNT(*) n FROM sentinel_checks WHERE site_id = ? AND checked_at >= datetime('now','-7 day')").bind(id).first();
+  const upPrev7 = await env.DB.prepare("SELECT AVG(ok) rate, COUNT(*) n FROM sentinel_checks WHERE site_id = ? AND checked_at < datetime('now','-7 day') AND checked_at >= datetime('now','-14 day')").bind(id).first();
+  let uptimeTrend = null;
+  const MIN_7D = 7 * 288 * 0.5;                              // 50 % de couverture par fenêtre
+  if (up7 && upPrev7 && up7.rate != null && upPrev7.rate != null && up7.n >= MIN_7D && upPrev7.n >= MIN_7D) {
     const d = up7.rate - upPrev7.rate;
     uptimeTrend = d > 0.005 ? 'up' : (d < -0.005 ? 'down' : 'stable');
   }
@@ -972,9 +990,9 @@ export async function handleSiteCockpit(request, env, id) {
   const series30d = seriesRows.map((r) => ({ d: r.d, ms: Math.round(r.ms || 0), up: r.up }));
 
   // Dernier audit + historique + tendance de score (vs ~7 j).
-  const auditRow = await env.DB.prepare("SELECT score, scores, findings, cwv, pages, created_at FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 1").bind(id).first();
+  const auditRow = await env.DB.prepare("SELECT score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total, created_at FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 1").bind(id).first();
   let audit = null;
-  if (auditRow) { let sc = null, fd = [], cw = null, pg = null; try { sc = JSON.parse(auditRow.scores); } catch (_) {} try { fd = JSON.parse(auditRow.findings); } catch (_) {} try { cw = auditRow.cwv ? JSON.parse(auditRow.cwv) : null; } catch (_) {} try { pg = auditRow.pages ? JSON.parse(auditRow.pages) : null; } catch (_) {} audit = { score: auditRow.score, scores: sc, findings: fd, cwv: cw, pages: pg, created_at: auditRow.created_at }; }
+  if (auditRow) { let sc = null, fd = [], cw = null, pg = null, ind = [], na = []; try { sc = JSON.parse(auditRow.scores); } catch (_) {} try { fd = JSON.parse(auditRow.findings); } catch (_) {} try { cw = auditRow.cwv ? JSON.parse(auditRow.cwv) : null; } catch (_) {} try { pg = auditRow.pages ? JSON.parse(auditRow.pages) : null; } catch (_) {} try { ind = auditRow.indeterminate ? JSON.parse(auditRow.indeterminate) : []; } catch (_) {} try { na = auditRow.not_applicable ? JSON.parse(auditRow.not_applicable) : []; } catch (_) {} audit = { score: auditRow.score, scores: sc, findings: fd, cwv: cw, pages: pg, pagesTotal: auditRow.pages_total, indeterminate: ind, notApplicable: na, engine: auditRow.engine, created_at: auditRow.created_at }; }
   const histRows = (await env.DB.prepare("SELECT created_at, score, scores FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 20").bind(id).all()).results || [];
   const scoreHistory = histRows.reverse().map((r) => { let sc = null; try { sc = r.scores ? JSON.parse(r.scores) : null; } catch (_) {} return { at: r.created_at, score: r.score, scores: sc }; });
   let scoreTrend = null;
@@ -1016,7 +1034,7 @@ export async function handleSiteCockpit(request, env, id) {
 
   return json({ cockpit: {
     site: { id: site.id, url: site.url, label: site.label, platform: site.platform, last_ok: site.last_ok, last_status: site.last_status, last_ms: site.last_ms, last_checked_at: site.last_checked_at, next_check_at: site.next_check_at },
-    uptime30d, uptimeTrend, series30d, audit, scoreHistory, scoreTrend, ssl, geo, gsc,
+    uptime30d, uptimeWindowDays, uptimeTrend, series30d, audit, scoreHistory, scoreTrend, ssl, geo, gsc,
     email_enabled: !!(env && emailConfigured(env)),
   } }, 200, origin);
 }
@@ -1305,6 +1323,15 @@ function _engineGrounded(engine, apiKey, prompt) {
 // Métré : 1 crédit si une clé SERVEUR est utilisée (BYOK = hors compteur).
 // Partagé par la route on-demand et le cron hebdo.
 async function _executeGeoRun(env, { id, tenant, site, businessName, city, activity, prompts, plan, lookupHmac }) {
+  // S9/C10 — refus de scorer un test VIDE : sans activité, ville ni requêtes
+  // personnalisées, les prompts par défaut deviennent « Quel est le meilleur
+  // établissement ? » sans lieu ni catégorie. Aucun établissement au monde
+  // ne sort sur cette question — le 0/100 qui en découlait était une
+  // affirmation (« vous êtes invisible dans les IA ») tirée d'un test nul.
+  if (!String(city || '').trim() && !String(activity || '').trim()) {
+    const defaults = new Set(_defaultGeoPrompts('', ''));
+    if ((prompts || []).every((p) => defaults.has(p))) return { error: 'not-configured' };
+  }
   const engines = await _resolveGeoEngines(env, tenant);
   if (!engines.length) return { error: 'no-key' };
 
@@ -1423,6 +1450,7 @@ export async function handleSiteGeoRun(request, env, id) {
 
   const out = await _executeGeoRun(env, { id, tenant: g.tenant, site, businessName, city, activity, prompts, plan: g.plan, lookupHmac: g.claims && g.claims.sub });
   if (out.blocked) return json({ error: 'Conversations épuisées ce mois. Ajoutez un pack de conversations ou attendez le 1er du mois.', code: 'AI_CREDITS_EXHAUSTED' }, 429, origin);
+  if (out.error === 'not-configured') return json({ error: 'Visibilité IA non configurée : renseignez l\'activité et la ville (ou vos propres requêtes). Un test générique donnerait un 0/100 sans signification — Sentinel refuse de publier ce chiffre.', code: 'GEO_NOT_CONFIGURED' }, 400, origin);
   if (out.error === 'no-key') return err("La mesure de visibilité IA n'est pas activée (aucune clé moteur configurée côté serveur). Le reste de l'audit fonctionne.", 503, origin);
   if (out.error) return err(`La mesure de visibilité IA a échoué (${out.detail || 'service indisponible'}). Réessayez plus tard.`, 502, origin);
 
@@ -1815,6 +1843,12 @@ export async function sweepDueGeo(env) {
       });
       if (out && out.score != null) { ran++; continue; }
       failed++;
+      // S9/C10 — non configuré : on ARRÊTE le cron pour ce site (next_geo_at
+      // NULL) au lieu de reboucler ; la prochaine sauvegarde de config le relancera.
+      if (out && out.error === 'not-configured') {
+        await env.DB.prepare("UPDATE sentinel_geo SET next_geo_at = NULL WHERE site_id = ? AND tenant_id = ?").bind(d.id, d.tenant).run().catch(() => {});
+        continue;
+      }
       // échec / bloqué → repousser d'1 j (évite de reboucler quotidiennement sur une clé KO).
       await env.DB.prepare("UPDATE sentinel_geo SET next_geo_at = datetime('now','+1 day') WHERE site_id = ? AND tenant_id = ?").bind(d.id, d.tenant).run().catch(() => {});
     } catch (_) { failed++; }
