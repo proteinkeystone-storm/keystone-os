@@ -66,6 +66,45 @@ export function perfScore(cwv) {
   return Math.round(parts.reduce((a, p) => a + p[0] * p[1], 0) / wsum);
 }
 
+// ═══ S17 — vitesse lissée sur les derniers audits ════════════════════════
+// Constaté sur les deux premiers sites tiers surveillés (04/08) : à périmètre
+// égal, sur des sites INCHANGÉS, deux audits à 25 min d'écart donnaient
+//   tourisme-lacadieredazur.fr  67 → 63  (vitesse 77 → 61, LCP 3,3 → 3,8 s)
+//   districtcafe.ca             81 → 75  (vitesse 65 → 40, LCP 3,2 → 4,0 s)
+// Tous les autres axes identiques au point près : l'écart vient ENTIÈREMENT
+// de la mesure de vitesse. Deux causes qui s'additionnent — la médiane de 3
+// chargements (S11.2) réduit la variance sans l'effacer, et le seuil « mauvais »
+// est à 4,0 s, exactement là où ces sites se situent (3,9 s vaut encore des
+// points, 4,0 s en vaut zéro).
+// Or le produit affiche sa propre règle : à périmètre égal, le score est
+// stable, sinon c'est un bug. Le lissage la rétablit — même mécanisme que la
+// médiane des relevés GEO (S14.2) : une mesure isolée ne fait pas une tendance.
+// Le chiffre du jour n'est pas perdu pour autant (`smooth.raw`), il est affiché.
+export const CWV_SMOOTH_N = 3;
+const _median = (xs) => {
+  const a = xs.filter((v) => typeof v === 'number' && isFinite(v)).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const m = a.length >> 1;
+  return a.length % 2 ? a[m] : Math.round(((a[m - 1] + a[m]) / 2) * 1000) / 1000;
+};
+// La mesure BRUTE d'un relevé : indispensable pour ne pas lisser des lissages
+// (une médiane de médianes dérive et fige le score).
+export function rawCwv(c) { return (c && c.smooth && c.smooth.raw) ? c.smooth.raw : c; }
+
+export function smoothCwv(current, previous) {
+  // Mesure REPRISE d'un audit précédent (S12.3) : déjà étiquetée comme telle,
+  // la lisser une seconde fois brouillerait les deux explications.
+  if (!current || current.stale_from) return current;
+  const raws = [current, ...(previous || [])].slice(0, CWV_SMOOTH_N).map(rawCwv).filter(Boolean);
+  if (raws.length < 2) return current;
+  const out = { ...current, smooth: { n: raws.length, raw: rawCwv(current) } };
+  for (const k of ['lcp', 'cls', 'fcp', 'weightKb']) {
+    const m = _median(raws.map((r) => r[k]));
+    if (m != null) out[k] = m;
+  }
+  return out;
+}
+
 // Descendants Schema.org de LocalBusiness (hiérarchie complète, y compris
 // LocalBusiness lui-même). Un site qui déclare `LodgingBusiness` ou
 // `Restaurant` A une fiche établissement — exiger la chaîne littérale

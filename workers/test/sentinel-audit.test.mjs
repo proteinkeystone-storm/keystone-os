@@ -18,7 +18,7 @@ import { gunzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyzePage, extractJsonLd, LOCALBUSINESS_TYPES, globalScore, perfScore, AXIS_WEIGHTS, sitemapLooksValid, phoneInText, addressInText, entitySplit, dedupeFixCode } from '../src/lib/audit-page.js';
+import { analyzePage, extractJsonLd, LOCALBUSINESS_TYPES, globalScore, perfScore, AXIS_WEIGHTS, sitemapLooksValid, phoneInText, addressInText, entitySplit, dedupeFixCode, smoothCwv, rawCwv } from '../src/lib/audit-page.js';
 
 const FIX = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const load = (name) => gunzipSync(readFileSync(join(FIX, `${name}.html.gz`))).toString('utf-8');
@@ -745,4 +745,59 @@ t('S16.3 · nom d\'entité absent : pas de « votre établissement » entre guil
   assert.ok(!f.detail.includes('« votre établissement »'));
 });
 
-console.log(`\n${n} tests OK — moteur S8→S16 conforme à la vérité terrain des fixtures.`);
+// ═══ S17 — vitesse lissée sur les derniers audits ════════════════════════
+// Déclencheur chiffré (04/08, deux sites tiers INCHANGÉS, 25 min d'écart) :
+//   tourisme-lacadieredazur.fr  global 67 → 63, vitesse 77 → 61 (LCP 3,3 → 3,8 s)
+//   districtcafe.ca             global 81 → 75, vitesse 65 → 40 (LCP 3,2 → 4,0 s)
+// Tous les autres axes identiques : la variance vient entièrement de la mesure.
+
+t('S17 · le cas réel : la médiane absorbe le pic qui faisait chuter le score', () => {
+  // districtcafe.ca — les deux mesures observées, plus une 3ᵉ plausible.
+  const jour = { lcp: 4000, cls: 0.02, fcp: 1500, weightKb: 2500, runs: 3, conditions: 'mobile-4g-cpu4x' };
+  const avant = [{ lcp: 3200, cls: 0.02, fcp: 1450, weightKb: 2480 }, { lcp: 3300, cls: 0.03, fcp: 1500, weightKb: 2510 }];
+  const s = smoothCwv(jour, avant);
+  assert.equal(s.lcp, 3300, 'médiane de 3200/3300/4000');
+  assert.equal(s.smooth.n, 3);
+  assert.equal(s.smooth.raw.lcp, 4000, 'la mesure du jour reste consultable');
+  assert.equal(s.runs, 3, 'les métadonnées de mesure sont conservées');
+  assert.equal(s.conditions, 'mobile-4g-cpu4x');
+  // Point de bascule, recalculé À LA MAIN après que le moteur m'a contredit :
+  // 4,0 s tombe PILE sur le seuil « mauvais », la composante LCP vaut 0.
+  // Brut  : LCP 0×0,45 + CLS 100×0,25 + FCP 100×0,15 + poids 89×0,15 = 53,35 → 53.
+  // Lissé : LCP 47×0,45 + 25 + 15 + 13,35 = 74,5 → 75. Soit 22 points d'axe
+  // qui n'existaient que par le hasard d'un chargement.
+  assert.equal(perfScore(jour), 53);
+  assert.equal(perfScore(s), 75, 'lissé, le score retrouve sa valeur stable');
+});
+
+t('S17 · pas de lissage de lissage — on repart toujours des mesures BRUTES', () => {
+  // Une médiane de médianes dérive et finit par figer le score.
+  const a1 = smoothCwv({ lcp: 3000, cls: 0.01, fcp: 1000, weightKb: 1000 }, [{ lcp: 5000, cls: 0.01, fcp: 1000, weightKb: 1000 }]);
+  assert.equal(a1.lcp, 4000);                    // médiane de 2 → moyenne
+  assert.equal(rawCwv(a1).lcp, 3000, 'rawCwv rend la mesure d\'origine');
+  const a2 = smoothCwv({ lcp: 3000, cls: 0.01, fcp: 1000, weightKb: 1000 }, [rawCwv(a1), { lcp: 5000, cls: 0.01, fcp: 1000, weightKb: 1000 }]);
+  assert.equal(a2.lcp, 3000, 'médiane de 3000/3000/5000');
+});
+
+t('S17 · première mesure d\'un site : aucun lissage, aucune mention', () => {
+  const seul = smoothCwv({ lcp: 3800, cls: 0.02, fcp: 1500, weightKb: 2000 }, []);
+  assert.equal(seul.lcp, 3800);
+  assert.equal(seul.smooth, undefined, 'rien à annoncer tant qu\'il n\'y a qu\'un relevé');
+});
+
+t('S17 · une mesure REPRISE (S12.3) n\'est jamais lissée — une étiquette à la fois', () => {
+  const reprise = { lcp: 3800, cls: 0.02, fcp: 1500, weightKb: 2000, stale_from: '2026-08-01 10:00:00' };
+  const s = smoothCwv(reprise, [{ lcp: 2000, cls: 0.01, fcp: 900, weightKb: 1000 }]);
+  assert.equal(s.lcp, 3800);
+  assert.equal(s.smooth, undefined);
+  assert.equal(s.stale_from, '2026-08-01 10:00:00');
+});
+
+t('S17 · métrique manquante dans un relevé : elle est ignorée, pas comptée zéro', () => {
+  const s = smoothCwv({ lcp: 3000, cls: 0.02, fcp: 1200, weightKb: 2000 },
+    [{ lcp: 3400, fcp: 1300, weightKb: 2100 }, { lcp: 3200, cls: 0.04, fcp: 1250, weightKb: 2050 }]);
+  assert.equal(s.lcp, 3200);
+  assert.equal(s.cls, 0.03, 'médiane des DEUX cls présents (0,02 et 0,04)');
+});
+
+console.log(`\n${n} tests OK — moteur S8→S17 conforme à la vérité terrain des fixtures.`);

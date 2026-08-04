@@ -43,9 +43,9 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 // S5 — GEO (visibilité IA) : clé du propriétaire via le coffre BYOK si dispo,
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
-import { analyzePage, detectPlatform, dedupeFixCode, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
+import { analyzePage, detectPlatform, dedupeFixCode, smoothCwv, rawCwv, CWV_SMOOTH_N, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S16.4';
+const SENTINEL_ENGINE_VERSION = 'S17.0';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -610,7 +610,10 @@ async function _finalizeCrawl(env, c) {
   // 3 chargements — deux médianes à 7 min d'écart donnaient perf 80 vs 64
   // sur la même page (variance gratuite entre express et complet).
   let cwv = await _lastCwv(env, site.id, "-6 hours");
-  if (!cwv) cwv = await _measurePerf(env, site.url);
+  if (!cwv) {
+    cwv = await _measurePerf(env, site.url);
+    if (cwv) cwv = smoothCwv(cwv, await _prevCwvs(env, site.id));   // S17 — même lissage que l'express
+  }
   if (!cwv) cwv = await _lastCwv(env, site.id);      // S12.3 — repli étiqueté (stale_from)
   const perf = _perfScore(cwv);
   const scores = { disponibilite: dispo, performance: perf, ...agg.scores };
@@ -1224,6 +1227,17 @@ async function _lastCwv(env, siteId, interval = '-7 day') {
   try { const c = JSON.parse(row.cwv); c.stale_from = row.created_at; return c; } catch (_) { return null; }
 }
 
+// S17 — les N-1 mesures précédentes, en BRUT, pour lisser celle du jour.
+// Fenêtre 30 j : au-delà, un vieux relevé ne dit plus rien du site actuel.
+async function _prevCwvs(env, siteId, n = CWV_SMOOTH_N - 1) {
+  try {
+    const { results } = await env.DB.prepare(
+      `SELECT cwv FROM sentinel_audits WHERE site_id = ? AND cwv IS NOT NULL
+         AND created_at >= datetime('now','-30 day') ORDER BY created_at DESC LIMIT ?`).bind(siteId, n).all();
+    return (results || []).map((r) => { try { return rawCwv(JSON.parse(r.cwv)); } catch (_) { return null; } }).filter(Boolean);
+  } catch (_) { return []; }
+}
+
 export async function handleSiteAudit(request, env, id) {
   const origin = getAllowedOrigin(env, request);
   const g = await _gate(request, env, origin);
@@ -1263,6 +1277,11 @@ export async function handleSiteAudit(request, env, id) {
     cwv = await _lastCwv(env, site.id);
     if (cwv) scoreNote = 'cwv-reprise';
     else scoreNote = 'sans-axe-vitesse';
+  } else {
+    // S17 — lissage : médiane des CWV_SMOOTH_N derniers relevés. Un chargement
+    // isolé varie assez pour déplacer le score de 4 à 6 points sur un site
+    // inchangé (constaté le 04/08 sur les deux premiers sites tiers).
+    cwv = smoothCwv(cwv, await _prevCwvs(env, site.id));
   }
   const perf = _perfScore(cwv);                     // S9/C9 : poids de page inclus
   const scores = { disponibilite: dispo, performance: perf, ...a.scores };   // null = axe « n/a »

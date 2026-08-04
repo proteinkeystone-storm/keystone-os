@@ -22,7 +22,14 @@ const POLL_MS = 45000;
 // Clé publique VAPID (doit correspondre au worker — même clé que Keynapse).
 const SNT_VAPID_PUBLIC = 'BB0ytfuRYEoK1K6Y4SGGFbXhj6MbSTqsGnLG_gMypV_IVkGyWFiengfTRVyNJFUqmP8Vvg30v-9067t9X5HTlEc';
 
-const PLATFORM_LABEL = { wix: 'Wix', wordpress: 'WordPress', custom: 'Sur-mesure', unknown: 'Plateforme inconnue' };
+// S17 — squarespace/shopify manquaient : reconnus par le moteur depuis S13.4,
+// ils n'avaient pas de libellé ici. Conséquence visible sur le rapport
+// districtcafe.ca du 04/08 — l'en-tête du PDF n'affichait AUCUNE plateforme
+// (repli `|| ''`), là où le rapport WordPress affichait la sienne.
+const PLATFORM_LABEL = { wix: 'Wix', wordpress: 'WordPress', squarespace: 'Squarespace', shopify: 'Shopify', custom: 'Sur-mesure', unknown: 'Plateforme inconnue' };
+// Plateformes managées (miroir de MANAGED_PLATFORMS côté worker) : l'utilisateur
+// n'a la main ni sur les en-têtes, ni sur le cache du CDN.
+const _MANAGED_PLATFORMS = new Set(['wix', 'squarespace', 'shopify']);
 const AXES = [
   { k: 'disponibilite', label: 'Disponibilité' },
   { k: 'performance',   label: 'Performance' },
@@ -422,7 +429,26 @@ function _transparencyHTML(a, platform) {
   }
   const cond = a.cwv && a.cwv.conditions;
   if (cond) parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Conditions de mesure vitesse</b> : ${cond === 'mobile-4g-cpu4x' ? 'mobile émulé, réseau 4G lente, CPU ×4 (comparable à PageSpeed)' : 'datacenter non bridé — chiffres plus favorables que le mobile réel'}${a.cwv && a.cwv.runs > 1 ? ` · médiane de ${a.cwv.runs} mesures` : ''}.</div>`);
-  if (a.cacheAgeMax > 300) parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Cache de l'hébergeur</b> : certaines pages ont été servies depuis une copie datant de ${Math.round(a.cacheAgeMax / 60)} min. Un correctif tout juste appliqué peut ne pas encore apparaître ici — ni chez Google. Republier le site purge ce cache.</div>`);
+  // S17 — vitesse lissée : le chiffre qui compte pour le score est la médiane
+  // des derniers relevés, et la mesure du jour est donnée à côté. Sans cette
+  // ligne, un LCP affiché différent de celui mesuré serait incompréhensible.
+  if (a.cwv && a.cwv.smooth && a.cwv.smooth.n > 1) {
+    const brut = a.cwv.smooth.raw && a.cwv.smooth.raw.lcp;
+    parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Vitesse lissée</b> : médiane des ${a.cwv.smooth.n} derniers audits${brut ? ` — la mesure d'aujourd'hui seule donnait ${(brut / 1000).toFixed(1).replace('.', ',')} s` : ''}. Un chargement isolé varie beaucoup : le score suit la tendance, pas le hasard d'une mesure.</div>`);
+  }
+  // S17 — cache : sur une plateforme managée (Wix, Squarespace, Shopify) une
+  // copie de plusieurs heures est le fonctionnement NORMAL du CDN, pas un
+  // incident. Constaté sur districtcafe.ca : 39 h d'âge à chaque audit — au
+  // seuil de 5 min, l'avertissement se serait affiché en permanence et aurait
+  // cessé d'être lu. Seuil 6 h et ton neutre là-bas ; ailleurs, inchangé.
+  const managedCache = _MANAGED_PLATFORMS.has(String(platform || '').toLowerCase());
+  const seuilCache = managedCache ? 21600 : 300;
+  if (a.cacheAgeMax > seuilCache) {
+    const dureeTxt = a.cacheAgeMax >= 5400 ? `${Math.round(a.cacheAgeMax / 3600)} h` : `${Math.round(a.cacheAgeMax / 60)} min`;
+    parts.push(managedCache
+      ? `<div class="snt-transp-row">${icon('refresh', 13)} <b>Pages servies depuis le cache</b> (${dureeTxt}) : c'est le fonctionnement normal de ${_esc(PLATFORM_LABEL[platform] || 'cette plateforme')}. Après un correctif, publiez le site — c'est la publication qui purge ce cache — puis relancez l'audit.</div>`
+      : `<div class="snt-transp-row">${icon('refresh', 13)} <b>Cache de l'hébergeur</b> : certaines pages ont été servies depuis une copie datant de ${dureeTxt}. Un correctif tout juste appliqué peut ne pas encore apparaître ici — ni chez Google. Republier le site purge ce cache.</div>`);
+  }
   if (a.cwv && a.cwv.stale_from) parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Vitesse</b> : mesure du jour indisponible — reprise de celle du ${_esc(new Date(String(a.cwv.stale_from).replace(' ', 'T') + 'Z').toLocaleDateString('fr-FR'))}.</div>`);
   if (!a.cwv && a.scores && a.scores.performance == null) parts.push(`<div class="snt-transp-row">${icon('alert-triangle', 13)} <b>Score calculé sans l'axe vitesse</b> (mesure indisponible) — il n'est pas comparable à un score qui l'inclut.</div>`);
   if (a.engine) parts.push(`<div class="snt-transp-row snt-dim">Moteur d'audit ${_esc(a.engine)} — les scores peuvent évoluer lors des révisions de méthode.</div>`);
@@ -1182,7 +1208,20 @@ function _exportPdf() {
   // S9 — transparence dans le rapport : conditions de mesure + version moteur.
   const _cwvR = p.audit && p.audit.cwv && p.audit.cwv.runs > 1 ? ` Médiane de ${p.audit.cwv.runs} mesures.` : '';
   const staleTxt = (p.audit && p.audit.cwv && p.audit.cwv.stale_from) ? ` Vitesse : reprise de la mesure du ${new Date(String(p.audit.cwv.stale_from).replace(' ', 'T') + 'Z').toLocaleDateString('fr-FR')} (mesure du jour indisponible).` : '';
-  const cacheTxt = (p.audit && p.audit.cacheAgeMax > 300) ? ` Certaines pages étaient servies depuis le cache de l'hébergeur (jusqu'à ${Math.round(p.audit.cacheAgeMax / 60)} min) — un correctif récent peut ne pas encore y figurer.` : '';
+  // S17 — même règle que le cockpit : sur plateforme managée, un cache de
+  // plusieurs heures est normal (seuil 6 h, ton neutre) ; ailleurs, seuil 5 min.
+  const _mgd = _MANAGED_PLATFORMS.has(String((p.site && p.site.platform) || '').toLowerCase());
+  const _age = (p.audit && p.audit.cacheAgeMax) || 0;
+  const _ageTxt = _age >= 5400 ? `${Math.round(_age / 3600)} h` : `${Math.round(_age / 60)} min`;
+  const cacheTxt = _age > (_mgd ? 21600 : 300)
+    ? (_mgd ? ` Des pages ont été servies depuis le cache de ${_esc(PLATFORM_LABEL[p.site && p.site.platform] || 'la plateforme')} (${_ageTxt}) : c'est son fonctionnement normal. Publiez le site après un correctif pour purger ce cache.`
+            : ` Certaines pages étaient servies depuis le cache de l'hébergeur (jusqu'à ${_ageTxt}) — un correctif récent peut ne pas encore y figurer.`)
+    : '';
+  // S17 — la vitesse affichée est la médiane des N derniers audits : sans cette
+  // phrase, le LCP du rapport ne correspondrait à aucune mesure identifiable.
+  const smoothTxt = (p.audit && p.audit.cwv && p.audit.cwv.smooth && p.audit.cwv.smooth.n > 1)
+    ? ` Vitesse lissée : médiane des ${p.audit.cwv.smooth.n} derniers audits${p.audit.cwv.smooth.raw && p.audit.cwv.smooth.raw.lcp ? ` (mesure du jour seule : ${(p.audit.cwv.smooth.raw.lcp / 1000).toFixed(1).replace('.', ',')} s)` : ''} — un chargement isolé varie trop pour porter un score.`
+    : '';
   const weightsTxt = 'Pondération du score global : SEO 25 % · Vitesse 20 % · Sécurité (en-têtes) 15 % · Accessibilité de base 15 % · Présence locale 15 % · Disponibilité 10 % — un axe non mesuré est retiré du calcul.';
   const condTxt = (p.audit && p.audit.cwv && p.audit.cwv.conditions === 'mobile-4g-cpu4x') ? `Vitesse mesurée en conditions mobiles émulées (4G lente, CPU ×4).${_cwvR}` : ((p.audit && p.audit.cwv) ? `Vitesse mesurée depuis un datacenter (non bridé) — plus favorable que le mobile réel.${_cwvR}` : '');
   const engTxt = (p.audit && p.audit.engine) ? ` · moteur ${_esc(p.audit.engine)}` : '';
@@ -1206,7 +1245,7 @@ function _exportPdf() {
   ${geoHtml}
   <h2>${sorted.length ? 'À corriger en priorité — solutions clé en main' : 'Points de contrôle'} <span style="font-size:12px;font-weight:600;color:#64748b">· ${sorted.length ? `${sorted.length} action${sorted.length > 1 ? 's' : ''}${totalGain ? ` · gain au score : jusqu'à +${String(totalGain).replace('.', ',')} pts` : ''}` : 'aucune action requise'}</span></h2>
   ${finds || '<p>Aucun problème détecté sur les axes audités.</p>'}
-  <div class="foot">Généré par Keystone Sentinel${engTxt} — chaque correctif inclut les étapes et le code prêt à coller.${condTxt ? ' ' + condTxt : ''}${staleTxt}${cacheTxt}<br>${weightsTxt}</div></body></html>`;
+  <div class="foot">Généré par Keystone Sentinel${engTxt} — chaque correctif inclut les étapes et le code prêt à coller.${condTxt ? ' ' + condTxt : ''}${smoothTxt}${staleTxt}${cacheTxt}<br>${weightsTxt}</div></body></html>`;
   const w = window.open('', '_blank');
   if (!w) { alert('Autorisez les fenêtres pop-up pour exporter le PDF.'); return; }
   w.document.write(html); w.document.close();
