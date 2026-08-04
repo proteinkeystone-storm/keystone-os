@@ -257,6 +257,9 @@ async function _callReal(text, opts) {
             audience    : opts?.audience     || null,
             action      : opts?.action       || null,
             lengthTarget: opts?.lengthTarget || null,
+            // Nombre de propositions. 1 = relecture (desK) : on rend UNE copie
+            // corrigée. Absent = 3, comportement historique de tous les pads.
+            variants    : opts?.variants === 1 ? 1 : undefined,
             // Mode « composer un post » (chaîne) : 1 post développé, ton réseau.
             composePost : opts?.composePost === true || undefined,
             network     : opts?.network || undefined,
@@ -623,7 +626,7 @@ function _buildModalHTML(initialText, presetOpts) {
     // (sous la méta) → plus de place quand elle grossit ; la droite ne garde
     // que le post courant + ses actions. Hors chaîne : pas d'archive.
     const archiveSlot = chainMode ? '<div class="gw-archive" id="gw-archive"></div>' : '';
-    const tonesHTML = chainMode ? '' : `
+    const tonesHTML = (chainMode || relecture) ? '' : `
                     <div class="gw-label">Ton souhaité</div>
                     <div class="gw-options" id="gw-tones" data-selected="${_escapeHtml(presetTone)}">
                         <button class="gw-option-btn ${autoOn}" data-tone="">Auto</button>
@@ -639,7 +642,7 @@ function _buildModalHTML(initialText, presetOpts) {
                 ${railHTML || `<div>
                     <h2 class="gw-title">Ghost Writer</h2>
                     <div class="gw-subtitle">${relecture
-                        ? 'Relecture — orthographe, typographie, fluidité. Le texte de l\'auteur est préservé.'
+                        ? 'Relecture — orthographe, grammaire, typographie. Les mots de l\'auteur sont préservés.'
                         : 'Réécrivez votre texte — 3 variantes générées'}</div>
                 </div>`}
                 <button class="gw-close" id="gw-close-btn" aria-label="Fermer (Esc)">✕</button>
@@ -661,10 +664,10 @@ function _buildModalHTML(initialText, presetOpts) {
                     ${archiveSlot}
                 </div>
                 <div class="gw-right">
-                    <div class="gw-label">${relecture ? 'Relectures proposées' : 'Variantes proposées'}</div>
+                    <div class="gw-label">${relecture ? 'Texte corrigé' : 'Variantes proposées'}</div>
                     <div id="gw-variants" class="gw-variants">
                         <div class="gw-empty">${relecture
-                            ? 'Cliquez sur « Corriger le texte » pour obtenir 3 relectures.'
+                            ? 'Cliquez sur « Corriger le texte » pour obtenir la version relue.'
                             : 'Cliquez sur "Réécrire" pour obtenir 3 variantes.'}<br><span style="opacity:.6">Raccourci : Cmd+Shift+G</span></div>
                     </div>
                 </div>
@@ -870,7 +873,10 @@ async function _handleGenerate(overlay) {
             _addToComposeArchive({ text: result.variants[0].text, network: getChain()?.network || null });
         }
         _renderVariants(variants, result.variants);
-        _setStatus(status, chainMode ? `✓ Post composé (modèle: ${result.model})` : `✓ ${result.variants.length} variantes (modèle: ${result.model})`, null);
+        _setStatus(status, chainMode ? `✓ Post composé (modèle: ${result.model})`
+            : (_presetOpts?.action === 'improve' && result.variants.length === 1
+                ? `✓ Texte relu (modèle: ${result.model})`
+                : `✓ ${result.variants.length} variantes (modèle: ${result.model})`), null);
         _refreshQuotaChip(overlay);  // resync depuis la réponse serveur
     } catch (e) {
         _setStatus(status, `✗ ${_friendlyError(e)}`, 'error');
@@ -1000,6 +1006,12 @@ function _renderVariants(container, variants) {
         _renderComposeResult(container, variants[0]);
         return;
     }
+    // RELECTURE : une seule copie corrigée → ni carrousel, ni flèches, ni
+    // indicateurs « 1 2 3 ». On lit le texte relu et on le reprend, point.
+    if (_presetOpts?.action === 'improve' && variants.length === 1) {
+        _renderRelecture(container, variants[0]);
+        return;
+    }
 
     // Carousel (Phase 3) — les 3 variantes sont superposées en absolute,
     // seule l'active est visible. Navigation : touches 1/2/3, flèches
@@ -1119,6 +1131,31 @@ function _removeFromComposeArchive(id) {
 }
 
 // Rendu du résultat compose : 1 grand post (scroll) + actions + archive en dessous.
+/* Vue RELECTURE : le texte corrigé, en grand, avec les deux seules actions
+   qui aient un sens ici — le copier, ou le reprendre dans l'article. Pas
+   d'envoi vers Social Manager (on relit une copie de rédaction), pas
+   d'archive (il n'y a rien à collectionner). */
+function _renderRelecture(container, variant) {
+    const texte = variant?.text || '';
+    container.innerHTML = `
+        <div class="gw-compose-wrap">
+            <article class="gw-compose-post"><div class="gw-variant-text">${_escapeHtml(texte)}</div></article>
+            <div class="gw-actions-row">
+                <button class="gw-mini-btn gw-action-copy">Copier</button>
+                <button class="gw-mini-btn gw-action-replace">Reprendre ce texte</button>
+            </div>
+        </div>
+    `;
+    const copyBtn = container.querySelector('.gw-action-copy');
+    copyBtn?.addEventListener('click', () => {
+        navigator.clipboard?.writeText(texte)?.then(() => {
+            const o = copyBtn.textContent; copyBtn.textContent = '✓ Copié';
+            setTimeout(() => { copyBtn.textContent = o; }, 1500);
+        });
+    });
+    container.querySelector('.gw-action-replace')?.addEventListener('click', (e) => _replaceSelection(texte, e.currentTarget));
+}
+
 function _renderComposeResult(container, variant) {
     const post = variant?.text || '';
     container.innerHTML = `

@@ -222,6 +222,7 @@ export async function handleGhostwriterRewrite(request, env) {
   const {
     text, tone, intent, vouvoie, maxOutputTokens,
     mode, audience, action, lengthTarget,   // Sprint GW-2 (optionnels)
+    variants,                               // 1 = relecture (desK) ; défaut 3
     engine, apiKey,                          // BYOK
     source,                                  // Chaîne de contenu — { text, ref } source fournie par l'utilisateur
   } = body;
@@ -429,7 +430,28 @@ export async function handleGhostwriterRewrite(request, env) {
   };
   const lengthDirective = LENGTH_DIRECTIVES[lengthTarget] || '';
 
-  const systemPrompt = [
+  // RELECTURE (variants:1) — on rend UNE copie corrigée, pas un choix de
+  // formulations : demander « 3 variantes tonales » n'a aucun sens quand on
+  // relit le texte d'un auteur. Défaut inchangé (3) pour tous les autres pads.
+  const nVar = Math.min(3, Math.max(1, parseInt(variants, 10) || 3));
+  const solo = nVar === 1;
+  const systemPrompt = solo ? [
+    'Tu es un correcteur-relecteur professionnel. Tu rends UNE version corrigée du texte donné, sans le dénaturer ni le réécrire.',
+    '',
+    'Règles strictes :',
+    '- UNE seule version corrigée',
+    '- Corriger orthographe, grammaire, accords, ponctuation et typographie française (espaces insécables, guillemets « », apostrophes)',
+    '- Améliorer la fluidité SEULEMENT là où la phrase accroche ; préserver au maximum les tournures, le vocabulaire et le style de l\'auteur',
+    '- Ne RIEN ajouter, ne RIEN retirer : ni idée, ni exemple, ni transition',
+    `- Forme d'adresse : ${formalAddress}`,
+    '- Préserver le sens original (faits, dates, montants, noms propres)',
+    '- Pas de commentaire, pas de préface, pas d\'explication',
+    '- Aucun markdown (pas de **, *, _, #, etc.)',
+    '',
+    'FORMAT DE SORTIE — réponds en TEXTE BRUT, PAS en JSON :',
+    '- 1re ligne : exactement « Relecture »',
+    '- Lignes suivantes : le texte corrigé, rien d\'autre.',
+  ].filter(Boolean).join('\n') : [
     'Tu es un assistant de réécriture textuelle expert. Tu reformules le texte donné en exactement 3 variantes distinctes, sans le dénaturer.',
     '',
     'Règles strictes :',
@@ -468,7 +490,7 @@ export async function handleGhostwriterRewrite(request, env) {
     try {
       out = await callLLM(env, {
         engine, apiKey, system: systemPrompt,
-        messages  : [{ role: 'user', content: `Texte source à réécrire :\n\n${text}${_srcBlock}` }],
+        messages  : [{ role: 'user', content: `${solo ? 'Texte à relire' : 'Texte source à réécrire'} :\n\n${text}${_srcBlock}` }],
         max_tokens: cappedMaxTokens, fallbackOnError: false,
       });
     } catch (e) { return err(e?.message || 'Erreur moteur', e?.httpStatus || 502, origin); }
@@ -497,7 +519,7 @@ export async function handleGhostwriterRewrite(request, env) {
       aiResponse = await env.AI.run(MODEL_ID, {
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user',   content: `Texte source à réécrire :\n\n${text}${_srcBlock}` },
+          { role: 'user',   content: `${solo ? 'Texte à relire' : 'Texte source à réécrire'} :\n\n${text}${_srcBlock}` },
         ],
         max_tokens: cappedMaxTokens,
       });

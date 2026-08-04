@@ -606,7 +606,10 @@ function _bindPasserelles(insp, a) {
     // RELECTURE, pas réécriture : on corrige la copie d'un contributeur, on ne
     // la refait pas. `improve` = corrections, fluidité, clarté en préservant
     // ses tournures ; `keep` interdit au moteur de rallonger ou d'amputer.
-    try { openGhostwriterChained(a.notes || '', null, { action: 'improve', lengthTarget: 'keep' }); }
+    // variants:1 → UNE copie corrigée. Trois formulations au choix seraient
+    // absurdes ici : on ne propose pas des versions du texte d'un auteur, on
+    // lui rend le sien, propre.
+    try { openGhostwriterChained(a.notes || '', null, { action: 'improve', lengthTarget: 'keep', variants: 1 }); }
     catch (e) { _toast('Ghost Writer indisponible.', true); }
   });
   insp.querySelector('[data-act="tonet"]')?.addEventListener('click', async () => {
