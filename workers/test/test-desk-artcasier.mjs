@@ -87,6 +87,21 @@ ok(r.status === 200, 'article placé sur une page', r.status);
 r = await call(A, '/issue/' + issueId);
 const f2 = (r.data.files || []).find(x => x.id === fileId);
 ok(f2 && f2.art_id === artId, 'la pièce reste rattachée à l’article après placement', f2);
+// …et elle SUIT l'article sur sa page : sinon le casier de la page reste vide
+// et la pièce paraît avoir disparu (vu en production le 5 août).
+ok(f2 && f2.page_id === page.id, 'la pièce rejoint le casier de la page', f2 && f2.page_id);
+ok(f2 && f2.issue_id === issueId, 'et reste imputée au bon numéro', f2 && f2.issue_id);
+
+// Retrait de la page : la pièce repart au marbre AVEC l'article, elle ne
+// reste pas orpheline dans le casier d'une page qui ne le porte plus.
+r = await call(A, '/issue/' + issueId);
+const slotId = (r.data.slots || []).find(s => s.art_id === artId)?.id;
+r = await call(A, '/slot/' + slotId, { method: 'DELETE' });
+ok(r.status === 200, 'article retiré de la page', r.status);
+r = await call(A, '/issue/' + issueId);
+const f3 = (r.data.files || []).find(x => x.id === fileId);
+ok(f3 && f3.page_id === '', 'la pièce repart au marbre avec l’article', f3 && f3.page_id);
+ok(f3 && f3.art_id === artId, 'toujours rattachée à son article', f3 && f3.art_id);
 
 console.log(`\n${pass} ✓ · ${fail} ✗\n`);
 process.exit(fail ? 1 : 0);

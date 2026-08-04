@@ -1081,6 +1081,12 @@ export async function handleSlotCreate(request, env, pageId) {
     env.DB.prepare("INSERT INTO dk_page_slots (id, page_id, pub_id, position, art_id, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")
       .bind(id, pageId, pubId, existing.length, owns.id),
     env.DB.prepare(`UPDATE dk_pages SET kind = 'article', updated_at = datetime('now'), updated_by = ? WHERE id = ?`).bind(_byName(u), pageId),
+    // Les pièces que l'article portait AU MARBRE le suivent sur sa page :
+    // sinon elles restent invisibles depuis la page, qui est justement
+    // l'endroit où l'on va les chercher une fois l'article placé.
+    env.DB.prepare(`UPDATE dk_files SET page_id = ?, issue_id = COALESCE(NULLIF(issue_id, ''), ?)
+                    WHERE art_id = ? AND (page_id IS NULL OR page_id = '')`)
+      .bind(pageId, page.issue_id, owns.id),
   ]);
   return json({ ok: true, slot: { id, page_id: pageId, position: existing.length, art_id: owns.id, banc: '[]' } }, 200, origin);
 }
@@ -1115,6 +1121,13 @@ export async function handleSlotDelete(request, env, slotId) {
   const g = await _slotGate(request, env, origin, slotId);
   if (g.error) return g.error;
   const { u, slot } = g;
+  // Symétrie : l'article quitte la page, ses pièces repartent au marbre avec
+  // lui. Les laisser sur la page en ferait des orphelines dans un casier qui
+  // ne porte plus l'article.
+  if (slot.art_id) {
+    await env.DB.prepare(`UPDATE dk_files SET page_id = '' WHERE art_id = ? AND page_id = ?`)
+      .bind(slot.art_id, slot.page_id).run();
+  }
   await env.DB.prepare('DELETE FROM dk_page_slots WHERE id = ?').bind(slotId).run();
   // Retasser les positions ; une page sans emplacement redevient vide.
   const rest = (await env.DB.prepare(`SELECT id FROM dk_page_slots WHERE page_id = ? ORDER BY position`).bind(slot.page_id).all()).results || [];

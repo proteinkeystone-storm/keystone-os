@@ -845,7 +845,7 @@ function _renderFer() {
   _renderPubSlot();
   const main = _root.querySelector('[data-slot="main"]');
   main.classList.add('dk-main-fer');
-  const marbreN = (_D.articles || []).filter(a => !['publie', 'abandonne'].includes(a.status)).length;
+  const marbreN = (_D.articles || []).filter(_estAuMarbre).length;
   const newMarbre = _newMarbreCount();
   const newCards = _newCardCount();
   const newTotal = newMarbre + newCards;
@@ -1035,9 +1035,14 @@ function _markAllSeen() { const st = _seenState(); st.base = _nowStamp(); st.ack
 function _ackCardById(pageId) { const p = (_D?.pages || []).find(x => x.id === pageId); if (p) _ackSeen(p.id, _cardArrivalTs(p)); }
 function _ackArtById(artId) { const a = _artById(artId); if (a) _ackSeen(a.id, _artArrivalTs(a)); }
 function _cardIsNew(p) { return p && p.kind === 'article' && _slotsOf(p).length > 0 && _isNew(_cardArrivalTs(p), p.id); }
+// AU MARBRE = vivant et sans page à lui dans ce numéro (le banc des
+// remplaçants ne compte pas comme une place : l'article y attend encore).
+function _estAuMarbre(a) {
+  return a && !['publie', 'abandonne'].includes(a.status) && !_placementsOf(a.id).tit.length;
+}
 function _marbreIsNew(a) { return _isNew(_artArrivalTs(a), a.id); }
 function _newCardCount() { return (_D?.pages || []).filter(_cardIsNew).length; }
-function _newMarbreCount() { return (_D?.articles || []).filter(a => !['publie', 'abandonne'].includes(a.status) && _marbreIsNew(a)).length; }
+function _newMarbreCount() { return (_D?.articles || []).filter(a => _estAuMarbre(a) && _marbreIsNew(a)).length; }
 function _newLabel(nc, nm) {
   const t = nc + nm;
   return `${t} nouvel${t > 1 ? 's' : ''} article${t > 1 ? 's' : ''} arrivé${t > 1 ? 's' : ''}${nc && nm ? ` — ${nc} en page, ${nm} au marbre` : (nm ? ' au marbre' : ' en page')}`;
@@ -1475,7 +1480,10 @@ function _renderMarbre() {
   if (!wrap) return;
   const rubs = _D.rubriques || [];
   const arts = (_D.articles || []).filter(a => {
-    if (_mf.statut === 'vivant' && ['publie', 'abandonne'].includes(a.status)) return false;
+    // « au marbre » = vivant ET pas encore posé sur une page. Sans la seconde
+    // condition, un article trié sur sa page continuait de figurer au marbre,
+    // comme s'il attendait encore une place (vu en production le 5 août).
+    if (_mf.statut === 'vivant' && !_estAuMarbre(a)) return false;
     if (_mf.statut && _mf.statut !== 'vivant' && _mf.statut !== 'tous' && a.status !== _mf.statut) return false;
     if (_mf.rub && a.rub_id !== _mf.rub) return false;
     if (_mf.fresh === 'intemporel' && a.fresh === 'date') return false;
