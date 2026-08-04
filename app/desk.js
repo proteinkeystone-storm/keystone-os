@@ -603,7 +603,10 @@ function _passerellesHTML(a) {
 }
 function _bindPasserelles(insp, a) {
   insp.querySelector('[data-act="gw"]')?.addEventListener('click', () => {
-    try { openGhostwriterChained(a.notes || ''); }   // modal léger, par-dessus desK (round-trip)
+    // RELECTURE, pas réécriture : on corrige la copie d'un contributeur, on ne
+    // la refait pas. `improve` = corrections, fluidité, clarté en préservant
+    // ses tournures ; `keep` interdit au moteur de rallonger ou d'amputer.
+    try { openGhostwriterChained(a.notes || '', null, { action: 'improve', lengthTarget: 'keep' }); }
     catch (e) { _toast('Ghost Writer indisponible.', true); }
   });
   insp.querySelector('[data-act="tonet"]')?.addEventListener('click', async () => {

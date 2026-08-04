@@ -578,8 +578,12 @@ html.light-mode .dk-field input, html.light-mode .dk-field select { color-scheme
 }
 .dk-bacstrip:hover { background: rgba(201, 162, 39, .16); }
 .dk-bacstrip-go { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; font-weight: 400; font-size: 12px; color: var(--dk-gold); }
+/* Le texte REÇU d'un contributeur n'est pas une note secondaire : c'est la
+   contribution elle-même, on doit pouvoir la lire. En gris moyen elle passait
+   pour un commentaire — blanc sur fond sombre, noir sur fond clair (`inherit`
+   suit le thème sans avoir à écrire deux règles). */
 .dk-bac-body {
-  font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; color: var(--dk-tx2);
+  font-size: 13px; line-height: 1.6; white-space: pre-wrap; color: inherit;
   max-height: 180px; overflow-y: auto; border: 1px solid rgba(127, 127, 127, .22);
   border-radius: 10px; padding: 9px 11px;
 }

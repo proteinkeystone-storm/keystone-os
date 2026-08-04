@@ -611,9 +611,14 @@ function _buildModalHTML(initialText, presetOpts) {
     // développé, ton calé sur le réseau → PAS de pills de ton, bouton « Composer
     // le post ». Hors chaîne = rewrite classique (3 variantes + pills de ton).
     const chainMode = !!railHTML;
-    const srcLabel  = chainMode ? 'Angle à développer' : 'Texte source';
+    // Mode RELECTURE (desK) : on corrige la copie d'un contributeur, on ne la
+    // réécrit pas. Le mot compte — un auteur prend mal qu'on « réécrive » son
+    // texte. Le moteur reçoit action:'improve' (corrections et fluidité, pas de
+    // refonte) ; ici on ne change QUE les mots de l'interface.
+    const relecture = !chainMode && _presetOpts?.action === 'improve';
+    const srcLabel  = chainMode ? 'Angle à développer' : (relecture ? 'Texte à relire' : 'Texte source');
     const srcPlace  = chainMode ? 'Décrivez l\'angle ou l\'idée à transformer en post…' : 'Collez ou tapez votre texte ici…';
-    const goLabel   = chainMode ? 'Composer le post' : 'Réécrire en 3 variantes';
+    const goLabel   = chainMode ? 'Composer le post' : (relecture ? 'Corriger le texte' : 'Réécrire en 3 variantes');
     // Mode CHAÎNE : l'archive « Posts composés » vit dans le panneau GAUCHE
     // (sous la méta) → plus de place quand elle grossit ; la droite ne garde
     // que le post courant + ses actions. Hors chaîne : pas d'archive.
@@ -633,7 +638,9 @@ function _buildModalHTML(initialText, presetOpts) {
             <div class="gw-head">
                 ${railHTML || `<div>
                     <h2 class="gw-title">Ghost Writer</h2>
-                    <div class="gw-subtitle">Réécrivez votre texte — 3 variantes générées</div>
+                    <div class="gw-subtitle">${relecture
+                        ? 'Relecture — orthographe, typographie, fluidité. Le texte de l\'auteur est préservé.'
+                        : 'Réécrivez votre texte — 3 variantes générées'}</div>
                 </div>`}
                 <button class="gw-close" id="gw-close-btn" aria-label="Fermer (Esc)">✕</button>
             </div>
@@ -654,9 +661,11 @@ function _buildModalHTML(initialText, presetOpts) {
                     ${archiveSlot}
                 </div>
                 <div class="gw-right">
-                    <div class="gw-label">Variantes proposées</div>
+                    <div class="gw-label">${relecture ? 'Relectures proposées' : 'Variantes proposées'}</div>
                     <div id="gw-variants" class="gw-variants">
-                        <div class="gw-empty">Cliquez sur "Réécrire" pour obtenir 3 variantes.<br><span style="opacity:.6">Raccourci : Cmd+Shift+G</span></div>
+                        <div class="gw-empty">${relecture
+                            ? 'Cliquez sur « Corriger le texte » pour obtenir 3 relectures.'
+                            : 'Cliquez sur "Réécrire" pour obtenir 3 variantes.'}<br><span style="opacity:.6">Raccourci : Cmd+Shift+G</span></div>
                     </div>
                 </div>
             </div>
@@ -878,7 +887,8 @@ async function _handleGenerate(overlay) {
         }
     } finally {
         goBtn.disabled = false;
-        goBtn.innerHTML = chainMode ? '<span>Composer le post</span>' : '<span>Réécrire en 3 variantes</span>';
+        goBtn.innerHTML = chainMode ? '<span>Composer le post</span>'
+            : (_presetOpts?.action === 'improve' ? '<span>Corriger le texte</span>' : '<span>Réécrire en 3 variantes</span>');
     }
 }
 
@@ -1288,11 +1298,11 @@ export function openGhostwriter(initialText = '', presetOpts = null) {
  * qui est effacé hors mode post-ideas), gardée en variable de module le temps
  * du modal, injectée dans chaque appel `_callReal`, nettoyée à la fermeture.
  */
-export function openGhostwriterChained(initialText = '', source = null) {
+export function openGhostwriterChained(initialText = '', source = null, presetOpts = null) {
     _chainedSource = (source && typeof source.text === 'string' && source.text.trim())
         ? { text: source.text, ref: source.ref || '' }
         : null;
-    _openModal(initialText);
+    _openModal(initialText, presetOpts);
 }
 
 // Source portée depuis la chaîne (Brainstorming → Ghost Writer). Module-scope :
