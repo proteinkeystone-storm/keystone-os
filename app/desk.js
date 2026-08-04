@@ -209,9 +209,37 @@ export function openDesk(opts = {}) {
   _root.querySelector('[data-act="back"]').addEventListener('click', _onBack);
   _root.querySelector('[data-act="settings"]').addEventListener('click', () => _openSettings());
   _root.querySelector('[data-slot="veil"]').addEventListener('click', _closeInsp);
+  _veilleConfirmations(_root.querySelector('[data-slot="insp"]'));
   document.addEventListener('keydown', _onKey);
   document.addEventListener('visibilitychange', _onVisibility);
   _boot();
+}
+
+/* Une question de confirmation qui s'ouvre SOUS le pli oblige à deviner
+   qu'il faut faire défiler le panneau — sur « Supprimer », l'action la plus
+   irréversible, c'est le pire endroit pour cacher la question. On surveille
+   donc l'inspecteur : dès qu'une confirmation y apparaît, on l'amène à
+   l'écran. Un seul guetteur pour TOUS les panneaux (article, page, bac,
+   bannette, réglages) — et pour ceux qu'on écrira plus tard. */
+function _veilleConfirmations(insp) {
+  if (!insp || typeof MutationObserver !== 'function') return;
+  const SEL = '.dk-confirm, .dk-file-confirm';
+  const obs = new MutationObserver(muts => {
+    for (const m of muts) {
+      for (const n of m.addedNodes) {
+        if (n.nodeType !== 1) continue;
+        const box = n.matches?.(SEL) ? n : n.querySelector?.(SEL);
+        if (!box) continue;
+        // rAF : laisser le panneau finir sa mise en page avant de mesurer.
+        requestAnimationFrame(() => {
+          try { box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+          catch (_) { box.scrollIntoView(false); }   // navigateurs sans options
+        });
+        return;
+      }
+    }
+  });
+  obs.observe(insp, { childList: true, subtree: true });
 }
 
 export function closeDesk() {
