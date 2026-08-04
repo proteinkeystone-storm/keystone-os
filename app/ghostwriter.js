@@ -483,6 +483,17 @@ function _injectCSS() {
     border-radius: 12px; padding: 18px 20px; max-height: 72vh; overflow-y: auto;
 }
 .gw-compose-post .gw-variant-text { font-size: 14px; line-height: 1.7; }
+/* ── Relecture : voir CE QUI a été corrigé ── */
+.gw-relec-bar { display: flex; gap: 8px; }
+.gw-relec-vue.is-active { background: rgba(99,102,241,.18); border-color: rgba(99,102,241,.42); color: #fff; }
+.gw-diff-add {
+    background: rgba(76, 195, 138, .22); border-radius: 3px; padding: 1px 2px;
+    box-shadow: inset 0 -1px 0 rgba(76, 195, 138, .55);
+}
+.gw-diff-del { color: rgba(229, 72, 77, .85); text-decoration: line-through; text-decoration-thickness: 1px; }
+html.light-mode .gw-diff-add { background: rgba(22, 163, 74, .18); box-shadow: inset 0 -1px 0 rgba(22, 163, 74, .5); }
+html.light-mode .gw-diff-del { color: rgba(190, 18, 60, .8); }
+html.light-mode .gw-relec-vue.is-active { background: rgba(99,102,241,.16); color: #1e1b4b; }
 .gw-archive { border-top: 1px solid var(--bd, rgba(255,255,255,.08)); padding-top: 14px; }
 .gw-archive-head {
     font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
@@ -830,7 +841,7 @@ async function _handleGenerate(overlay) {
     // sont des contrôles UI, jamais envoyés au body — destructurés avant le spread.
     const {
         context: _ctx, targetEl: _t, replaceMode: _rm,
-        formContext: _fc, include_fields: _if, label: _l,
+        formContext: _fc, include_fields: _if, label: _l, onApply: _oa,
         tone: presetTone,
         ...presetRest
     } = _presetOpts || {};
@@ -1131,21 +1142,74 @@ function _removeFromComposeArchive(id) {
 }
 
 // Rendu du résultat compose : 1 grand post (scroll) + actions + archive en dessous.
+/* Comparatif mot à mot (plus longue sous-suite commune). Une relecture qui
+   ne montre PAS ce qu'elle a touché oblige à relire les deux textes en
+   parallèle — autant tout refaire à la main. On découpe en gardant les
+   séparateurs, pour que la ponctuation corrigée se voie elle aussi.
+   Borne de sûreté : au-delà, on renonce au comparatif plutôt que de faire
+   ramer le navigateur sur une matrice O(n·m). */
+const DIFF_MAX_MOTS = 4000;
+function _diffMots(avant, apres) {
+    const decoupe = s => String(s || '').split(/(\s+)/).filter(x => x !== '');
+    const a = decoupe(avant), b = decoupe(apres);
+    const neutraliseBlancs = ps => ps.map(p => (p.t !== '=' && /^\s+$/.test(p.mot)) ? { t: '=', mot: p.mot } : p);
+    if (!a.length) return neutraliseBlancs(b.map(mot => ({ t: '+', mot })));
+    if (a.length > DIFF_MAX_MOTS || b.length > DIFF_MAX_MOTS) return b.map(mot => ({ t: '=', mot }));
+    // Table des longueurs de la plus longue sous-suite commune.
+    const n = a.length, m = b.length;
+    const L = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) {
+        for (let j = m - 1; j >= 0; j--) {
+            L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+        }
+    }
+    const out = [];
+    let i = 0, j = 0;
+    while (i < n && j < m) {
+        if (a[i] === b[j]) { out.push({ t: '=', mot: a[i] }); i++; j++; }
+        else if (L[i + 1][j] >= L[i][j + 1]) { out.push({ t: '-', mot: a[i] }); i++; }
+        else { out.push({ t: '+', mot: b[j] }); j++; }
+    }
+    while (i < n) out.push({ t: '-', mot: a[i++] });
+    while (j < m) out.push({ t: '+', mot: b[j++] });
+    // Les blancs seuls ne sont pas des « corrections » à signaler.
+    return neutraliseBlancs(out);
+}
+
 /* Vue RELECTURE : le texte corrigé, en grand, avec les deux seules actions
    qui aient un sens ici — le copier, ou le reprendre dans l'article. Pas
    d'envoi vers Social Manager (on relit une copie de rédaction), pas
    d'archive (il n'y a rien à collectionner). */
 function _renderRelecture(container, variant) {
     const texte = variant?.text || '';
+    const source = container.closest('.gw-modal')?.querySelector('#gw-source')?.value || '';
+    const nDiff = _diffMots(source, texte).filter(p => p.t !== '=').length;
     container.innerHTML = `
         <div class="gw-compose-wrap">
-            <article class="gw-compose-post"><div class="gw-variant-text">${_escapeHtml(texte)}</div></article>
+            <div class="gw-relec-bar">
+                <button class="gw-mini-btn gw-relec-vue is-active" data-vue="diff">${nDiff ? 'Voir les corrections' : 'Aucune correction'}</button>
+                <button class="gw-mini-btn gw-relec-vue" data-vue="propre">Texte propre</button>
+            </div>
+            <article class="gw-compose-post"><div class="gw-variant-text" data-slot="relec"></div></article>
             <div class="gw-actions-row">
                 <button class="gw-mini-btn gw-action-copy">Copier</button>
                 <button class="gw-mini-btn gw-action-replace">Reprendre ce texte</button>
             </div>
         </div>
     `;
+    const zone = container.querySelector('[data-slot="relec"]');
+    const peindre = (vue) => {
+        zone.innerHTML = vue === 'propre'
+            ? _escapeHtml(texte)
+            : _diffMots(source, texte).map(p => p.t === '='
+                ? _escapeHtml(p.mot)
+                : `<span class="gw-diff-${p.t === '+' ? 'add' : 'del'}">${_escapeHtml(p.mot)}</span>`).join('');
+    };
+    peindre('diff');
+    container.querySelectorAll('.gw-relec-vue').forEach(b => b.addEventListener('click', () => {
+        container.querySelectorAll('.gw-relec-vue').forEach(x => x.classList.toggle('is-active', x === b));
+        peindre(b.dataset.vue);
+    }));
     const copyBtn = container.querySelector('.gw-action-copy');
     copyBtn?.addEventListener('click', () => {
         navigator.clipboard?.writeText(texte)?.then(() => {
@@ -1153,7 +1217,17 @@ function _renderRelecture(container, variant) {
             setTimeout(() => { copyBtn.textContent = o; }, 1500);
         });
     });
-    container.querySelector('.gw-action-replace')?.addEventListener('click', (e) => _replaceSelection(texte, e.currentTarget));
+    // Le pad peut fournir sa propre reprise (desK écrit dans l'article côté
+    // serveur). Sans elle, on retombe sur le comportement générique.
+    const btn = container.querySelector('.gw-action-replace');
+    btn?.addEventListener('click', async (e) => {
+        const apply = _presetOpts?.onApply;
+        if (typeof apply !== 'function') { _replaceSelection(texte, e.currentTarget); return; }
+        const b = e.currentTarget, orig = b.textContent;
+        b.disabled = true; b.textContent = '…';
+        try { await apply(texte); b.textContent = '✓ Repris'; setTimeout(_closeModal, 450); }
+        catch (err) { b.disabled = false; b.textContent = orig; _setStatus(container.closest('.gw-modal')?.querySelector('#gw-status'), '✗ ' + (err?.message || 'Reprise impossible'), 'error'); }
+    });
 }
 
 function _renderComposeResult(container, variant) {

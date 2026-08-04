@@ -609,8 +609,22 @@ function _bindPasserelles(insp, a) {
     // variants:1 → UNE copie corrigée. Trois formulations au choix seraient
     // absurdes ici : on ne propose pas des versions du texte d'un auteur, on
     // lui rend le sien, propre.
-    try { openGhostwriterChained(a.notes || '', null, { action: 'improve', lengthTarget: 'keep', variants: 1 }); }
-    catch (e) { _toast('Ghost Writer indisponible.', true); }
+    // onApply : le retour du voyage. Sans lui, « Reprendre ce texte » n'avait
+    // aucune cible (le texte de l'article vit sur le serveur, pas dans un champ
+    // à l'écran) et retombait sur le presse-papiers — la correction était donc
+    // perdue et l'article gardait ses fautes.
+    try {
+      openGhostwriterChained(a.notes || '', null, {
+        action: 'improve', lengthTarget: 'keep', variants: 1,
+        onApply: async (corrige) => {
+          await _api('/article/' + a.id, { method: 'PATCH', body: { notes: corrige } });
+          const cur = _artById(a.id); if (cur) cur.notes = corrige;
+          await _loadIssue(true);
+          _toast('Texte relu enregistré — pensez à marquer « relu ».');
+          _openInspMarbre(a.id);
+        },
+      });
+    } catch (e) { _toast('Ghost Writer indisponible.', true); }
   });
   insp.querySelector('[data-act="tonet"]')?.addEventListener('click', async () => {
     const c = _contribByName(a.contrib);
