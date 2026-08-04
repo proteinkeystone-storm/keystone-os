@@ -233,6 +233,33 @@ export function addressInText(text) {
       || scan(new RegExp(`\\b(?:${STREET_TYPES_NUMBERED})\\b`, 'gi'), true);
 }
 
+// S16.3 — un même bloc de code ne s'imprime qu'UNE fois par rapport.
+// Constaté sur le rapport WordPress réel du 04/08 (tourisme-lacadieredazur.fr) :
+// `jsonld`, `nap_localbiz` et `nap_hours` partagent la même fiche
+// LocalBusiness — quinze lignes identiques, imprimées TROIS fois de suite.
+// Le client y lit du remplissage, et le PDF passe de 3 à 5 pages. On garde le
+// bloc sur le finding le plus prioritaire du groupe (celui que le tri par
+// sévérité affiche en premier) ; les autres y renvoient en une phrase.
+export const SEV_ORDER = { high: 0, medium: 1, low: 2 };
+export function dedupeFixCode(findings) {
+  const groups = new Map();
+  for (const f of findings) {
+    if (!f.fix || !f.fix.code) continue;
+    const g = groups.get(f.fix.code) || [];
+    g.push(f); groups.set(f.fix.code, g);
+  }
+  for (const g of groups.values()) {
+    if (g.length < 2) continue;
+    g.sort((a, b) => (SEV_ORDER[a.sev] ?? 3) - (SEV_ORDER[b.sev] ?? 3));   // tri stable : à sévérité égale, l'ordre du rapport
+    const keeper = g[0];
+    for (const f of g.slice(1)) {
+      f.fix = { ...f.fix, code: null, codeLabel: null,
+        steps: [...(f.fix.steps || []), `Le bloc de code donné plus haut, pour « ${keeper.title} », couvre aussi ce point — inutile de le coller deux fois.`] };
+    }
+  }
+  return findings;
+}
+
 // ═══ S16.2 — détection de plateforme sur des SIGNATURES, pas des indices ══
 // Trouvé le 2026-08-04 pendant le balayage adverse : districtcafe.ca, un site
 // Squarespace, ressortait tantôt « squarespace », tantôt « wix ». Cause : la
@@ -680,7 +707,10 @@ export function analyzePage(html, opts = {}) {
   if (split) {
     add('presence', 'medium', 'jsonld_entity_split',
       'Deux fiches d\'établissement non reliées',
-      `Votre page décrit « ${split.name || 'votre établissement'} » DEUX fois : une fiche ${split.a} et une fiche ${split.b}, sans rien qui les relie${split.missingId ? ' (l\'une n\'a pas d\'identifiant « @id »)' : ''}. Les moteurs et les IA peuvent y voir deux établissements distincts, ou n\'en retenir qu\'un seul — souvent le moins complet. Donnez le MÊME « @id » aux deux : Schema.org fusionne alors les fiches qui le partagent, et tous vos signaux comptent pour la même entité.`);
+      // S16.3 — sans nom déclaré, ne pas imprimer « votre établissement » entre
+      // guillemets : sur districtcafe.ca, ça se lisait comme un texte à trous
+      // resté vide. Les fiches y sont rapprochées par le téléphone, pas le nom.
+      `Votre page décrit ${split.name ? `« ${split.name} »` : 'votre établissement'} DEUX fois : une fiche ${split.a} et une fiche ${split.b}, sans rien qui les relie${split.missingId ? ' (l\'une n\'a pas d\'identifiant « @id »)' : ''}. Les moteurs et les IA peuvent y voir deux établissements distincts, ou n\'en retenir qu\'un seul — souvent le moins complet. Donnez le MÊME « @id » aux deux : Schema.org fusionne alors les fiches qui le partagent, et tous vos signaux comptent pour la même entité.`);
   }
 
   // ── S10/C18 — canonical : la VALEUR compte ───────────────────────────────

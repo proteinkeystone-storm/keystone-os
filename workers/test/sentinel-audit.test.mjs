@@ -18,7 +18,7 @@ import { gunzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyzePage, extractJsonLd, LOCALBUSINESS_TYPES, globalScore, perfScore, AXIS_WEIGHTS, sitemapLooksValid, phoneInText, addressInText, entitySplit } from '../src/lib/audit-page.js';
+import { analyzePage, extractJsonLd, LOCALBUSINESS_TYPES, globalScore, perfScore, AXIS_WEIGHTS, sitemapLooksValid, phoneInText, addressInText, entitySplit, dedupeFixCode } from '../src/lib/audit-page.js';
 
 const FIX = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const load = (name) => gunzipSync(readFileSync(join(FIX, `${name}.html.gz`))).toString('utf-8');
@@ -661,6 +661,71 @@ t('S16.2 · une plateforme managée mal détectée gonflait l\'axe sécurité', 
   const faux = analyzePage(html, { headers, sitemap: true, url: 'https://wordpress.org/', platform: 'wix' });
   assert.equal(vrai.scores.securite, 40);    // 2 en-têtes sur 5 — la vérité
   assert.equal(faux.scores.securite, 100);   // 2 sur 2, les 3 autres « non applicables » — le mensonge
+});
+
+// ═══ S16.3 — ce que les DEUX PREMIERS RAPPORTS RÉELS ont montré ══════════
+// Stéphane a mis sous surveillance un WordPress (tourisme-lacadieredazur.fr,
+// 67/100, 11 actions) et un Squarespace (districtcafe.ca, 81/100, 5 actions)
+// puis exporté les PDF. Lus page à page : quatre défauts, dont un sérieux.
+
+t('S16.3 · le correctif ne doit plus FABRIQUER le défaut que C24 signale', () => {
+  // Le plus grave. La fiche LocalBusiness proposée n'avait pas d'@id : collée
+  // sur un site qui a déjà une Organization (c'est le cas des deux sites
+  // testés), elle crée une TROISIÈME fiche non reliée — donc le finding
+  // jsonld_entity_split au prochain audit. L'outil fabriquait le défaut.
+  const avecId = [
+    { '@type': 'Organization', '@id': 'https://exemple.fr/#business', name: 'Maison Durand' },
+    { '@type': 'LocalBusiness', '@id': 'https://exemple.fr/#business', name: 'Maison Durand' },
+  ];
+  assert.equal(entitySplit(avecId), null, 'l\'@id commun du snippet fusionne les fiches');
+  const sansId = [
+    { '@type': 'Organization', '@id': 'https://exemple.fr/#business', name: 'Maison Durand' },
+    { '@type': 'LocalBusiness', name: 'Maison Durand' },
+  ];
+  assert.ok(entitySplit(sansId), 'sans @id, le collage aurait créé la scission');
+});
+
+t('S16.3 · le même bloc de code ne s\'imprime qu\'UNE fois (rapport WordPress réel)', () => {
+  // Cas exact du PDF du 04/08 : jsonld, nap_localbiz et nap_hours partagent la
+  // fiche LocalBusiness — quinze lignes imprimées TROIS fois de suite.
+  const LD = '<script type="application/ld+json">{ … }</script>';
+  const findings = [
+    { key: 'nap_localbiz', sev: 'medium', title: 'Fiche établissement (LocalBusiness) absente', fix: { steps: ['a'], codeLabel: 'Fiche', code: LD } },
+    { key: 'nap_hours', sev: 'medium', title: 'Horaires d\'ouverture non déclarés', fix: { steps: ['a'], codeLabel: 'Fiche', code: LD } },
+    { key: 'jsonld', sev: 'medium', title: 'Données structurées absentes', fix: { steps: ['a'], codeLabel: 'Fiche', code: LD } },
+    { key: 'meta_missing', sev: 'high', title: 'Méta description absente', fix: { steps: ['b'], codeLabel: 'Méta', code: '<meta …>' } },
+  ];
+  dedupeFixCode(findings);
+  assert.equal(findings.filter((f) => f.fix.code).length, 2, 'un bloc LocalBusiness + un bloc méta');
+  assert.ok(findings[0].fix.code, 'le premier du groupe garde le bloc');
+  assert.equal(findings[1].fix.code, null);
+  assert.ok(findings[1].fix.steps.slice(-1)[0].includes('Fiche établissement (LocalBusiness) absente'));
+  assert.equal(findings[3].fix.code, '<meta …>', 'un bloc unique n\'est jamais touché');
+});
+
+t('S16.3 · dédup : le bloc reste sur le finding le PLUS prioritaire du groupe', () => {
+  const C = 'X';
+  const findings = [
+    { key: 'a', sev: 'low', title: 'Petit défaut', fix: { steps: [], code: C } },
+    { key: 'b', sev: 'high', title: 'Gros défaut', fix: { steps: [], code: C } },
+  ];
+  dedupeFixCode(findings);
+  assert.equal(findings[0].fix.code, null, 'le low renvoie…');
+  assert.equal(findings[1].fix.code, C, '…au high, qui est affiché en premier');
+  assert.ok(findings[0].fix.steps.slice(-1)[0].includes('Gros défaut'));
+});
+
+t('S16.3 · nom d\'entité absent : pas de « votre établissement » entre guillemets', () => {
+  // districtcafe.ca : les deux fiches se rapprochent par le TÉLÉPHONE, pas par
+  // le nom — le gabarit imprimait des guillemets vides, lus comme un oubli.
+  const html = `<html lang="fr"><head><title>Le cafe du quartier a Ottawa</title></head><body><h1>t</h1>
+    <script type="application/ld+json">{"@type":"Organization","@id":"https://x.fr/#o","telephone":"+33 4 94 11 22 33"}</script>
+    <script type="application/ld+json">{"@type":"LocalBusiness","telephone":"+33494112233"}</script>
+    <p>${' du texte. '.repeat(40)}</p></body></html>`;
+  const f = analyzePage(html, { url: 'https://x.fr/' }).findings.find((x) => x.key === 'jsonld_entity_split');
+  assert.ok(f, 'la scission est bien détectée par le téléphone seul');
+  assert.ok(f.detail.startsWith('Votre page décrit votre établissement DEUX fois'), f.detail.slice(0, 80));
+  assert.ok(!f.detail.includes('« votre établissement »'));
 });
 
 console.log(`\n${n} tests OK — moteur S8→S16 conforme à la vérité terrain des fixtures.`);

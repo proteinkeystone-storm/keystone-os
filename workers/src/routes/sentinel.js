@@ -43,9 +43,9 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 // S5 — GEO (visibilité IA) : clé du propriétaire via le coffre BYOK si dispo,
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
-import { analyzePage, detectPlatform, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
+import { analyzePage, detectPlatform, dedupeFixCode, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S16.2';
+const SENTINEL_ENGINE_VERSION = 'S16.3';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -733,6 +733,7 @@ function _wixFix(key, ctx) {
 {
   "@context": "https://schema.org",
   "@type": "LocalBusiness",
+  "@id": "${origin}/#business",
   "name": "Nom de votre établissement",
   "url": "${origin}",
   "telephone": "+33 1 23 45 67 89",
@@ -783,9 +784,13 @@ function _fixFor(key, ctx, f) {
 `"url": "${ctx.url || 'https://votre-domaine.fr'}",
 "@id": "${ctx.url || 'https://votre-domaine.fr'}#business"` };
     case 'jsonld_entity_split': return { steps: [
+      // S16.3 — le rapport Squarespace du 04/08 servait « Si votre site tourne
+      // sous WordPress… » à un site qui n'est pas sous WordPress. Les étapes
+      // parlent maintenant de la plateforme réellement détectée.
       'Repérez les DEUX blocs de données structurées qui décrivent votre établissement : le vôtre, et celui que votre plateforme (ou une extension SEO) ajoute automatiquement.',
+      ...(ctx.platform === 'squarespace' ? ['Sur Squarespace, la fiche automatique est construite à partir de Réglages › « Business Information » : c\'est là que se corrigent nom, adresse et téléphone, et le bloc ajouté à la main doit s\'aligner dessus.']
+        : ctx.platform === 'wordpress' ? ['Sur WordPress : quand deux extensions SEO (Yoast, Rank Math, un thème…) produisent chacune leur fiche, n\'en gardez qu\'une active — c\'est plus sain que de les aligner à la main.'] : []),
       `Donnez-leur le MÊME identifiant : ajoutez "@id": "${ctx.url ? (() => { try { return new URL(ctx.url).origin; } catch (_) { return 'https://votre-domaine.fr'; } })() : 'https://votre-domaine.fr'}/#business" dans CHACUN des deux blocs.`,
-      'Si votre site tourne sous WordPress : quand deux extensions SEO (Yoast, Rank Math, un thème…) produisent chacune leur fiche, n\'en gardez qu\'une active — c\'est plus sain que de les aligner à la main.',
       'Alternative : supprimez le bloc en double et ne conservez que le plus complet.',
       'Republiez, puis vérifiez avec l\'outil de test des résultats enrichis de Google : une seule entité doit apparaître.'],
       codeLabel: 'L\'identifiant commun à poser dans les deux blocs', code:
@@ -809,6 +814,7 @@ function _fixFor(key, ctx, f) {
 {
   "@context": "https://schema.org",
   "@type": "LocalBusiness",
+  "@id": "${origin}/#business",
   "name": "Nom de votre établissement",
   "url": "${origin}",
   "telephone": "+33 1 23 45 67 89",
@@ -851,7 +857,10 @@ function _fixFor(key, ctx, f) {
       return null;
   }
 }
-function _attachFixes(findings, ctx) { for (const f of findings) { try { f.fix = _fixFor(f.key, ctx, f); } catch (_) { f.fix = null; } } return findings; }
+function _attachFixes(findings, ctx) {
+  for (const f of findings) { try { f.fix = _fixFor(f.key, ctx, f); } catch (_) { f.fix = null; } }
+  return dedupeFixCode(findings);
+}
 
 // ── S4.1 · A) IA rédactionnel : génère le texte à la place du client ─────
 // Pour les correctifs « texte » (méta description, FAQ AEO), un appel IA
