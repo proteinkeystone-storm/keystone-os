@@ -147,11 +147,14 @@ export async function digestEmail(env, mail, opts = {}) {
           await _rattacher(env, { pubId, art: pick, pageId: slot.page_id, issueId: slot.issue_id, pageN: slot.n, atts, body,
             fromEmail: authorEmail, fromName: authorName, viaEmail: origEmail ? fromEmail : null, by: 'digestion' });
           await env.DB.prepare(
-            `INSERT INTO dk_inbox (id, pub_id, from_email, from_name, orig_email, orig_name, subject, body, suggestion, attachments, status, resolved_by, resolved_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'auto', 'digestion', datetime('now'))`)
+            // art_id : le rattachement AUTOMATIQUE doit lui aussi dire où il a
+            // posé la copie, sinon la bannette affiche « triée » sans pouvoir
+            // nommer l'article — et ne sait pas signaler sa disparition.
+            `INSERT INTO dk_inbox (id, pub_id, from_email, from_name, orig_email, orig_name, subject, body, suggestion, attachments, status, art_id, resolved_by, resolved_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'auto', ?, 'digestion', datetime('now'))`)
             .bind(inboxId, pubId, fromEmail, dkS(mail.fromName, DK_MAX_NAME), origEmail, origName, subject, body.slice(0, 2000),
               JSON.stringify({ kind: 'article', art_id: pick.id, via: origEmail ? 'expediteur-transfere' : 'expediteur', page_n: slot.n }),
-              JSON.stringify(atts)).run();
+              JSON.stringify(atts), pick.id).run();
           await _accuseReception(env, { pubId, pubName: pub.name, to: authorEmail, subject, ack });
           return { ok: true, mode: 'auto', inboxId, art_id: pick.id, orig_email: origEmail };
         }
@@ -540,7 +543,11 @@ export async function handleCourrier(request, env, pubId) {
       art_perdu: !!(r.art_id && !r.art_title),
     };
   });
-  return json({ ok: true, courrier }, 200, origin);
+  // Le compte des non-lus voyage AVEC la liste : sinon la pastille, qui ne se
+  // rafraîchit qu'au cycle d'équipe, contredit ce qu'on a sous les yeux.
+  const nonLus = (await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM dk_inbox WHERE pub_id = ? AND lu_at IS NULL`).bind(pubId).first())?.n || 0;
+  return json({ ok: true, courrier, non_lus: nonLus }, 200, origin);
 }
 
 /* POST /api/desk/inbox/:id/reprendre — refaire un article À PARTIR d'un

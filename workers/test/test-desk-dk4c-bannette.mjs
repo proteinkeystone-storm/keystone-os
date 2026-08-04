@@ -214,6 +214,36 @@ async function main() {
   const cx2 = await call(INTRUS, '/inbox/' + neufId + '/lu', { method: 'POST', body: {} });
   ok(cx2.status === 403 || cx2.status === 404, 'un non-membre ne relève rien', cx2.status);
 
+  /* ── 7 · Le rattachement AUTOMATIQUE dans la bannette ────────────
+     Cas vu en production le 4 août : une copie reconnue et posée toute
+     seule sur sa page n'enregistrait PAS l'article visé. La bannette
+     affichait « triée » sans pouvoir le nommer — et n'aurait pas su
+     signaler sa disparition.                                          */
+  console.log('\n7 · Le rattachement automatique est traçable');
+  const aAuto = await call(A, '/publication/' + pubId + '/article', { method: 'POST', body: {
+    title: 'Papier attendu de Baron', status: 'attendu', due: iso(3), contrib: 'Baron' } });
+  const dd = await call(A, '/issue/' + issueId);
+  await call(A, '/page/' + dd.data.pages.find(p => p.n === 4).id + '/slot', { method: 'POST', body: { art_id: aAuto.data.article.id } });
+  await call(A, '/publication/' + pubId + '/contrib', { method: 'POST', body: { name: 'Baron', email: 'baron@contrib.dk4c' } });
+
+  r = await inject({ to: `${slug}@test.dk`, from_email: 'baron@contrib.dk4c', from_name: 'Baron',
+    subject: 'Ma copie', body: 'Le texte de Baron.' });
+  ok(r.data.mode === 'auto', 'copie reconnue → rattachement automatique', r.data);
+
+  c = await call(A, '/publication/' + pubId + '/courrier');
+  const eAuto = c.data.courrier.find(x => x.id === r.data.inboxId);
+  ok(!!eAuto, 'le rattachement automatique APPARAÎT dans la bannette', c.data.courrier.length);
+  ok(eAuto && eAuto.art_id === aAuto.data.article.id, 'il enregistre l\'article visé', eAuto);
+  ok(eAuto && eAuto.art_title === 'Papier attendu de Baron', 'la bannette peut donc le NOMMER', eAuto && eAuto.art_title);
+  ok(eAuto && eAuto.status === 'auto', 'son sort reste distinct d\'un tri à la main', eAuto && eAuto.status);
+  ok(eAuto && eAuto.lu === false, 'et il compte comme non lu — c\'est une information');
+
+  // Et il sait signaler la disparition de son article, comme les autres.
+  await call(A, '/article/' + aAuto.data.article.id, { method: 'DELETE' });
+  c = await call(A, '/publication/' + pubId + '/courrier');
+  const eAuto2 = c.data.courrier.find(x => x.id === r.data.inboxId);
+  ok(eAuto2 && eAuto2.art_perdu === true, 'article supprimé → la bannette l\'alerte aussi pour un auto', eAuto2);
+
   console.log(`\n${fail === 0 ? '✅' : '❌'} DK-4c : ${pass} vérifications passées, ${fail} en échec.`);
   process.exit(fail === 0 ? 0 : 1);
 }

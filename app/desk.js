@@ -2081,17 +2081,25 @@ function _bacSort(r) {
   if (r.status === 'pending') return { txt: 'en attente de tri', cls: 'attente' };
   if (r.status === 'rejete')  return { txt: 'écartée' + (r.resolved_by ? ' par ' + r.resolved_by : ''), cls: 'ecarte' };
   if (r.art_perdu)            return { txt: 'rattachée à un article SUPPRIMÉ depuis', cls: 'perdu' };
-  if (r.art_title)            return { txt: 'rattachée à « ' + r.art_title + ' »', cls: 'ok' };
-  return { txt: 'triée' + (r.resolved_by ? ' par ' + r.resolved_by : ''), cls: 'ok' };
+  const auto = r.status === 'auto' ? ' (toute seule)' : '';
+  if (r.art_title)            return { txt: 'rattachée' + auto + ' à « ' + r.art_title + ' »', cls: 'ok' };
+  return { txt: 'rattachée' + auto + (r.resolved_by && !auto ? ' par ' + r.resolved_by : ''), cls: 'ok' };
 }
 
 async function _openBacList(vue) {
   if (vue) _bacVue = vue;
   const insp = _root.querySelector('[data-slot="insp"]');
   const pend = _D.inbox || [];
-  if (_bacVue === 'tout' && !_courrier) {
-    try { _courrier = (await _api('/publication/' + _pubId + '/courrier')).courrier || []; }
-    catch (e) { _toast(e.message, true); _bacVue = 'trier'; }
+  // TOUJOURS relire : le cache d'ouverture précédente ne connaît pas le
+  // courrier arrivé depuis. Un pli reçu après une première visite restait
+  // invisible — pastille à 1, bannette vide, ce qui donne exactement
+  // l'impression que la contribution s'est évaporée.
+  if (_bacVue === 'tout') {
+    try {
+      const r = await _api('/publication/' + _pubId + '/courrier');
+      _courrier = r.courrier || [];
+      _majPastille(r.non_lus || 0);   // la pastille dit la même chose que la liste
+    } catch (e) { _toast(e.message, true); _bacVue = 'trier'; }
   }
   const rows = _bacVue === 'tout' ? (_courrier || []) : pend;
   const perdus = (_courrier || []).filter(r => r.art_perdu).length;
@@ -2466,12 +2474,15 @@ function _openArtForm(page, existing, onDone, bancSlot) {
   // qui déclenche le rapprochement automatique, elle doit se saisir ICI, au
   // moment où la rédaction convient du papier, pas à la première relance.
   const seedMail = (a && _contribByName(a.contrib || '')?.email) || '';
+  // Une page du chemin de fer porte déjà sa rubrique (pré-assignation DK-2) :
+  // la redemander était un travail en double, et une occasion de se tromper.
+  const rubSeed = a ? (a.rub_id || '') : ((page && page.rub_id) || '');
   insp.innerHTML = _inspShell(a ? 'Modifier l\'article' : 'Nouvel article', null,
     `<div class="dk-sec">
       <label class="dk-field"><span>Titre</span><input type="text" data-k="title" maxlength="240" value="${_esc(a ? a.title : '')}" placeholder="Titre de l'article"></label>
       <label class="dk-field"><span>Rubrique</span><select data-k="rub">
         <option value="">Sans rubrique</option>
-        ${rubs.map(r => `<option value="${r.id}" ${a && a.rub_id === r.id ? 'selected' : ''}>${_esc(r.name)}</option>`).join('')}
+        ${rubs.map(r => `<option value="${r.id}" ${rubSeed === r.id ? 'selected' : ''}>${_esc(r.name)}</option>`).join('')}
       </select></label>
       <label class="dk-field"><span>Contributeur</span><input type="text" data-k="contrib" maxlength="160" value="${_esc(a ? (a.contrib || '') : '')}" placeholder="ex. Col. D. Mahieu"></label>
       <label class="dk-field"><span>Son adresse e-mail</span><input type="email" data-k="contribmail" maxlength="200" value="${_esc(seedMail)}" spellcheck="false" placeholder="prenom.nom@exemple.fr"></label>
