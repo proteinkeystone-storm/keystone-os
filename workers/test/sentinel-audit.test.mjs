@@ -18,7 +18,7 @@ import { gunzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyzePage, extractJsonLd, LOCALBUSINESS_TYPES, globalScore, perfScore, AXIS_WEIGHTS, sitemapLooksValid } from '../src/lib/audit-page.js';
+import { analyzePage, extractJsonLd, LOCALBUSINESS_TYPES, globalScore, perfScore, AXIS_WEIGHTS, sitemapLooksValid, phoneInText, addressInText } from '../src/lib/audit-page.js';
 
 const FIX = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const load = (name) => gunzipSync(readFileSync(join(FIX, `${name}.html.gz`))).toString('utf-8');
@@ -451,4 +451,85 @@ t('S14.2 · canonical avec apostrophe dans l\'URL voisine : href intact', () => 
   assert.ok(!keys(r).includes('canonical_mismatch'));
 });
 
-console.log(`\n${n} tests OK — moteur S8→S14 conforme à la vérité terrain des fixtures.`);
+// ═══ S16 — NAP sur le TEXTE : les erreurs du dogfooding 2026-08-04 ═══════
+// Douze sites WordPress/Squarespace RÉELS passés au moteur hors prod (les
+// deux plateformes n'avaient jamais été éprouvées en vrai). Quatre erreurs,
+// deux dans chaque sens — zéro trouvée par le harnais. Les extraits ci-dessous
+// sont VERBATIM : le texte réellement servi par ces pages, vérifié à la main.
+const pad = ' Bienvenue sur notre site. '.repeat(15);
+
+t('S16 · FAUX NÉGATIF 1 — téléphone français au format national (lacadieredazur.fr)', () => {
+  // Ni lien tel:, ni +33 : « 04 94 98 25 25 » écrit en toutes lettres. Le
+  // moteur annonçait « Téléphone non détecté » et retirait 30 pts de présence.
+  const html = `<html lang="fr"><head><title>Mairie de La Cadiere d Azur</title></head><body><h1>Mairie</h1>
+    <footer><p>11 rue Gabriel PERI, 83740 La Cadière d’Azur</p><p>Téléphone <span>04 94 98 25 25</span></p></footer><p>${pad}</p></body></html>`;
+  const r = analyzePage(html, { url: 'https://lacadieredazur.fr/' });
+  assert.ok(!keys(r).includes('nap_phone'), 'format national reconnu');
+  assert.ok(!keys(r).includes('nap_address'));
+  assert.equal(r.scores.presence, 65);            // 30+35 ; fiche et horaires réellement absents
+});
+
+t('S16 · FAUX NÉGATIF 2 — « place » et adresse coupée par des balises (tourisme-lacadieredazur.fr)', () => {
+  // « place » manquait à la liste des voies, et le motif exigeait la voie ET
+  // le code postal dans le MÊME nœud de texte — un pied de page les sépare.
+  const html = `<html lang="fr"><head><title>Bureau du Tourisme de La Cadiere</title></head><body><h1>Tourisme</h1>
+    <div><span>Maison des Gardes</span><br><span>11 place Charles de Gaulle</span><br><span>83740 La Cadière d'Azur</span>
+    <a href="tel:+33494901256">04.94.90.12.56</a></div><p>${pad}</p></body></html>`;
+  const r = analyzePage(html, { url: 'https://tourisme-lacadieredazur.fr/' });
+  assert.ok(!keys(r).includes('nap_address'), 'voie et code postal dans deux nœuds voisins');
+  assert.equal(r.scores.presence, 65);
+});
+
+t('S16 · FAUX POSITIF 1 — une coordonnée de tracé SVG n\'est pas un téléphone (bandol.fr)', () => {
+  // « 0033 85.3467 » vit dans un attribut d= : hors du texte, donc hors NAP.
+  const html = `<html lang="fr"><head><title>Ville de Bandol site officiel</title></head><body><h1>Bandol</h1>
+    <svg viewBox="0 0 200 200"><path d="M 0033 85.3467 L 0032 17.2665 Z"/></svg><p>${pad}</p></body></html>`;
+  const r = analyzePage(html, { url: 'https://www.bandol.fr/' });
+  assert.ok(keys(r).includes('nap_phone'), 'aucun téléphone sur cette page — le tracé ne compte pas');
+});
+
+t('S16 · FAUX POSITIF 2 — « chemin » dans un nom de fichier n\'est pas une voie (ollioules.fr)', () => {
+  const html = `<html lang="fr"><head><title>Ville d Ollioules site officiel</title></head><body><h1>Ollioules</h1>
+    <img src="/wp-content/uploads/chemin-crea-282-29-960w.jpg" alt="crea" class="image wp-image-27759"><p>${pad}</p></body></html>`;
+  const r = analyzePage(html, { url: 'https://www.ollioules.fr/' });
+  assert.ok(keys(r).includes('nap_address'), 'un nom de fichier n\'est pas une adresse');
+});
+
+t('S16 · la VRAIE adresse d\'Ollioules est reconnue (« 2 place Marius Trotobas »)', () => {
+  const html = `<html lang="fr"><head><title>Ville d Ollioules site officiel</title></head><body><h1>Ollioules</h1>
+    <p>Mairie d'Ollioules 2 place Marius Trotobas 83190 OLLIOULES <a href="tel:+33494304141">+33 (0)4 94 30 41 41</a></p><p>${pad}</p></body></html>`;
+  const r = analyzePage(html, { url: 'https://www.ollioules.fr/' });
+  assert.ok(!keys(r).includes('nap_address'));
+  assert.ok(!keys(r).includes('nap_phone'));
+});
+
+t('S16 · CONTRÔLE NÉGATIF — homographes anglais : « takes place », ZIP américain', () => {
+  // landinibrothers.com (Squarespace, Alexandria VA) : « … VA 22314 Hours Mon ».
+  // Sans voie française, et sans numéro devant « place », rien n'est crédité.
+  const en = `<html lang="en"><head><title>Landini Brothers Restaurant</title></head><body><h1>Landini</h1>
+    <p>The tasting takes place in our cellar. 115 King St, Alexandria, VA 22314 Hours Mon - Thurs</p><p>${pad}</p></body></html>`;
+  const r = analyzePage(en, { url: 'https://www.landinibrothers.com/' });
+  assert.ok(keys(r).includes('nap_address'), 'aucune adresse française ici');
+  assert.equal(r.scores.presence, 0);
+});
+
+t('S16 · non-régression : wordpress.org reste à ZÉRO crédit NAP après passage au texte', () => {
+  const r = analyzePage(load('wordpress-org'), { sitemap: true, url: 'https://wordpress.org/' });
+  assert.deepEqual(keys(r), ['nap_address', 'nap_hours', 'nap_localbiz', 'nap_phone']);
+  assert.equal(r.scores.presence, 0);
+});
+
+t('S16 · phoneInText / addressInText : la table de vérité, cas par cas', () => {
+  for (const [s, exp] of [['Tel : 04 94 98 25 25', true], ['07.70.16.39.89', true], ['+33 (0)4 94 30 41 41', true],
+    ['+33494901256', true], ['+32 81 22 33 44', true], ['+41 22 123 45 67', true], ['+352 26 12 34 56', true],
+    ['M 0033 85.3467 L 0032 17.2665', false], ['Ref 0123456789012', false], ['en 2024 05 06 07 08', false]]) {
+    assert.equal(phoneInText(s), exp, `phone: ${s}`);
+  }
+  for (const [s, exp] of [['40 chemin des Platrieres 83330 LE BEAUSSET', true], ['Rue de Fer 12, 5000 Namur', true],
+    ['10 cours Lafayette 83000 Toulon', true], ['nos cours de yoga en 2024 Toulon 83000 Var', false],
+    ['The event takes place at our venue. Order 12345 Shipped today.', false]]) {
+    assert.equal(addressInText(s), exp, `address: ${s}`);
+  }
+});
+
+console.log(`\n${n} tests OK — moteur S8→S16 conforme à la vérité terrain des fixtures.`);

@@ -156,6 +156,83 @@ function _decodeEntities(s) {
     .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&amp;/gi, '&');
 }
 
+// ═══ S16 — NAP : lire le TEXTE, pas le balisage ═══════════════════════════
+// Les heuristiques de secours (celles qui lisent la page quand la donnée
+// structurée manque) travaillaient sur `vis` : le HTML dépouillé de ses
+// scripts, mais AVEC ses attributs. Dogfooding du 2026-08-04 sur douze sites
+// WordPress/Squarespace réels — quatre erreurs, deux dans chaque sens :
+//   FAUX POSITIFS · bandol.fr : « 0033 85.3467 » (coordonnée d'un tracé SVG,
+//                   attribut `d=`) crédité comme un +33 ; ollioules.fr : le
+//                   fichier « chemin-crea-282-29-960w.jpg » crédité comme voie.
+//   FAUX NÉGATIFS · « 04 94 98 25 25 » (format national, sans lien tel:) et
+//                   « 11 place Charles de Gaulle 83740 La Cadière d'Azur »
+//                   invisibles — « place » hors liste, et le motif exigeait
+//                   la voie ET le code postal dans le MÊME nœud de texte.
+// Même cause unique : un attribut n'est pas du texte. Sur le texte APLATI, le
+// format national redevient sûr (coordonnées et noms de fichiers vivent dans
+// des attributs) — c'est ce qui permet de le réintroduire sans rouvrir le
+// faux positif que S8 avait fermé sur wordpress.org.
+
+// Types de voie sans ambiguïté : le mot suffit à ouvrir la fenêtre.
+export const STREET_TYPES_SAFE = 'rue|avenue|boulevard|impasse|chemin|all[ée]e|quai|route|chauss[ée]e|esplanade|traverse|mont[ée]e|faubourg|hameau|lotissement|r[ée]sidence|parvis|promenade';
+// Homographes (anglais ou français courant) : « the event takes place »,
+// « des cours de yoga », « a public square ». Ceux-là n'ouvrent la fenêtre
+// que précédés d'un NUMÉRO de voie — « 11 place Charles de Gaulle ».
+export const STREET_TYPES_NUMBERED = 'place|square|cours|voie|passage';
+
+// Format NATIONAL (0X suivi de quatre paires) — France, Belgique, Suisse et
+// Luxembourg l'écrivent ainsi. Bornes anti-troncature : ni chiffre ni
+// séparateur décimal avant/après, sinon « 26.077 » ou une référence produit
+// à douze chiffres fabriqueraient un numéro.
+export const PHONE_NATIONAL_TEXT = /(?<![\d.,])0[1-9](?:[ .\-]?\d{2}){4}(?![\d.,])/;
+// Format international (S13.3), resserré : l'indicatif ne suffit pas, il faut
+// derrière un abonné de 8 à 10 chiffres. Sans ce compte, « 0033 85.3467 » —
+// une coordonnée de tracé — passait pour un numéro belge.
+// Le « (0) » de « +33 (0)4 94 30 41 41 » impose un petit groupe de
+// séparateurs, pas un seul caractère — borné à 2 pour ne pas souder deux
+// nombres voisins.
+const PHONE_INTL_TEXT = /(?<![\d.,])(?:\+|00)(?:33|32|41|352)((?:[ .\-/]{0,2}\(?\d\)?){6,12})(?![\d])/g;
+
+export function phoneInText(text) {
+  const s = String(text || '');
+  if (PHONE_NATIONAL_TEXT.test(s)) return true;
+  PHONE_INTL_TEXT.lastIndex = 0;
+  let m;
+  while ((m = PHONE_INTL_TEXT.exec(s)) !== null) {
+    const digits = m[1].replace(/\D/g, '').length;
+    if (digits < 8 || digits > 10) continue;
+    // Un numéro écrit avec des séparateurs va par groupes de 1 à 3 chiffres
+    // (« 4 94 90 12 56 »). Un groupe de 4+ au milieu trahit une décimale ou
+    // une paire de coordonnées, pas un abonné.
+    const groups = m[1].split(/[^\d]+/).filter(Boolean);
+    if (groups.length > 1 && groups.some((g) => g.length > 3)) continue;
+    return true;
+  }
+  return false;
+}
+
+// Adresse postale dans le texte : un type de voie, puis à moins de 80
+// caractères un code postal (4-5 chiffres) SUIVI d'une commune capitalisée.
+// Cette dernière exigence écarte les millésimes (« depuis 1979, … ») et les
+// ZIP anglo-saxons isolés (« 115 King St, Alexandria, VA 22314 Hours Mon »).
+// La casse compte pour la commune — d'où une passe manuelle, pas un motif /i.
+export function addressInText(text) {
+  const s = String(text || '');
+  const cp = /\b\d{4,5}\s+[A-ZÀ-ÖØ-Þ]/;
+  const scan = (re, needsNumber) => {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(s)) !== null) {
+      const end = m.index + m[0].length;
+      if (needsNumber && !/\d{1,4}\s*(?:bis|ter|quater)?\s+$/i.test(s.slice(Math.max(0, m.index - 12), m.index))) continue;
+      if (cp.test(s.slice(end, end + 80))) return true;
+    }
+    return false;
+  };
+  return scan(new RegExp(`\\b(?:${STREET_TYPES_SAFE})\\b`, 'gi'), false)
+      || scan(new RegExp(`\\b(?:${STREET_TYPES_NUMBERED})\\b`, 'gi'), true);
+}
+
 // ═══ S10 — contrôles à valeur ═════════════════════════════════════════════
 
 // Hôtes de staging/brouillon des plateformes — une URL de prod déclarée sur
@@ -399,12 +476,15 @@ export function analyzePage(html, opts = {}) {
   // S13.3 — francophonie, pas seulement la France : +33/+32/+41/+352 et
   // codes postaux à 4 chiffres (BE/CH/LU). Une friterie de Namur avait
   // présence 0/100 et quatre faux findings.
+  // S16 — les motifs de secours lisent `napText` (texte APLATI et décodé) et
+  // non plus le balisage : un attribut n'est pas du texte. Cf. le bloc S16
+  // en tête de fichier — deux faux positifs et deux faux négatifs fermés.
+  const napText = _decodeEntities(_visText).replace(/\s+/g, ' ');
   const napPhone = /href=["']tel:/i.test(vis) || ldPhone
     || /itemprop=["']telephone["']/i.test(vis)
-    || /(?:\+|00)(?:33|32|41|352)[\s.\-/]?\d(?:[\s.\-/]?\d){5,10}/.test(vis);   // indicatif requis : le motif 0X.. matchait du SVG
+    || phoneInText(napText);
   const napAddress = ldAddress || /<address[\s>]/i.test(vis)
-    // rue/avenue/… suivi d'un code postal (4-5 chiffres) dans le même nœud de texte (≤ 80 c.)
-    || /\b(?:rue|avenue|boulevard|impasse|chemin|all[ée]e|quai|route|chauss[ée]e)\b[^<>]{0,80}\b\d{4,5}\b/i.test(vis);
+    || addressInText(napText);
   const napLocalBiz = [...ld.types].some((t) => LOCALBUSINESS_TYPES.has(t))
     || [...micro].some((t) => LOCALBUSINESS_TYPES.has(t));
   const napHours = ldHours;
