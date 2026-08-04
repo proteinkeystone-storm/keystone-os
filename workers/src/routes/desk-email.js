@@ -499,6 +499,7 @@ export async function handleInboxApply(request, env, inboxId) {
   // disparaît plus tard.
   await env.DB.prepare(`UPDATE dk_inbox SET status = 'done', art_id = ?, resolved_by = ?, resolved_at = datetime('now') WHERE id = ?`)
     .bind(artId, by, inboxId).run();
+  await _marquerLu(env, inboxId);
   return json({ ok: true, art_id: artId }, 200, origin);
 }
 
@@ -521,7 +522,7 @@ export async function handleCourrier(request, env, pubId) {
   const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '80', 10) || 80, 1), 200);
   const rows = (await env.DB.prepare(
     `SELECT i.id, i.from_email, i.from_name, i.orig_email, i.orig_name, i.subject, i.body,
-            i.attachments, i.suggestion, i.status, i.art_id, i.resolved_by, i.resolved_at, i.received_at,
+            i.attachments, i.suggestion, i.status, i.art_id, i.resolved_by, i.resolved_at, i.received_at, i.lu_at,
             a.title AS art_title, a.status AS art_status
        FROM dk_inbox i LEFT JOIN dk_articles a ON a.id = i.art_id
       WHERE i.pub_id = ? ORDER BY i.received_at DESC LIMIT ?`).bind(pubId, limit).all()).results || [];
@@ -531,7 +532,7 @@ export async function handleCourrier(request, env, pubId) {
       id: r.id, from_email: r.from_email, from_name: r.from_name,
       orig_email: r.orig_email, orig_name: r.orig_name,
       subject: r.subject, body: r.body, attachments: atts,
-      status: r.status, received_at: r.received_at,
+      status: r.status, received_at: r.received_at, lu: !!r.lu_at,
       resolved_by: r.resolved_by, resolved_at: r.resolved_at,
       art_id: r.art_id || null, art_title: r.art_title || null, art_status: r.art_status || null,
       // Le cas qui a coûté une contribution : l'entrée dit « rattachée »,
@@ -590,7 +591,33 @@ export async function handleInboxReprendre(request, env, inboxId) {
   // Le courrier pointe désormais vers l'article vivant.
   await env.DB.prepare(`UPDATE dk_inbox SET art_id = ?, status = 'done', resolved_by = ?, resolved_at = datetime('now') WHERE id = ?`)
     .bind(artId, by, inboxId).run();
+  await _marquerLu(env, inboxId);
   return json({ ok: true, art_id: artId, pieces: reprises }, 200, origin);
+}
+
+/* POST /api/desk/inbox/:id/lu — relever un courrier de la bannette.
+   Marqué à l'OUVERTURE de la fiche : c'est le moment où quelqu'un a
+   réellement vu ce qui est arrivé. Trier, écarter ou reprendre le
+   marquent aussi — on ne peut pas faire ces gestes sans l'avoir lu.
+   Corps { tout: true } → relève tout le courrier de la publication.   */
+export async function handleInboxLu(request, env, inboxId) {
+  const origin = getAllowedOrigin(env, request);
+  await ensureDeskSchema(env);
+  const row = await env.DB.prepare('SELECT pub_id FROM dk_inbox WHERE id = ?').bind(inboxId).first();
+  if (!row) return err('Courrier introuvable', 404, origin);
+  const u = await dkMemberGate(request, env, origin, row.pub_id);
+  if (u.error) return u.error;
+  const body = await parseBody(request).catch(() => ({}));
+  if (body && body.tout) {
+    await env.DB.prepare(`UPDATE dk_inbox SET lu_at = datetime('now') WHERE pub_id = ? AND lu_at IS NULL`).bind(row.pub_id).run();
+  } else {
+    await _marquerLu(env, inboxId);
+  }
+  const n = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM dk_inbox WHERE pub_id = ? AND lu_at IS NULL`).bind(row.pub_id).first())?.n || 0;
+  return json({ ok: true, non_lus: n }, 200, origin);
+}
+async function _marquerLu(env, inboxId) {
+  await env.DB.prepare(`UPDATE dk_inbox SET lu_at = datetime('now') WHERE id = ? AND lu_at IS NULL`).bind(inboxId).run().catch(() => {});
 }
 
 /* DELETE /api/desk/inbox/:id — EFFACER un courrier de la bannette.
@@ -640,5 +667,6 @@ export async function handleInboxReject(request, env, inboxId) {
   for (const a of g.atts) { if (env.DK_CASIER && a.r2_key) await env.DK_CASIER.delete(a.r2_key).catch(() => {}); }
   await env.DB.prepare(`UPDATE dk_inbox SET status = 'rejete', attachments = '[]', resolved_by = ?, resolved_at = datetime('now') WHERE id = ?`)
     .bind(dkByName(g.u), inboxId).run();
+  await _marquerLu(env, inboxId);
   return json({ ok: true }, 200, origin);
 }

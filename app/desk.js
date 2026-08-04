@@ -849,6 +849,9 @@ function _renderFer() {
   const newMarbre = _newMarbreCount();
   const newCards = _newCardCount();
   const newTotal = newMarbre + newCards;
+  // Pastille rouge : le courrier jamais ouvert. Compté par le serveur et
+  // partagé par l'équipe — relevé par l'un, relevé pour tous.
+  const nonLus = _D.courrier_non_lus || 0;
   main.innerHTML = `
     ${_offline ? `<div class="dk-offline">Hors ligne — lecture seule sur la dernière version connue</div>` : ''}
     <div class="dk-rail" data-slot="rail"></div>
@@ -863,7 +866,7 @@ function _renderFer() {
       <span class="dk-ferbar-issue">n° ${_esc(_D.issue.num)}${_D.issue.theme ? ' · ' + _esc(_D.issue.theme) : ''} · ${_D.pages.length} pages</span>
       <span class="dk-ferbar-spacer"></span>
       ${_relancesDues().length ? `<button class="dk-btn ghost small dk-relbtn" data-act="relances" title="Copies en attente à relancer">${icon('bell', 14)}<span class="dk-btn-txt"> Relances (${_relancesDues().length})</span></button>` : ''}
-      <button class="dk-btn ghost small" data-act="bannette" title="Tout le courrier reçu par e-mail — rien n'en sort jamais">${icon('mail', 14)}<span class="dk-btn-txt"> Courrier</span></button>
+      <button class="dk-btn ghost small dk-mailbtn" data-act="bannette" title="${nonLus ? nonLus + ' courrier' + (nonLus > 1 ? 's' : '') + ' jamais ouvert' + (nonLus > 1 ? 's' : '') + ' — ' : ''}Tout le courrier reçu par e-mail, rien n'en sort jamais">${icon('mail', 14)}<span class="dk-btn-txt"> Courrier</span>${nonLus ? `<span class="dk-mailbadge">${nonLus > 99 ? '99+' : nonLus}</span>` : ''}</button>
       <button class="dk-btn ghost small" data-act="prepress" title="Contrôle du PDF final & édition numérique booK">${icon('printer', 14)}<span class="dk-btn-txt"> Pré-impression</span></button>
       <button class="dk-btn cta small" data-act="newart">${icon('plus', 14)}<span class="dk-btn-txt"> Article</span></button>
     </div>
@@ -2049,6 +2052,26 @@ const BAC_VIA = { expediteur: 'expéditeur connu', 'expediteur-ambigu': 'expédi
 let _bacVue = 'trier';        // 'trier' | 'tout'
 let _courrier = null;         // cache de la vue « tout » (chargée à la demande)
 
+/* Relever un courrier = l'ouvrir. On rafraîchit la pastille SUR PLACE :
+   un _renderFer() complet rejouerait la frise sous l'inspecteur ouvert. */
+async function _marquerLu(id, tout) {
+  try {
+    const r = await _api('/inbox/' + id + '/lu', { method: 'POST', body: tout ? { tout: true } : {} });
+    _majPastille(r.non_lus || 0);
+    if (_courrier) _courrier.forEach(c => { if (tout || c.id === id) c.lu = true; });
+  } catch (_) { /* le relevé est un confort : son échec ne bloque rien */ }
+}
+function _majPastille(n) {
+  if (!_D) return;
+  _D.courrier_non_lus = n;
+  const btn = _root.querySelector('[data-act="bannette"]');
+  if (!btn) return;
+  const badge = btn.querySelector('.dk-mailbadge');
+  if (!n) { badge?.remove(); return; }
+  if (badge) badge.textContent = n > 99 ? '99+' : String(n);
+  else btn.insertAdjacentHTML('beforeend', `<span class="dk-mailbadge">${n > 99 ? '99+' : n}</span>`);
+}
+
 function _bacQui(r) {
   return (r.orig_name || r.orig_email || r.from_name || r.from_email || '?')
     + (r.orig_email ? ' · transféré par ' + (r.from_name || r.from_email) : '');
@@ -2080,6 +2103,7 @@ async function _openBacList(vue) {
         <button data-v="tout" class="${_bacVue === 'tout' ? 'on' : ''}">Tout le courrier</button>
       </div>
       ${_bacVue === 'tout' && perdus ? `<p class="dk-bac-alert">${icon('alert-triangle', 13)} ${perdus} courrier${perdus > 1 ? 's ont' : ' a'} perdu son article — vous pouvez le reprendre.</p>` : ''}
+      ${_bacVue === 'tout' && (_D.courrier_non_lus || 0) ? `<div class="dk-btn-row" style="margin-bottom:9px"><button class="dk-btn small" data-act="toutlu">Tout marquer comme lu (${_D.courrier_non_lus})</button></div>` : ''}
       ${rows.length ? rows.map(r => {
         const atts = _bacAtts(r);
         const pending = r.status === 'pending';
@@ -2090,9 +2114,10 @@ async function _openBacList(vue) {
           const sugArt = s.kind === 'article' ? _artById(s.art_id) : null;
           ligne = sugArt ? '→ « ' + sugArt.title + ' »' : (s.rub_id && _rubById(s.rub_id) ? '→ spontané · ' + _rubById(s.rub_id).name : '→ spontané');
         }
-        return `<div class="dk-banc-item">
+        const nonLu = r.lu === false;
+        return `<div class="dk-banc-item${nonLu ? ' dk-banc-nonlu' : ''}">
           <div class="dk-banc-info">
-            <div class="dk-banc-title">${_esc(r.subject || '(sans objet)')}</div>
+            <div class="dk-banc-title">${nonLu ? '<span class="dk-mailpoint" title="jamais ouvert"></span>' : ''}${_esc(r.subject || '(sans objet)')}</div>
             <div class="dk-banc-meta">${_esc(_bacQui(r))} · ${_relTime(r.received_at)}${atts.length ? ' · ' + atts.length + ' pièce' + (atts.length > 1 ? 's' : '') : ''}<br><span class="dk-bac-sort ${sort.cls}">${_esc(ligne)}</span></div>
           </div>
           <button class="dk-btn small ${pending ? 'primary' : ''}" data-bac="${r.id}">${pending ? 'Trier' : 'Ouvrir'}</button>
@@ -2105,6 +2130,11 @@ async function _openBacList(vue) {
   _bindClose(insp);
   insp.classList.add('on');
   _root.querySelector('[data-slot="veil"]').classList.add('on');
+  insp.querySelector('[data-act="toutlu"]')?.addEventListener('click', async () => {
+    const first = rows[0]; if (!first) return;
+    await _marquerLu(first.id, true);
+    _openBacList('tout');
+  });
   insp.querySelector('[data-slot="bacvue"]').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b || b.dataset.v === _bacVue) return;
     _openBacList(b.dataset.v);
@@ -2120,6 +2150,7 @@ async function _openBacList(vue) {
    le filet quand l'article d'accueil a disparu ou que le tri était faux. */
 function _openCourrierItem(row) {
   const insp = _root.querySelector('[data-slot="insp"]');
+  if (!row.lu) { row.lu = true; _marquerLu(row.id); }
   const atts = _bacAtts(row);
   const sort = _bacSort(row);
   const rubs = _D.rubriques || [];
@@ -2193,6 +2224,7 @@ function _openCourrierItem(row) {
 
 function _openBacItem(row) {
   const insp = _root.querySelector('[data-slot="insp"]');
+  _marquerLu(row.id);
   const s = _bacSugg(row), atts = _bacAtts(row);
   const sugArt = s.kind === 'article' ? _artById(s.art_id) : null;
   const candIds = Array.isArray(s.candidates) ? s.candidates : [];
@@ -2717,7 +2749,11 @@ async function _openSettings() {
           <input type="text" data-k="pubslug" maxlength="40" value="${_esc(slug)}" spellcheck="false" placeholder="l-epaulette">
           <span class="dk-slug-fix">@${_esc(em.domain || '…')}</span>
           <button class="dk-btn small" data-act="saveslug">Enregistrer</button>
-        </div>` : (addr ? `<p class="dk-bac-addr"><strong>${_esc(addr)}</strong></p>` : '')}
+        </div>` : ''}
+        ${addr ? `<div class="dk-addr-row">
+          <span class="dk-bac-addr"><strong>${_esc(addr)}</strong></span>
+          <button class="dk-btn small" data-act="copyaddr" data-addr="${_esc(addr)}" title="Copier l'adresse">${icon('copy', 13)} Copier</button>
+        </div>` : ''}
         <p class="dk-note">${addr
           ? `Transférez-y (ou mettez en copie) les e-mails des contributeurs : la copie se pointe toute seule quand l'expéditeur est connu, le reste attend dans le bac « à trier ». Rien ne se range en silence.`
           : `Le branchement e-mail arrive — cette adresse s'activera avec le domaine de dépôt. Le bac « à trier » et la digestion sont déjà prêts.`}</p>
@@ -2844,6 +2880,19 @@ async function _openSettings() {
     if (!name) return;
     try { await _api('/publication/' + _pubId, { method: 'PATCH', body: { name } }); pub.name = name; _renderPubSlot(); _toast('Publication renommée.'); }
     catch (e) { _toast(e.message, true); }
+  });
+  insp.querySelector('[data-act="copyaddr"]')?.addEventListener('click', async e => {
+    const b = e.currentTarget, addr = b.dataset.addr;
+    try {
+      await navigator.clipboard.writeText(addr);
+      _toast('Adresse copiée : ' + addr);
+    } catch (_) {
+      // Presse-papiers refusé (contexte non sécurisé, permission) : on
+      // sélectionne l'adresse pour que le Cmd-C manuel reste possible.
+      const el = b.parentElement?.querySelector('.dk-bac-addr');
+      if (el) { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+      _toast('Copie refusée par le navigateur — l\'adresse est sélectionnée, faites Cmd-C.', true);
+    }
   });
   insp.querySelector('[data-act="saveslug"]')?.addEventListener('click', async () => {
     const slug = insp.querySelector('[data-k="pubslug"]').value.trim().toLowerCase();

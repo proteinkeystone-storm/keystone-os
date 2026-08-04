@@ -187,7 +187,8 @@ import { handleDeskHealth, handleDeskBootstrap, handlePubCreate, handlePubPatch,
          handleContribUpsert, handleRelanceSend, sweepDeskCasier } from './routes/desk.js';
 // desK DK-4 — adresse de dépôt redaction-*@ : digestion des e-mails + bac à trier.
 import { handleDeskEmail, handleEmailInject, handleInboxApply, handleInboxReject,
-         handleCourrier, handleInboxReprendre, handleInboxDelete } from './routes/desk-email.js';
+         handleCourrier, handleInboxReprendre, handleInboxDelete,
+         handleInboxLu } from './routes/desk-email.js';
 // Key-Ring (Sonnette) — ORDRE 3 : « Sonner » Web Push + boucle retour.
 import { handleKeyringRing, handleKeyringRingStatus, handleKeyringRespond, handleKeyringRespondGet,
          handleKeyringPushSubscribe, handleKeyringPushUnsubscribe, handleKeyringPushStatus, handleKeyringPushList,
@@ -465,6 +466,8 @@ export default {
       if (dkCourrier && method === 'GET') return handleCourrier(request, env, dkCourrier[1]);
       const dkInboxRepr = path.match(/^\/api\/desk\/inbox\/([A-Za-z0-9-]+)\/reprendre$/);
       if (dkInboxRepr && method === 'POST') return handleInboxReprendre(request, env, dkInboxRepr[1]);
+      const dkInboxLu = path.match(/^\/api\/desk\/inbox\/([A-Za-z0-9-]+)\/lu$/);
+      if (dkInboxLu && method === 'POST') return handleInboxLu(request, env, dkInboxLu[1]);
       const dkInboxDel = path.match(/^\/api\/desk\/inbox\/([A-Za-z0-9-]+)$/);
       if (dkInboxDel && method === 'DELETE') return handleInboxDelete(request, env, dkInboxDel[1]);
 

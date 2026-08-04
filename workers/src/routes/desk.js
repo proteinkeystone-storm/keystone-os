@@ -267,6 +267,14 @@ async function _ensureSchema(env) {
   // emportait alors la contribution sans laisser de piste.
   try { await env.DB.prepare(`ALTER TABLE dk_inbox ADD COLUMN art_id TEXT`).run(); } catch (_) {}
   await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_dk_inbox_pub_recu ON dk_inbox(pub_id, received_at)`).run();
+  // Pastille « non lu » de la bannette. Volontairement PARTAGÉE par
+  // l'équipe, comme une vraie bannette : ce que quelqu'un a relevé est
+  // relevé pour tout le monde. Le courrier déjà là à la migration part
+  // comme lu — on n'invente pas une alerte rétroactive.
+  try {
+    await env.DB.prepare(`ALTER TABLE dk_inbox ADD COLUMN lu_at TEXT`).run();
+    await env.DB.prepare(`UPDATE dk_inbox SET lu_at = received_at WHERE lu_at IS NULL`).run();
+  } catch (_) {}
   _schemaReady = true;
 }
 
@@ -665,9 +673,13 @@ export async function handleIssueGet(request, env, issueId) {
     const inbox = (await env.DB.prepare(
       `SELECT id, from_email, from_name, orig_email, orig_name, subject, body, suggestion, attachments, received_at
        FROM dk_inbox WHERE pub_id = ? AND status = 'pending' ORDER BY received_at DESC LIMIT 50`).bind(pubId).all()).results || [];
+    // Pastille de la bannette : le courrier jamais ouvert, tous sorts confondus.
+    const nonLus = (await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM dk_inbox WHERE pub_id = ? AND lu_at IS NULL`).bind(pubId).first())?.n || 0;
     const pubRow = await env.DB.prepare('SELECT slug FROM dk_publications WHERE id = ?').bind(pubId).first();
     return json({
       ok: true, issue, pages, slots, articles, rubriques, files, contribs, relances, inbox,
+      courrier_non_lus: nonLus,
       casier, quota: { used, max: QUOTA_ISSUE },
       mailer: emailConfigured(env),
       email: { domain: env.DK_EMAIL_DOMAIN || null, slug: (pubRow && pubRow.slug) || null },

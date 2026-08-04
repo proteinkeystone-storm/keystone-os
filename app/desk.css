@@ -607,6 +607,26 @@ html.light-mode .dk-bac-select { color-scheme: light; }
   background: rgba(245, 158, 11, .12); color: #f59e0b;
 }
 .dk-bac-alert svg { flex: 0 0 auto; }
+/* Pastille rouge du courrier jamais ouvert : un compte, pas une humeur —
+   elle ne pulse pas, elle attend. Rouge franc, distinct du doré du signal
+   « nouvel article » et de l'ambre des alertes. */
+.dk-mailbtn { position: relative; overflow: visible; }
+.dk-mailbadge {
+  position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px;
+  padding: 0 4px; border-radius: 9px; background: var(--dk-rouge); color: #fff;
+  font-size: 10.5px; font-weight: 800; line-height: 17px; text-align: center;
+  font-variant-numeric: tabular-nums; box-shadow: 0 0 0 2px rgba(19, 24, 38, .9);
+}
+html.light-mode .dk-mailbadge { box-shadow: 0 0 0 2px #fff; }
+.dk-mailpoint {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--dk-rouge); margin-right: 6px; vertical-align: middle;
+}
+.dk-banc-nonlu .dk-banc-title { font-weight: 800; }
+/* Adresse de dépôt + son bouton Copier */
+.dk-addr-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin: 2px 0 4px; }
+.dk-addr-row .dk-bac-addr { flex: 1 1 auto; min-width: 0; margin: 0; word-break: break-all; }
+.dk-addr-row .dk-btn { flex: 0 0 auto; }
 .dk-slug-row { flex-wrap: wrap; align-items: center; gap: 6px; }
 .dk-slug-row input { flex: 1 1 160px; min-width: 140px; text-align: right; }
 .dk-slug-fix { font-size: 13px; color: var(--dk-tx2); white-space: nowrap; }
