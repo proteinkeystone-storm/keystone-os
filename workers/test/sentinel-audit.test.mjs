@@ -612,4 +612,55 @@ t('S16/C24 · informatif : le finding ne promet aucun point de score', () => {
   assert.equal(f[0].gain, 0);   // hors barème, comme tous les contrôles S10+
 });
 
+// ═══ S16.2 — détection de plateforme : le tirage au sort de Squarespace ══
+// Trouvé pendant le balayage adverse de C24 : districtcafe.ca ressortait
+// tantôt « squarespace », tantôt « wix ». La sonde cherchait « wix » dans la
+// valeur de TOUS les en-têtes ; Squarespace renvoie `x-contextid` et un
+// cookie `crumb`, deux jetons base64 tirés au hasard à CHAQUE requête.
+// Signatures ci-dessous relevées à la main sur les sites réels le 2026-08-04.
+import { detectPlatform } from '../src/lib/audit-page.js';
+
+t('S16.2 · ATTAQUE — un jeton aléatoire contenant « wix » ne fait pas un site Wix', () => {
+  const sqsp = '<html><head><link href="//assets.squarespace.com/universal/x.css"></head><body>a</body></html>';
+  // Le jeton EXACT qui a fait mentir la sonde le 2026-08-04.
+  assert.equal(detectPlatform(sqsp, { server: 'Squarespace', 'x-contextid': 'gJtnwixz/A0cCgwUT' }), 'squarespace');
+  // Et le cas générique : un site sur-mesure dont l'ETag contient les 3 lettres.
+  assert.equal(detectPlatform('<html><body>Bonjour</body></html>', { server: 'nginx', etag: 'W/"b3aWIXc88ea55"' }), 'custom');
+});
+
+t('S16.2 · ATTAQUE — un simple LIEN vers wix.com ne fait pas un site Wix', () => {
+  // Une agence web qui compare les plateformes, un portfolio « fait sous Wix »…
+  const wp = '<html><head><meta name="generator" content="WordPress 6.5"></head><body><p>Nous migrons votre site depuis <a href="https://fr.wix.com/">wix.com</a> vers WordPress.</p></body></html>';
+  assert.equal(detectPlatform(wp, { server: 'Apache' }), 'wordpress');
+});
+
+t('S16.2 · les signatures réelles des quatre plateformes', () => {
+  assert.equal(detectPlatform('<html><body>x</body></html>', { server: 'Pepyaka', 'x-wix-request-id': '1785842738.8004' }), 'wix');
+  assert.equal(detectPlatform('<html><head><meta name="generator" content="Wix.com Website Builder"/></head></html>', {}), 'wix');
+  assert.equal(detectPlatform('<html><img src="https://static.wixstatic.com/a.jpg"></html>', {}), 'wix');
+  assert.equal(detectPlatform('<html><script src="//static.parastorage.com/x.js"></script></html>', {}), 'wix');
+  assert.equal(detectPlatform('<html><body>x</body></html>', { server: 'Squarespace' }), 'squarespace');
+  assert.equal(detectPlatform('<html><meta property="og:image" content="http://static1.squarespace.com/x"></html>', {}), 'squarespace');
+  assert.equal(detectPlatform('<html><link href="/wp-content/themes/a/style.css"></html>', { server: 'Apache' }), 'wordpress');
+  assert.equal(detectPlatform('<html><script src="https://cdn.shopify.com/x.js"></script></html>', { server: 'cloudflare' }), 'shopify');
+  assert.equal(detectPlatform('<html><body>Un site écrit à la main</body></html>', { server: 'nginx' }), 'custom');
+});
+
+t('S16.2 · les fixtures réelles sont reconnues par leur signature HTML seule', () => {
+  for (const f of ['wix-studio-mas-home', 'wix-studio-mas-arbousier'])
+    assert.equal(detectPlatform(load(f), {}), 'wix', f);
+  assert.equal(detectPlatform(load('wordpress-org'), {}), 'wordpress');
+  assert.equal(detectPlatform(load('static-vercel-pks'), {}), 'custom');
+});
+
+t('S16.2 · une plateforme managée mal détectée gonflait l\'axe sécurité', () => {
+  // Le vrai coût du bug : trois en-têtes exemptés pour un site qui n'y a pas droit.
+  const html = load('wordpress-org');
+  const headers = { 'strict-transport-security': 'max-age=1', 'x-content-type-options': 'nosniff' };
+  const vrai = analyzePage(html, { headers, sitemap: true, url: 'https://wordpress.org/', platform: detectPlatform(html, {}) });
+  const faux = analyzePage(html, { headers, sitemap: true, url: 'https://wordpress.org/', platform: 'wix' });
+  assert.equal(vrai.scores.securite, 40);    // 2 en-têtes sur 5 — la vérité
+  assert.equal(faux.scores.securite, 100);   // 2 sur 2, les 3 autres « non applicables » — le mensonge
+});
+
 console.log(`\n${n} tests OK — moteur S8→S16 conforme à la vérité terrain des fixtures.`);

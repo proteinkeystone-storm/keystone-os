@@ -43,9 +43,9 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 // S5 — GEO (visibilité IA) : clé du propriétaire via le coffre BYOK si dispo,
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
-import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
+import { analyzePage, detectPlatform, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S16.1';
+const SENTINEL_ENGINE_VERSION = 'S16.2';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -217,14 +217,11 @@ async function _probe(url) {
   try {
     const res = await fetch(url, { method: 'GET', redirect: 'follow', headers: { 'User-Agent': UA }, signal: ctrl.signal });
     const ms = Date.now() - t0; const status = res.status; const ok = _classify(status);
-    let headerHint = '';
-    for (const [k, v] of res.headers) { if (`${k}:${v}`.toLowerCase().includes('wix')) { headerHint = 'wix'; break; } }
-    const html = (await res.text()).slice(0, 200000).toLowerCase();
-    let platform = 'custom';
-    if (headerHint === 'wix' || html.includes('static.wixstatic.com') || html.includes('wix.com') || html.includes('_wixcssstate') || html.includes('wixbisession')) platform = 'wix';
-    else if (html.includes('/wp-content/') || html.includes('/wp-json') || html.includes('wp-includes') || html.includes('content="wordpress')) platform = 'wordpress';
-    else if (html.includes('squarespace.com') || html.includes('content="squarespace')) platform = 'squarespace';   // S13.4 — managé : scoping en-têtes
-    else if (html.includes('cdn.shopify.com') || html.includes('shopify.theme') || html.includes('x-shopify')) platform = 'shopify';
+    const headers = {}; for (const [k, v] of res.headers) headers[k.toLowerCase()] = v;
+    // S16.2 — détection sur signatures (lib, testée). L'ancienne sonde
+    // cherchait « wix » dans TOUTES les valeurs d'en-tête : les jetons
+    // aléatoires de Squarespace la faisaient mentir une fois sur ~500.
+    const platform = detectPlatform(await res.text(), headers);
     return { ok, status, ms, error: ok ? null : `HTTP ${status}`, platform };
   } catch (e) {
     return { ok: 0, status: 0, ms: Date.now() - t0, error: (e && e.name === 'AbortError') ? 'Délai dépassé' : (e && e.message || 'Inaccessible'), platform: 'unknown' };
@@ -345,12 +342,23 @@ async function _audit(url, opts = {}) {
     } catch (_) {}
   }
 
+  // S16.2 — la signature relevée sur CE document prime sur la valeur stockée
+  // (mal détectée à la création, elle restait figée à vie et exemptait à tort
+  // trois en-têtes de sécurité). Une ABSENCE de signature, elle, ne prouve
+  // rien : on garde alors la valeur connue — même asymétrie de preuve qu'en S8.
+  const detected = detectPlatform(html, headers);
+  const platform = detected !== 'custom' ? detected : (opts.platform || 'custom');
+
   // Analyse pure (lib/audit-page.js) — testée sur fixtures réelles (S8).
-  const a = analyzePage(html, { truncated, headers, skipSite: opts.skipSite, sitemap, url, platform: opts.platform });
+  const a = analyzePage(html, { truncated, headers, skipSite: opts.skipSite, sitemap, url, platform });
   // S13.2 — coquille SPA : marqueur dédié dans les indéterminés (persiste,
   // le front l'affiche comme « site en rendu client », pas comme un défaut).
   if (a.spaShell && !a.indeterminate.includes('_spa')) a.indeterminate.unshift('_spa');
-  return { reachable, ...a, sitemap, effectiveUrl: typeof effectiveUrl !== 'undefined' ? effectiveUrl : url, cacheAge: typeof cacheAge !== 'undefined' ? cacheAge : 0 };
+  // S16.2 — la plateforme est re-déduite du document DÉJÀ téléchargé (aucune
+  // requête en plus). L'appelant s'en sert pour corriger la valeur stockée :
+  // sans cela, une détection erronée à la création du site restait figée à vie.
+  return { reachable, ...a, sitemap, detectedPlatform: detected, platform,
+           effectiveUrl: typeof effectiveUrl !== 'undefined' ? effectiveUrl : url, cacheAge: typeof cacheAge !== 'undefined' ? cacheAge : 0 };
 }
 
 // ── V2 · Crawl multi-pages — découverte + agrégation ────────────
@@ -439,8 +447,10 @@ async function _auditSite(url, platform) {
     extraUrls = d.urls.map((u) => _rehost(u, canonHost));
     pagesTotal = d.total;
   } catch (_) {}
+  // S16.2 — les pages internes héritent de la plateforme retenue pour la HOME
+  // (signature fraîche), pas de la valeur stockée qui peut être erronée.
   const extras = (await Promise.all(extraUrls.map((u) =>
-    _audit(u, { skipSite: true, sitemapKnown: home.sitemap, platform }).then((r) => ({ url: u, ...r })).catch(() => null)
+    _audit(u, { skipSite: true, sitemapKnown: home.sitemap, platform: home.platform }).then((r) => ({ url: u, ...r })).catch(() => null)
   ))).filter((p) => p && p.reachable);
   const pagesAudited = [{ url, ...home }].concat(extras).map((p) => ({ ...p, path: _pathOf(p.url) }));
 
@@ -448,6 +458,7 @@ async function _auditSite(url, platform) {
   const pages = pagesAudited.map((p) => ({ path: p.path, score: _globalScore({ ...p.scores }) }));
   const cacheAgeMax = Math.max(0, ...pagesAudited.map((p) => p.cacheAge || 0));   // S15.2
   return { reachable: home.reachable, ...agg, pages, pageCount: pagesAudited.length, cacheAgeMax,
+           platform: home.platform, detectedPlatform: home.detectedPlatform,
            pagesTotal: Math.max(pagesTotal, pagesAudited.length), geoHints: home.geoHints || null };
 }
 
@@ -1209,6 +1220,20 @@ export async function handleSiteAudit(request, env, id) {
   // la surveillance uptime (sentinel_checks) trace déjà l'indisponibilité.
   if (!a.reachable) {
     return err('Site injoignable au moment de l\'audit — aucun score attribué. Réessayez quand le site répond.', 503, origin);
+  }
+
+  // S16.2 — AUTO-RÉPARATION de la plateforme. Elle n'était déduite qu'UNE
+  // fois, à la création du site : une détection erronée y restait à vie, avec
+  // des conséquences réelles (en-têtes de sécurité exemptés à tort, correctifs
+  // rédigés pour le mauvais éditeur). Chaque audit la re-déduit du document
+  // déjà téléchargé — on ne corrige que sur SIGNATURE trouvée, jamais sur son
+  // absence, et l'audit en cours a déjà utilisé la bonne valeur.
+  if (a.detectedPlatform && a.detectedPlatform !== 'custom' && a.detectedPlatform !== site.platform) {
+    try {
+      await env.DB.prepare("UPDATE sentinel_sites SET platform = ?, updated_at = datetime('now') WHERE id = ?")
+        .bind(a.detectedPlatform, site.id).run();
+      site.platform = a.detectedPlatform;
+    } catch (_) { /* non bloquant : l'audit vaut mieux qu'une correction perdue */ }
   }
 
   // S9/C11-C12 — axe dispo : fenêtre réelle + garde de couverture.

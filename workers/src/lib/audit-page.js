@@ -233,6 +233,47 @@ export function addressInText(text) {
       || scan(new RegExp(`\\b(?:${STREET_TYPES_NUMBERED})\\b`, 'gi'), true);
 }
 
+// ═══ S16.2 — détection de plateforme sur des SIGNATURES, pas des indices ══
+// Trouvé le 2026-08-04 pendant le balayage adverse : districtcafe.ca, un site
+// Squarespace, ressortait tantôt « squarespace », tantôt « wix ». Cause : la
+// sonde cherchait la sous-chaîne « wix » dans la valeur de TOUS les en-têtes.
+// Or Squarespace renvoie `x-contextid: gJtnrosz/A0cCgwUT` et un cookie
+// `crumb=…`, deux jetons base64 RETIRÉS AU HASARD à chaque requête. Quand le
+// tirage contient w-i-x (≈ 1 fois sur 500), le site devient « Wix ».
+// Conséquences : (1) la plateforme est décidée UNE SEULE FOIS, à la création
+// du site, puis stockée — un tirage malheureux fige l'erreur ; (2) « wix » est
+// une plateforme MANAGÉE : trois en-têtes de sécurité passent « non
+// applicables », donc un site sur-mesure voit son axe sécurité gonflé sans
+// raison ; (3) le client reçoit des instructions d'éditeur Wix pour un site
+// qui n'est pas sous Wix. Le même laxisme existait côté HTML : `wix.com` en
+// sous-chaîne suffisait — un simple lien vers wix.com classait la page.
+// Signatures relevées à la main sur des sites réels (2026-08-04) :
+//   Wix         server: Pepyaka · en-tête x-wix-request-id · static.wixstatic.com
+//               · parastorage.com · <meta generator "Wix.com Website Builder">
+//   Squarespace server: Squarespace · static1/assets.squarespace.com
+//   WordPress   /wp-content/ · /wp-json · wp-includes · generator "WordPress"
+//   Shopify     cdn.shopify.com · shopify.theme · en-tête x-shopify-*
+export function detectPlatform(html, headers) {
+  const h = String(html || '').slice(0, 200000).toLowerCase();
+  const hd = headers || {};
+  const server = String(hd.server || '').toLowerCase();
+  // Sur le NOM de l'en-tête : un nom ne peut pas être un jeton aléatoire.
+  const hasName = (prefix) => Object.keys(hd).some((k) => k.toLowerCase().startsWith(prefix));
+  const generator = (h.match(/<meta[^>]+name=["']generator["'][^>]*>/i) || [''])[0];
+
+  if (server.includes('pepyaka') || hasName('x-wix-')
+    || h.includes('static.wixstatic.com') || h.includes('parastorage.com')
+    || h.includes('_wixcssstate') || h.includes('wixbisession')
+    || generator.includes('wix.com')) return 'wix';
+  if (server.includes('squarespace')
+    || h.includes('static1.squarespace.com') || h.includes('assets.squarespace.com')
+    || generator.includes('squarespace')) return 'squarespace';
+  if (h.includes('/wp-content/') || h.includes('/wp-json') || h.includes('wp-includes')
+    || generator.includes('wordpress')) return 'wordpress';
+  if (h.includes('cdn.shopify.com') || h.includes('shopify.theme') || hasName('x-shopify-')) return 'shopify';
+  return 'custom';
+}
+
 // ═══ S16/C24 — entités dupliquées et non fusionnées ══════════════════════
 // Cas fondateur (Le Mas des Bouteillans, vérifié en direct le 2026-08-04) :
 // la home sert DEUX fiches pour le même établissement —
