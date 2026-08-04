@@ -2146,9 +2146,35 @@ function _openCourrierItem(row) {
         <button class="dk-btn small primary" data-act="reprendre">${icon('mail', 14)} Recréer un article</button>
         <button class="dk-btn small" data-act="retour">Retour</button>
       </div>
+    </div>
+    <div class="dk-sec"><h4>Effacer ce courrier</h4>
+      <p class="dk-note" style="margin-top:0">Le seul geste sans retour de la bannette : le texte reçu et ses pièces disparaissent définitivement.${row.art_title ? ` L'article « ${_esc(row.art_title)} » n'est pas touché.` : ''}</p>
+      <div class="dk-btn-row"><button class="dk-btn small dk-btn-danger" data-act="suppr">${icon('trash-2', 14)} Effacer définitivement</button></div>
+      <div data-slot="supprconfirm"></div>
     </div>`);
   _bindClose(insp);
   insp.querySelector('[data-act="retour"]').onclick = () => _openBacList('tout');
+  // Confirmation INLINE en toutes lettres — même parti pris que la
+  // suppression d'une pièce du casier : pas d'« armé 2 clics » invisible.
+  insp.querySelector('[data-act="suppr"]').onclick = () => {
+    const box = insp.querySelector('[data-slot="supprconfirm"]');
+    if (box.querySelector('[data-supproui]')) return;
+    box.innerHTML = `<div class="dk-file-confirm" style="margin-top:8px">
+      <span class="dk-file-confirm-q">Effacer « ${_esc(row.subject || 'ce courrier')} » sans retour possible ?</span>
+      <span class="dk-file-confirm-acts">
+        <button class="dk-btn small dk-btn-danger" data-supproui>Effacer</button>
+        <button class="dk-btn small" data-supprnon>Annuler</button>
+      </span></div>`;
+    box.querySelector('[data-supprnon]').onclick = () => { box.innerHTML = ''; };
+    box.querySelector('[data-supproui]').onclick = async () => {
+      try {
+        const r = await _api('/inbox/' + row.id, { method: 'DELETE' });
+        _toast('Courrier effacé' + (r.article_conserve ? ` — l'article « ${r.article_conserve} » est conservé.` : '.'));
+        _courrier = null;
+        _openBacList('tout');
+      } catch (e) { _toast(e.message, true); }
+    };
+  };
   insp.querySelector('[data-act="reprendre"]').onclick = async () => {
     const g = k => insp.querySelector(`[data-k="${k}"]`).value;
     if (!g('rtitle').trim()) { _toast('Le titre est requis', true); return; }
@@ -2211,11 +2237,35 @@ function _openBacItem(row) {
         <button class="dk-btn ghost" data-act="bacback">Retour</button>
       </div>
       <div data-slot="bacmsg"></div>
+      <p class="dk-note">« Rejeter » écarte la contribution mais en garde la trace dans la bannette. Pour l'effacer vraiment — un essai, un indésirable —, utilisez ci-dessous.</p>
+      <div class="dk-btn-row"><button class="dk-btn small dk-btn-danger" data-act="bacsuppr">${icon('trash-2', 14)} Effacer définitivement</button></div>
+      <div data-slot="supprconfirm"></div>
     </div>`);
   _bindClose(insp);
   insp.classList.add('on');
   _root.querySelector('[data-slot="veil"]').classList.add('on');
   insp.querySelector('[data-act="bacback"]').onclick = () => _openBacList('trier');
+  insp.querySelector('[data-act="bacsuppr"]').onclick = () => {
+    const box = insp.querySelector('[data-slot="supprconfirm"]');
+    if (box.querySelector('[data-supproui]')) return;
+    box.innerHTML = `<div class="dk-file-confirm" style="margin-top:8px">
+      <span class="dk-file-confirm-q">Effacer « ${_esc(row.subject || 'ce courrier')} » sans retour possible ?</span>
+      <span class="dk-file-confirm-acts">
+        <button class="dk-btn small dk-btn-danger" data-supproui>Effacer</button>
+        <button class="dk-btn small" data-supprnon>Annuler</button>
+      </span></div>`;
+    box.querySelector('[data-supprnon]').onclick = () => { box.innerHTML = ''; };
+    box.querySelector('[data-supproui]').onclick = async () => {
+      try {
+        await _api('/inbox/' + row.id, { method: 'DELETE' });
+        _toast('Courrier effacé.');
+        _courrier = null;
+        await _loadIssue(true);
+        _renderFer();
+        if ((_D.inbox || []).length) _openBacList('trier'); else _closeInsp();
+      } catch (e) { _toast(e.message, true); }
+    };
+  };
   insp.querySelector('[data-k="bacart"]')?.addEventListener('change', () => {
     insp.querySelector('input[name="bacmode"][value="autre"]').checked = true;
   });

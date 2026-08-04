@@ -143,6 +143,37 @@ async function main() {
   ok(ec && ec.attachments.length === 0, 'ses pièces ont bien été purgées');
   ok(c.data.courrier.length === 2, 'la bannette totalise TOUT le courrier reçu', c.data.courrier.length);
 
+  /* ── 5 · Effacer un courrier (le seul geste sans retour) ────────
+     La bannette promet que rien ne se perd ; il faut donc une porte de
+     sortie franche pour l'essai, l'indésirable, ou l'effacement demandé
+     par un contributeur. Deux pièges : ne pas emporter l'article qui en
+     est issu, et ne pas purger une pièce déjà promue à son casier.     */
+  console.log('\n5 · Effacer un courrier');
+  const dx = await call(INTRUS, '/inbox/' + inboxId, { method: 'DELETE' });
+  ok(dx.status === 403 || dx.status === 404, 'un non-membre n\'efface rien', dx.status);
+
+  // Ce courrier a été REPRIS : sa pièce vit maintenant dans le casier de
+  // l'article repris. L'effacer ne doit pas la lui arracher.
+  const artRepris = rp.data.art_id;
+  const dl2 = await call(A, '/inbox/' + inboxId, { method: 'DELETE' });
+  ok(dl2.status === 200, 'courrier effacé', dl2.data);
+  ok(dl2.data.article_conserve === 'Article test 2 Actu Minarm (repris)', 'la réponse rappelle l\'article conservé', dl2.data);
+  ok(dl2.data.pieces_purgees === 0, 'la pièce promue au casier n\'est PAS purgée', dl2.data);
+
+  const d3 = await call(A, '/issue/' + issueId);
+  ok(d3.data.articles.some(a => a.id === artRepris), 'l\'article issu du courrier survit à l\'effacement');
+  const fRepris = d3.data.files.find(f => f.art_id === artRepris);
+  ok(!!fRepris, 'sa pièce est toujours dans son casier', d3.data.files.length);
+  const dlUrl = await call(A, '/casier/' + fRepris.id + '/url');
+  ok(dlUrl.status === 200 && dlUrl.data.url, 'et elle est toujours téléchargeable (objet R2 intact)', dlUrl.status);
+
+  c = await call(A, '/publication/' + pubId + '/courrier');
+  ok(!c.data.courrier.some(x => x.id === inboxId), 'le courrier a bien quitté la bannette');
+  ok(c.data.courrier.length === 1, 'les autres courriers sont intacts', c.data.courrier.length);
+
+  const dl3 = await call(A, '/inbox/' + inboxId, { method: 'DELETE' });
+  ok(dl3.status === 404, 'effacer deux fois → 404 propre', dl3.status);
+
   console.log(`\n${fail === 0 ? '✅' : '❌'} DK-4c : ${pass} vérifications passées, ${fail} en échec.`);
   process.exit(fail === 0 ? 0 : 1);
 }

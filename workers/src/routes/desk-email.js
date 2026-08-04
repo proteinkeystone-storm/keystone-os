@@ -593,6 +593,45 @@ export async function handleInboxReprendre(request, env, inboxId) {
   return json({ ok: true, art_id: artId, pieces: reprises }, 200, origin);
 }
 
+/* DELETE /api/desk/inbox/:id — EFFACER un courrier de la bannette.
+
+   La bannette promet que rien ne se perd ; il faut donc une porte de
+   sortie explicite pour ce qui n'a rien à y faire — un essai, un spam,
+   ou un contributeur qui demande l'effacement de ses données. C'est le
+   seul geste vraiment irréversible du module : le texte reçu et les
+   pièces disparaissent pour de bon (côté client, confirmation en clair).
+
+   L'ARTICLE issu de ce courrier n'est JAMAIS touché : il vit sa vie au
+   marbre ou en page. On se contente de le signaler dans la réponse pour
+   que l'interface puisse le dire.                                      */
+export async function handleInboxDelete(request, env, inboxId) {
+  const origin = getAllowedOrigin(env, request);
+  await ensureDeskSchema(env);
+  const row = await env.DB.prepare('SELECT * FROM dk_inbox WHERE id = ?').bind(inboxId).first();
+  if (!row) return err('Courrier introuvable', 404, origin);
+  const u = await dkMemberGate(request, env, origin, row.pub_id);
+  if (u.error) return u.error;
+
+  let atts = []; try { atts = JSON.parse(row.attachments || '[]'); } catch (_) {}
+  // On ne purge que les objets R2 encore PROPRES à ce courrier : si le tri
+  // les a promus au casier d'un article, ils appartiennent maintenant à
+  // l'article et les effacer laisserait une pièce morte dans sa fiche.
+  let pieces = 0;
+  for (const a of atts) {
+    if (!a || !a.r2_key) continue;
+    const encoreAuCasier = await env.DB.prepare('SELECT 1 AS x FROM dk_files WHERE pub_id = ? AND r2_key = ? LIMIT 1')
+      .bind(row.pub_id, a.r2_key).first();
+    if (encoreAuCasier) continue;
+    if (env.DK_CASIER) await env.DK_CASIER.delete(a.r2_key).catch(() => {});
+    pieces++;
+  }
+  const art = row.art_id
+    ? await env.DB.prepare('SELECT title FROM dk_articles WHERE id = ?').bind(row.art_id).first()
+    : null;
+  await env.DB.prepare('DELETE FROM dk_inbox WHERE id = ?').bind(inboxId).run();
+  return json({ ok: true, pieces_purgees: pieces, article_conserve: art ? art.title : null }, 200, origin);
+}
+
 // POST /api/desk/inbox/:id/reject — écarter (pièces R2 purgées, trace gardée).
 export async function handleInboxReject(request, env, inboxId) {
   const origin = getAllowedOrigin(env, request);
