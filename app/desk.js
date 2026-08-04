@@ -2102,7 +2102,7 @@ async function _openBacList(vue) {
         <button data-v="trier" class="${_bacVue === 'trier' ? 'on' : ''}">À trier${pend.length ? ' (' + pend.length + ')' : ''}</button>
         <button data-v="tout" class="${_bacVue === 'tout' ? 'on' : ''}">Tout le courrier</button>
       </div>
-      ${_bacVue === 'tout' && perdus ? `<p class="dk-bac-alert">${icon('alert-triangle', 13)} ${perdus} courrier${perdus > 1 ? 's ont' : ' a'} perdu son article — vous pouvez le reprendre.</p>` : ''}
+      ${_bacVue === 'tout' && perdus ? `<p class="dk-bac-alert">${icon('alert-triangle', 13)} ${perdus > 1 ? `${perdus} courriers ont perdu leur article — vous pouvez les reprendre.` : `1 courrier a perdu son article — vous pouvez le reprendre.`}</p>` : ''}
       ${_bacVue === 'tout' && (_D.courrier_non_lus || 0) ? `<div class="dk-btn-row" style="margin-bottom:9px"><button class="dk-btn small" data-act="toutlu">Tout marquer comme lu (${_D.courrier_non_lus})</button></div>` : ''}
       ${rows.length ? rows.map(r => {
         const atts = _bacAtts(r);
@@ -2121,6 +2121,7 @@ async function _openBacList(vue) {
             <div class="dk-banc-meta">${_esc(_bacQui(r))} · ${_relTime(r.received_at)}${atts.length ? ' · ' + atts.length + ' pièce' + (atts.length > 1 ? 's' : '') : ''}<br><span class="dk-bac-sort ${sort.cls}">${_esc(ligne)}</span></div>
           </div>
           <button class="dk-btn small ${pending ? 'primary' : ''}" data-bac="${r.id}">${pending ? 'Trier' : 'Ouvrir'}</button>
+          <button class="dk-iconbtn" data-suppr="${r.id}" title="Effacer définitivement ce courrier" aria-label="Effacer définitivement">${icon('trash-2', 14)}</button>
         </div>`;
       }).join('') : `<p class="dk-empty-line">${_bacVue === 'tout' ? 'Aucun courrier reçu pour l\'instant.' : 'Le bac est vide — tout est rattaché.'}</p>`}
       <p class="dk-note">${_bacVue === 'tout'
@@ -2144,6 +2145,29 @@ async function _openBacList(vue) {
     if (!row) return;
     if (row.status === 'pending') _openBacItem(row); else _openCourrierItem(row);
   });
+  // Effacer depuis la LISTE : confirmation en toutes lettres dans la ligne
+  // elle-même, pour ne pas avoir à ouvrir chaque pli pour faire le ménage.
+  insp.querySelectorAll('[data-suppr]').forEach(b => b.onclick = () => {
+    const row = rows.find(x => x.id === b.dataset.suppr);
+    const item = b.closest('.dk-banc-item');
+    if (!row || !item || item.querySelector('[data-supproui]')) return;
+    item.innerHTML = `<div class="dk-file-confirm">
+      <span class="dk-file-confirm-q">Effacer « ${_esc(row.subject || 'ce courrier')} » sans retour possible ?${row.art_title ? ` L'article « ${_esc(row.art_title)} » est conservé.` : ''}</span>
+      <span class="dk-file-confirm-acts">
+        <button class="dk-btn small dk-btn-danger" data-supproui>Effacer</button>
+        <button class="dk-btn small" data-supprnon>Annuler</button>
+      </span></div>`;
+    item.querySelector('[data-supprnon]').onclick = () => _openBacList();
+    item.querySelector('[data-supproui]').onclick = async () => {
+      try {
+        await _api('/inbox/' + row.id, { method: 'DELETE' });
+        _toast('Courrier effacé.');
+        _courrier = null;
+        await _loadIssue(true);
+        _openBacList();
+      } catch (e) { _toast(e.message, true); }
+    };
+  });
 }
 
 /* Un courrier DÉJÀ classé : on le relit, et on peut le reprendre — c'est
@@ -2154,6 +2178,10 @@ function _openCourrierItem(row) {
   const atts = _bacAtts(row);
   const sort = _bacSort(row);
   const rubs = _D.rubriques || [];
+  // Le panneau s'ouvrait TOUJOURS sur « Sans rubrique », même quand la
+  // digestion avait déjà proposé une rubrique ou que l'article d'accueil en
+  // portait une : on repartait de zéro à chaque réouverture.
+  const rubSeed = (_artById(row.art_id)?.rub_id) || _bacSugg(row).rub_id || '';
   insp.innerHTML = _inspShell(row.subject || '(sans objet)',
     `<div class="dk-insp-rub">${_esc(_bacQui(row))} · ${_relTime(row.received_at)}</div>`,
     `<div class="dk-sec"><h4>Ce qu'il est devenu</h4>
@@ -2170,7 +2198,7 @@ function _openCourrierItem(row) {
       <label class="dk-field"><span>Titre</span><input type="text" data-k="rtitle" maxlength="240" value="${_esc(row.subject || '')}"></label>
       <label class="dk-field"><span>Rubrique</span><select data-k="rrub">
         <option value="">Sans rubrique</option>
-        ${rubs.map(r => `<option value="${r.id}">${_esc(r.name)}</option>`).join('')}
+        ${rubs.map(r => `<option value="${r.id}" ${rubSeed === r.id ? 'selected' : ''}>${_esc(r.name)}</option>`).join('')}
       </select></label>
       <label class="dk-field"><span>Contributeur</span><input type="text" data-k="rcontrib" maxlength="160" value="${_esc(row.orig_name || row.from_name || '')}"></label>
       <div class="dk-btn-row">
