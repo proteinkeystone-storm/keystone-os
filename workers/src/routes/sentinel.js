@@ -45,7 +45,7 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 import { analyzePage, detectPlatform, dedupeFixCode, smoothCwv, rawCwv, CWV_SMOOTH_N, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S17.0';
+const SENTINEL_ENGINE_VERSION = 'S17.1';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -208,6 +208,12 @@ async function _gate(request, env, origin) {
   await _ensureTenant(env, tenant, claims && claims.plan);
   return { claims, tenant, plan: _planOf(request, env, claims) };
 }
+
+// S17.1 — séparateur décimal FRANÇAIS dans les textes lus par le client.
+// Le résumé « en clair » écrivait déjà « 3,4 s » quand le titre du finding et
+// la carte KPI affichaient « 3.4 s » : trois écritures du même nombre sur une
+// seule page de rapport. Les coordonnées SVG, elles, gardent le point.
+const _fr1 = (n) => Number(n).toFixed(1).replace('.', ',');
 
 // ── Sondes (fetch) ──────────────────────────────────────────────
 function _classify(status) { return (status >= 200 && status < 400) ? 1 : 0; }
@@ -619,10 +625,10 @@ async function _finalizeCrawl(env, c) {
   const scores = { disponibilite: dispo, performance: perf, ...agg.scores };
   const findings = agg.findings.slice();
   if (cwv) {
-    if (cwv.lcp >= 4000) findings.push({ axis: 'performance', sev: 'high', key: 'perf_lcp', title: `Chargement lent (LCP ${(cwv.lcp / 1000).toFixed(1)} s)`, detail: 'Cible : moins de 2,5 s — compressez images et scripts.' });
-    else if (cwv.lcp >= 2500) findings.push({ axis: 'performance', sev: 'medium', key: 'perf_lcp', title: `Chargement à améliorer (LCP ${(cwv.lcp / 1000).toFixed(1)} s)`, detail: 'Cible : moins de 2,5 s.' });
+    if (cwv.lcp >= 4000) findings.push({ axis: 'performance', sev: 'high', key: 'perf_lcp', title: `Chargement lent (LCP ${_fr1(cwv.lcp / 1000)} s)`, detail: 'Cible : moins de 2,5 s — compressez images et scripts.' });
+    else if (cwv.lcp >= 2500) findings.push({ axis: 'performance', sev: 'medium', key: 'perf_lcp', title: `Chargement à améliorer (LCP ${_fr1(cwv.lcp / 1000)} s)`, detail: 'Cible : moins de 2,5 s.' });
     if (cwv.cls >= 0.25) findings.push({ axis: 'performance', sev: 'medium', key: 'perf_cls', title: `La page saute au chargement (CLS ${cwv.cls})`, detail: 'Réservez les dimensions des images, bannières et publicités.' });
-    if (cwv.weightKb >= 3072) findings.push({ axis: 'performance', sev: 'low', key: 'perf_weight', title: `Page lourde (${(cwv.weightKb / 1024).toFixed(1)} Mo)`, detail: 'Allégez images et scripts pour accélérer le mobile.' });
+    if (cwv.weightKb >= 3072) findings.push({ axis: 'performance', sev: 'low', key: 'perf_weight', title: `Page lourde (${_fr1(cwv.weightKb / 1024)} Mo)`, detail: 'Allégez images et scripts pour accélérer le mobile.' });
   }
   _cacheHint(findings, pagesAudited.length);        // S15.3
   _attachFixes(findings, { url: site.url, host: _hostOf(site.url), platform: site.platform });
@@ -1287,10 +1293,10 @@ export async function handleSiteAudit(request, env, id) {
   const scores = { disponibilite: dispo, performance: perf, ...a.scores };   // null = axe « n/a »
   const findings = a.findings.slice();
   if (cwv) {
-    if (cwv.lcp >= 4000) findings.push({ axis: 'performance', sev: 'high', key: 'perf_lcp', title: `Chargement lent (LCP ${(cwv.lcp / 1000).toFixed(1)} s)`, detail: 'Cible : moins de 2,5 s — compressez images et scripts.' });
-    else if (cwv.lcp >= 2500) findings.push({ axis: 'performance', sev: 'medium', key: 'perf_lcp', title: `Chargement à améliorer (LCP ${(cwv.lcp / 1000).toFixed(1)} s)`, detail: 'Cible : moins de 2,5 s.' });
+    if (cwv.lcp >= 4000) findings.push({ axis: 'performance', sev: 'high', key: 'perf_lcp', title: `Chargement lent (LCP ${_fr1(cwv.lcp / 1000)} s)`, detail: 'Cible : moins de 2,5 s — compressez images et scripts.' });
+    else if (cwv.lcp >= 2500) findings.push({ axis: 'performance', sev: 'medium', key: 'perf_lcp', title: `Chargement à améliorer (LCP ${_fr1(cwv.lcp / 1000)} s)`, detail: 'Cible : moins de 2,5 s.' });
     if (cwv.cls >= 0.25) findings.push({ axis: 'performance', sev: 'medium', key: 'perf_cls', title: `La page saute au chargement (CLS ${cwv.cls})`, detail: 'Réservez les dimensions des images, bannières et publicités.' });
-    if (cwv.weightKb >= 3072) findings.push({ axis: 'performance', sev: 'low', key: 'perf_weight', title: `Page lourde (${(cwv.weightKb / 1024).toFixed(1)} Mo)`, detail: 'Allégez images et scripts pour accélérer le mobile.' });
+    if (cwv.weightKb >= 3072) findings.push({ axis: 'performance', sev: 'low', key: 'perf_weight', title: `Page lourde (${_fr1(cwv.weightKb / 1024)} Mo)`, detail: 'Allégez images et scripts pour accélérer le mobile.' });
   }
   _cacheHint(findings, a.pageCount);                // S15.3
   _attachFixes(findings, { url: site.url, host: _hostOf(site.url), platform: site.platform });

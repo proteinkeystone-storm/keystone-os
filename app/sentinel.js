@@ -600,7 +600,7 @@ function _kpiCardsHTML(c) {
   const a = c.audit || {};
   const score = a.score;
   const lcp = a.cwv && a.cwv.lcp;
-  const lcpTxt = (lcp != null && lcp > 0) ? (lcp / 1000).toFixed(1) + ' s' : 'n/a';
+  const lcpTxt = (lcp != null && lcp > 0) ? (lcp / 1000).toFixed(1).replace('.', ',') + ' s' : 'n/a';   // S17.1 — virgule décimale
   const lcpAssess = (lcp == null || lcp <= 0) ? ' ' : (lcp <= 2500 ? '✓ bon' : (lcp <= 4000 ? 'à améliorer' : 'lent'));
   const upTxt = c.uptime30d != null ? String(c.uptime30d).replace('.', ',') + ' %' : 'historique insuffisant';
   // S9/C13 — tendance null = « pas assez de données », pas « stable ».
@@ -1144,7 +1144,7 @@ function _exportPdf() {
 
   // ── KPI ──
   const lcp = p.cwv && p.cwv.lcp;
-  const lcpTxt = (lcp != null && lcp > 0) ? (lcp / 1000).toFixed(1) + ' s' : 'n/a';
+  const lcpTxt = (lcp != null && lcp > 0) ? (lcp / 1000).toFixed(1).replace('.', ',') + ' s' : 'n/a';   // S17.1 — virgule décimale
   const up = p.uptime30d != null ? String(p.uptime30d).replace('.', ',') + ' %' : 'n/a';
   const scTrend = p.scoreTrend == null ? 'première mesure' : (p.scoreTrend > 0 ? `+${p.scoreTrend} cette semaine` : (p.scoreTrend < 0 ? `${p.scoreTrend} cette semaine` : 'stable'));
   const sslTxt = p.ssl && p.ssl.valid ? 'Valide' : (p.ssl && p.ssl.https ? 'À vérifier' : 'HTTP');
