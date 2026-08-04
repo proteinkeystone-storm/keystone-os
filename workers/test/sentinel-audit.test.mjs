@@ -18,7 +18,7 @@ import { gunzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyzePage, extractJsonLd, LOCALBUSINESS_TYPES, globalScore, perfScore, AXIS_WEIGHTS, sitemapLooksValid, phoneInText, addressInText } from '../src/lib/audit-page.js';
+import { analyzePage, extractJsonLd, LOCALBUSINESS_TYPES, globalScore, perfScore, AXIS_WEIGHTS, sitemapLooksValid, phoneInText, addressInText, entitySplit } from '../src/lib/audit-page.js';
 
 const FIX = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const load = (name) => gunzipSync(readFileSync(join(FIX, `${name}.html.gz`))).toString('utf-8');
@@ -56,7 +56,14 @@ t('mas-home : H1 détecté, LodgingBusiness reconnu, findings = horaires + stagi
   // Révision S10 (vérifiée à la main le 2026-08-03) : le JSON-LD LodgingBusiness
   // du Mas déclare bien url=proteinstd.wixstudio.com — VRAI défaut, le finding
   // C17 DOIT sortir. Toujours ni 'h1' ni 'nap_localbiz' (les 2 faux négatifs S7).
-  assert.deepEqual(keys(r), ['jsonld_url_mismatch', 'nap_hours']);
+  // Révision S16/C24 (re-vérifiée À LA MAIN le 2026-08-04, sur la fixture ET
+  // sur la page servie en direct) : cette home porte DEUX fiches du même
+  // établissement — LodgingBusiness (bloc maison) et LocalBusiness (généré par
+  // Wix depuis « Infos de l'entreprise »), mêmes nom et téléphone, aucun @id
+  // commun. Défaut réel, jamais signalé jusqu'ici : le finding DOIT sortir.
+  // Les pages gîtes, elles, n'ont qu'un seul nœud — d'où l'attendu inchangé
+  // ci-dessous : Wix ne génère sa fiche que sur la page d'accueil.
+  assert.deepEqual(keys(r), ['jsonld_entity_split', 'jsonld_url_mismatch', 'nap_hours']);
   assert.equal(r.scores.seo, 100);                     // S10 = informatif, ne touche pas au barème
   assert.equal(r.scores.accessibilite, 100);
   assert.equal(r.scores.presence, 85);                 // 30+35+20, horaires absents (réel)
@@ -114,7 +121,11 @@ t('mas-home tronquée à 500 Ko : h1 indéterminé, AUCUN faux finding (le vrai 
   assert.equal(r.truncated, true);
   // Preuve asymétrique S8/S10 : le staging (VU dans le buffer) reste un
   // finding valable même tronqué ; le H1 (non vu) reste indéterminé.
-  assert.deepEqual(keys(r), ['jsonld_url_mismatch']);  // l'ancien moteur émettait 'h1' ici — LE bug
+  // S16/C24 s'ajoute pour la même raison : les deux fiches ont été VUES dans
+  // le buffer, et un bloc JSON-LD ne se parse que s'il est complet (un
+  // <script> coupé échoue au JSON.parse et est ignoré). L'absence d'@id
+  // commun est donc constatée sur deux objets entiers, pas déduite d'un vide.
+  assert.deepEqual(keys(r), ['jsonld_entity_split', 'jsonld_url_mismatch']);  // l'ancien moteur émettait 'h1' ici — LE bug
   assert.ok(r.indeterminate.includes('h1'));
   assert.ok(r.indeterminate.includes('nap_hours'));    // « pas trouvé » sur tronqué ≠ absent
   assert.equal(r.scores.presence, 100);                // renormalisé sur tél+adresse+fiche (trouvés)
@@ -392,7 +403,7 @@ t('S13 · MANAGED_PLATFORMS : squarespace et shopify scopés comme wix', () => {
 });
 t('S13 · non-régression : les fixtures Wix réelles sont INSENSIBLES au strip', () => {
   const r = analyzePage(load('wix-studio-mas-home'), { sitemap: true, url: 'https://lemasdesbouteillans.com/' });
-  assert.deepEqual(keys(r), ['jsonld_url_mismatch', 'nap_hours']);   // identique à S10
+  assert.deepEqual(keys(r), ['jsonld_entity_split', 'jsonld_url_mismatch', 'nap_hours']);   // S10 + la scission d'entités S16/C24
   assert.equal(r.scores.seo, 100);
   assert.equal(r.spaShell, false);                     // 3,3 Mo de contenu ≠ coquille
 });
@@ -530,6 +541,75 @@ t('S16 · phoneInText / addressInText : la table de vérité, cas par cas', () =
     ['The event takes place at our venue. Order 12345 Shipped today.', false]]) {
     assert.equal(addressInText(s), exp, `address: ${s}`);
   }
+});
+
+// ═══ S16/C24 — deux fiches pour un seul établissement ════════════════════
+// La promesse faite au client du Mas et jamais tenue : le LocalBusiness que
+// Wix génère depuis « Infos de l'entreprise » n'a pas d'@id, il reste étranger
+// au LodgingBusiness du bloc maison. Vérité terrain relevée à la main sur la
+// page servie le 2026-08-04 : 3 nœuds, deux fiches du même établissement
+// (mêmes nom, téléphone et rue), aucun lien entre elles.
+
+t('S16/C24 · le cas du Mas : LodgingBusiness + LocalBusiness Wix, rien ne les relie', () => {
+  const s = entitySplit([
+    { '@type': 'LodgingBusiness', '@id': 'https://www.lemasdesbouteillans.com/#business', name: 'Le Mas des Bouteillans', telephone: '+33680637511' },
+    { '@type': 'LocalBusiness', name: 'Le Mas des Bouteillans', telephone: '+33 6 80 63 75 11' },
+    { '@type': 'WebSite', name: 'Le Mas des Bouteillans' },
+  ]);
+  assert.ok(s, 'la scission doit être détectée');
+  assert.equal(s.a, 'LodgingBusiness');
+  assert.equal(s.b, 'LocalBusiness');
+  assert.equal(s.missingId, true);
+});
+
+t('S16/C24 · @id commun = fusionnées : plus aucun finding', () => {
+  const id = 'https://exemple.fr/#business';
+  assert.equal(entitySplit([
+    { '@type': 'LodgingBusiness', '@id': id, name: 'Le Mas' },
+    { '@type': 'LocalBusiness', '@id': id, name: 'Le Mas' },
+  ]), null);
+});
+
+t('S16/C24 · une fiche qui CITE l\'@id de l\'autre est reliée (parentOrganization)', () => {
+  assert.equal(entitySplit([
+    { '@type': 'Organization', '@id': 'https://exemple.fr/#org', name: 'Groupe Durand' },
+    { '@type': 'Restaurant', '@id': 'https://exemple.fr/#resto', name: 'Groupe Durand', parentOrganization: { '@id': 'https://exemple.fr/#org' } },
+  ]), null);
+});
+
+t('S16/C24 · téléphone identique malgré la mise en forme = même entité', () => {
+  const s = entitySplit([
+    { '@type': 'Restaurant', name: 'Chez Louise', telephone: '+33 4 94 90 12 56' },
+    { '@type': 'LocalBusiness', name: 'Restaurant Chez Louise Namur', telephone: '0033494901256' },
+  ]);
+  assert.ok(s, 'noms différents mais même numéro');
+});
+
+t('S16/C24 · CONTRÔLE NÉGATIF — un annuaire de commerces n\'est PAS une scission', () => {
+  assert.equal(entitySplit([
+    { '@type': 'Restaurant', name: 'La Bonne Fourchette', telephone: '+33 4 94 11 11 11', address: { streetAddress: '1 rue A' } },
+    { '@type': 'Bakery', name: 'Le Fournil', telephone: '+33 4 94 22 22 22', address: { streetAddress: '2 rue B' } },
+    { '@type': 'HairSalon', name: 'Coiffure Sud', telephone: '+33 4 94 33 33 33', address: { streetAddress: '3 rue C' } },
+  ]), null);
+});
+
+t('S16/C24 · CONTRÔLE NÉGATIF — les fixtures saines restent muettes', () => {
+  // pks : ProfessionalService seul (WebSite/SoftwareApplication/FAQPage ne
+  // sont pas des fiches d'établissement). wordpress.org : Organization seule.
+  for (const f of ['static-vercel-pks', 'wordpress-org']) {
+    const r = analyzePage(load(f), { sitemap: true, url: 'https://x.fr/' });
+    assert.ok(!keys(r).includes('jsonld_entity_split'), f);
+  }
+  // Les pages gîtes du Mas : un seul LodgingBusiness — Wix ne génère sa fiche
+  // que sur la page d'accueil.
+  const g = analyzePage(load('wix-studio-mas-arbousier'), { skipSite: true, sitemap: true, url: 'https://lemasdesbouteillans.com/arbousier' });
+  assert.ok(!keys(g).includes('jsonld_entity_split'));
+});
+
+t('S16/C24 · informatif : le finding ne promet aucun point de score', () => {
+  const f = [{ key: 'jsonld_entity_split', sev: 'medium', pages: ['/'] }];
+  attachGains(f, { scores: { seo: 90, securite: 100, accessibilite: 100, presence: 85, performance: 80, disponibilite: 100 }, pageCount: 5, notApplicable: [] });
+  assert.equal(f[0].gain, 0);   // hors barème, comme tous les contrôles S10+
 });
 
 console.log(`\n${n} tests OK — moteur S8→S16 conforme à la vérité terrain des fixtures.`);

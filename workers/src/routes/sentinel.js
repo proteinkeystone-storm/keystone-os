@@ -45,7 +45,7 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 import { analyzePage, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S16.0';
+const SENTINEL_ENGINE_VERSION = 'S16.1';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -687,6 +687,21 @@ function _wixFix(key, ctx) {
       'Éditeur Wix : sélectionnez le titre principal de la page › dans la barre de texte, choisissez le style « Titre 1 ».',
       'Gardez UN seul Titre 1 par page ; passez les sous-titres en « Titre 2 / 3 ».',
       'Publiez.'] };
+    // S16/C24 — Wix génère TOUT SEUL une fiche « Local Business » sur la page
+    // d'accueil dès que « Infos de l'entreprise » contient un nom et une
+    // adresse. Elle n'a pas d'@id : elle reste étrangère au bloc que vous avez
+    // ajouté vous-même. Wix permet de la convertir en balisage personnalisé —
+    // c'est là qu'on pose l'@id commun (ou qu'on l'exclut, si votre bloc est
+    // plus riche : LodgingBusiness bat LocalBusiness pour un hébergement).
+    case 'jsonld_entity_split': return { steps: [
+      'Tableau de bord Wix › Marketing et SEO › « Réglages SEO » › choisissez le type de page « Page d\'accueil » › « Personnaliser les valeurs par défaut ».',
+      'Ouvrez le balisage « Local Business » : « Aperçu du préréglage » puis « Convertir en balisage personnalisé » (c\'est ce qui rend le JSON-LD éditable).',
+      `Dans le code, ajoutez la ligne "@id" avec EXACTEMENT la même valeur que dans votre propre bloc : "@id": "${origin || 'https://votre-domaine.fr'}/#business". Deux fiches qui partagent un @id sont fusionnées en une seule entité.`,
+      'Variante plus radicale, si votre bloc maison est le plus complet : au même endroit, EXCLUEZ le balisage Local Business de la page d\'accueil — vous ne gardez qu\'une fiche, la vôtre.',
+      'Enregistrez, puis PUBLIEZ (c\'est la publication qui purge le cache Wix).',
+      'Contrôlez avec l\'outil de test des résultats enrichis de Google : une seule entité doit apparaître.'],
+      codeLabel: 'La ligne à ajouter dans le balisage Wix', code:
+`"@id": "${origin || 'https://votre-domaine.fr'}/#business"` };
     case 'canonical': return { steps: [
       'Wix gère les balises canoniques automatiquement — en général, rien à faire.',
       'Si vraiment nécessaire : éditeur › page › panneau SEO › « Avancé » › « Balise canonique ».'] };
@@ -756,6 +771,14 @@ function _fixFor(key, ctx, f) {
       codeLabel: 'Champs à corriger dans votre JSON-LD', code:
 `"url": "${ctx.url || 'https://votre-domaine.fr'}",
 "@id": "${ctx.url || 'https://votre-domaine.fr'}#business"` };
+    case 'jsonld_entity_split': return { steps: [
+      'Repérez les DEUX blocs de données structurées qui décrivent votre établissement : le vôtre, et celui que votre plateforme (ou une extension SEO) ajoute automatiquement.',
+      `Donnez-leur le MÊME identifiant : ajoutez "@id": "${ctx.url ? (() => { try { return new URL(ctx.url).origin; } catch (_) { return 'https://votre-domaine.fr'; } })() : 'https://votre-domaine.fr'}/#business" dans CHACUN des deux blocs.`,
+      'Si votre site tourne sous WordPress : quand deux extensions SEO (Yoast, Rank Math, un thème…) produisent chacune leur fiche, n\'en gardez qu\'une active — c\'est plus sain que de les aligner à la main.',
+      'Alternative : supprimez le bloc en double et ne conservez que le plus complet.',
+      'Republiez, puis vérifiez avec l\'outil de test des résultats enrichis de Google : une seule entité doit apparaître.'],
+      codeLabel: 'L\'identifiant commun à poser dans les deux blocs', code:
+`"@id": "${ctx.url ? (() => { try { return new URL(ctx.url).origin; } catch (_) { return 'https://votre-domaine.fr'; } })() : 'https://votre-domaine.fr'}/#business"` };
     case 'canonical_mismatch': return { steps: [
       'La balise canonical de la page pointe vers un AUTRE domaine : Google est invité à indexer ce domaine-là à votre place.',
       'Corrigez le href de <link rel="canonical"> pour qu\'il pointe vers la page elle-même, sur votre domaine.',

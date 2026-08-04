@@ -233,6 +233,57 @@ export function addressInText(text) {
       || scan(new RegExp(`\\b(?:${STREET_TYPES_NUMBERED})\\b`, 'gi'), true);
 }
 
+// ═══ S16/C24 — entités dupliquées et non fusionnées ══════════════════════
+// Cas fondateur (Le Mas des Bouteillans, vérifié en direct le 2026-08-04) :
+// la home sert DEUX fiches pour le même établissement —
+//   · LodgingBusiness  @id=…/#business   (bloc maison : checkinTime, priceRange)
+//   · LocalBusiness    @id ABSENT        (généré par Wix depuis « Infos de
+//                                         l'entreprise », mêmes nom/tél/adresse)
+// Rien ne les relie. Les moteurs et les IA peuvent y voir deux établissements,
+// ou n'en retenir qu'un — et c'est souvent le pauvre. Les signaux qui valent
+// (heure d'arrivée, fourchette de prix) sont alors perdus.
+// Schema.org fusionne les nœuds qui PARTAGENT un « @id » : c'est le geste.
+const _normName = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+// Téléphone comparable malgré la mise en forme : « +33680637511 » et
+// « +33 6 80 63 75 11 » sont le même numéro.
+const _normPhone = (s) => String(s || '').replace(/\D/g, '').replace(/^(?:00)?33/, '').replace(/^0/, '');
+const _streetOf = (n) => {
+  const a = n && n.address;
+  if (!a) return '';
+  return _normName(typeof a === 'string' ? a : (a.streetAddress || ''));
+};
+
+// Renvoie { a, b, name, missingId } si deux fiches décrivent la même entité
+// sans être reliées, sinon null.
+export function entitySplit(nodes) {
+  const isEntity = (n) => {
+    const t = n && n['@type']; const tl = Array.isArray(t) ? t : (t ? [t] : []);
+    return tl.some((x) => LOCALBUSINESS_TYPES.has(x) || x === 'Organization');
+  };
+  const typeOf = (n) => { const t = n['@type']; return Array.isArray(t) ? t.join('+') : String(t || ''); };
+  const ents = (nodes || []).filter(isEntity);
+  for (let i = 0; i < ents.length; i++) {
+    for (let j = i + 1; j < ents.length; j++) {
+      const a = ents[i], b = ents[j];
+      // Même entité ? nom identique, ou même téléphone, ou même rue.
+      const sameName = !!_normName(a.name) && _normName(a.name) === _normName(b.name);
+      const samePhone = !!_normPhone(a.telephone) && _normPhone(a.telephone) === _normPhone(b.telephone);
+      const sameStreet = !!_streetOf(a) && _streetOf(a) === _streetOf(b);
+      if (!sameName && !samePhone && !sameStreet) continue;
+      // Reliées ? même @id, ou l'une cite l'@id de l'autre (parentOrganization,
+      // sameAs, brand…). Une citation suffit : le graphe est alors explicite.
+      const ida = typeof a['@id'] === 'string' ? a['@id'] : '';
+      const idb = typeof b['@id'] === 'string' ? b['@id'] : '';
+      if (ida && ida === idb) continue;
+      if (ida && JSON.stringify(b).includes(ida)) continue;
+      if (idb && JSON.stringify(a).includes(idb)) continue;
+      return { a: typeOf(a), b: typeOf(b), name: a.name || b.name || '', missingId: !ida || !idb };
+    }
+  }
+  return null;
+}
+
 // ═══ S10 — contrôles à valeur ═════════════════════════════════════════════
 
 // Hôtes de staging/brouillon des plateformes — une URL de prod déclarée sur
@@ -293,7 +344,7 @@ export const FINDING_POINTS = {
   nap_localbiz: [['presence', 20]], nap_hours: [['presence', 15]],
 };
 // Informatifs : réels et importants, mais HORS barème — gain 0, dit tel quel.
-export const INFO_GAIN_KEYS = new Set(['jsonld_url_mismatch', 'canonical_mismatch', 'canonical_inconsistent', 'wix_subdomain', 'title_long']);
+export const INFO_GAIN_KEYS = new Set(['jsonld_url_mismatch', 'canonical_mismatch', 'canonical_inconsistent', 'wix_subdomain', 'title_long', 'jsonld_entity_split']);
 // Variables : le gain dépend du résultat de l'optimisation (continu) — pas de promesse chiffrée.
 export const VARIABLE_GAIN_KEYS = new Set(['perf_lcp', 'perf_cls', 'perf_weight', 'img_alt']);
 
@@ -579,6 +630,16 @@ export function analyzePage(html, opts = {}) {
         staging ? 'URL de staging dans les données structurées' : 'Données structurées : le domaine déclaré n\'est pas celui du site',
         `Votre fiche (JSON-LD) déclare « ${example} » comme adresse officielle, alors que le site audité est ${auditedHost}.${staging ? ' C\'est une adresse de brouillon/staging de plateforme — oubli fréquent lors de la mise en ligne.' : ''} Les moteurs et les IA peuvent attribuer votre établissement au mauvais domaine.`);
     }
+  }
+
+  // ── S16/C24 — deux fiches pour un seul établissement ────────────────────
+  // Informatif (hors barème, comme tous les contrôles S10+) : le défaut ne
+  // coûte pas de points au client, il coûte de la compréhension aux moteurs.
+  const split = entitySplit(ld.nodes);
+  if (split) {
+    add('presence', 'medium', 'jsonld_entity_split',
+      'Deux fiches d\'établissement non reliées',
+      `Votre page décrit « ${split.name || 'votre établissement'} » DEUX fois : une fiche ${split.a} et une fiche ${split.b}, sans rien qui les relie${split.missingId ? ' (l\'une n\'a pas d\'identifiant « @id »)' : ''}. Les moteurs et les IA peuvent y voir deux établissements distincts, ou n\'en retenir qu\'un seul — souvent le moins complet. Donnez le MÊME « @id » aux deux : Schema.org fusionne alors les fiches qui le partagent, et tous vos signaux comptent pour la même entité.`);
   }
 
   // ── S10/C18 — canonical : la VALEUR compte ───────────────────────────────
