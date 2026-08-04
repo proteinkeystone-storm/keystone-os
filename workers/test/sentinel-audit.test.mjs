@@ -703,6 +703,23 @@ t('S16.3 · le même bloc de code ne s\'imprime qu\'UNE fois (rapport WordPress 
   assert.equal(findings[3].fix.code, '<meta …>', 'un bloc unique n\'est jamais touché');
 });
 
+t('S16.4 · dédup : plus de « collez le code ci-dessous » quand il n\'y a plus de code', () => {
+  // 2ᵉ export du rapport WordPress (04/08) : la carte disait « 3. Collez le
+  // code ci-dessous » PUIS « 4. Le bloc plus haut couvre aussi ce point ».
+  // Deux consignes contradictoires, et un « ci-dessous » qui ne désigne rien.
+  const C = '<script>…</script>';
+  const findings = [
+    { key: 'nap_localbiz', sev: 'medium', title: 'Fiche établissement absente', fix: { steps: ['Installez WPCode.', 'Collez le code ci-dessous, enregistrez.'], code: C } },
+    { key: 'nap_address', sev: 'low', title: 'Adresse non structurée', fix: { steps: ['Affichez d\'abord l\'adresse complète sur la page.', 'Installez WPCode.', 'Collez le code ci-dessous, enregistrez.'], code: C } },
+  ];
+  dedupeFixCode(findings);
+  const s = findings[1].fix.steps;
+  assert.ok(!s.some((x) => /ci-dessous|Collez|WPCode/i.test(x)), `étapes de collage résiduelles : ${JSON.stringify(s)}`);
+  assert.equal(s[0], 'Affichez d\'abord l\'adresse complète sur la page.', 'l\'étape qui vaut SANS code est gardée');
+  assert.ok(s[1].includes('rien à coller ici'));
+  assert.equal(s.length, 2);
+});
+
 t('S16.3 · dédup : le bloc reste sur le finding le PLUS prioritaire du groupe', () => {
   const C = 'X';
   const findings = [

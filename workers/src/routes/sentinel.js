@@ -45,7 +45,7 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 import { analyzePage, detectPlatform, dedupeFixCode, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S16.3';
+const SENTINEL_ENGINE_VERSION = 'S16.4';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -808,8 +808,17 @@ function _fixFor(key, ctx, f) {
       'Votre site est publié sur une adresse Wix gratuite (terminant par .wixsite.com) : Google la classe moins bien et elle inspire moins confiance.',
       'Tableau de bord Wix › Réglages › « Domaines » › « Connecter un domaine » : reliez un nom de domaine à votre marque (ex. votre-entreprise.fr).',
       'Un domaine personnalisé améliore le référencement, la crédibilité et le rendu lors des partages.'] };
+    // S16.4 — le titre promettait « affichez un numéro cliquable » et la carte
+    // ne livrait qu'un JSON-LD (constaté sur le rapport Squarespace du 04/08).
+    // Le balisage satisfait le contrôle, mais ce n'est pas ce que lisent les
+    // visiteurs : le geste visible passe donc en PREMIÈRE étape, le balisage
+    // reste le complément structuré.
     case 'jsonld': case 'nap_localbiz': case 'nap_address': case 'nap_phone': case 'nap_hours':
-      return { steps: head, codeLabel: 'Fiche établissement (LocalBusiness — nom, adresse, téléphone, horaires)', code:
+      return { steps: [
+        ...(key === 'nap_phone' ? ['Affichez d\'abord le numéro sur la page (en-tête ou pied de page), en lien cliquable : <a href="tel:+33612345678">06 12 34 56 78</a> — c\'est ce que voient vos visiteurs, et ce qu\'un mobile compose d\'un doigt.'] : []),
+        ...(key === 'nap_address' ? ['Affichez d\'abord l\'adresse complète sur la page (pied de page ou page Contact) : rue, code postal, ville.'] : []),
+        ...(key === 'nap_hours' ? ['Affichez d\'abord vos horaires sur la page — c\'est la première chose qu\'un client cherche.'] : []),
+        ...head], codeLabel: 'Fiche établissement (LocalBusiness — nom, adresse, téléphone, horaires)', code:
 `<script type="application/ld+json">
 {
   "@context": "https://schema.org",

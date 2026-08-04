@@ -241,6 +241,9 @@ export function addressInText(text) {
 // bloc sur le finding le plus prioritaire du groupe (celui que le tri par
 // sévérité affiche en premier) ; les autres y renvoient en une phrase.
 export const SEV_ORDER = { high: 0, medium: 1, low: 2 };
+// Étapes qui n'existent QUE pour faire coller le bloc : elles partent avec lui.
+// (Textes que nous écrivons nous-mêmes — pas d'entrée utilisateur ici.)
+const CODE_STEP = /ci-dessous|ce bloc|collez|coller|snippet|wpcode|code personnalis|custom code/i;
 export function dedupeFixCode(findings) {
   const groups = new Map();
   for (const f of findings) {
@@ -253,8 +256,16 @@ export function dedupeFixCode(findings) {
     g.sort((a, b) => (SEV_ORDER[a.sev] ?? 3) - (SEV_ORDER[b.sev] ?? 3));   // tri stable : à sévérité égale, l'ordre du rapport
     const keeper = g[0];
     for (const f of g.slice(1)) {
+      // S16.4 — retirer le bloc ne suffit pas : il faut aussi retirer les
+      // étapes qui l'accompagnaient. Le rapport WordPress du 04/08 (2ᵉ export)
+      // affichait « 3. Collez le code ci-dessous » suivi de « 4. Le bloc donné
+      // plus haut couvre aussi ce point » — deux consignes qui se contredisent,
+      // et un « ci-dessous » qui ne désigne plus rien. On ne garde que les
+      // étapes qui gardent un sens SANS code (ex. « affichez l'adresse sur la
+      // page »), puis on renvoie au bloc.
+      const utiles = (f.fix.steps || []).filter((s) => !CODE_STEP.test(s));
       f.fix = { ...f.fix, code: null, codeLabel: null,
-        steps: [...(f.fix.steps || []), `Le bloc de code donné plus haut, pour « ${keeper.title} », couvre aussi ce point — inutile de le coller deux fois.`] };
+        steps: [...utiles, `Le bloc de code donné plus haut, pour « ${keeper.title} », règle aussi ce point — rien à coller ici.`] };
     }
   }
   return findings;
