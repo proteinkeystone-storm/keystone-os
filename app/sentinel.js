@@ -432,7 +432,13 @@ function _transparencyHTML(a, platform) {
   // S17 — vitesse lissée : le chiffre qui compte pour le score est la médiane
   // des derniers relevés, et la mesure du jour est donnée à côté. Sans cette
   // ligne, un LCP affiché différent de celui mesuré serait incompréhensible.
-  if (a.cwv && a.cwv.smooth && a.cwv.smooth.n > 1) {
+  if (a.cwv && a.cwv.smooth && a.cwv.smooth.skipped) {
+    // S17.2 — le garde-fou a parlé : un écart de cette taille n'est pas du
+    // bruit. C'est le seul cas où le score bouge fort ; le taire serait pire
+    // que tout, c'est le jour où le client a besoin de comprendre.
+    const sec = (v) => (v / 1000).toFixed(1).replace('.', ',');
+    parts.push(`<div class="snt-transp-row">${icon('alert-triangle', 13)} <b>Changement net de vitesse</b> : ${sec(a.cwv.lcp)} s aujourd'hui contre ${sec(a.cwv.smooth.median)} s en moyenne récente. L'écart dépasse ce que la variation de mesure peut expliquer — c'est donc la mesure du jour qui compte ici, sans lissage.</div>`);
+  } else if (a.cwv && a.cwv.smooth && a.cwv.smooth.n > 1) {
     const brut = a.cwv.smooth.raw && a.cwv.smooth.raw.lcp;
     parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Vitesse lissée</b> : médiane des ${a.cwv.smooth.n} derniers audits${brut ? ` — la mesure d'aujourd'hui seule donnait ${(brut / 1000).toFixed(1).replace('.', ',')} s` : ''}. Un chargement isolé varie beaucoup : le score suit la tendance, pas le hasard d'une mesure.</div>`);
   }
@@ -1219,9 +1225,13 @@ function _exportPdf() {
     : '';
   // S17 — la vitesse affichée est la médiane des N derniers audits : sans cette
   // phrase, le LCP du rapport ne correspondrait à aucune mesure identifiable.
-  const smoothTxt = (p.audit && p.audit.cwv && p.audit.cwv.smooth && p.audit.cwv.smooth.n > 1)
-    ? ` Vitesse lissée : médiane des ${p.audit.cwv.smooth.n} derniers audits${p.audit.cwv.smooth.raw && p.audit.cwv.smooth.raw.lcp ? ` (mesure du jour seule : ${(p.audit.cwv.smooth.raw.lcp / 1000).toFixed(1).replace('.', ',')} s)` : ''} — un chargement isolé varie trop pour porter un score.`
-    : '';
+  const _sm = p.audit && p.audit.cwv && p.audit.cwv.smooth;
+  const _s1 = (v) => (v / 1000).toFixed(1).replace('.', ',');
+  const smoothTxt = (_sm && _sm.skipped)
+    ? ` Changement net de vitesse : ${_s1(p.audit.cwv.lcp)} s aujourd'hui contre ${_s1(_sm.median)} s en moyenne récente — l'écart dépasse ce que la variation de mesure explique, c'est donc la mesure du jour qui compte ici, sans lissage.`
+    : (_sm && _sm.n > 1)
+      ? ` Vitesse lissée : médiane des ${_sm.n} derniers audits${_sm.raw && _sm.raw.lcp ? ` (mesure du jour seule : ${_s1(_sm.raw.lcp)} s)` : ''} — un chargement isolé varie trop pour porter un score.`
+      : '';
   const weightsTxt = 'Pondération du score global : SEO 25 % · Vitesse 20 % · Sécurité (en-têtes) 15 % · Accessibilité de base 15 % · Présence locale 15 % · Disponibilité 10 % — un axe non mesuré est retiré du calcul.';
   const condTxt = (p.audit && p.audit.cwv && p.audit.cwv.conditions === 'mobile-4g-cpu4x') ? `Vitesse mesurée en conditions mobiles émulées (4G lente, CPU ×4).${_cwvR}` : ((p.audit && p.audit.cwv) ? `Vitesse mesurée depuis un datacenter (non bridé) — plus favorable que le mobile réel.${_cwvR}` : '');
   const engTxt = (p.audit && p.audit.engine) ? ` · moteur ${_esc(p.audit.engine)}` : '';

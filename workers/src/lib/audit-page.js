@@ -91,17 +91,40 @@ const _median = (xs) => {
 // (une médiane de médianes dérive et fige le score).
 export function rawCwv(c) { return (c && c.smooth && c.smooth.raw) ? c.smooth.raw : c; }
 
+// S17.2 — GARDE-FOU D'ÉCART. Le lissage seul aveuglait le capteur : sur le
+// code de S17.0, un site qui passe de 3,0 s à 6,2 s voyait sa note de vitesse
+// MONTER de 55 à 82, et un client qui applique notre correctif (5,0 → 1,9 s)
+// gardait 55 et le finding « Chargement lent » — l'exact incident du 04/08
+// (« j'ai corrigé, le rapport ne bouge pas ») refabriqué par nous.
+// Le lissage reste le défaut ; au-delà de CWV_JUMP (40 %) d'écart entre la
+// mesure du jour et la médiane, c'est la mesure du jour qui compte, et le
+// rapport le dit. Calibrage : sur les 7 transitions réelles des trois sites
+// surveillés, le bruit n'a jamais dépassé 26,8 % — le garde-fou n'aurait donc
+// fait exception AUCUNE fois. À revoir quand l'historique sera plus fourni.
+// Écart mesuré sur le LCP seul : 45 % de l'axe, c'est le chiffre affiché en
+// KPI et nommé dans le finding. Le CLS est écarté (0,02 → 0,04 fait +100 %
+// sans rien vouloir dire) et le FCP suit le LCP.
+export const CWV_JUMP = 0.40;
+
 export function smoothCwv(current, previous) {
   // Mesure REPRISE d'un audit précédent (S12.3) : déjà étiquetée comme telle,
   // la lisser une seconde fois brouillerait les deux explications.
   if (!current || current.stale_from) return current;
   const raws = [current, ...(previous || [])].slice(0, CWV_SMOOTH_N).map(rawCwv).filter(Boolean);
   if (raws.length < 2) return current;
-  const out = { ...current, smooth: { n: raws.length, raw: rawCwv(current) } };
+
+  const medians = {};
   for (const k of ['lcp', 'cls', 'fcp', 'weightKb']) {
     const m = _median(raws.map((r) => r[k]));
-    if (m != null) out[k] = m;
+    if (m != null) medians[k] = m;
   }
+  // Changement NET : on ne lisse pas, on rapporte ce qu'on a mesuré.
+  const jour = rawCwv(current);
+  if (medians.lcp && jour.lcp && Math.abs(jour.lcp - medians.lcp) / medians.lcp > CWV_JUMP) {
+    return { ...current, smooth: { skipped: true, n: raws.length, median: medians.lcp } };
+  }
+  const out = { ...current, smooth: { n: raws.length, raw: jour } };
+  for (const [k, m] of Object.entries(medians)) out[k] = m;
   return out;
 }
 

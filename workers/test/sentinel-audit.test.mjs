@@ -800,4 +800,73 @@ t('S17 · métrique manquante dans un relevé : elle est ignorée, pas comptée 
   assert.equal(s.cls, 0.03, 'médiane des DEUX cls présents (0,02 et 0,04)');
 });
 
+// ═══ S17.2 — GARDE-FOU D'ÉCART : les trois attaques qui avaient porté ═════
+// Exercice de détracteur demandé le 04/08 : « prouve que ce qui a été fait ne
+// fonctionne pas ». Trois attaques ont porté sur S17.0, rejouées ici — elles
+// doivent désormais échouer. Seuil calibré sur les 7 transitions RÉELLES des
+// trois sites surveillés : bruit maximal observé 26,8 %, garde-fou à 40 %.
+
+t('S17.2 · ATTAQUE 1 rejouée — un site qui DOUBLE ne doit plus voir son score monter', () => {
+  // Sur S17.0 : mesuré 6,2 s → perf 55 ; lissé 3,1 s → perf 82. Le score
+  // MONTAIT le jour où le site devenait deux fois plus lent.
+  const avant = [{ lcp: 3000, cls: 0.02, fcp: 1200, weightKb: 1800 }, { lcp: 3100, cls: 0.02, fcp: 1200, weightKb: 1800 }];
+  const jour = { lcp: 6200, cls: 0.02, fcp: 1200, weightKb: 1800, conditions: 'mobile-4g-cpu4x' };
+  const s = smoothCwv(jour, avant);
+  assert.equal(s.smooth.skipped, true, 'écart 100 % : le lissage doit être écarté');
+  assert.equal(s.lcp, 6200, 'c\'est la mesure du jour qui compte');
+  assert.equal(perfScore(s), 55);
+  assert.ok(s.smooth.median, 'la médiane écartée reste affichable pour l\'expliquer');
+});
+
+t('S17.2 · ATTAQUE 2 rejouée — le client qui APPLIQUE le correctif doit le voir', () => {
+  // Sur S17.0 : il passait de 5,0 s à 1,9 s et gardait perf 55 + le finding
+  // « Chargement lent ». L'incident du 04/08 refabriqué par nous.
+  const avant = [{ lcp: 5000, cls: 0.02, fcp: 1200, weightKb: 1800 }, { lcp: 5200, cls: 0.02, fcp: 1200, weightKb: 1800 }];
+  const jour = { lcp: 1900, cls: 0.02, fcp: 1200, weightKb: 1800, conditions: 'mobile-4g-cpu4x' };
+  const s = smoothCwv(jour, avant);
+  assert.equal(s.smooth.skipped, true, 'écart 62 % : le lissage doit être écarté');
+  assert.equal(s.lcp, 1900);
+  assert.equal(perfScore(s), 100, 'son travail compte immédiatement');
+  assert.ok(s.lcp < 2500, 'et le finding « Chargement lent » ne sort plus');
+});
+
+t('S17.2 · le BRUIT RÉEL de vos trois sites reste lissé — aucune stabilité perdue', () => {
+  // Les 7 transitions réellement observées (mesures brutes lues en base le
+  // 04/08). Aucune ne doit déclencher le garde-fou, sinon le lissage ne sert
+  // plus à rien et le client retrouve un score qui saute.
+  const series = {
+    'tourisme-lacadieredazur.fr': [3280, 3807, 3416],
+    'districtcafe.ca': [3169, 3997, 3456],
+    'lemasdesbouteillans.com': [1915, 1733, 2429, 1699],
+  };
+  for (const [site, serie] of Object.entries(series)) {
+    for (let i = 1; i < serie.length; i++) {
+      const prev = serie.slice(Math.max(0, i - 2), i).reverse().map((lcp) => ({ lcp, cls: 0.02, fcp: 1200, weightKb: 1800 }));
+      const s = smoothCwv({ lcp: serie[i], cls: 0.02, fcp: 1200, weightKb: 1800 }, prev);
+      assert.ok(!s.smooth.skipped, `${site} audit ${i + 1} (${serie[i]} ms) : bruit ordinaire, doit rester lissé`);
+    }
+  }
+});
+
+t('S17.2 · ATTAQUE 3 rejouée — une mesure reprise ne porte plus l\'étiquette du lissage', () => {
+  // Vérifié sur l'objet RÉELLEMENT stocké en base (audit du 04/08 15h39) :
+  // il contient `smooth`. Au repli S12.3, le rapport annonçait à la fois
+  // « mesure du jour seule : 3,4 s » et « mesure du jour indisponible ».
+  const enBase = { lcp: 3416, cls: 0.043, fcp: 831, weightKb: 194, runs: 3, conditions: 'mobile-4g-cpu4x',
+    smooth: { n: 3, raw: { lcp: 3500, cls: 0.043, fcp: 831, weightKb: 194, runs: 3, conditions: 'mobile-4g-cpu4x' } } };
+  const repris = rawCwv(enBase);        // ce que fait désormais _lastCwv
+  assert.equal(repris.smooth, undefined, 'plus de double étiquette');
+  assert.equal(repris.lcp, 3500, 'et la valeur reprise est une mesure qui a VRAIMENT eu lieu ce jour-là');
+  assert.equal(repris.conditions, 'mobile-4g-cpu4x');
+});
+
+t('S17.2 · le seuil se juge sur le LCP seul — un CLS minuscule ne déclenche rien', () => {
+  // 0,02 → 0,05 fait +150 % en relatif et ne veut rien dire ; le garde-fou ne
+  // doit pas s'y déclencher, sinon il crie sur du bruit.
+  const s = smoothCwv({ lcp: 3000, cls: 0.05, fcp: 1200, weightKb: 1800 },
+    [{ lcp: 3050, cls: 0.02, fcp: 1200, weightKb: 1800 }, { lcp: 2980, cls: 0.02, fcp: 1200, weightKb: 1800 }]);
+  assert.ok(!s.smooth.skipped);
+  assert.equal(s.cls, 0.02, 'le CLS est lissé comme les autres');
+});
+
 console.log(`\n${n} tests OK — moteur S8→S17 conforme à la vérité terrain des fixtures.`);

@@ -45,7 +45,7 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 import { resolveEngineForTenant } from '../lib/llm-router.js';
 import { analyzePage, detectPlatform, dedupeFixCode, smoothCwv, rawCwv, CWV_SMOOTH_N, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
 
-const SENTINEL_ENGINE_VERSION = 'S17.1';
+const SENTINEL_ENGINE_VERSION = 'S17.2';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -1230,7 +1230,13 @@ function _cacheHint(findings, pageCount) {
 async function _lastCwv(env, siteId, interval = '-7 day') {
   const row = await env.DB.prepare(`SELECT cwv, created_at FROM sentinel_audits WHERE site_id = ? AND cwv IS NOT NULL AND created_at >= datetime('now','${interval}') ORDER BY created_at DESC LIMIT 1`).bind(siteId).first();
   if (!row || !row.cwv) return null;
-  try { const c = JSON.parse(row.cwv); c.stale_from = row.created_at; return c; } catch (_) { return null; }
+  // S17.2 — on reprend la mesure BRUTE de ce jour-là, pas la valeur lissée qui
+  // avait été stockée. Sans ça l'objet repris gardait son `smooth`, et le
+  // rapport affichait deux lignes contradictoires : « mesure du jour seule :
+  // 3,4 s » ET « mesure du jour indisponible ». Constaté sur l'objet réellement
+  // en base (audit du 04/08 15h39). Une reprise doit désigner une mesure qui a
+  // vraiment eu lieu à la date annoncée.
+  try { const c = rawCwv(JSON.parse(row.cwv)); c.stale_from = row.created_at; return c; } catch (_) { return null; }
 }
 
 // S17 — les N-1 mesures précédentes, en BRUT, pour lisser celle du jour.
