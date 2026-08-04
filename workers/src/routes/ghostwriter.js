@@ -494,7 +494,7 @@ export async function handleGhostwriterRewrite(request, env) {
         max_tokens: cappedMaxTokens, fallbackOnError: false,
       });
     } catch (e) { return err(e?.message || 'Erreur moteur', e?.httpStatus || 502, origin); }
-    const parsedByok = _parseVariants(out.text);
+    const parsedByok = _parseVariants(out.text, solo);
     if (!parsedByok) return err('Le modèle n\'a pas renvoyé de variantes exploitables.', 502, origin);
     committed = true;
     return json({ variants: parsedByok.variants, model: out.model, usage: out.usage, viaBYOK: true, quota: null }, 200, origin);
@@ -552,7 +552,7 @@ export async function handleGhostwriterRewrite(request, env) {
     lastRawText = rawText;
     if (!rawText) { lastIssue = 'réponse vide ou non-textuelle'; continue; }
 
-    const candidate = _parseVariants(rawText);   // tolérant (fences/préface, 1-3, labels)
+    const candidate = _parseVariants(rawText, solo);   // tolérant (fences/préface, 1-3, labels)
     if (candidate) { parsed = candidate; break; }
     lastIssue = `JSON inexploitable (raw: ${String(rawText).slice(0, 160)})`;
   }
@@ -676,10 +676,18 @@ function _aiText(aiResponse) {
 // FORMAT PRINCIPAL = texte délimité (variantes séparées par « --- ») : robuste,
 // le modèle ne peut pas « oublier une clé » puisqu'il n'y en a pas (c'était LE
 // bug Mistral). Repli JSON (rétro-compat / si le modèle insiste).
-function _parseVariants(rawText) {
+function _parseVariants(rawText, solo) {
   const s = String(rawText || '').trim();
   if (!s) return null;
   const looksJson = s.startsWith('{') || /^```/.test(s);
+  // RELECTURE (solo) : la réponse attendue est UN bloc — donc SANS ligne « --- ».
+  // Exiger le séparateur ici rejetait une réponse pourtant parfaite. _parseDelimited
+  // sait déjà lire un bloc unique (1re ligne = label si courte, reste = texte).
+  if (solo) {
+    const r = _parseJsonVariants(s) || _parseDelimited(s);
+    if (!r || !r.variants.length) return null;
+    return { variants: r.variants.slice(0, 1) };   // une seule, même si le modèle en a donné plus
+  }
   if (looksJson) {
     return _parseJsonVariants(s) || (_hasDelim(s) ? _parseDelimited(s) : null);
   }
@@ -774,3 +782,9 @@ export async function handleGhostwriterQuota(request, env) {
   const used = await _readUsage(env, lookupHmac);
   return json(_quotaPayload(claims.plan, used), 200, origin);
 }
+
+/* Exposé pour le banc (scripts/test-ghostwriter-parse.mjs) : le parseur est
+   la pièce qui a lâché le 5 août quand la relecture a commencé à rendre UN
+   bloc sans séparateur « --- ». Le tester à sec évite d'avoir à faire tourner
+   le modèle pour vérifier une règle de lecture. */
+export { _parseVariants as gwParseVariants };
