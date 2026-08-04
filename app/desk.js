@@ -864,7 +864,7 @@ function _renderFer() {
       <span class="dk-ferbar-spacer"></span>
       ${_relancesDues().length ? `<button class="dk-btn ghost small dk-relbtn" data-act="relances" title="Copies en attente à relancer">${icon('bell', 14)}<span class="dk-btn-txt"> Relances (${_relancesDues().length})</span></button>` : ''}
       <button class="dk-btn ghost small" data-act="prepress" title="Contrôle du PDF final & édition numérique booK">${icon('printer', 14)}<span class="dk-btn-txt"> Pré-impression</span></button>
-      <button class="dk-btn ghost small" data-act="newart">${icon('plus', 14)}<span class="dk-btn-txt"> Article</span></button>
+      <button class="dk-btn cta small" data-act="newart">${icon('plus', 14)}<span class="dk-btn-txt"> Article</span></button>
     </div>
     ${(_D.inbox || []).length ? `<button class="dk-bacstrip" data-act="bac">${icon('mail', 15)}<span>${_D.inbox.length} contribution${_D.inbox.length > 1 ? 's' : ''} à rattacher</span><span class="dk-bacstrip-go">trier ${icon('chevron-right', 13)}</span></button>` : ''}
     ${newTotal ? `<div class="dk-newstrip"><span class="dk-newstrip-dot"></span><span class="dk-newstrip-txt">${_newLabel(newCards, newMarbre)}</span><button class="dk-newstrip-clear" data-act="markseen">Tout marquer comme vu</button></div>` : ''}
@@ -2240,6 +2240,10 @@ function _openArtForm(page, existing, onDone, bancSlot) {
   const insp = _root.querySelector('[data-slot="insp"]');
   const rubs = _D.rubriques || [];
   const a = existing || null;
+  // Pièces jointes dès la création : le casier exige un art_id, donc les
+  // fichiers attendent ici puis partent juste après la création (§DK-3).
+  const staged = [];
+  const stageOn = !a && _D && _D.casier !== 'off';
   insp.innerHTML = _inspShell(a ? 'Modifier l\'article' : 'Nouvel article', null,
     `<div class="dk-sec">
       <label class="dk-field"><span>Titre</span><input type="text" data-k="title" maxlength="240" value="${_esc(a ? a.title : '')}" placeholder="Titre de l'article"></label>
@@ -2257,6 +2261,15 @@ function _openArtForm(page, existing, onDone, bancSlot) {
         <option value="date" ${a && a.fresh === 'date' ? 'selected' : ''}>daté — lié à une actualité</option>
       </select></label>
       <label class="dk-field" data-slot="perimefield" style="${a && a.fresh === 'date' ? '' : 'display:none'}"><span>Périmé après le (optionnel)</span><input type="date" data-k="perime" value="${a && a.perime ? a.perime : ''}"></label>
+      ${stageOn ? `<div class="dk-sec dk-sec-nested">
+        <h4>Pièces jointes</h4>
+        <div data-slot="stagelist"></div>
+        <div class="dk-btn-row" style="margin-top:8px">
+          <button class="dk-btn small" data-act="stagefiles">${icon('upload-cloud', 14)} Joindre des fichiers</button>
+          <input type="file" data-k="stageinput" multiple style="display:none">
+        </div>
+        <p class="dk-note">Photo, PDF ou document — elles partent dès que l'article est créé.</p>
+      </div>` : ''}
       <div class="dk-btn-row" style="margin-top:12px">
         <button class="dk-btn primary" data-act="saveart">${a ? 'Enregistrer' : 'Créer'}</button>
         ${a ? '' : `<button class="dk-btn" data-act="savewrite">${icon('edit-3', 14)} Créer et écrire</button>`}
@@ -2269,6 +2282,30 @@ function _openArtForm(page, existing, onDone, bancSlot) {
   insp.querySelector('[data-k="fresh"]').addEventListener('change', e => {
     insp.querySelector('[data-slot="perimefield"]').style.display = e.target.value === 'date' ? '' : 'none';
   });
+  if (stageOn) {
+    const stageInput = insp.querySelector('[data-k="stageinput"]');
+    const renderStage = () => {
+      const list = insp.querySelector('[data-slot="stagelist"]');
+      list.innerHTML = staged.length
+        ? staged.map((f, i) => `<div class="dk-file">
+            <span class="dk-file-ico">${icon('paperclip', 13)}</span>
+            <div class="dk-file-info">
+              <div class="dk-file-name">${_esc(f.name)}</div>
+              <div class="dk-file-meta">${_fmtSize(f.size)} · <em>part à la création</em></div>
+            </div>
+            <button class="dk-iconbtn" data-unstage="${i}" title="Retirer la pièce" aria-label="Retirer">${icon('x', 14)}</button>
+          </div>`).join('')
+        : `<p class="dk-empty-line">Aucune pièce — photo, PDF ou document. Joignez-les ici : elles suivent l'article, même avant sa mise en page.</p>`;
+      list.querySelectorAll('[data-unstage]').forEach(b => b.onclick = () => {
+        staged.splice(parseInt(b.dataset.unstage, 10), 1); renderStage();
+      });
+    };
+    insp.querySelector('[data-act="stagefiles"]').onclick = () => stageInput.click();
+    stageInput.addEventListener('change', () => {
+      staged.push(...stageInput.files); stageInput.value = ''; renderStage();
+    });
+    renderStage();
+  }
   const back = () => {
     if (onDone) onDone();
     else if (page) _openInsp(page.n, true);
@@ -2297,6 +2334,7 @@ function _openArtForm(page, existing, onDone, bancSlot) {
         _toast(page ? 'Article créé et réservé page ' + _pn(page.n) + '.'
           : bancSlot ? 'Article créé et posé au banc des remplaçants.'
           : 'Article créé — il attend au marbre.');
+        if (staged.length) await _uploadFilesToArt({ id: artId }, staged);
       }
       await _loadIssue(true);
       // Ma propre création/réservation ne doit pas me « pulser ».
