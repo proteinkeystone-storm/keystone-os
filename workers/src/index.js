@@ -186,7 +186,8 @@ import { handleDeskHealth, handleDeskBootstrap, handlePubCreate, handlePubPatch,
          handleCasierUrl, handleCasierDl, handleCasierDelete,
          handleContribUpsert, handleRelanceSend, sweepDeskCasier } from './routes/desk.js';
 // desK DK-4 — adresse de dépôt redaction-*@ : digestion des e-mails + bac à trier.
-import { handleDeskEmail, handleEmailInject, handleInboxApply, handleInboxReject } from './routes/desk-email.js';
+import { handleDeskEmail, handleEmailInject, handleInboxApply, handleInboxReject,
+         handleCourrier, handleInboxReprendre } from './routes/desk-email.js';
 // Key-Ring (Sonnette) — ORDRE 3 : « Sonner » Web Push + boucle retour.
 import { handleKeyringRing, handleKeyringRingStatus, handleKeyringRespond, handleKeyringRespondGet,
          handleKeyringPushSubscribe, handleKeyringPushUnsubscribe, handleKeyringPushStatus, handleKeyringPushList,
@@ -458,6 +459,12 @@ export default {
       if (dkInboxApply && method === 'POST') return handleInboxApply(request, env, dkInboxApply[1]);
       const dkInboxReject = path.match(/^\/api\/desk\/inbox\/([A-Za-z0-9-]+)\/reject$/);
       if (dkInboxReject && method === 'POST') return handleInboxReject(request, env, dkInboxReject[1]);
+      // DK-4c — la bannette : tout le courrier reçu, et la reprise d'un
+      // courrier déjà classé (filet contre la fausse manœuvre).
+      const dkCourrier = path.match(/^\/api\/desk\/publication\/([A-Za-z0-9-]+)\/courrier$/);
+      if (dkCourrier && method === 'GET') return handleCourrier(request, env, dkCourrier[1]);
+      const dkInboxRepr = path.match(/^\/api\/desk\/inbox\/([A-Za-z0-9-]+)\/reprendre$/);
+      if (dkInboxRepr && method === 'POST') return handleInboxReprendre(request, env, dkInboxRepr[1]);
 
       // ── Sentinel (Pad O-GEO-001 · S0) — audit web avec suivi ──
       if (path === '/api/sentinel/health' && method === 'GET')  return handleSentinelHealth(request, env);

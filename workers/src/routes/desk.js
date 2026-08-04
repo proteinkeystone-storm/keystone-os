@@ -261,6 +261,12 @@ async function _ensureSchema(env) {
   // sinon on retient l'adresse de la rédactrice comme si elle signait tout.
   try { await env.DB.prepare(`ALTER TABLE dk_inbox ADD COLUMN orig_email TEXT`).run(); } catch (_) {}
   try { await env.DB.prepare(`ALTER TABLE dk_inbox ADD COLUMN orig_name TEXT`).run(); } catch (_) {}
+  // DK-4c · la bannette : ce que CHAQUE courrier est devenu. Sans cette
+  // colonne, une entrée triée devenait intraçable — on savait qu'elle avait
+  // été traitée, jamais où elle avait atterri. Un article supprimé plus tard
+  // emportait alors la contribution sans laisser de piste.
+  try { await env.DB.prepare(`ALTER TABLE dk_inbox ADD COLUMN art_id TEXT`).run(); } catch (_) {}
+  await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_dk_inbox_pub_recu ON dk_inbox(pub_id, received_at)`).run();
   _schemaReady = true;
 }
 

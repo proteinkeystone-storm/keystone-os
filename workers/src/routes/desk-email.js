@@ -494,8 +494,103 @@ export async function handleInboxApply(request, env, inboxId) {
     return err('Indiquez un article existant (art_id) ou un nouvel article (create)', 400, origin);
   }
 
-  await env.DB.prepare(`UPDATE dk_inbox SET status = 'done', resolved_by = ?, resolved_at = datetime('now') WHERE id = ?`).bind(by, inboxId).run();
+  // On retient OÙ le courrier a atterri : c'est ce qui rend la bannette
+  // capable de dire « rattaché à … » — et de rattraper le coup si l'article
+  // disparaît plus tard.
+  await env.DB.prepare(`UPDATE dk_inbox SET status = 'done', art_id = ?, resolved_by = ?, resolved_at = datetime('now') WHERE id = ?`)
+    .bind(artId, by, inboxId).run();
   return json({ ok: true, art_id: artId }, 200, origin);
+}
+
+/* ═══════════ DK-4c · LA BANNETTE ═════════════════════════════════
+   GET /api/desk/publication/:id/courrier — TOUT ce qui est arrivé par
+   e-mail, quel qu'en soit le sort.
+
+   Le bac ne montrait que `status = 'pending'`. Une entrée triée — même
+   par erreur — disparaissait donc de l'écran pour toujours, alors que
+   son texte et ses pièces dormaient intacts en base. Une fausse
+   manœuvre, et le courrier semblait s'être évaporé. Ici, rien ne sort
+   jamais de la vue : on dit à chaque ligne ce qu'elle est devenue, et
+   si l'article d'accueil a disparu depuis, on le dit aussi.           */
+export async function handleCourrier(request, env, pubId) {
+  const origin = getAllowedOrigin(env, request);
+  await ensureDeskSchema(env);
+  const u = await dkMemberGate(request, env, origin, pubId);
+  if (u.error) return u.error;
+  const url = new URL(request.url);
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '80', 10) || 80, 1), 200);
+  const rows = (await env.DB.prepare(
+    `SELECT i.id, i.from_email, i.from_name, i.orig_email, i.orig_name, i.subject, i.body,
+            i.attachments, i.suggestion, i.status, i.art_id, i.resolved_by, i.resolved_at, i.received_at,
+            a.title AS art_title, a.status AS art_status
+       FROM dk_inbox i LEFT JOIN dk_articles a ON a.id = i.art_id
+      WHERE i.pub_id = ? ORDER BY i.received_at DESC LIMIT ?`).bind(pubId, limit).all()).results || [];
+  const courrier = rows.map(r => {
+    let atts = []; try { atts = JSON.parse(r.attachments || '[]'); } catch (_) {}
+    return {
+      id: r.id, from_email: r.from_email, from_name: r.from_name,
+      orig_email: r.orig_email, orig_name: r.orig_name,
+      subject: r.subject, body: r.body, attachments: atts,
+      status: r.status, received_at: r.received_at,
+      resolved_by: r.resolved_by, resolved_at: r.resolved_at,
+      art_id: r.art_id || null, art_title: r.art_title || null, art_status: r.art_status || null,
+      // Le cas qui a coûté une contribution : l'entrée dit « rattachée »,
+      // mais l'article a été supprimé depuis. La bannette doit le crier.
+      art_perdu: !!(r.art_id && !r.art_title),
+    };
+  });
+  return json({ ok: true, courrier }, 200, origin);
+}
+
+/* POST /api/desk/inbox/:id/reprendre — refaire un article À PARTIR d'un
+   courrier déjà classé. Le filet : l'article d'accueil a été supprimé,
+   ou le tri était mauvais. Le texte reçu et les pièces (les objets R2
+   survivent à la suppression d'un article) repartent au marbre.
+   { title, rub_id?, contrib? }                                        */
+export async function handleInboxReprendre(request, env, inboxId) {
+  const origin = getAllowedOrigin(env, request);
+  await ensureDeskSchema(env);
+  const row = await env.DB.prepare('SELECT * FROM dk_inbox WHERE id = ?').bind(inboxId).first();
+  if (!row) return err('Courrier introuvable', 404, origin);
+  const u = await dkMemberGate(request, env, origin, row.pub_id);
+  if (u.error) return u.error;
+  if (row.status === 'pending') return err('Ce courrier est encore au bac — triez-le normalement', 400, origin);
+  const by = dkByName(u);
+  const body = await parseBody(request);
+  const title = dkS(String(body.title || row.subject || '').trim(), DK_MAX_TITLE);
+  if (!title) return err('Titre requis', 400, origin);
+  let rubId = null;
+  if (body.rub_id) {
+    const r = await env.DB.prepare('SELECT id FROM dk_rubriques WHERE id = ? AND pub_id = ?').bind(body.rub_id, row.pub_id).first();
+    if (r) rubId = r.id;
+  }
+  const contrib = dkS(String(body.contrib || row.orig_name || row.from_name || '').trim(), DK_MAX_NAME);
+  const artId = generateId();
+  await env.DB.prepare(
+    `INSERT INTO dk_articles (id, pub_id, title, rub_id, contrib, status, notes, histo)
+     VALUES (?, ?, ?, ?, ?, 'remis', ?, ?)`)
+    .bind(artId, row.pub_id, title, rubId, contrib || null, String(row.body || '').slice(0, DK_MAX_NOTES),
+      JSON.stringify([`Repris depuis la bannette (courrier du ${String(row.received_at || '').slice(0, 10)}) par ${by}`])).run();
+
+  // Les pièces d'origine repartent avec lui — sauf celles qu'un « écarter »
+  // a purgées de R2, auquel cas la liste est déjà vide.
+  let atts = []; try { atts = JSON.parse(row.attachments || '[]'); } catch (_) {}
+  const issueId = await _activeIssueId(env, row.pub_id);
+  let reprises = 0;
+  for (const a of atts) {
+    if (!a || !a.r2_key) continue;
+    if (env.DK_CASIER && !(await env.DK_CASIER.head(a.r2_key).catch(() => null))) continue;   // objet disparu
+    await env.DB.prepare(
+      `INSERT INTO dk_files (id, pub_id, issue_id, page_id, art_id, name, mime, size, r2_key, status, uploaded_by)
+       VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, 'ok', ?)`)
+      .bind(generateId(), row.pub_id, issueId, artId, a.name, a.mime, a.size, a.r2_key,
+        row.orig_name || row.from_name || row.from_email || '?').run();
+    reprises++;
+  }
+  // Le courrier pointe désormais vers l'article vivant.
+  await env.DB.prepare(`UPDATE dk_inbox SET art_id = ?, status = 'done', resolved_by = ?, resolved_at = datetime('now') WHERE id = ?`)
+    .bind(artId, by, inboxId).run();
+  return json({ ok: true, art_id: artId, pieces: reprises }, 200, origin);
 }
 
 // POST /api/desk/inbox/:id/reject — écarter (pièces R2 purgées, trace gardée).

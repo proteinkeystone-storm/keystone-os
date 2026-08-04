@@ -593,6 +593,20 @@ html.light-mode .dk-field input, html.light-mode .dk-field select { color-scheme
 }
 html.light-mode .dk-bac-select { color-scheme: light; }
 .dk-bac-new { margin: 4px 0 0 22px; }
+/* ── DK-4c · la bannette ────────────────────────────────────────── */
+.dk-bac-seg { margin-bottom: 10px; }
+/* Le sort de chaque courrier : lisible d'un coup d'œil, l'article perdu
+   ne doit pas pouvoir passer inaperçu. */
+.dk-bac-sort.attente { color: var(--dk-gold); }
+.dk-bac-sort.ok      { color: var(--dk-tx2); }
+.dk-bac-sort.ecarte  { color: var(--dk-tx3); font-style: italic; }
+.dk-bac-sort.perdu   { color: #f59e0b; font-weight: 700; }
+.dk-bac-alert {
+  display: flex; align-items: center; gap: 7px; margin-bottom: 10px;
+  padding: 8px 11px; border-radius: 10px; font-size: 12.5px;
+  background: rgba(245, 158, 11, .12); color: #f59e0b;
+}
+.dk-bac-alert svg { flex: 0 0 auto; }
 .dk-slug-row { flex-wrap: wrap; align-items: center; gap: 6px; }
 .dk-slug-row input { flex: 1 1 160px; min-width: 140px; text-align: right; }
 .dk-slug-fix { font-size: 13px; color: var(--dk-tx2); white-space: nowrap; }

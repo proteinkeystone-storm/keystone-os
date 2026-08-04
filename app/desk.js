@@ -863,6 +863,7 @@ function _renderFer() {
       <span class="dk-ferbar-issue">n° ${_esc(_D.issue.num)}${_D.issue.theme ? ' · ' + _esc(_D.issue.theme) : ''} · ${_D.pages.length} pages</span>
       <span class="dk-ferbar-spacer"></span>
       ${_relancesDues().length ? `<button class="dk-btn ghost small dk-relbtn" data-act="relances" title="Copies en attente à relancer">${icon('bell', 14)}<span class="dk-btn-txt"> Relances (${_relancesDues().length})</span></button>` : ''}
+      <button class="dk-btn ghost small" data-act="bannette" title="Tout le courrier reçu par e-mail — rien n'en sort jamais">${icon('mail', 14)}<span class="dk-btn-txt"> Courrier</span></button>
       <button class="dk-btn ghost small" data-act="prepress" title="Contrôle du PDF final & édition numérique booK">${icon('printer', 14)}<span class="dk-btn-txt"> Pré-impression</span></button>
       <button class="dk-btn cta small" data-act="newart">${icon('plus', 14)}<span class="dk-btn-txt"> Article</span></button>
     </div>
@@ -872,7 +873,8 @@ function _renderFer() {
       ? `<div class="dk-frise-wrap" data-size="${_size}"><div class="dk-frise" data-slot="frise"></div></div>`
       : `<div class="dk-marbre-wrap" data-slot="marbre"></div>`}`;
   _renderRail();
-  main.querySelector('[data-act="bac"]')?.addEventListener('click', () => _openBacList());
+  main.querySelector('[data-act="bac"]')?.addEventListener('click', () => _openBacList('trier'));
+  main.querySelector('[data-act="bannette"]')?.addEventListener('click', () => _openBacList('tout'));
   main.querySelector('[data-act="markseen"]')?.addEventListener('click', () => { _markAllSeen(); _renderFer(); });
   main.querySelector('[data-slot="view"]').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
@@ -2039,32 +2041,128 @@ function _bacAtts(row) { try { const a = JSON.parse(row.attachments || '[]'); re
 function _bacSugg(row) { try { return JSON.parse(row.suggestion || '{}') || {}; } catch (_) { return {}; } }
 const BAC_VIA = { expediteur: 'expéditeur connu', 'expediteur-ambigu': 'expéditeur connu — plusieurs articles possibles', titre: 'titre reconnu', habitude: 'habitude apprise', ia: 'suggestion IA', aucune: '' };
 
-function _openBacList() {
+/* DK-4c · LA BANNETTE — deux vues sur le même courrier.
+   « À trier » ne montrait que l'en-attente : une entrée confirmée sortait
+   de l'écran pour toujours, et si l'article d'accueil était supprimé plus
+   tard, la contribution semblait s'être évaporée alors qu'elle dormait
+   intacte en base. Ici rien ne quitte jamais la vue. */
+let _bacVue = 'trier';        // 'trier' | 'tout'
+let _courrier = null;         // cache de la vue « tout » (chargée à la demande)
+
+function _bacQui(r) {
+  return (r.orig_name || r.orig_email || r.from_name || r.from_email || '?')
+    + (r.orig_email ? ' · transféré par ' + (r.from_name || r.from_email) : '');
+}
+// Ce qu'un courrier est devenu — la phrase qui manquait.
+function _bacSort(r) {
+  if (r.status === 'pending') return { txt: 'en attente de tri', cls: 'attente' };
+  if (r.status === 'rejete')  return { txt: 'écartée' + (r.resolved_by ? ' par ' + r.resolved_by : ''), cls: 'ecarte' };
+  if (r.art_perdu)            return { txt: 'rattachée à un article SUPPRIMÉ depuis', cls: 'perdu' };
+  if (r.art_title)            return { txt: 'rattachée à « ' + r.art_title + ' »', cls: 'ok' };
+  return { txt: 'triée' + (r.resolved_by ? ' par ' + r.resolved_by : ''), cls: 'ok' };
+}
+
+async function _openBacList(vue) {
+  if (vue) _bacVue = vue;
   const insp = _root.querySelector('[data-slot="insp"]');
-  const rows = _D.inbox || [];
-  insp.innerHTML = _inspShell('À trier — contributions reçues', null,
+  const pend = _D.inbox || [];
+  if (_bacVue === 'tout' && !_courrier) {
+    try { _courrier = (await _api('/publication/' + _pubId + '/courrier')).courrier || []; }
+    catch (e) { _toast(e.message, true); _bacVue = 'trier'; }
+  }
+  const rows = _bacVue === 'tout' ? (_courrier || []) : pend;
+  const perdus = (_courrier || []).filter(r => r.art_perdu).length;
+
+  insp.innerHTML = _inspShell('Bannette — le courrier reçu', null,
     `<div class="dk-sec">
+      <div class="dk-seg dk-bac-seg" data-slot="bacvue">
+        <button data-v="trier" class="${_bacVue === 'trier' ? 'on' : ''}">À trier${pend.length ? ' (' + pend.length + ')' : ''}</button>
+        <button data-v="tout" class="${_bacVue === 'tout' ? 'on' : ''}">Tout le courrier</button>
+      </div>
+      ${_bacVue === 'tout' && perdus ? `<p class="dk-bac-alert">${icon('alert-triangle', 13)} ${perdus} courrier${perdus > 1 ? 's ont' : ' a'} perdu son article — vous pouvez le reprendre.</p>` : ''}
       ${rows.length ? rows.map(r => {
-        const s = _bacSugg(r), atts = _bacAtts(r);
-        const sugArt = s.kind === 'article' ? _artById(s.art_id) : null;
-        const sugLine = sugArt ? '→ « ' + sugArt.title + ' »' : (s.rub_id && _rubById(s.rub_id) ? '→ spontané · ' + _rubById(s.rub_id).name : '→ spontané');
+        const atts = _bacAtts(r);
+        const pending = r.status === 'pending';
+        const sort = _bacSort(r);
+        let ligne = sort.txt;
+        if (pending) {
+          const s = _bacSugg(r);
+          const sugArt = s.kind === 'article' ? _artById(s.art_id) : null;
+          ligne = sugArt ? '→ « ' + sugArt.title + ' »' : (s.rub_id && _rubById(s.rub_id) ? '→ spontané · ' + _rubById(s.rub_id).name : '→ spontané');
+        }
         return `<div class="dk-banc-item">
           <div class="dk-banc-info">
             <div class="dk-banc-title">${_esc(r.subject || '(sans objet)')}</div>
-            <div class="dk-banc-meta">${_esc(r.orig_name || r.orig_email || r.from_name || r.from_email || '?')}${r.orig_email ? ' · transféré par ' + _esc(r.from_name || r.from_email) : ''} · ${_relTime(r.received_at)}${atts.length ? ' · ' + atts.length + ' pièce' + (atts.length > 1 ? 's' : '') : ''}<br>${_esc(sugLine)}</div>
+            <div class="dk-banc-meta">${_esc(_bacQui(r))} · ${_relTime(r.received_at)}${atts.length ? ' · ' + atts.length + ' pièce' + (atts.length > 1 ? 's' : '') : ''}<br><span class="dk-bac-sort ${sort.cls}">${_esc(ligne)}</span></div>
           </div>
-          <button class="dk-btn small primary" data-bac="${r.id}">Trier</button>
+          <button class="dk-btn small ${pending ? 'primary' : ''}" data-bac="${r.id}">${pending ? 'Trier' : 'Ouvrir'}</button>
         </div>`;
-      }).join('') : `<p class="dk-empty-line">Le bac est vide — tout est rattaché.</p>`}
-      <p class="dk-note">Rien ne se range tout seul dans le doute : vous confirmez, l'app apprend (adresse du contributeur, rubrique habituelle).</p>
+      }).join('') : `<p class="dk-empty-line">${_bacVue === 'tout' ? 'Aucun courrier reçu pour l\'instant.' : 'Le bac est vide — tout est rattaché.'}</p>`}
+      <p class="dk-note">${_bacVue === 'tout'
+        ? 'Tout ce qui est arrivé par e-mail reste ici, quel qu\'en soit le sort — même trié, même écarté. Le texte reçu et ses pièces restent relisibles : rien ne se perd sur une fausse manœuvre.'
+        : 'Rien ne se range tout seul dans le doute : vous confirmez, l\'app apprend (adresse du contributeur, rubrique habituelle).'}</p>
     </div>`);
   _bindClose(insp);
   insp.classList.add('on');
   _root.querySelector('[data-slot="veil"]').classList.add('on');
-  insp.querySelectorAll('[data-bac]').forEach(b => b.onclick = () => {
-    const row = (_D.inbox || []).find(x => x.id === b.dataset.bac);
-    if (row) _openBacItem(row);
+  insp.querySelector('[data-slot="bacvue"]').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || b.dataset.v === _bacVue) return;
+    _openBacList(b.dataset.v);
   });
+  insp.querySelectorAll('[data-bac]').forEach(b => b.onclick = () => {
+    const row = rows.find(x => x.id === b.dataset.bac);
+    if (!row) return;
+    if (row.status === 'pending') _openBacItem(row); else _openCourrierItem(row);
+  });
+}
+
+/* Un courrier DÉJÀ classé : on le relit, et on peut le reprendre — c'est
+   le filet quand l'article d'accueil a disparu ou que le tri était faux. */
+function _openCourrierItem(row) {
+  const insp = _root.querySelector('[data-slot="insp"]');
+  const atts = _bacAtts(row);
+  const sort = _bacSort(row);
+  const rubs = _D.rubriques || [];
+  insp.innerHTML = _inspShell(row.subject || '(sans objet)',
+    `<div class="dk-insp-rub">${_esc(_bacQui(row))} · ${_relTime(row.received_at)}</div>`,
+    `<div class="dk-sec"><h4>Ce qu'il est devenu</h4>
+      <p class="dk-bac-sort ${sort.cls}" style="font-size:13px">${_esc(sort.txt)}</p>
+      ${row.resolved_at ? `<p class="dk-note">Trié le ${_esc(String(row.resolved_at).slice(0, 10))}${row.resolved_by ? ' par ' + _esc(row.resolved_by) : ''}.</p>` : ''}
+    </div>
+    ${row.body ? `<div class="dk-sec"><h4>Texte reçu</h4><div class="dk-bac-body">${_esc(String(row.body).slice(0, 4000))}${String(row.body).length > 4000 ? '…' : ''}</div></div>` : ''}
+    ${atts.length ? `<div class="dk-sec"><h4>Pièces d'origine (${atts.length})</h4>
+      ${atts.map(a => `<div class="dk-file"><span class="dk-file-ico">${icon('paperclip', 13)}</span>
+        <div class="dk-file-info"><div class="dk-file-name">${_esc(a.name)}</div><div class="dk-file-meta">${_fmtSize(a.size)}</div></div></div>`).join('')}</div>`
+      : (row.status === 'rejete' ? `<p class="dk-note">Les pièces ont été purgées à l'écartement.</p>` : '')}
+    <div class="dk-sec"><h4>Reprendre ce courrier</h4>
+      <p class="dk-note" style="margin-top:0">Recrée un article au marbre à partir de ce qui a été reçu — le texte et les pièces encore disponibles repartent avec lui. L'original n'est pas touché.</p>
+      <label class="dk-field"><span>Titre</span><input type="text" data-k="rtitle" maxlength="240" value="${_esc(row.subject || '')}"></label>
+      <label class="dk-field"><span>Rubrique</span><select data-k="rrub">
+        <option value="">Sans rubrique</option>
+        ${rubs.map(r => `<option value="${r.id}">${_esc(r.name)}</option>`).join('')}
+      </select></label>
+      <label class="dk-field"><span>Contributeur</span><input type="text" data-k="rcontrib" maxlength="160" value="${_esc(row.orig_name || row.from_name || '')}"></label>
+      <div class="dk-btn-row">
+        <button class="dk-btn small primary" data-act="reprendre">${icon('mail', 14)} Recréer un article</button>
+        <button class="dk-btn small" data-act="retour">Retour</button>
+      </div>
+    </div>`);
+  _bindClose(insp);
+  insp.querySelector('[data-act="retour"]').onclick = () => _openBacList('tout');
+  insp.querySelector('[data-act="reprendre"]').onclick = async () => {
+    const g = k => insp.querySelector(`[data-k="${k}"]`).value;
+    if (!g('rtitle').trim()) { _toast('Le titre est requis', true); return; }
+    try {
+      const r = await _api('/inbox/' + row.id + '/reprendre', { method: 'POST', body: {
+        title: g('rtitle').trim(), rub_id: g('rrub') || null, contrib: g('rcontrib').trim(),
+      } });
+      _toast('Article recréé au marbre' + (r.pieces ? ` avec ${r.pieces} pièce${r.pieces > 1 ? 's' : ''}` : '') + '.');
+      _courrier = null;
+      await _loadIssue(true);
+      if (_view === 'marbre') _renderMarbre();
+      _openInspMarbre(r.art_id);
+    } catch (e) { _toast(e.message, true); }
+  };
 }
 
 function _openBacItem(row) {
@@ -2117,7 +2215,7 @@ function _openBacItem(row) {
   _bindClose(insp);
   insp.classList.add('on');
   _root.querySelector('[data-slot="veil"]').classList.add('on');
-  insp.querySelector('[data-act="bacback"]').onclick = _openBacList;
+  insp.querySelector('[data-act="bacback"]').onclick = () => _openBacList('trier');
   insp.querySelector('[data-k="bacart"]')?.addEventListener('change', () => {
     insp.querySelector('input[name="bacmode"][value="autre"]').checked = true;
   });
@@ -2136,6 +2234,7 @@ function _openBacItem(row) {
     }
     try {
       await _api('/inbox/' + row.id + '/apply', { method: 'POST', body });
+      _courrier = null;   // la bannette doit relire : ce courrier a changé de sort
       _toast(body.art_id ? 'Copie rattachée — pointée reçue.' : 'Spontané créé au marbre.');
       await _loadIssue(true);
       if ((_D.inbox || []).length) _openBacList(); else _closeInsp();
@@ -2152,6 +2251,7 @@ function _openBacItem(row) {
     box.querySelector('[data-act="rejyes"]').onclick = async () => {
       try {
         await _api('/inbox/' + row.id + '/reject', { method: 'POST' });
+        _courrier = null;
         _toast('Contribution rejetée.');
         await _loadIssue(true);
         if ((_D.inbox || []).length) _openBacList(); else _closeInsp();
