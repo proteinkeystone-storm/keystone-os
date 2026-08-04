@@ -671,7 +671,9 @@ export async function handleIssueGet(request, env, issueId) {
     const casier = !env.DK_CASIER ? 'off' : (r2PresignReady(env) ? 'presigned' : 'direct');
     // DK-4 : bac « à trier » (entrées en attente) + adresse de dépôt.
     const inbox = (await env.DB.prepare(
-      `SELECT id, from_email, from_name, orig_email, orig_name, subject, body, suggestion, attachments, received_at
+      // `status` DOIT voyager : sans lui le client ne sait pas qu'il a affaire
+      // à une entrée encore au bac, et lui ouvre le mauvais panneau.
+      `SELECT id, from_email, from_name, orig_email, orig_name, subject, body, suggestion, attachments, received_at, status, lu_at
        FROM dk_inbox WHERE pub_id = ? AND status = 'pending' ORDER BY received_at DESC LIMIT 50`).bind(pubId).all()).results || [];
     // Pastille de la bannette : le courrier jamais ouvert, tous sorts confondus.
     const nonLus = (await env.DB.prepare(

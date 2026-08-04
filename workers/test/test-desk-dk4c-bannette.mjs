@@ -244,6 +244,19 @@ async function main() {
   const eAuto2 = c.data.courrier.find(x => x.id === r.data.inboxId);
   ok(eAuto2 && eAuto2.art_perdu === true, 'article supprimé → la bannette l\'alerte aussi pour un auto', eAuto2);
 
+  /* ── 8 · Le bac servi avec le numéro porte son statut ────────────
+     Sans `status`, le client ne sait pas qu'une entrée est encore au bac :
+     il lui ouvrait le panneau de REPRISE (qui crée au marbre) au lieu du
+     panneau de TRI (qui rattache à un article attendu ou pose sur une
+     page). C'est ce qui envoyait toute contribution triée au marbre.    */
+  console.log('\n8 · Le bac servi avec le numéro est complet');
+  r = await inject({ to: `${slug}@test.dk`, from_email: 'payload@contrib.dk4c', subject: 'Contrôle du payload', body: 'texte' });
+  const dPay = await call(A, '/issue/' + issueId);
+  const ePay = (dPay.data.inbox || []).find(x => x.id === r.data.inboxId);
+  ok(!!ePay, 'l\'entrée en attente est bien servie avec le numéro', (dPay.data.inbox || []).length);
+  ok(ePay && ePay.status === 'pending', 'elle porte son STATUT — sans lui, le mauvais panneau s\'ouvre', ePay && ePay.status);
+  ok(ePay && 'lu_at' in ePay, 'et son état de lecture', ePay && Object.keys(ePay));
+
   console.log(`\n${fail === 0 ? '✅' : '❌'} DK-4c : ${pass} vérifications passées, ${fail} en échec.`);
   process.exit(fail === 0 ? 0 : 1);
 }

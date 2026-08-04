@@ -2044,6 +2044,34 @@ function _bacAtts(row) { try { const a = JSON.parse(row.attachments || '[]'); re
 function _bacSugg(row) { try { return JSON.parse(row.suggestion || '{}') || {}; } catch (_) { return {}; } }
 const BAC_VIA = { expediteur: 'expéditeur connu', 'expediteur-ambigu': 'expéditeur connu — plusieurs articles possibles', titre: 'titre reconnu', habitude: 'habitude apprise', ia: 'suggestion IA', aucune: '' };
 
+/* Où poser un spontané qu'on vient de trier. Le tri le déposait TOUJOURS
+   au marbre : choisir « Actu Minarm » ne suffisait pas à lui donner une
+   place, il fallait ensuite aller le chercher au marbre et le réserver à
+   la main sur une page de cette rubrique. On propose donc la page, et la
+   première page libre de la rubrique choisie est pré-sélectionnée. */
+function _pagesLibres() {
+  return (_D.pages || []).filter(p => p.kind !== 'fixe' && !_slotsOf(p).some(s => s.art_id));
+}
+function _pageOptionsHTML(rubId) {
+  const libres = _pagesLibres();
+  const cible = rubId ? libres.find(p => p.rub_id === rubId) : null;
+  return `<option value="">Au marbre — il attendra qu'on lui trouve une page</option>` +
+    libres.map(p => {
+      const r = p.rub_id ? _rubById(p.rub_id) : null;
+      return `<option value="${p.id}" ${cible && cible.id === p.id ? 'selected' : ''}>${_esc(_pageLabel(p))}${r ? ' — ' + _esc(r.name) : ''}</option>`;
+    }).join('');
+}
+// Réserver l'article sur la page choisie, juste après sa création (même
+// enchaînement que le formulaire d'article : créer puis poser).
+async function _poserSurPage(pageId, artId) {
+  if (!pageId || !artId) return null;
+  try {
+    await _api('/page/' + pageId + '/slot', { method: 'POST', body: { art_id: artId } });
+    const p = (_D.pages || []).find(x => x.id === pageId);
+    return p ? _pageLabel(p) : 'sa page';
+  } catch (e) { _toast('Article créé, mais la réservation a échoué : ' + e.message, true); return null; }
+}
+
 /* DK-4c · LA BANNETTE — deux vues sur le même courrier.
    « À trier » ne montrait que l'en-attente : une entrée confirmée sortait
    de l'écran pour toujours, et si l'article d'accueil était supprimé plus
@@ -2151,7 +2179,12 @@ async function _openBacList(vue) {
   insp.querySelectorAll('[data-bac]').forEach(b => b.onclick = () => {
     const row = rows.find(x => x.id === b.dataset.bac);
     if (!row) return;
-    if (row.status === 'pending') _openBacItem(row); else _openCourrierItem(row);
+    // La vue « À trier » ne contient QUE de l'en-attente : on ne se fie pas au
+    // champ status, absent des entrées du bac servies avec le numéro — s'y
+    // fier ouvrait le panneau de REPRISE à la place de celui du tri, qui ne
+    // sait ni rattacher à un article attendu ni poser sur une page.
+    if (_bacVue === 'trier' || row.status === 'pending') _openBacItem(row);
+    else _openCourrierItem(row);
   });
   // Effacer depuis la LISTE : confirmation en toutes lettres dans la ligne
   // elle-même, pour ne pas avoir à ouvrir chaque pli pour faire le ménage.
@@ -2209,6 +2242,7 @@ function _openCourrierItem(row) {
         ${rubs.map(r => `<option value="${r.id}" ${rubSeed === r.id ? 'selected' : ''}>${_esc(r.name)}</option>`).join('')}
       </select></label>
       <label class="dk-field"><span>Contributeur</span><input type="text" data-k="rcontrib" maxlength="160" value="${_esc(row.orig_name || row.from_name || '')}"></label>
+      <label class="dk-field"><span>Où le poser</span><select data-k="rpage">${_pageOptionsHTML(rubSeed)}</select></label>
       <div class="dk-btn-row">
         <button class="dk-btn small primary" data-act="reprendre">${icon('mail', 14)} Recréer un article</button>
         <button class="dk-btn small" data-act="retour">Retour</button>
@@ -2221,6 +2255,9 @@ function _openCourrierItem(row) {
     </div>`);
   _bindClose(insp);
   insp.querySelector('[data-act="retour"]').onclick = () => _openBacList('tout');
+  insp.querySelector('[data-k="rrub"]')?.addEventListener('change', e => {
+    insp.querySelector('[data-k="rpage"]').innerHTML = _pageOptionsHTML(e.target.value);
+  });
   // Confirmation INLINE en toutes lettres — même parti pris que la
   // suppression d'une pièce du casier : pas d'« armé 2 clics » invisible.
   insp.querySelector('[data-act="suppr"]').onclick = () => {
@@ -2249,7 +2286,9 @@ function _openCourrierItem(row) {
       const r = await _api('/inbox/' + row.id + '/reprendre', { method: 'POST', body: {
         title: g('rtitle').trim(), rub_id: g('rrub') || null, contrib: g('rcontrib').trim(),
       } });
-      _toast('Article recréé au marbre' + (r.pieces ? ` avec ${r.pieces} pièce${r.pieces > 1 ? 's' : ''}` : '') + '.');
+      const posee = await _poserSurPage(g('rpage'), r.art_id);
+      _toast('Article recréé ' + (posee ? 'en ' + posee : 'au marbre')
+        + (r.pieces ? ` avec ${r.pieces} pièce${r.pieces > 1 ? 's' : ''}` : '') + '.');
       _courrier = null;
       await _loadIssue(true);
       if (_view === 'marbre') _renderMarbre();
@@ -2298,6 +2337,7 @@ function _openBacItem(row) {
           ${rubs.map(r => `<option value="${r.id}" ${s.rub_id === r.id ? 'selected' : ''}>${_esc(r.name)}</option>`).join('')}
         </select></label>
         <label class="dk-field"><span>Contributeur</span><input type="text" data-k="baccontrib" maxlength="160" value="${_esc(row.from_name || '')}"></label>
+        <label class="dk-field"><span>Où le poser</span><select data-k="bacpage">${_pageOptionsHTML(s.rub_id)}</select></label>
       </div>
       <div class="dk-btn-row" style="margin-top:12px">
         <button class="dk-btn primary" data-act="bacok">${icon('check', 14)} Confirmer</button>
@@ -2337,6 +2377,10 @@ function _openBacItem(row) {
   insp.querySelector('[data-k="bacart"]')?.addEventListener('change', () => {
     insp.querySelector('input[name="bacmode"][value="autre"]').checked = true;
   });
+  // Changer de rubrique repropose la première page libre de CETTE rubrique.
+  insp.querySelector('[data-k="bacrub"]')?.addEventListener('change', e => {
+    insp.querySelector('[data-k="bacpage"]').innerHTML = _pageOptionsHTML(e.target.value);
+  });
   insp.querySelector('[data-act="bacok"]').onclick = async () => {
     const mode = insp.querySelector('input[name="bacmode"]:checked')?.value;
     let body = null;
@@ -2350,10 +2394,16 @@ function _openBacItem(row) {
       if (!title) { _toast('Le titre est requis', true); return; }
       body = { create: { title, rub_id: insp.querySelector('[data-k="bacrub"]').value || null, contrib: insp.querySelector('[data-k="baccontrib"]').value.trim() } };
     }
+    const pageId = body.create ? (insp.querySelector('[data-k="bacpage"]')?.value || '') : '';
     try {
-      await _api('/inbox/' + row.id + '/apply', { method: 'POST', body });
+      const r = await _api('/inbox/' + row.id + '/apply', { method: 'POST', body });
       _courrier = null;   // la bannette doit relire : ce courrier a changé de sort
-      _toast(body.art_id ? 'Copie rattachée — pointée reçue.' : 'Spontané créé au marbre.');
+      // Le spontané ne tombe au marbre que si on l'a VOULU : sinon il prend
+      // directement la page choisie, sans second passage par le marbre.
+      const posee = pageId ? await _poserSurPage(pageId, r.art_id) : null;
+      _toast(body.art_id ? 'Copie rattachée — pointée reçue.'
+        : posee ? 'Contribution posée en ' + posee + '.'
+        : 'Spontané créé au marbre.');
       await _loadIssue(true);
       if ((_D.inbox || []).length) _openBacList(); else _closeInsp();
       _renderFer();
