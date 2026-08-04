@@ -2749,11 +2749,14 @@ async function _openSettings() {
           <input type="text" data-k="pubslug" maxlength="40" value="${_esc(slug)}" spellcheck="false" placeholder="l-epaulette">
           <span class="dk-slug-fix">@${_esc(em.domain || '…')}</span>
           <button class="dk-btn small" data-act="saveslug">Enregistrer</button>
-        </div>` : ''}
-        ${addr ? `<div class="dk-addr-row">
+          ${addr ? `<button class="dk-iconbtn" data-act="copyaddr" data-addr="${_esc(addr)}" title="Copier l'adresse complète" aria-label="Copier l'adresse complète">${icon('copy', 14)}</button>` : ''}
+        </div>` :
+        // Un membre non propriétaire ne peut pas modifier le nom court : il lui
+        // faut donc l'adresse en toutes lettres, elle n'est écrite nulle part ailleurs.
+        (addr ? `<div class="dk-addr-row">
           <span class="dk-bac-addr"><strong>${_esc(addr)}</strong></span>
-          <button class="dk-btn small" data-act="copyaddr" data-addr="${_esc(addr)}" title="Copier l'adresse">${icon('copy', 13)} Copier</button>
-        </div>` : ''}
+          <button class="dk-iconbtn" data-act="copyaddr" data-addr="${_esc(addr)}" title="Copier l'adresse" aria-label="Copier l'adresse">${icon('copy', 14)}</button>
+        </div>` : '')}
         <p class="dk-note">${addr
           ? `Transférez-y (ou mettez en copie) les e-mails des contributeurs : la copie se pointe toute seule quand l'expéditeur est connu, le reste attend dans le bac « à trier ». Rien ne se range en silence.`
           : `Le branchement e-mail arrive — cette adresse s'activera avec le domaine de dépôt. Le bac « à trier » et la digestion sont déjà prêts.`}</p>
@@ -2887,11 +2890,12 @@ async function _openSettings() {
       await navigator.clipboard.writeText(addr);
       _toast('Adresse copiée : ' + addr);
     } catch (_) {
-      // Presse-papiers refusé (contexte non sécurisé, permission) : on
-      // sélectionne l'adresse pour que le Cmd-C manuel reste possible.
+      // Presse-papiers refusé (contexte non sécurisé, permission) : l'adresse
+      // n'est plus écrite à l'écran côté propriétaire, donc on la DIT — sinon
+      // l'échec laisserait sans rien.
       const el = b.parentElement?.querySelector('.dk-bac-addr');
       if (el) { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
-      _toast('Copie refusée par le navigateur — l\'adresse est sélectionnée, faites Cmd-C.', true);
+      _toast('Copie refusée par le navigateur — l\'adresse est : ' + addr, true);
     }
   });
   insp.querySelector('[data-act="saveslug"]')?.addEventListener('click', async () => {
