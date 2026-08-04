@@ -254,6 +254,13 @@ async function _ensureSchema(env) {
   // first_folio = numéro de la page qui suit la couverture (0 pour L'Épaulette).
   try { await env.DB.prepare(`ALTER TABLE dk_publications ADD COLUMN cover_unnumbered INTEGER DEFAULT 0`).run(); } catch (_) {}
   try { await env.DB.prepare(`ALTER TABLE dk_publications ADD COLUMN first_folio INTEGER DEFAULT 1`).run(); } catch (_) {}
+  // DK-4b : un mail TRANSFÉRÉ (la rédaction fait suivre la copie d'un auteur)
+  // a deux expéditeurs — celui qui transfère (from_email, la vérité de
+  // l'enveloppe) et l'auteur d'origine, lu dans le bloc « De : » du corps.
+  // C'est l'AUTEUR qui doit servir au rapprochement et aux apprentissages,
+  // sinon on retient l'adresse de la rédactrice comme si elle signait tout.
+  try { await env.DB.prepare(`ALTER TABLE dk_inbox ADD COLUMN orig_email TEXT`).run(); } catch (_) {}
+  try { await env.DB.prepare(`ALTER TABLE dk_inbox ADD COLUMN orig_name TEXT`).run(); } catch (_) {}
   _schemaReady = true;
 }
 
@@ -650,7 +657,7 @@ export async function handleIssueGet(request, env, issueId) {
     const casier = !env.DK_CASIER ? 'off' : (r2PresignReady(env) ? 'presigned' : 'direct');
     // DK-4 : bac « à trier » (entrées en attente) + adresse de dépôt.
     const inbox = (await env.DB.prepare(
-      `SELECT id, from_email, from_name, subject, body, suggestion, attachments, received_at
+      `SELECT id, from_email, from_name, orig_email, orig_name, subject, body, suggestion, attachments, received_at
        FROM dk_inbox WHERE pub_id = ? AND status = 'pending' ORDER BY received_at DESC LIMIT 50`).bind(pubId).all()).results || [];
     const pubRow = await env.DB.prepare('SELECT slug FROM dk_publications WHERE id = ?').bind(pubId).first();
     return json({

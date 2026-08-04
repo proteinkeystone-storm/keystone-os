@@ -2051,7 +2051,7 @@ function _openBacList() {
         return `<div class="dk-banc-item">
           <div class="dk-banc-info">
             <div class="dk-banc-title">${_esc(r.subject || '(sans objet)')}</div>
-            <div class="dk-banc-meta">${_esc(r.from_name || r.from_email || '?')} · ${_relTime(r.received_at)}${atts.length ? ' · ' + atts.length + ' pièce' + (atts.length > 1 ? 's' : '') : ''}<br>${_esc(sugLine)}</div>
+            <div class="dk-banc-meta">${_esc(r.orig_name || r.orig_email || r.from_name || r.from_email || '?')}${r.orig_email ? ' · transféré par ' + _esc(r.from_name || r.from_email) : ''} · ${_relTime(r.received_at)}${atts.length ? ' · ' + atts.length + ' pièce' + (atts.length > 1 ? 's' : '') : ''}<br>${_esc(sugLine)}</div>
           </div>
           <button class="dk-btn small primary" data-bac="${r.id}">Trier</button>
         </div>`;
@@ -2077,7 +2077,15 @@ function _openBacItem(row) {
   const via = BAC_VIA[s.via] || '';
   const defMode = sugArt ? 'art' : 'new';
   insp.innerHTML = _inspShell(row.subject || '(sans objet)',
-    `<div class="dk-insp-rub">${_esc(row.from_name || row.from_email || 'expéditeur inconnu')}${row.from_email && row.from_name ? ' · ' + _esc(row.from_email) : ''} · ${_relTime(row.received_at)}</div>`,
+    (() => {
+      // Mail transféré : c'est l'AUTEUR qu'on nomme, la personne qui a fait
+      // suivre passe en mention — sinon on croit que la rédaction signe tout.
+      const auteur = row.orig_name || row.orig_email;
+      const relais = row.from_name || row.from_email;
+      return `<div class="dk-insp-rub">${_esc(auteur || relais || 'expéditeur inconnu')}${
+        row.orig_email && row.orig_name ? ' · ' + _esc(row.orig_email) : (!auteur && row.from_email && row.from_name ? ' · ' + _esc(row.from_email) : '')
+      }${row.orig_email ? ' · transféré par ' + _esc(relais) : ''} · ${_relTime(row.received_at)}</div>`;
+    })(),
     `${row.body ? `<div class="dk-sec"><h4>Message</h4><div class="dk-bac-body">${_esc(row.body.slice(0, 1500))}${row.body.length > 1500 ? '…' : ''}</div></div>` : ''}
     ${atts.length ? `<div class="dk-sec"><h4>Pièces jointes (${atts.length})</h4>
       ${atts.map(a => `<div class="dk-file"><span class="dk-file-ico">${icon('paperclip', 13)}</span>
@@ -2244,6 +2252,10 @@ function _openArtForm(page, existing, onDone, bancSlot) {
   // fichiers attendent ici puis partent juste après la création (§DK-3).
   const staged = [];
   const stageOn = !a && _D && _D.casier !== 'off';
+  // L'adresse déjà connue du contributeur (satellite dk_contribs) — c'est elle
+  // qui déclenche le rapprochement automatique, elle doit se saisir ICI, au
+  // moment où la rédaction convient du papier, pas à la première relance.
+  const seedMail = (a && _contribByName(a.contrib || '')?.email) || '';
   insp.innerHTML = _inspShell(a ? 'Modifier l\'article' : 'Nouvel article', null,
     `<div class="dk-sec">
       <label class="dk-field"><span>Titre</span><input type="text" data-k="title" maxlength="240" value="${_esc(a ? a.title : '')}" placeholder="Titre de l'article"></label>
@@ -2252,6 +2264,8 @@ function _openArtForm(page, existing, onDone, bancSlot) {
         ${rubs.map(r => `<option value="${r.id}" ${a && a.rub_id === r.id ? 'selected' : ''}>${_esc(r.name)}</option>`).join('')}
       </select></label>
       <label class="dk-field"><span>Contributeur</span><input type="text" data-k="contrib" maxlength="160" value="${_esc(a ? (a.contrib || '') : '')}" placeholder="ex. Col. D. Mahieu"></label>
+      <label class="dk-field"><span>Son adresse e-mail</span><input type="email" data-k="contribmail" maxlength="200" value="${_esc(seedMail)}" spellcheck="false" placeholder="prenom.nom@exemple.fr"></label>
+      <p class="dk-note" style="margin:-6px 0 11px">Renseignée ici, sa copie se range toute seule sur cette page dès son premier envoi à l'adresse de dépôt — sans passer par le bac.</p>
       <label class="dk-field"><span>Statut</span><select data-k="status">
         ${['propose', 'attendu', 'remis', 'relu', 'maquette'].map(s => `<option value="${s}" ${a && a.status === s ? 'selected' : ''}>${STATUS[s].label}</option>`).join('')}
       </select></label>
@@ -2282,6 +2296,18 @@ function _openArtForm(page, existing, onDone, bancSlot) {
   insp.querySelector('[data-k="fresh"]').addEventListener('change', e => {
     insp.querySelector('[data-slot="perimefield"]').style.display = e.target.value === 'date' ? '' : 'none';
   });
+  // Contributeur déjà connu → son adresse se rappelle toute seule. On cesse dès
+  // que la personne a tapé quelque chose : on n'écrase jamais une saisie.
+  {
+    const nameIn = insp.querySelector('[data-k="contrib"]');
+    const mailIn = insp.querySelector('[data-k="contribmail"]');
+    let autofill = !mailIn.value;
+    mailIn.addEventListener('input', () => { autofill = false; });
+    nameIn.addEventListener('input', () => {
+      if (!autofill) return;
+      mailIn.value = _contribByName(nameIn.value.trim())?.email || '';
+    });
+  }
   if (stageOn) {
     const stageInput = insp.querySelector('[data-k="stageinput"]');
     const renderStage = () => {
@@ -2316,6 +2342,9 @@ function _openArtForm(page, existing, onDone, bancSlot) {
   const doSave = async (thenWrite) => {
     const g = k => insp.querySelector(`[data-k="${k}"]`).value;
     if (!g('title').trim()) { _toast('Le titre est requis', true); return; }
+    const cmail = g('contribmail').trim().toLowerCase();
+    if (cmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cmail)) { _toast('L\'adresse du contributeur est incomplète', true); return; }
+    if (cmail && !g('contrib').trim()) { _toast('Indiquez aussi le nom du contributeur', true); return; }
     const body = {
       title: g('title').trim(), rub_id: g('rub') || null, contrib: g('contrib').trim(),
       status: g('status'), due: g('due') || null,
@@ -2335,6 +2364,12 @@ function _openArtForm(page, existing, onDone, bancSlot) {
           : bancSlot ? 'Article créé et posé au banc des remplaçants.'
           : 'Article créé — il attend au marbre.');
         if (staged.length) await _uploadFilesToArt({ id: artId }, staged);
+      }
+      // L'adresse rejoint le satellite des contributeurs : c'est elle qui fera
+      // reconnaître l'auteur quand sa copie arrivera à l'adresse de dépôt.
+      if (cmail && body.contrib) {
+        try { await _api('/publication/' + _pubId + '/contrib', { method: 'POST', body: { name: body.contrib, email: cmail } }); }
+        catch (e) { _toast('Article enregistré, mais l\'adresse du contributeur n\'a pas pu l\'être : ' + e.message, true); }
       }
       await _loadIssue(true);
       // Ma propre création/réservation ne doit pas me « pulser ».

@@ -33,6 +33,7 @@
 import PostalMime from 'postal-mime';
 import { json, err, parseBody, generateId, getAllowedOrigin, requireAdmin } from '../lib/auth.js';
 import { callLLM } from '../lib/llm-router.js';
+import { sendEmail, emailConfigured } from '../lib/email-resend.js';
 import { recordUsage } from '../lib/ai-budget.js';
 import { ensureDeskSchema, dkMemberGate, dkHistoPush, dkS, dkFileExt, dkFileName,
          dkByName, dkContribStats, DK_FILE_EXTS, DK_FILE_MAX, DK_MAX_NAME,
@@ -65,7 +66,7 @@ export async function handleDeskEmail(message, env, ctx) {
     try { message.setReject('Message illisible'); } catch (_) {}
     return;
   }
-  const r = await digestEmail(env, mail).catch(e => ({ ok: false, reason: e && e.message }));
+  const r = await digestEmail(env, mail, { ack: true }).catch(e => ({ ok: false, reason: e && e.message }));
   if (!r.ok) { try { message.setReject(r.reason === 'adresse' ? 'Adresse de dépôt inconnue' : 'Dépôt refusé'); } catch (_) {} }
 }
 
@@ -79,7 +80,8 @@ function _htmlToText(html) {
 }
 
 /* ═══════════════ La digestion (cœur, testable à sec) ════════════ */
-export async function digestEmail(env, mail) {
+export async function digestEmail(env, mail, opts = {}) {
+  const ack = opts.ack === true;   // accusé de réception : seulement le vrai courrier
   await ensureDeskSchema(env);
 
   // L'adresse porte le tenant : <slug>@… → publication (le domaine
@@ -97,6 +99,13 @@ export async function digestEmail(env, mail) {
   const subject = dkS(String(mail.subject || '').trim(), 300) || '';
   const body = String(mail.text || '').slice(0, MAX_BODY_KEEP);
   const inboxId = generateId();
+
+  // Mail transféré → l'AUTEUR est celui du bloc « De : », pas l'enveloppe.
+  const fwd = _forwardedFrom(subject, body);
+  const origEmail = fwd && fwd.email && fwd.email !== fromEmail ? fwd.email : null;
+  const origName  = origEmail ? (fwd.name || null) : null;
+  const authorEmail = origEmail || fromEmail;   // sert au rapprochement ET aux apprentissages
+  const authorName  = origName || mail.fromName || null;
 
   // Pièces jointes → R2 sous le préfixe du bac (whitelist DK-3, cap taille).
   // Elles ne deviennent des pièces du CASIER qu'au rattachement.
@@ -122,8 +131,8 @@ export async function digestEmail(env, mail) {
      Expéditeur connu (dk_contribs.email) → SES articles attendus.
      Un seul → direct ; plusieurs → départage lexical franc.        */
   let suggestion = null;
-  if (fromEmail) {
-    const names = ((await env.DB.prepare('SELECT name FROM dk_contribs WHERE pub_id = ? AND email = ?').bind(pubId, fromEmail).all()).results || [])
+  if (authorEmail) {
+    const names = ((await env.DB.prepare('SELECT name FROM dk_contribs WHERE pub_id = ? AND email = ?').bind(pubId, authorEmail).all()).results || [])
       .map(r => (r.name || '').toLowerCase());
     if (names.length) {
       const mine = candidates.filter(a => names.includes((a.contrib || '').toLowerCase()));
@@ -135,13 +144,16 @@ export async function digestEmail(env, mail) {
           `SELECT s.page_id, p.issue_id, p.n FROM dk_page_slots s JOIN dk_pages p ON p.id = s.page_id
            WHERE s.art_id = ? ORDER BY p.n LIMIT 1`).bind(pick.id).first();
         if (slot) {
-          await _rattacher(env, { pubId, art: pick, pageId: slot.page_id, issueId: slot.issue_id, pageN: slot.n, atts, body, fromEmail, fromName: mail.fromName, by: 'digestion' });
+          await _rattacher(env, { pubId, art: pick, pageId: slot.page_id, issueId: slot.issue_id, pageN: slot.n, atts, body,
+            fromEmail: authorEmail, fromName: authorName, viaEmail: origEmail ? fromEmail : null, by: 'digestion' });
           await env.DB.prepare(
-            `INSERT INTO dk_inbox (id, pub_id, from_email, from_name, subject, body, suggestion, attachments, status, resolved_by, resolved_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'auto', 'digestion', datetime('now'))`)
-            .bind(inboxId, pubId, fromEmail, dkS(mail.fromName, DK_MAX_NAME), subject, body.slice(0, 2000),
-              JSON.stringify({ kind: 'article', art_id: pick.id, via: 'expediteur', page_n: slot.n }), JSON.stringify(atts)).run();
-          return { ok: true, mode: 'auto', inboxId, art_id: pick.id };
+            `INSERT INTO dk_inbox (id, pub_id, from_email, from_name, orig_email, orig_name, subject, body, suggestion, attachments, status, resolved_by, resolved_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'auto', 'digestion', datetime('now'))`)
+            .bind(inboxId, pubId, fromEmail, dkS(mail.fromName, DK_MAX_NAME), origEmail, origName, subject, body.slice(0, 2000),
+              JSON.stringify({ kind: 'article', art_id: pick.id, via: origEmail ? 'expediteur-transfere' : 'expediteur', page_n: slot.n }),
+              JSON.stringify(atts)).run();
+          await _accuseReception(env, { pubId, pubName: pub.name, to: authorEmail, subject, ack });
+          return { ok: true, mode: 'auto', inboxId, art_id: pick.id, orig_email: origEmail };
         }
         // Pas encore en page → bac, suggestion franche pré-cochée.
         suggestion = { kind: 'article', art_id: pick.id, via: 'expediteur' };
@@ -157,7 +169,11 @@ export async function digestEmail(env, mail) {
     if (pick) suggestion = { kind: 'article', art_id: pick.id, via: 'titre' };
   }
   if (!suggestion) {
-    const habit = fromEmail ? await env.DB.prepare('SELECT rub_id FROM dk_habits WHERE pub_id = ? AND from_email = ?').bind(pubId, fromEmail).first() : null;
+    // Une habitude posée sur une adresse de l'équipe (héritée d'avant DK-4b)
+    // ne veut rien dire : on ne la lit pas non plus.
+    const habit = authorEmail && !(await _isTeamAddress(env, pubId, authorEmail))
+      ? await env.DB.prepare('SELECT rub_id FROM dk_habits WHERE pub_id = ? AND from_email = ?').bind(pubId, authorEmail).first()
+      : null;
     if (habit && habit.rub_id) suggestion = { kind: 'spontane', rub_id: habit.rub_id, via: 'habitude' };
   }
   if (!suggestion) {
@@ -167,12 +183,108 @@ export async function digestEmail(env, mail) {
 
   /* ── Étage 3 · le bac (jamais contourné) ──────────────────────── */
   await env.DB.prepare(
-    `INSERT INTO dk_inbox (id, pub_id, from_email, from_name, subject, body, suggestion, attachments)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(inboxId, pubId, fromEmail || null, dkS(mail.fromName, DK_MAX_NAME), subject, body,
+    `INSERT INTO dk_inbox (id, pub_id, from_email, from_name, orig_email, orig_name, subject, body, suggestion, attachments)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(inboxId, pubId, fromEmail || null, dkS(mail.fromName, DK_MAX_NAME), origEmail, origName, subject, body,
       JSON.stringify(suggestion), JSON.stringify(atts)).run();
-  return { ok: true, mode: 'bac', inboxId, suggestion };
+  await _accuseReception(env, { pubId, pubName: pub.name, to: authorEmail, subject, ack });
+  return { ok: true, mode: 'bac', inboxId, suggestion, orig_email: origEmail };
 }
+
+/* ═══════════ DK-4b · le mail TRANSFÉRÉ ═══════════════════════════
+   La rédaction fait suivre la copie d'un auteur à l'adresse de dépôt.
+   L'enveloppe porte alors l'adresse de CELLE QUI TRANSFÈRE — si on s'y
+   fie, le rapprochement automatique ne se déclenche jamais (l'auteur
+   n'est pas reconnu) et, pire, chaque confirmation apprend « les mails
+   de la rédactrice vont en rubrique X », puis Y, puis Z, puisqu'elle
+   transfère tout. On lit donc l'expéditeur d'ORIGINE dans le bloc que
+   tous les logiciels de messagerie insèrent en tête du corps.
+
+   Prudence : on n'y touche QUE si le message se déclare transfert
+   (objet « Tr: / Fwd: » ou séparateur « ----- Message transféré -----»).
+   Sans ce garde-fou, un contributeur qui cite un mail dans le sien se
+   verrait attribuer la paternité de quelqu'un d'autre.               */
+function _forwardedFrom(subject, text) {
+  const head = String(text || '').slice(0, 8000);
+  const declared = /^\s*(?:fwd?|tr|wg|rv|enc)\s*:/i.test(String(subject || '')) ||
+    /(?:-{2,}\s*(?:forwarded message|message transf[ée]r[ée])|begin forwarded message\s*:|d[ée]but du message transf[ée]r[ée]\s*:)/i.test(head);
+  if (!declared) return null;
+  const fromLine = /^[ \t>]*(?:from|de|von|van)\s*:[ \t]*(.+)$/gim;
+  // Le domaine peut contenir des chiffres (y compris dans le dernier label) :
+  // s'arrêter au premier chiffre tronquerait l'adresse en silence.
+  const addr = /([^\s<>@,;:"']+@[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?\.[a-z0-9-]{2,})/i;
+  let m;
+  while ((m = fromLine.exec(head))) {
+    const a = addr.exec(m[1] || '');
+    if (!a) continue;
+    let name = m[1].replace(a[0], '').replace(/[<>"]/g, '').replace(/[,;]/g, ' ').trim();
+    if (/^\(.*\)$/.test(name)) name = name.slice(1, -1).trim();
+    return { email: a[1].toLowerCase(), name: dkS(name, DK_MAX_NAME) || null };
+  }
+  return null;
+}
+
+/* ═══════════ Accusé de réception ═══════════════════════════════════
+   Un auteur qui écrit à une machine ne sait pas si c'est arrivé — et il
+   rappellera la rédaction pour le demander. On lui répond donc « bien
+   reçu ». Trois garde-fous, parce qu'un répondeur automatique branché
+   sur une adresse publique se retourne vite contre son domaine :
+
+   1. UNIQUEMENT aux contributeurs déjà connus de la publication. Un
+      inconnu n'obtient rien : son mail attend dans le bac, un humain le
+      verra. C'est aussi ce qui nous empêche de répondre à une adresse
+      falsifiée par un spammeur (elle ne sera pas dans dk_contribs).
+   2. Jamais aux adresses de service (no-reply, mailer-daemon…), sinon
+      deux automates se répondent en boucle.
+   3. Un seul accusé par adresse et par jour.                          */
+const ACK_MAX_PER_DAY = 1;
+const ACK_SYSTEM_RE = /^(?:no-?reply|ne-?pas-?repondre|mailer-daemon|postmaster|bounce|notification|newsletter|donotreply)\b|^(?:no-?reply|bounce)[-.@]/i;
+
+async function _accuseReception(env, { pubId, pubName, to, subject, ack }) {
+  try {
+    if (!ack || !to || !emailConfigured(env)) return;
+    if (String(env.DK_EMAIL_ACK || 'on') === 'off') return;
+    if (ACK_SYSTEM_RE.test(to)) return;
+    const known = await env.DB.prepare('SELECT name FROM dk_contribs WHERE pub_id = ? AND email = ? LIMIT 1').bind(pubId, to).first();
+    if (!known) return;
+    // Plafond : compte les entrées déjà reçues de cet auteur dans les 24 h
+    // (celle qu'on vient d'insérer comprise) — au-delà, on cesse d'écrire.
+    const seen = (await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM dk_inbox
+       WHERE pub_id = ? AND COALESCE(orig_email, from_email) = ?
+         AND received_at >= datetime('now', '-1 day')`).bind(pubId, to).first())?.n || 0;
+    if (seen > ACK_MAX_PER_DAY) return;
+    const qui = known.name ? String(known.name) : '';
+    await sendEmail(env, {
+      to: [to],
+      subject: 'Bien reçu — ' + (pubName || 'la rédaction'),
+      html: `<p>Bonjour${qui ? ' ' + _escapeHtml(qui) : ''},</p>
+             <p>Votre envoi${subject ? ' « ' + _escapeHtml(subject) + ' »' : ''} est bien arrivé à la rédaction de <strong>${_escapeHtml(pubName || '')}</strong>.</p>
+             <p>Il est entre les mains de l'équipe. Vous n'avez rien d'autre à faire : on revient vers vous si quelque chose manque.</p>
+             <p style="color:#666;font-size:13px">Message automatique — inutile d'y répondre, personne ne le lit. Pour joindre la rédaction, écrivez comme d'habitude.</p>`,
+    });
+  } catch (_) { /* l'accusé est un confort : son échec ne casse jamais un dépôt */ }
+}
+function _escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/* Une adresse de l'ÉQUIPE (membre ou invitation en attente) n'est jamais
+   un contributeur : on n'apprend aucune habitude « ses mails vont en
+   rubrique X » sur elle, sinon la règle se réécrit à chaque transfert. */
+async function _isTeamAddress(env, pubId, email) {
+  if (!email) return false;
+  const hit = await env.DB.prepare(
+    `SELECT 1 AS x FROM dk_members WHERE pub_id = ? AND lower(email) = ?
+     UNION ALL
+     SELECT 1 AS x FROM dk_invites WHERE pub_id = ? AND lower(email) = ?
+     LIMIT 1`).bind(pubId, email, pubId, email).first();
+  return !!hit;
+}
+
+// L'auteur d'une entrée du bac : l'expéditeur d'origine s'il y en a un
+// (mail transféré), sinon l'expéditeur de l'enveloppe.
+function _authorOf(row) { return (row && (row.orig_email || row.from_email)) || null; }
 
 /* Recoupement lexical titres ↔ objet + noms de fichiers : un SEUL
    gagnant franc (score ≥ seuil et nettement devant le 2ᵉ), sinon null.
@@ -223,13 +335,16 @@ async function _suggestRubriqueIA(env, pubId, pubName, subject, body) {
 /* Rattachement effectif d'une contribution à un article : pointage
    « copie reçue » + pièces vers le casier + corps vers les notes si
    elles sont vides. Utilisé par l'étage 1 (auto) et par le bac.       */
-async function _rattacher(env, { pubId, art, pageId, issueId, pageN, atts, body, fromEmail, fromName, by }) {
+async function _rattacher(env, { pubId, art, pageId, issueId, pageN, atts, body, fromEmail, fromName, viaEmail, by }) {
+  // `who` = l'AUTEUR (c'est lui qui signe la pièce au casier) ; la mention du
+  // transfert n'apparaît que dans l'historique, pour ne pas alourdir l'étiquette.
   const who = fromName || fromEmail || 'un contributeur';
+  const whoHisto = who + (viaEmail ? ` (transféré par ${viaEmail})` : '');
   const cur = await env.DB.prepare('SELECT id, status, notes, histo, contrib, due FROM dk_articles WHERE id = ?').bind(art.id).first();
   const stillWaiting = ['propose', 'attendu'].includes(cur.status);
   const histo = stillWaiting
-    ? dkHistoPush(cur.histo, `Copie reçue par e-mail de ${who}` + (by === 'digestion' ? ' (rattachée automatiquement)' : ` — confirmée par ${by}`))
-    : dkHistoPush(cur.histo, `Complément reçu par e-mail de ${who}` + (by === 'digestion' ? '' : ` — confirmé par ${by}`));
+    ? dkHistoPush(cur.histo, `Copie reçue par e-mail de ${whoHisto}` + (by === 'digestion' ? ' (rattachée automatiquement)' : ` — confirmée par ${by}`))
+    : dkHistoPush(cur.histo, `Complément reçu par e-mail de ${whoHisto}` + (by === 'digestion' ? '' : ` — confirmé par ${by}`));
   let sql = `UPDATE dk_articles SET ${stillWaiting ? `status = 'remis', ` : ''}histo = ?, updated_at = datetime('now')`;
   const binds = [histo];
   if (body && !(cur.notes || '').trim()) { sql += ', notes = ?'; binds.push(String(body).slice(0, DK_MAX_NOTES)); }
@@ -328,7 +443,10 @@ export async function handleInboxApply(request, env, inboxId) {
     await _rattacher(env, {
       pubId: row.pub_id, art, pageId: slot ? slot.page_id : '', pageN: slot ? slot.n : null,
       issueId: slot ? slot.issue_id : await _activeIssueId(env, row.pub_id),
-      atts, body: row.body, fromEmail: row.from_email, fromName: row.from_name, by,
+      atts, body: row.body,
+      // Mail transféré : l'auteur est celui d'origine, pas la personne qui a fait suivre.
+      fromEmail: _authorOf(row), fromName: row.orig_name || row.from_name,
+      viaEmail: row.orig_email ? row.from_email : null, by,
     });
     artId = art.id;
   } else if (body.create && body.create.title) {
@@ -354,17 +472,23 @@ export async function handleInboxApply(request, env, inboxId) {
         .bind(generateId(), row.pub_id, issueId, artId, a.name, a.mime, a.size, a.r2_key, row.from_name || row.from_email || '?').run();
     }
     // Apprentissages : e-mail du contributeur + habitude de rubrique.
-    if (row.from_email && contrib) {
+    // Sur un mail TRANSFÉRÉ, ce qu'on retient est l'auteur d'origine — retenir
+    // la personne qui fait suivre reviendrait à lui attribuer tous les papiers.
+    const author = _authorOf(row);
+    if (author && contrib) {
       await env.DB.prepare(
         `INSERT INTO dk_contribs (id, pub_id, name, email) VALUES (?, ?, ?, ?)
          ON CONFLICT (pub_id, name) DO UPDATE SET email = excluded.email`)
-        .bind(generateId(), row.pub_id, contrib, row.from_email).run();
+        .bind(generateId(), row.pub_id, contrib, author).run();
     }
-    if (row.from_email && rubId) {
+    // L'habitude « les mails de X vont en rubrique Y » n'a de sens que pour un
+    // contributeur. Posée sur une adresse de l'ÉQUIPE, qui transfère de tout à
+    // tout le monde, elle se réécrit à chaque tri et ne dit plus rien de vrai.
+    if (author && rubId && !(await _isTeamAddress(env, row.pub_id, author))) {
       await env.DB.prepare(
         `INSERT INTO dk_habits (pub_id, from_email, rub_id) VALUES (?, ?, ?)
          ON CONFLICT (pub_id, from_email) DO UPDATE SET rub_id = excluded.rub_id, updated_at = datetime('now')`)
-        .bind(row.pub_id, row.from_email, rubId).run();
+        .bind(row.pub_id, author, rubId).run();
     }
   } else {
     return err('Indiquez un article existant (art_id) ou un nouvel article (create)', 400, origin);
