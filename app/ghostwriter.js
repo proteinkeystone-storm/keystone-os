@@ -484,7 +484,23 @@ function _injectCSS() {
 }
 .gw-compose-post .gw-variant-text { font-size: 14px; line-height: 1.7; }
 /* ── Relecture : voir CE QUI a été corrigé ── */
-.gw-relec-bar { display: flex; gap: 8px; }
+.gw-relec-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* DK-9 · la typographie ne se met pas au même niveau qu'un mot changé.
+   Repliée par défaut ; dépliée, elle reste en sourdine — un liseré, pas
+   un surlignage — pour que les vraies corrections continuent de sauter
+   aux yeux même quand tout est affiché. */
+.gw-relec-typo {
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+  font-size: 11.5px; color: var(--text-muted, #888); user-select: none;
+}
+.gw-relec-typo input { accent-color: #6366f1; width: 13px; height: 13px; cursor: pointer; }
+.gw-diff-add.gw-diff-typo {
+  background: none; box-shadow: inset 0 -1px 0 rgba(148, 163, 184, .55);
+  color: inherit; opacity: .85;
+}
+.gw-diff-del.gw-diff-typo { color: rgba(148, 163, 184, .7); text-decoration-thickness: 1px; }
+html.light-mode .gw-diff-add.gw-diff-typo { background: none; box-shadow: inset 0 -1px 0 rgba(100, 116, 139, .5); }
+html.light-mode .gw-diff-del.gw-diff-typo { color: rgba(100, 116, 139, .75); }
 .gw-relec-vue.is-active { background: rgba(99,102,241,.18); border-color: rgba(99,102,241,.42); color: #fff; }
 .gw-diff-add {
     background: rgba(76, 195, 138, .22); border-radius: 3px; padding: 1px 2px;
@@ -653,7 +669,16 @@ function _buildModalHTML(initialText, presetOpts) {
                 ${railHTML || `<div>
                     <h2 class="gw-title">Ghost Writer</h2>
                     <div class="gw-subtitle">${relecture
-                        ? 'Relecture — orthographe, grammaire, typographie. Les mots de l\'auteur sont préservés.'
+                        /* DK-9 · le libellé dit ce qui est GARANTI, plus ce qui est espéré.
+                           « Les mots de l'auteur sont préservés » a été mesuré sur trois vrais
+                           papiers de L'Épaulette : vrai 37 fois sur 38, faux une fois (« plus
+                           faible » rendu « moindre »). Une promesse absolue démentie une fois
+                           sur mille mots reste une promesse fausse — et c'est sur le papier de
+                           quelqu'un d'autre. On annonce donc les deux choses qui, elles, ne
+                           peuvent pas mentir : la découpe en paragraphes est rendue par le code
+                           (gwRecollerParagraphes), et rien n'entre dans l'article sans être
+                           passé sous les yeux de la rédactrice, surligné. */
+                        ? 'Relecture — orthographe, grammaire, typographie. Vos paragraphes sont gardés, chaque correction est surlignée.'
                         : 'Réécrivez votre texte — 3 variantes générées'}</div>
                 </div>`}
                 <button class="gw-close" id="gw-close-btn" aria-label="Fermer (Esc)">✕</button>
@@ -1176,6 +1201,63 @@ function _diffMots(avant, apres) {
     return neutraliseBlancs(out);
 }
 
+/* ── DK-9 · séparer ce qui touche un MOT de ce qui touche un SIGNE ──
+   Mesuré sur de vrais papiers de L'Épaulette : sur un texte de 449 mots,
+   le comparatif surlignait 54 corrections dont UNE SEULE touchait un mot.
+   Les 53 autres étaient la même apostrophe droite remplacée par la courbe.
+   Un texte entièrement surligné ne se relit pas : la seule correction qui
+   demandait un arbitrage humain était noyée dans le bruit.
+
+   On classe donc chaque correction. Est « purement typographique » celle
+   dont le mot est le MÊME une fois normalisé — apostrophes, guillemets,
+   accents, ligatures, espaces (insécables comprises), traits d'union,
+   ponctuation. Tout le reste touche le texte et se surligne franchement.
+
+   ⚠ Cette règle est la MÊME que celle de `scripts/mesure-relecture.mjs`
+   (fonctions `norm` / `hunks` / `classe`). Les deux doivent rester en
+   phase : le banc mesure ce que la rédactrice voit. */
+function _relecNorm(s) {
+    return String(s || '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')            // accents
+        .replace(/[’‘‚‛]/g, "'").replace(/[«»“”„]/g, '"')            // apostrophes, guillemets
+        .replace(/[   ]/g, ' ')                       // espaces insécables / fines
+        .replace(/[–—]/g, '-').replace(/…/g, '...')
+        .replace(/[.,;:!?()[\]"']/g, '')                             // ponctuation
+        .toLowerCase().trim();
+}
+/* Annote chaque morceau du comparatif d'un drapeau `typo`. Les blancs ne
+   FERMENT pas un groupe : « 6h30 » → « 6 h 30 » arrive en trois morceaux
+   séparés par des espaces, et les compter séparément ferait passer une
+   correction irréprochable pour trois écarts. */
+function _diffAnnote(avant, apres) {
+    const parts = _diffMots(avant, apres);
+    const groupes = [];
+    let cur = null, attente = [];
+    parts.forEach((p, i) => {
+        const blanc = /^\s+$/.test(p.mot);
+        if (p.t === '=') {
+            if (!cur) return;
+            if (blanc) { attente.push(i); return; }
+            groupes.push(cur); cur = null; attente = [];
+            return;
+        }
+        if (!cur) cur = { idx: [], moins: [], plus: [] };
+        for (const j of attente) { cur.idx.push(j); cur.moins.push(parts[j].mot); cur.plus.push(parts[j].mot); }
+        attente = [];
+        cur.idx.push(i);
+        (p.t === '-' ? cur.moins : cur.plus).push(p.mot);
+    });
+    if (cur) groupes.push(cur);
+    const colle = arr => arr.map(_relecNorm).filter(Boolean).join('').replace(/-/g, '');
+    let nMots = 0, nTypo = 0;
+    for (const g of groupes) {
+        const typo = colle(g.moins) === colle(g.plus);
+        typo ? nTypo++ : nMots++;
+        for (const j of g.idx) if (parts[j].t !== '=') parts[j].typo = typo;
+    }
+    return { parts, nMots, nTypo };
+}
+
 /* Vue RELECTURE : le texte corrigé, en grand, avec les deux seules actions
    qui aient un sens ici — le copier, ou le reprendre dans l'article. Pas
    d'envoi vers Social Manager (on relit une copie de rédaction), pas
@@ -1183,12 +1265,17 @@ function _diffMots(avant, apres) {
 function _renderRelecture(container, variant) {
     const texte = variant?.text || '';
     const source = container.closest('.gw-modal')?.querySelector('#gw-source')?.value || '';
-    const nDiff = _diffMots(source, texte).filter(p => p.t !== '=').length;
+    const { parts, nMots, nTypo } = _diffAnnote(source, texte);
+    const rien = !nMots && !nTypo;
+    const compte = rien ? 'Aucune correction'
+        : (nMots ? `${nMots} correction${nMots > 1 ? 's' : ''} sur les mots` : 'Aucun mot touché');
     container.innerHTML = `
         <div class="gw-compose-wrap">
             <div class="gw-relec-bar">
-                <button class="gw-mini-btn gw-relec-vue is-active" data-vue="diff">${nDiff ? 'Voir les corrections' : 'Aucune correction'}</button>
+                <button class="gw-mini-btn gw-relec-vue is-active" data-vue="diff">${compte}</button>
                 <button class="gw-mini-btn gw-relec-vue" data-vue="propre">Texte propre</button>
+                ${nTypo ? `<label class="gw-relec-typo"><input type="checkbox" data-slot="typo">
+                    <span>montrer aussi la typographie (${nTypo})</span></label>` : ''}
             </div>
             <article class="gw-compose-post"><div class="gw-variant-text" data-slot="relec"></div></article>
             <div class="gw-actions-row">
@@ -1198,14 +1285,23 @@ function _renderRelecture(container, variant) {
         </div>
     `;
     const zone = container.querySelector('[data-slot="relec"]');
+    const boiteTypo = container.querySelector('[data-slot="typo"]');
     const peindre = (vue) => {
-        zone.innerHTML = vue === 'propre'
-            ? _escapeHtml(texte)
-            : _diffMots(source, texte).map(p => p.t === '='
-                ? _escapeHtml(p.mot)
-                : `<span class="gw-diff-${p.t === '+' ? 'add' : 'del'}">${_escapeHtml(p.mot)}</span>`).join('');
+        if (vue === 'propre') { zone.innerHTML = _escapeHtml(texte); return; }
+        const montrerTypo = !!(boiteTypo && boiteTypo.checked);
+        zone.innerHTML = parts.map(p => {
+            if (p.t === '=') return _escapeHtml(p.mot);
+            if (p.typo && !montrerTypo) {
+                // Typographie repliée : on affiche le texte TEL QU'IL SERA
+                // repris (donc la version corrigée), sans rien surligner.
+                return p.t === '+' ? _escapeHtml(p.mot) : '';
+            }
+            const doux = p.typo ? ' gw-diff-typo' : '';
+            return `<span class="gw-diff-${p.t === '+' ? 'add' : 'del'}${doux}">${_escapeHtml(p.mot)}</span>`;
+        }).join('');
     };
     peindre('diff');
+    boiteTypo?.addEventListener('change', () => peindre('diff'));
     container.querySelectorAll('.gw-relec-vue').forEach(b => b.addEventListener('click', () => {
         container.querySelectorAll('.gw-relec-vue').forEach(x => x.classList.toggle('is-active', x === b));
         peindre(b.dataset.vue);

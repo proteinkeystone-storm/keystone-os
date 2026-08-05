@@ -632,11 +632,16 @@ function _passerellesHTML(a) {
 function _bindPasserelles(insp, a) {
   insp.querySelector('[data-act="gw"]')?.addEventListener('click', () => {
     // RELECTURE, pas réécriture : on corrige la copie d'un contributeur, on ne
-    // la refait pas. `improve` = corrections, fluidité, clarté en préservant
-    // ses tournures ; `keep` interdit au moteur de rallonger ou d'amputer.
-    // variants:1 → UNE copie corrigée. Trois formulations au choix seraient
-    // absurdes ici : on ne propose pas des versions du texte d'un auteur, on
-    // lui rend le sien, propre.
+    // la refait pas. C'est `variants: 1` qui fait TOUT le travail : côté worker
+    // il bascule sur une consigne système dédiée (branche `solo`), qui porte
+    // elle-même « ne rien ajouter, ne rien retirer, préserver les tournures ».
+    // ⚠ `action` et `lengthTarget` sont envoyés par habitude mais n'atteignent
+    // PAS cette consigne-là (la branche solo n'inclut ni actionDirective ni
+    // lengthDirective) — constaté en mesurant, DK-9. On les garde parce que
+    // `action: 'improve'` pilote AUSSI l'habillage du modal côté client
+    // (« Texte à relire », « Corriger le texte », pas de pills de ton).
+    // Trois formulations au choix seraient absurdes ici : on ne propose pas
+    // des versions du texte d'un auteur, on lui rend le sien, propre.
     // onApply : le retour du voyage. Sans lui, « Reprendre ce texte » n'avait
     // aucune cible (le texte de l'article vit sur le serveur, pas dans un champ
     // à l'écran) et retombait sur le presse-papiers — la correction était donc

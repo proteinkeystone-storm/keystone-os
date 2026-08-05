@@ -65,3 +65,8 @@ AUDIT_*.md
 _design-lab/notice-sa-src/assets.py
 _design-lab/notice-sa-src/NOTICE_SMART_AGENT.html
 _design-lab/notice-sa-src/NOTICE_SMART_AGENT.pdf
+
+# DK-9 — copies de contributeurs passées à la relecture (mesure DESK_PROD_SPRINTS).
+# Le dépôt est PUBLIC : le papier d'un contributeur de L'Épaulette n'y monte
+# jamais. Le banc, lui, est versionné (scripts/mesure-relecture.mjs).
+_design-lab/relecture-dk9/

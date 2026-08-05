@@ -912,6 +912,30 @@ await parcours('Parcours 4 — Relecture', async () => {
   check('le texte de l\'article est chargé dans le modal',
     (await valeur(page, '#gw-source')) === COPIE_FAUTIVE);
 
+  /* DK-9 · ce que le modal PROMET doit être ce que le moteur FAIT.
+     L'ancien sous-titre jurait que « les mots de l'auteur sont préservés » :
+     mesuré sur trois vrais papiers de L'Épaulette, vrai 37 fois sur 38.
+     Le libellé annonce désormais les deux choses qui ne peuvent pas mentir —
+     la découpe en paragraphes (rendue par le code) et le fait que rien
+     n'entre dans l'article sans passer surligné sous les yeux de la
+     rédactrice. Et un sous-titre qui déborde de son en-tête ne se lit pas :
+     on mesure, on ne regarde pas. */
+  const sousTitre = await page.evaluate(() => {
+    const el = document.querySelector('#gw-overlay .gw-subtitle');
+    if (!el) return null;
+    const tete = el.closest('.gw-head');
+    const r = el.getBoundingClientRect(), h = tete.getBoundingClientRect();
+    return { txt: el.textContent.trim(), hauteur: Math.round(r.height),
+             deborde: Math.round(Math.max(0, r.right - h.right) + Math.max(0, r.bottom - h.bottom)) };
+  });
+  check('le modal ne promet plus que « les mots sont préservés » — mesuré faux',
+    !!sousTitre && !/mots de l'auteur sont préservés/.test(sousTitre.txt), sousTitre && sousTitre.txt);
+  check('il annonce ce qui est garanti : les paragraphes gardés, chaque correction surlignée',
+    !!sousTitre && /paragraphes sont gardés/.test(sousTitre.txt) && /surlignée/.test(sousTitre.txt),
+    sousTitre && sousTitre.txt);
+  check('et il tient dans son en-tête (0 px de débordement)',
+    !!sousTitre && sousTitre.deborde === 0 && sousTitre.hauteur > 0, JSON.stringify(sousTitre));
+
   await cliquer(page, '#gw-go');
   await attend(page, () => !!document.querySelector('.gw-relec-bar') || !!document.querySelector('.gw-indicator'),
     null, 'le résultat de la relecture');
@@ -925,6 +949,40 @@ await parcours('Parcours 4 — Relecture', async () => {
     'indicateurs : ' + await compter(page, '.gw-indicator'));
   check('le comparatif montre ce qui a été corrigé',
     (await compter(page, '.gw-diff-add')) > 0 || (await compter(page, '.gw-diff-del')) > 0);
+
+  /* DK-9 · la typographie ne noie plus les vraies corrections.
+     Mesuré sur un vrai papier : 54 corrections surlignées, UNE SEULE
+     touchait un mot — les 53 autres étaient la même apostrophe. Ici la
+     copie fautive porte exactement les deux natures : « coésion » →
+     « cohésion » et « renforcé » → « renforcée » touchent un mot ;
+     « deroulé » → « déroulé » n'ajoute qu'un accent. */
+  check('le compteur annonce les corrections SUR LES MOTS, pas le total brut',
+    /2 corrections sur les mots/.test(await texte(page, '.gw-relec-vue[data-vue="diff"]')),
+    await texte(page, '.gw-relec-vue[data-vue="diff"]'));
+  check('la typographie est comptée à part, et repliée par défaut',
+    /typographie \(1\)/.test(await texte(page, '.gw-relec-typo'))
+      && (await compter(page, '.gw-diff-typo')) === 0,
+    await texte(page, '.gw-relec-typo'));
+  check('les deux corrections qui touchent un mot restent surlignées',
+    (await compter(page, '.gw-diff-add:not(.gw-diff-typo)')) === 2,
+    'surlignées : ' + await compter(page, '.gw-diff-add:not(.gw-diff-typo)'));
+
+  // Replier ne PERD rien : l'accent est bien appliqué à l'écran, en clair,
+  // et la faute d'origine a disparu — c'est le texte qui sera repris.
+  const zoneTxt = await texte(page, '[data-slot="relec"]');
+  check('un accent corrigé s\'affiche corrigé, sans surlignage ni doublon',
+    zoneTxt.includes('déroulé') && !zoneTxt.includes('deroulé'), zoneTxt.slice(0, 90));
+  check('mais une vraie faute montre encore le mot d\'origine barré',
+    zoneTxt.includes('coésion') && zoneTxt.includes('cohésion'), zoneTxt.slice(0, 90));
+
+  await cliquer(page, '[data-slot="typo"]');
+  await attendSel(page, '.gw-diff-typo', 'la typographie dépliée');
+  check('la case dépliée montre la typographie, en sourdine',
+    (await compter(page, '.gw-diff-typo')) > 0
+      && (await compter(page, '.gw-diff-add:not(.gw-diff-typo)')) === 2,
+    'typo : ' + await compter(page, '.gw-diff-typo'));
+  await cliquer(page, '[data-slot="typo"]');
+  await attendAbsence(page, '.gw-diff-typo', 'la typographie repliée à nouveau');
 
   // ── Défaut n° 6 (suite) : « Reprendre ce texte » réécrit RÉELLEMENT `notes`.
   await cliquer(page, '.gw-action-replace');

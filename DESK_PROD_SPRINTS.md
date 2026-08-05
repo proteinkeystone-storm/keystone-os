@@ -38,8 +38,8 @@ Autrement dit : le produit est sain, les conditions de fabrication ne le sont pa
 | Front en prod | `ks-os-v5.28.485-desk-dk8`, `app/desk.css?v=19` (vérifié : `/app` les sert) |
 | Worker en prod | version `36580790` (déployée depuis `558bb2c`) — colonnes `dk_inbox.auth`/`auth_detail` confirmées en D1 prod |
 | Bancs desK | **9/9 verts** (DK-2 48, DK-3 30, DK-4 33, DK-4b 22, DK-4c 54, DK-5 19, casier 20, signal 6, **DK-8 37**) |
-| `npm test` | **869 assertions, zéro échec** — puis **+63** avec DK-7 (52) et DK-8 (11) |
-| Front desK | `app/desk.js` **3 228 lignes**, `app/desk.css` 865 — ~~zéro test~~ → **banc `test-desk-ui.mjs`, 63 vérifications** (DK-7 + DK-8) |
+| `npm test` | **zéro échec** — 72 vérifications de front (DK-7 52 + DK-8 11 + DK-9 9) et 27 sur le parseur Ghost Writer (14 avant DK-9) |
+| Front desK | `app/desk.js` **3 228 lignes**, `app/desk.css` 865 — ~~zéro test~~ → **banc `test-desk-ui.mjs`, 72 vérifications** (DK-7 + DK-8 + DK-9) |
 | Membres du pad | **1** (Stéphane). La rédactrice n'a aucun accès. |
 
 > Deux échecs de bancs traînaient depuis des semaines. Aucun n'était un bug —
@@ -215,29 +215,97 @@ jamais tout seul sur une page. — **Fait.**
 
 ---
 
-### DK-9 · La relecture tenue à sa promesse — **petit, avant que la rédactrice ne la voie**
+### DK-9 · La relecture tenue à sa promesse — ✅ **CLOS le 2026-08-05** (non déployé)
 
-**Ferme :** le modal affiche « Les mots de l'auteur sont préservés » et personne ne
-l'a vérifié.
+**Fermait :** le modal affichait « Les mots de l'auteur sont préservés » et personne
+ne l'avait vérifié.
 
-La tuyauterie est prouvée (la commande part avec `action: improve`,
-`lengthTarget: keep`, `variants: 1` ; la réponse se lit ; le texte se réécrit).
-**Ce qui n'est pas prouvé, c'est que Mistral préserve effectivement les tournures.**
+**L'instrument :** `scripts/mesure-relecture.mjs`. Il passe des textes dans le
+**vrai** chemin de production (mêmes paramètres que le bouton de `app/desk.js`) et
+classe chaque correction : *typographie*, *orthographe/accord*, et les trois qui
+cassent la promesse — *réécriture*, *ajout*, *retrait*. Plus des contrôles durs
+(noms propres, chiffres, dates) et un contrôle de **mise en paragraphes**. Le
+comparatif est une **copie verbatim** de `_diffMots` : le chiffre annoncé est celui
+que la rédactrice voit. Hors `npm test` (appel Mistral réel, facturé, non
+déterministe) ; `MESURE_HORS_LIGNE=1` reclasse une mesure déjà payée.
 
-Passer **trois vrais textes de contributeurs** à la relecture et comparer — l'outil
-de comparaison mot à mot est déjà dans le modal. Mesurer ce qui est réellement
-touché.
+**Ce que la mesure a trouvé — et qui n'était pas la question posée.**
 
-Deux issues acceptables : soit le modèle préserve et la promesse tient ; soit il
-réécrit, et on resserre la consigne système (`workers/src/routes/ghostwriter.js`,
-branche `solo`) **ou** on change le libellé du modal. Ce qui n'est pas acceptable,
-c'est de laisser la promesse non vérifiée sur le papier de quelqu'un d'autre.
+1. **La relecture rendait l'article en un seul bloc.** 5 lignes vides sur 5 perdues,
+   3 textes sur 3. Pas le modèle : `_parseDelimited` et son `.filter(Boolean)`.
+   **Invisible** — le comparatif du modal neutralise les blancs, il n'avait rien à
+   montrer. La rédactrice reprenait sa copie sans paragraphes, en silence.
+2. **Le modèle développait les sigles.** Sur un vrai papier : « SLT MAZELLA » →
+   « lieutenant Mazella », « DA » → « division d'application » **quatre fois**. Dans
+   une revue de corps, l'abréviation EST le vocabulaire.
+3. **Le modèle recoupait les paragraphes.** 6 rendus en 8, 8 rendus en 12. Il aère
+   les longs, jamais il ne fusionne. Réécriture de la forme, invisible elle aussi.
 
-**Fini quand :** le libellé du modal correspond à ce que le modèle fait vraiment.
+**Ce qui a été fait, dans cet ordre, en mesurant après chaque pas :**
 
-**Il faut de Stéphane :** trois textes réels.
+| | promesse entamée |
+|---|---|
+| état initial, sur les 3 vrais textes | **12** |
+| consigne système resserrée (sigles, synonymes, découpe, chiffres) | **4** |
+| découpe rendue par le code (`gwRecollerParagraphes`) | **2** |
+| classement du banc corrigé (un nom composé soudé = orthographe) | **1** |
 
----
+**Le dernier écart, en 1 166 mots de vrais papiers :** « plus faible » → « moindre ».
+Un synonyme. Tout le reste est du travail de correcteur : mois en minuscules,
+`1ère` → `1re`, `Emirats Arabes Unis` → `Émirats arabes unis`, `l'Ecole` → `l'École`,
+`50km/h` → `50 km/h`, `11%` → `11 %`, `fort` → `forts`, `services` → `service`.
+Noms propres, chiffres et dates : **tous intacts** (52 + 31 contrôlés).
+
+**Le libellé, tranché d'après la mesure.** « Les mots de l'auteur sont préservés »
+était vrai 37 fois sur 38 — donc faux, et sur le papier de quelqu'un d'autre. Le
+modal annonce désormais les deux choses qui ne peuvent pas mentir :
+
+> Relecture — orthographe, grammaire, typographie.
+> **Vos paragraphes sont gardés, chaque correction est surlignée.**
+
+La découpe est garantie par le code, et rien n'entre dans l'article sans passer
+surligné sous les yeux de la rédactrice.
+
+**Les garde-fous, tous hors ligne, dans `npm test` :**
+`scripts/test-ghostwriter-parse.mjs` passe de **14 à 27** assertions (paragraphes
+préservés, découpe rendue, refus de recoller si le modèle a fusionné ou si le volume
+a bougé, guillemet fermant d'une citation finale). `scripts/test-desk-ui.mjs` passe
+de **63 à 72** : le sous-titre ne promet plus ce qui est faux, annonce ce qui est
+garanti, et **tient dans son en-tête** (0 px de débordement, mesuré).
+Vu attraper : `.filter(Boolean)` remis → l'assertion des paragraphes vire au rouge.
+
+**Fichiers :** `workers/src/routes/ghostwriter.js` (consigne `solo`,
+`_parseDelimited`, `_recollerParagraphes`) ; `app/ghostwriter.js` (libellé) ;
+`app/desk.js` (commentaire faux corrigé — `lengthTarget` n'atteint pas la branche
+`solo`, c'est `variants: 1` qui fait tout) ; `scripts/mesure-relecture.mjs` (neuf) ;
+`scripts/test-ghostwriter-parse.mjs`, `scripts/test-desk-ui.mjs` ; `.gitignore`.
+
+> **Le bruit typographique, réglé le 2026-08-05** (demandé par Stéphane après
+> lecture de la mesure). Le comparatif classe désormais chaque correction :
+> celles qui touchent un **mot** restent surlignées franchement, celles qui ne
+> touchent qu'un **signe** (apostrophe, accent, espace insécable, ligature,
+> ponctuation, trait d'union) sont **repliées** — le texte s'affiche corrigé, sans
+> surlignage. Une case « montrer aussi la typographie (n) » les déplie, en
+> sourdine. Le compteur du haut annonce les corrections **sur les mots**.
+> Effet sur les vrais papiers :
+>
+> | | avant | après |
+> |---|---|---|
+> | reel-1 | 23 en vrac | **1** sur les mots · 9 repliées |
+> | reel-2 | 54 en vrac | **5** sur les mots · 15 repliées |
+> | reel-3 | 24 en vrac | **2** sur les mots · 7 repliées |
+>
+> La règle de classement est **la même** que celle du banc de mesure (`norm` /
+> `hunks` / `classe`) : le banc mesure ce que la rédactrice voit. Les deux doivent
+> rester en phase. Gardé par 6 assertions de `test-desk-ui.mjs` (66 → **72**), dont
+> « un accent corrigé s'affiche corrigé, sans surlignage ni doublon » et « une
+> vraie faute montre encore le mot d'origine barré ». Vu attraper : le classement
+> neutralisé, 4 assertions virent au rouge.
+
+> **Les textes de contributeurs restent hors dépôt** : `_design-lab/relecture-dk9/`
+> est au `.gitignore` (le dépôt est public). Pour re-mesurer après un changement de
+> modèle ou de consigne : y poser des `.txt`, lancer le worker de banc, puis
+> `node scripts/mesure-relecture.mjs`.
 
 ### DK-10 · La rédactrice en chef — **le vrai passage en prod**
 

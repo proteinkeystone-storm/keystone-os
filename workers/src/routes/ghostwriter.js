@@ -435,22 +435,45 @@ export async function handleGhostwriterRewrite(request, env) {
   // relit le texte d'un auteur. Défaut inchangé (3) pour tous les autres pads.
   const nVar = Math.min(3, Math.max(1, parseInt(variants, 10) || 3));
   const solo = nVar === 1;
+  /* ── DK-9 · la consigne de RELECTURE ────────────────────────────
+     Resserrée le 2026-08-05 après MESURE sur de vrais textes de
+     contributeurs (`scripts/mesure-relecture.mjs`). La version d'avant
+     tenait sur les textes de démonstration et lâchait sur les vrais.
+     Trois dérives constatées, chacune adressée nommément ci-dessous :
+     · les SIGLES développés — « SLT » → « lieutenant », « DA » →
+       « division d'application » (4 fois dans un seul papier). Dans une
+       revue de corps, l'abréviation EST le vocabulaire : la développer,
+       c'est traduire l'auteur pour un lecteur qui n'existe pas.
+     · les PARAGRAPHES recoupés — 6 → 8 sur un texte, 8 → 12 sur un
+       autre. Le modèle « aère » l'article. C'est une réécriture de la
+       forme, et elle est INVISIBLE dans le comparatif du modal, qui
+       neutralise les blancs.
+     · les SYNONYMES — « plus faible » → « moindre ». C'est la licence
+       « améliorer la fluidité » de l'ancienne consigne qui l'autorisait.
+       Elle est retirée : le modal ne promet qu'orthographe, grammaire et
+       typographie, la consigne dit maintenant la même chose. */
   const systemPrompt = solo ? [
-    'Tu es un correcteur-relecteur professionnel. Tu rends UNE version corrigée du texte donné, sans le dénaturer ni le réécrire.',
+    'Tu es un correcteur-relecteur professionnel. Tu CORRIGES un texte, tu ne le réécris pas.',
+    'Objectif : que l\'auteur relise ta version et y reconnaisse SON texte, mot pour mot, en mieux orthographié.',
     '',
-    'Règles strictes :',
-    '- UNE seule version corrigée',
-    '- Corriger orthographe, grammaire, accords, ponctuation et typographie française (espaces insécables, guillemets « », apostrophes)',
-    '- Améliorer la fluidité SEULEMENT là où la phrase accroche ; préserver au maximum les tournures, le vocabulaire et le style de l\'auteur',
-    '- Ne RIEN ajouter, ne RIEN retirer : ni idée, ni exemple, ni transition',
+    'CE QUE TU CORRIGES :',
+    '- orthographe, grammaire, accords, conjugaison',
+    '- ponctuation et typographie française : espaces insécables, guillemets « », apostrophes typographiques, traits d\'union, ligatures (œ, æ)',
+    '',
+    'CE QUE TU NE TOUCHES JAMAIS — même si tu penses faire mieux :',
+    '- les ABRÉVIATIONS, SIGLES et ACRONYMES : tu les recopies EXACTEMENT tels quels. Tu ne les développes JAMAIS, tu n\'ajoutes jamais leur signification entre parenthèses. Le lecteur de cette revue les connaît mieux que toi.',
+    '- la DÉCOUPE EN PARAGRAPHES : tu rends EXACTEMENT le même nombre de paragraphes, coupés aux mêmes endroits. Tu ne scindes pas un paragraphe long, tu ne fusionnes pas deux paragraphes courts, tu n\'en ajoutes aucun.',
+    '- le CHOIX DES MOTS : aucun synonyme, aucune tournure « plus fluide ». Une phrase grammaticalement correcte se recopie telle quelle, même si tu l\'aurais écrite autrement.',
+    '- les CHIFFRES et NOMBRES dans la forme où l\'auteur les a écrits (en chiffres ou en toutes lettres, comme lui).',
+    '- les noms propres, les dates, les montants, les faits.',
+    '- Ne RIEN ajouter, ne RIEN retirer : ni mot de liaison, ni idée, ni exemple, ni transition.',
     `- Forme d'adresse : ${formalAddress}`,
-    '- Préserver le sens original (faits, dates, montants, noms propres)',
-    '- Pas de commentaire, pas de préface, pas d\'explication',
-    '- Aucun markdown (pas de **, *, _, #, etc.)',
+    '',
+    'Pas de commentaire, pas de préface, pas d\'explication. Aucun markdown (pas de **, *, _, #).',
     '',
     'FORMAT DE SORTIE — réponds en TEXTE BRUT, PAS en JSON :',
     '- 1re ligne : exactement « Relecture »',
-    '- Lignes suivantes : le texte corrigé, rien d\'autre.',
+    '- Lignes suivantes : le texte corrigé, avec une ligne vide entre les paragraphes, aux MÊMES endroits que dans le texte reçu. Rien d\'autre.',
   ].filter(Boolean).join('\n') : [
     'Tu es un assistant de réécriture textuelle expert. Tu reformules le texte donné en exactement 3 variantes distinctes, sans le dénaturer.',
     '',
@@ -496,6 +519,8 @@ export async function handleGhostwriterRewrite(request, env) {
     } catch (e) { return err(e?.message || 'Erreur moteur', e?.httpStatus || 502, origin); }
     const parsedByok = _parseVariants(out.text, solo);
     if (!parsedByok) return err('Le modèle n\'a pas renvoyé de variantes exploitables.', 502, origin);
+    // DK-9 : en relecture, l'article ressort avec la découpe de son auteur.
+    if (solo && parsedByok.variants[0]) parsedByok.variants[0].text = _recollerParagraphes(text, parsedByok.variants[0].text);
     committed = true;
     return json({ variants: parsedByok.variants, model: out.model, usage: out.usage, viaBYOK: true, quota: null }, 200, origin);
   }
@@ -575,6 +600,8 @@ export async function handleGhostwriterRewrite(request, env) {
   // committed=true AVANT le return : le finally verra true et ne
   // revertra pas. Toute exception après ce point laisserait le
   // bump appliqué — c'est ce qu'on veut puisque l'AI a déjà run.
+  // DK-9 : en relecture, l'article ressort avec la découpe de son auteur.
+  if (solo && parsed.variants[0]) parsed.variants[0].text = _recollerParagraphes(text, parsed.variants[0].text);
   committed = true;
   return json({
     variants: parsed.variants,
@@ -704,16 +731,41 @@ function _parseDelimited(s) {
   const blocks = String(s || '').split(/(?:^|\n)\s*-{3,}\s*(?:\n|$)/).map(b => b.trim()).filter(Boolean);
   const variants = [];
   for (const block of blocks) {
-    const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-    if (!lines.length) continue;
+    /* ⚠ DK-9 — les LIGNES VIDES sont du contenu, pas du bruit.
+       Ce parseur les filtrait (`.filter(Boolean)`), ce qui rendait toujours
+       un pavé d'un seul tenant. Sur trois variantes courtes ça ne se voyait
+       pas ; sur la RELECTURE d'un article de six paragraphes, ça écrasait
+       toute la mise en paragraphes — et en silence, car le comparatif mot à
+       mot du modal neutralise les blancs (`_diffMots` → `neutraliseBlancs`)
+       et ne pouvait donc RIEN montrer. La rédactrice cliquait « Reprendre ce
+       texte » et récupérait son article en un seul bloc.
+       Mesuré le 2026-08-05 : 5 lignes vides sur 5 perdues, sur trois textes
+       sur trois. Gardé par scripts/test-ghostwriter-parse.mjs. */
+    const lines = block.split('\n').map(l => l.trim());
+    const pleines = lines.filter(Boolean);
+    if (!pleines.length) continue;
+    const i0 = lines.findIndex(Boolean);
     let label = '', text = '';
-    if (lines.length >= 2 && lines[0].length <= 70) {
-      label = lines[0].replace(/^(ton|variante)\b\s*[:\-–—]?\s*/i, '').replace(/^["'«»\s]+|["'«»:\-–—\s]+$/g, '').trim();
-      text  = lines.slice(1).join('\n').trim();
+    if (pleines.length >= 2 && pleines[0].length <= 70) {
+      label = pleines[0].replace(/^(ton|variante)\b\s*[:\-–—]?\s*/i, '').replace(/^["'«»\s]+|["'«»:\-–—\s]+$/g, '').trim();
+      text  = lines.slice(i0 + 1).join('\n');
     } else {
-      text = lines.join('\n').trim();
+      text = lines.slice(i0).join('\n');
     }
-    text = text.replace(/^["'«»]+|["'«»]+$/g, '').trim();
+    // Un paragraphe se sépare par UNE ligne vide : au-delà, c'est du vide.
+    text = text.replace(/\n{3,}/g, '\n\n').trim();
+    /* Le modèle enrobe parfois toute sa réponse de guillemets. On ne retire
+       la paire QUE si elle enveloppe vraiment le texte entier. Un article qui
+       se TERMINE sur une citation — « … » en dernier — est un cas courant en
+       rédaction ; raboter son guillemet fermant reviendrait à retirer quelque
+       chose à l'auteur, ce que la relecture promet de ne jamais faire. */
+    for (const [ouvre, ferme] of [['«', '»'], ['"', '"'], ["'", "'"]]) {
+      if (text.startsWith(ouvre) && text.endsWith(ferme) && text.length > 2
+          && text.slice(ouvre.length, -ferme.length).includes(ferme) === false) {
+        text = text.slice(ouvre.length, -ferme.length).trim();
+        break;
+      }
+    }
     if (text) variants.push({ label: label || `Variante ${variants.length + 1}`, text });
     if (variants.length >= 3) break;
   }
@@ -788,3 +840,50 @@ export async function handleGhostwriterQuota(request, env) {
    bloc sans séparateur « --- ». Le tester à sec évite d'avoir à faire tourner
    le modèle pour vérifier une règle de lecture. */
 export { _parseVariants as gwParseVariants };
+export { _recollerParagraphes as gwRecollerParagraphes };
+
+/* ═══════ DK-9 · rendre à l'article SA découpe en paragraphes ═══════
+   Mesuré le 2026-08-05 sur trois vrais papiers de L'Épaulette : le
+   modèle « aère » le texte qu'on lui donne à relire — 6 paragraphes
+   rendus en 8, 8 rendus en 12. Il coupe les longs, jamais il ne
+   fusionne. C'est une réécriture de la FORME, et elle est invisible
+   dans le comparatif du modal (qui neutralise les blancs) : la
+   rédactrice reprend le texte et découvre l'article recomposé.
+
+   Resserrer la consigne système n'y a rien fait (essayé, mesuré : les
+   sigles ont cessé d'être développés, la découpe non). On la remet donc
+   d'aplomb par le calcul, ce qui a l'avantage d'être déterministe et
+   testable sans brûler un neurone.
+
+   Principe : le modèle n'ajoute que des coupures. On recolle donc ses
+   blocs pour retrouver le compte de l'auteur, en se calant sur la
+   longueur de CHAQUE paragraphe d'origine. Aucun mot n'est touché.
+
+   Garde-fous — on renonce et on rend la copie du modèle telle quelle si
+   le texte a trop changé de volume (≥ 8 % de mots d'écart) ou s'il a
+   FUSIONNÉ au lieu de couper : dans ces cas-là on ne recolle pas un
+   découpage, on masquerait une vraie réécriture. */
+function _recollerParagraphes(source, corrige) {
+  const decoupe = s => String(s || '').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  const nMots = s => String(s || '').split(/\s+/).filter(Boolean).length;
+  const src = decoupe(source), out = decoupe(corrige);
+  if (src.length < 2 || out.length <= src.length) return corrige;
+  const totalSrc = nMots(source);
+  if (!totalSrc || Math.abs(nMots(corrige) - totalSrc) > Math.max(10, totalSrc * 0.08)) return corrige;
+  const cibles = src.map(nMots);
+  const res = [];
+  let i = 0;
+  for (let p = 0; p < cibles.length && i < out.length; p++) {
+    let bloc = out[i++], n = nMots(bloc);
+    const restants = cibles.length - p - 1;   // paragraphes encore à servir
+    // On agrège tant que ça RAPPROCHE de la longueur du paragraphe d'origine,
+    // sans jamais consommer les blocs dont les paragraphes suivants ont besoin.
+    while (i < out.length && (out.length - i) > restants
+           && Math.abs(n + nMots(out[i]) - cibles[p]) < Math.abs(n - cibles[p])) {
+      bloc += ' ' + out[i]; n += nMots(out[i]); i++;
+    }
+    res.push(bloc);
+  }
+  while (i < out.length) res[res.length - 1] += ' ' + out[i++];   // reliquat éventuel
+  return res.join('\n\n');
+}
