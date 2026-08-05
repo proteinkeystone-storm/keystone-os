@@ -427,7 +427,13 @@ export async function handleDeskBootstrap(request, env) {
       out.push({ id: p.id, name: p.name, slug: p.slug || null, owner: p.owner_sub === u.sub,
         cover_unnumbered: !!p.cover_unnumbered, first_folio: Number.isFinite(p.first_folio) ? p.first_folio : 1, issues });
     }
-    return json({ ok: true, engine: DK_ENGINE_VERSION, me: { sub: u.sub, name: u.name }, publications: out }, 200, origin);
+    // DK-10 : l'e-mail voyage avec `me`. L'invitation d'un co-équipier
+    // s'accepte par CORRESPONDANCE D'ADRESSE (voir plus haut) : si celle de
+    // sa licence n'est pas celle qui a été invitée, il arrive sur un desK
+    // vide et croit devoir créer sa propre revue — il en ouvrirait une
+    // SECONDE à côté de celle de l'équipe, et personne ne verrait l'erreur.
+    // Le front affiche donc l'adresse dans l'écran d'accueil vide.
+    return json({ ok: true, engine: DK_ENGINE_VERSION, me: { sub: u.sub, name: u.name, email: u.email }, publications: out }, 200, origin);
   } catch (e) {
     return err('Lecture impossible : ' + (e && e.message || 'erreur'), 500, origin);
   }

@@ -38,8 +38,8 @@ Autrement dit : le produit est sain, les conditions de fabrication ne le sont pa
 | Front en prod | `ks-os-v5.28.486-desk-dk9`, `app/desk.css?v=19` (vérifié : trois sondes espacées) |
 | Worker en prod | version `14757e27` (déployée depuis `8818066`) — colonnes `dk_inbox.auth`/`auth_detail` confirmées en D1 prod |
 | Bancs desK | **9/9 verts** (DK-2 48, DK-3 30, DK-4 33, DK-4b 22, DK-4c 54, DK-5 19, casier 20, signal 6, **DK-8 37**) |
-| `npm test` | **zéro échec** — 72 vérifications de front (DK-7 52 + DK-8 11 + DK-9 9) et 27 sur le parseur Ghost Writer (14 avant DK-9) |
-| Front desK | `app/desk.js` **3 228 lignes**, `app/desk.css` 865 — ~~zéro test~~ → **banc `test-desk-ui.mjs`, 72 vérifications** (DK-7 + DK-8 + DK-9) |
+| `npm test` | **zéro échec** — 76 vérifications de front (DK-7 52 + DK-8 11 + DK-9 9 + DK-10 4) et 27 sur le parseur Ghost Writer (14 avant DK-9) |
+| Front desK | `app/desk.js` **3 228 lignes**, `app/desk.css` 865 — ~~zéro test~~ → **banc `test-desk-ui.mjs`, 76 vérifications** (DK-7 + DK-8 + DK-9 + DK-10) |
 | Membres du pad | **1** (Stéphane). La rédactrice n'a aucun accès. |
 
 > Deux échecs de bancs traînaient depuis des semaines. Aucun n'était un bug —
@@ -307,7 +307,7 @@ Vu attraper : `.filter(Boolean)` remis → l'assertion des paragraphes vire au r
 > modèle ou de consigne : y poser des `.txt`, lancer le worker de banc, puis
 > `node scripts/mesure-relecture.mjs`.
 
-### DK-10 · La rédactrice en chef — **le vrai passage en prod**
+### DK-10 · La rédactrice en chef — **le vrai passage en prod** · 🟡 mine désamorcée, le reste vous appartient
 
 **Ferme :** celle qui va s'en servir n'a jamais vu un écran ; toute l'ergonomie a
 été validée par une seule personne.
@@ -320,7 +320,44 @@ démonstration : un vrai bouclage, de la première contribution au passage en
 **Fini quand :** un numéro est bouclé avec elle aux commandes, et la liste de ses
 frictions est écrite. C'est cette liste qui dira si l'app est bonne.
 
-**Coût :** du calendrier, pas du code.
+**Coût :** du calendrier, pas du code. **Rien de ce qui suit ne clôt DK-10.**
+
+> **CE QUI A ÉTÉ FAIT LE 2026-08-05 — une mine sous le premier contact.**
+> Une invitation desK s'accepte par **correspondance d'adresse** : au bootstrap,
+> le worker cherche `dk_invites.email = claims.email`. Les deux côtés sont bien
+> normalisés (`.toLowerCase().trim()`), donc la casse ne pose pas de problème.
+> **Mais si l'adresse de sa licence n'est pas celle qui a été invitée** — faute de
+> frappe, adresse personnelle au lieu de la professionnelle, ou licence dont le
+> champ e-mail est vide (le JWT retombe alors sur `licence.owner`, qui est un
+> NOM) — elle n'a aucune publication, et l'écran qu'elle reçoit est **exactement
+> celui d'un desK neuf** : « Votre rédaction vous attend. Créez. »
+>
+> Elle aurait créé une **seconde revue** à côté de celle de l'équipe, y aurait
+> travaillé, et personne ne l'aurait vu avant longtemps. Le pire des ratés : celui
+> qui ressemble à un succès.
+>
+> Corrigé : `me.email` voyage désormais avec le bootstrap, et l'écran d'accueil
+> vide **nomme l'adresse de connexion** en ambre, avec l'avertissement qu'une
+> revue créée là serait une seconde revue. Gardé par un **parcours 7** dans
+> `scripts/test-desk-ui.mjs` (72 → **76**), qui mesure aussi que l'avertissement
+> est réellement rendu. Vu attraper : la ligne retirée, 3 assertions au rouge.
+
+**À vérifier AVANT la séance — ce sont les trois choses qui la bloqueraient :**
+
+1. **Sa licence Keystone existe et porte la BONNE adresse e-mail.** C'est celle-là
+   qu'il faut inviter, pas une autre. Si le doute subsiste, l'écran d'accueil de
+   desK la lui affichera désormais : comparez-la à ce que montre Réglages → Équipe
+   (l'invitation en attente y est listée avec son adresse).
+2. **Son plan donne accès à desK** : le pad est en `STARTER`. Une licence `DEMO`
+   ne l'ouvrira pas. Et si sa licence porte une liste `ks_owned_assets`, `O-DSK-001`
+   doit y figurer (liste absente = tout est ouvert).
+3. **L'invitation est bien partie** : Réglages → Équipe doit montrer la ligne
+   « invitation en attente — s'activera à sa prochaine connexion ». Elle disparaît
+   au premier bootstrap de la rédactrice ; tant qu'elle est là, c'est qu'elle ne
+   s'est pas encore connectée. (Plafond : 20 membres par publication.)
+
+**Il faut de Stéphane :** la séance, et la liste des frictions écrite pendant —
+pas après. C'est le seul livrable de DK-10, et il n'est pas dans ce dépôt.
 
 ---
 

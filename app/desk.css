@@ -38,6 +38,16 @@
 .dk-hero-ico { color: var(--dk-gold); margin-bottom: 14px; }
 .dk-hero h2 { font-weight: 900; letter-spacing: -0.02em; font-size: 24px; margin-bottom: 10px; }
 .dk-hero p { color: var(--dk-tx2); font-size: 14px; line-height: 1.55; margin-bottom: 18px; }
+/* DK-10 · l'adresse avec laquelle on est connecté, sur l'écran d'accueil vide.
+   Une invitation s'accepte par correspondance d'adresse : sans cette ligne,
+   une adresse qui ne correspond pas mène à un desK vide indiscernable d'un
+   desK neuf — et le co-équipier crée une SECONDE revue à côté de l'équipe. */
+.dk-hero-qui {
+  font-size: 12.5px; line-height: 1.5; text-align: left;
+  padding: 10px 13px; border-radius: 10px;
+  background: rgba(245, 158, 11, .1); color: #f59e0b;
+}
+.dk-hero-qui strong { font-weight: 700; overflow-wrap: anywhere; }
 .dk-form-row { display: flex; gap: 9px; align-items: center; }
 .dk-form-row input[type="text"], .dk-form-row input[type="email"] {
   flex: 1; min-width: 0; padding: 10px 13px; border-radius: 11px; font: inherit; font-size: 14px;

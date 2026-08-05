@@ -384,6 +384,9 @@ function _renderCreatePub(extra) {
         <div class="dk-hero-ico">${icon('desk', 44)}</div>
         <h2>${extra ? 'Nouvelle publication' : 'Votre rédaction vous attend'}</h2>
         <p>Une publication = une revue et son équipe. Vous y créerez vos numéros, leur chemin de fer, et inviterez vos co-équipiers — les contributeurs, eux, restent dans l'e-mail.</p>
+        ${!extra && _me && _me.email ? `<p class="dk-hero-qui">Vous êtes ici avec l'adresse <strong>${_esc(_me.email)}</strong>.
+          Si on vous a invitée dans une revue qui existe déjà, c'est à cette adresse-là que l'invitation doit être arrivée —
+          sinon, en créant une revue ci-dessous, vous en ouvririez une seconde à côté de celle de l'équipe.</p>` : ''}
         <div class="dk-form-row">
           <input type="text" data-k="pubname" maxlength="120" placeholder="Nom de la revue — ex. L'Épaulette">
           <button class="dk-btn primary" data-act="createpub">Créer</button>

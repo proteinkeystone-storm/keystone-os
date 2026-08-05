@@ -225,8 +225,11 @@ function apiDesk(method, path, body) {
   let m;
 
   if (path === '/bootstrap') {
-    return [200, { ok: true, me: { sub: 'ui-owner', name: 'Stéphane' },
-      publications: [{ ...DB.pub, issues: [DB.issue] }] }];
+    // DK-10 : `me.email` voyage — c'est ce qui permet à l'écran d'accueil vide
+    // de nommer l'adresse de connexion. DB.sansPub simule le cas de la
+    // co-équipière dont l'invitation n'a pas pris (adresse qui ne correspond pas).
+    return [200, { ok: true, me: { sub: 'ui-owner', name: 'Stéphane', email: 'ui@test.dk' },
+      publications: DB.sansPub ? [] : [{ ...DB.pub, issues: [DB.issue] }] }];
   }
 
   if ((m = path.match(/^\/issue\/([^/]+)$/)) && method === 'GET') {
@@ -1208,12 +1211,50 @@ await parcours('Parcours 6 — DK-8 · la porte d\'entrée', async () => {
 });
 
 /* ─────────────────────────────────────────────────────────────────
+   PARCOURS 7 · DK-10 — la co-équipière dont l'invitation n'a pas pris
+
+   Une invitation desK s'accepte par CORRESPONDANCE D'ADRESSE : au
+   bootstrap, le worker cherche `dk_invites.email = claims.email`. Si la
+   rédactrice en chef ouvre desK avec une licence dont l'adresse n'est
+   pas celle qui a été invitée — une faute de frappe, une adresse
+   personnelle au lieu de la professionnelle —, elle n'a AUCUNE
+   publication. Et l'écran qu'elle reçoit alors est le même que celui
+   d'un desK tout neuf : « Votre rédaction vous attend. Créez. »
+
+   Elle créerait donc une SECONDE revue à côté de celle de l'équipe, y
+   travaillerait, et personne ne verrait l'erreur avant longtemps. Le
+   pire des ratés : celui qui ressemble à un succès. L'écran doit dire
+   avec quelle adresse on est connecté.
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 7 — DK-10 · l\'invitation qui n\'a pas pris', async () => {
+  await ouvrirLePad(page, BASE);
+  DB.sansPub = true;                       // aucune publication pour cette adresse
+  await page.goto(BASE + '/__dk7-harnais.html', { waitUntil: 'domcontentloaded' });
+  await attendSel(page, '.dk-hero', 'l\'écran d\'accueil vide');
+
+  check('sans publication, desK propose bien d\'en créer une',
+    /Votre rédaction vous attend/.test(await texte(page, '.dk-hero h2')));
+  const qui = await page.evaluate(() => {
+    const el = document.querySelector('.dk-hero-qui');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { txt: el.textContent.replace(/\s+/g, ' ').trim(), h: Math.round(r.height) };
+  });
+  check('mais il NOMME l\'adresse de connexion — sans quoi l\'erreur est indétectable',
+    !!qui && qui.txt.includes('ui@test.dk'), qui && qui.txt.slice(0, 120));
+  check('et il prévient qu\'une revue créée ici serait une SECONDE revue',
+    !!qui && /seconde/i.test(qui.txt) && /invit/i.test(qui.txt), qui && qui.txt.slice(0, 200));
+  check('l\'avertissement est réellement visible (hauteur rendue > 0)',
+    !!qui && qui.h > 0, JSON.stringify(qui));
+});
+
+/* ─────────────────────────────────────────────────────────────────
    Hygiène : aucune erreur JS n'a été avalée en chemin.
    ───────────────────────────────────────────────────────────────── */
 console.log('\n\x1b[1m▶ Hygiène\x1b[0m');
 {
   const graves = erreursPage.filter(e => !/favicon|LOGOS|ERR_/.test(e));
-  check('aucune erreur JavaScript pendant les six parcours', graves.length === 0,
+  check('aucune erreur JavaScript pendant les sept parcours', graves.length === 0,
     graves.slice(0, 4).join(' | '));
 }
 
