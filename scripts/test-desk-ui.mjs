@@ -252,6 +252,9 @@ function apiDesk(method, path, body) {
           orig_email: r.orig_email, orig_name: r.orig_name,
           subject: r.subject, body: r.body, suggestion: r.suggestion,
           attachments: r.attachments, received_at: r.received_at,
+          // DK-8 : le verdict d'authentification voyage avec le bac, sinon la
+          // mention « expéditeur non authentifié » n'a rien à afficher.
+          auth: r.auth ?? null, auth_detail: r.auth_detail ?? null,
         };
         return r.id === 'in-spontane' ? base : { ...base, status: r.status, lu_at: r.lu_at };
       }),
@@ -282,9 +285,14 @@ function apiDesk(method, path, body) {
         art_id: r.art_id || null, art_title: art ? art.title : null,
         art_status: art ? art.status : null,
         art_perdu: !!(r.art_id && !art),
+        auth: r.auth ?? null, auth_detail: r.auth_detail ?? null,
       };
     }).sort((a, b) => (a.received_at < b.received_at ? 1 : -1));
-    return [200, { ok: true, courrier, non_lus: nonLus() }];
+    // DK-8 : les comptes par sort, sur TOUT le courrier — la liste est
+    // plafonnée côté worker, donc l'alerte « mises de côté » les lit ici.
+    const compte = {};
+    for (const r of DB.inbox) compte[r.status] = (compte[r.status] || 0) + 1;
+    return [200, { ok: true, courrier, non_lus: nonLus(), compte }];
   }
 
   if ((m = path.match(/^\/inbox\/([^/]+)\/lu$/)) && method === 'POST') {
@@ -1048,12 +1056,106 @@ await parcours('Parcours 5 — Confirmations dans le cadre', async () => {
 });
 
 /* ─────────────────────────────────────────────────────────────────
+   PARCOURS 6 · DK-8 — ce que la porte d'entrée doit DIRE à l'écran
+
+   Le worker est gardé par workers/test/test-desk-dk8-porte.mjs (l'avalanche
+   de 300, le SPF en échec). Ici on vérifie la seule moitié qu'un banc de
+   worker ne peut pas voir : que la rédactrice, elle, l'apprenne — la
+   mention « expéditeur non authentifié » sur le pli à trier, et le sort
+   « mise de côté » sur celui que le bac débordant n'a pas pu accueillir.
+   Un avertissement présent dans le HTML mais invisible ne compte pas :
+   on mesure sa hauteur rendue.
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 6 — DK-8 · la porte d\'entrée', async () => {
+  await ouvrirLePad(page, BASE);   // monde neuf…
+
+  // … puis les deux plis que seul DK-8 sait produire, et on recharge le pad
+  // SANS remettre le monde à zéro (ouvrirLePad le ferait).
+  DB.inbox.unshift(
+    { id: 'in-usurpe', pub_id: 'pub-1',
+      from_email: 'd.mahieu@exemple.fr', from_name: 'Col. D. Mahieu',
+      orig_email: null, orig_name: null,
+      subject: 'Ma copie — le stage de cohésion (2)',
+      body: 'Voici la copie promise.',
+      suggestion: JSON.stringify({ kind: 'article', art_id: 'art-copie', via: 'expediteur' }),
+      attachments: '[]',
+      status: 'pending', art_id: null, resolved_by: null, resolved_at: null,
+      received_at: SQL_NOW(-2), lu_at: null,
+      auth: 'fail', auth_detail: 'spf=fail dkim=none dmarc=fail' },
+    { id: 'in-decote', pub_id: 'pub-1',
+      from_email: 's.royer@exemple.fr', from_name: 'Mme S. Royer',
+      orig_email: null, orig_name: null,
+      subject: 'Mon papier, désolée du retard',
+      body: 'Je vous l\'envoie enfin.',
+      suggestion: JSON.stringify({ via: 'aucune' }), attachments: '[]',
+      status: 'differe', art_id: null, resolved_by: null, resolved_at: null,
+      received_at: SQL_NOW(-1), lu_at: null, auth: null, auth_detail: null },
+  );
+  await page.goto(BASE + '/__dk7-harnais.html', { waitUntil: 'domcontentloaded' });
+  await attendSel(page, '.dk-frise .dk-pcard', 'le pad rechargé avec les plis DK-8');
+  await attendre(120);
+
+  // ── Le bac « À trier » : la mention doit être LÀ, et VISIBLE.
+  await cliquer(page, '[data-act="bac"]');
+  await attendSel(page, '.dk-insp [data-bac="in-usurpe"]', 'le pli non authentifié dans le bac');
+  check('le pli non authentifié est signalé dès la liste du bac',
+    await existe(page, '.dk-insp [data-bac="in-usurpe"]')
+      && /non authentifi/i.test(await texte(page, '.dk-insp .dk-banc-item .dk-bac-suspect')));
+
+  await cliquer(page, '.dk-insp [data-bac="in-usurpe"]');
+  await attendSel(page, '.dk-insp [data-act="bacok"]', 'le panneau de TRI du pli non authentifié');
+  const alerte = await page.evaluate(() => {
+    const el = document.querySelector('.dk-insp .dk-bac-alert');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { txt: el.textContent, h: Math.round(r.height), w: Math.round(r.width) };
+  });
+  check('le panneau de tri porte l\'avertissement d\'authentification', !!alerte, 'aucun .dk-bac-alert');
+  check('l\'avertissement nomme les contrôles qui ont lâché',
+    !!alerte && /SPF\/DKIM/.test(alerte.txt) && /usurp/i.test(alerte.txt), alerte && alerte.txt.slice(0, 120));
+  check('il rapporte le détail constaté à l\'arrivée',
+    !!alerte && /spf=fail/.test(alerte.txt), alerte && alerte.txt.slice(0, 160));
+  check('et il est réellement VISIBLE (hauteur rendue > 0)',
+    !!alerte && alerte.h > 0 && alerte.w > 0, JSON.stringify(alerte));
+  // Le travail de la digestion n'est pas jeté pour autant : la cible reste
+  // proposée, c'est l'humain qui tranche — c'est tout l'objet du garde-fou.
+  check('la cible reste proposée à la rédactrice (on demande un humain, on ne perd rien)',
+    /stage de coh/i.test(await texte(page, '.dk-insp .dk-bac-choice')));
+
+  // ── La bannette : le pli mis de côté est visible, nommé, et triable.
+  await cliquer(page, '[data-act="bannette"]');
+  await attendSel(page, '.dk-insp [data-bac="in-decote"]', 'le pli mis de côté dans la bannette');
+  check('la bannette dit qu\'une contribution a été mise de côté, et pourquoi',
+    /mise de c/i.test(await texte(page, '.dk-insp .dk-bac-alert'))
+      && /bac d[ée]bordait/i.test(await texte(page, '.dk-insp .dk-bac-alert')),
+    await texte(page, '.dk-insp .dk-bac-alert'));
+  const ligne = await page.evaluate(() => {
+    const b = document.querySelector('[data-bac="in-decote"]');
+    const item = b && b.closest('.dk-banc-item');
+    return item ? { sort: (item.querySelector('.dk-bac-sort') || {}).textContent || '', bouton: b.textContent.trim() } : null;
+  });
+  check('sa ligne annonce « mise de côté », pas « écartée » ni « rattachée »',
+    !!ligne && /mise de c/i.test(ligne.sort) && !/écart|rattach/i.test(ligne.sort), JSON.stringify(ligne));
+  check('et son bouton propose de la TRIER — de côté n\'est pas un sort, c\'est une file',
+    !!ligne && ligne.bouton === 'Trier', JSON.stringify(ligne));
+
+  // Le piège du 4 août, rejoué : le pli mis de côté doit ouvrir le panneau de
+  // TRI (qui sait rattacher et poser en page), pas celui de reprise.
+  await cliquer(page, '.dk-insp [data-bac="in-decote"]');
+  await attendSel(page, '.dk-insp [data-act="bacok"]', 'le panneau de tri du pli mis de côté');
+  check('un pli mis de côté ouvre le panneau de TRI, pas celui de reprise',
+    await existe(page, '.dk-insp [data-act="bacok"]') && !await existe(page, '.dk-insp [data-act="reprendre"]'));
+  check('et il explique qu\'elle n\'a jamais été refusée à son auteur',
+    /jamais été refusée/i.test(await texte(page, '.dk-insp')));
+});
+
+/* ─────────────────────────────────────────────────────────────────
    Hygiène : aucune erreur JS n'a été avalée en chemin.
    ───────────────────────────────────────────────────────────────── */
 console.log('\n\x1b[1m▶ Hygiène\x1b[0m');
 {
   const graves = erreursPage.filter(e => !/favicon|LOGOS|ERR_/.test(e));
-  check('aucune erreur JavaScript pendant les cinq parcours', graves.length === 0,
+  check('aucune erreur JavaScript pendant les six parcours', graves.length === 0,
     graves.slice(0, 4).join(' | '));
 }
 

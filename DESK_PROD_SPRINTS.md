@@ -35,11 +35,11 @@ Autrement dit : le produit est sain, les conditions de fabrication ne le sont pa
 | | |
 |---|---|
 | `main` | `40d9146` |
-| Front en prod | `ks-os-v5.28.484-desk-confirm-vue`, `app/desk.css?v=18` |
-| Worker en prod | version `740b8747` (déployée depuis `40d9146`) |
-| Bancs desK | **8/8 verts** (DK-2 48, DK-3 30, DK-4 33, DK-4b 22, DK-4c 54, DK-5 19, casier 20, signal 6) |
-| `npm test` | **869 assertions, zéro échec** — puis **+52** avec DK-7 (2026-08-05) |
-| Front desK | `app/desk.js` **3 203 lignes**, `app/desk.css` 855 — ~~zéro test~~ → **banc `test-desk-ui.mjs`, 52 vérifications** (DK-7) |
+| Front en prod | `ks-os-v5.28.484-desk-confirm-vue`, `app/desk.css?v=18` — **DK-8 non déployé** (`?v=19` en attente de regroupement) |
+| Worker en prod | version `740b8747` (déployée depuis `40d9146`) — **DK-8 non déployé** |
+| Bancs desK | **9/9 verts** (DK-2 48, DK-3 30, DK-4 33, DK-4b 22, DK-4c 54, DK-5 19, casier 20, signal 6, **DK-8 37**) |
+| `npm test` | **869 assertions, zéro échec** — puis **+63** avec DK-7 (52) et DK-8 (11) |
+| Front desK | `app/desk.js` **3 228 lignes**, `app/desk.css` 865 — ~~zéro test~~ → **banc `test-desk-ui.mjs`, 63 vérifications** (DK-7 + DK-8) |
 | Membres du pad | **1** (Stéphane). La rédactrice n'a aucun accès. |
 
 > Deux échecs de bancs traînaient depuis des semaines. Aucun n'était un bug —
@@ -140,36 +140,78 @@ n'ont toujours aucun test de front.
 
 ---
 
-### DK-8 · La porte d'entrée increvable — **bloquant**
+### DK-8 · La porte d'entrée increvable — ✅ **LIVRÉ le 2026-08-05**
 
-**Ferme :** une vague d'indésirables refoule les vrais contributeurs ; `From` reste
-falsifiable alors qu'on s'apprête à publier l'adresse à tous les contributeurs.
+**Fermait :** une vague d'indésirables refoulait les vrais contributeurs ; `From`
+restait falsifiable alors qu'on s'apprête à publier l'adresse à tous les
+contributeurs.
 
-Worker seul (`workers/src/routes/desk-email.js`). Trois choses :
+**a) Un plafond par expéditeur.** `MAX_PENDING_PER_SENDER = 20` à côté de
+`MAX_INBOX_PENDING = 200` (surchargeables par `DK_INBOX_MAX_SENDER` /
+`DK_INBOX_MAX`). Ce ne sont **pas des portes** : ils ne disent que le nombre de plis
+posés DEVANT la rédactrice. C'est le plafond par expéditeur qui fait tout le travail
+— sans lui, une avalanche d'un seul indésirable occupe les 200 places et le
+contributeur suivant ne trouve plus de bureau où se poser.
 
-**a) Un plafond par expéditeur.** Aujourd'hui il n'y a rien entre « un mail » et
-`MAX_INBOX_PENDING = 200`.
+**b) Le bac plein ne refuse plus rien.** Au-delà des plafonds, le pli est **mis de
+côté** (`dk_inbox.status = 'differe'`) : reçu, stocké, pièces jointes comprises,
+visible dans la bannette, triable à la main — et **repêché tout seul** dès qu'une
+place se libère (`_repecherDiff`, appelé à chaque nouveau pli et à chaque
+tri/rejet/effacement). Le repêchage sert **par expéditeur, le plus ancien d'abord** :
+les 280 messages d'une avalanche ne doublent jamais la contribution légitime arrivée
+derrière eux. `setReject` ne subsiste que pour l'adresse de dépôt inconnue et le
+message illisible ; une panne interne remonte en exception (réessayable) plutôt qu'en
+refus définitif.
 
-**b) Le bac plein ne doit plus jamais refuser une contribution.** Aujourd'hui :
-`if (pending >= MAX_INBOX_PENDING) return { ok:false, reason:'bac plein' }` →
-`message.setReject('Dépôt refusé')`. L'auteur reçoit un échec SMTP, la rédaction ne
-sait rien. Il faut **mettre de côté, jamais refouler**.
-
-**c) Lire SPF/DKIM.** Cloudflare Email Routing fournit `Authentication-Results` au
-handler `email()`. Un message qui échoue à l'authentification ne doit **jamais**
-déclencher le rattachement automatique (`mode: 'auto'`) — il va au bac, avec la
-mention visible. Ça referme le trou là où il a des conséquences, sans rien changer
-pour les envois légitimes.
+**c) SPF/DKIM lus.** `Authentication-Results` est lu sur `message.headers` (repli sur
+le MIME parsé), rangé dans `dk_inbox.auth` / `auth_detail` (`'pass'` | `'fail'` |
+NULL quand le message n'en porte aucune — NULL = comportement d'avant, on n'invente
+pas de verdict rétroactif). Un `fail` **interdit le rattachement automatique** : le
+pli descend au bac avec la cible toujours proposée, la mention affichée en clair sur
+le panneau de tri et dans la bannette, et **aucun accusé de réception** (l'envoyer
+reviendrait à écrire au contributeur dont on a usurpé l'adresse). Lecture
+**fail-safe** : toutes les mentions du champ sont balayées, le moindre `fail`
+l'emporte — un faux `spf=pass` ajouté après coup ne blanchit rien.
 
 > Contexte : l'audit de juillet 2026 avait acté que la digestion fait confiance au
 > champ `From`, falsifiable, en jugeant le risque acceptable **parce que la
 > rédactrice transférait**. Le modèle a changé le 4 août (envoi direct des
-> contributeurs, encouragé). L'arbitrage n'a pas été réévalué. C'est le sujet de ce
-> sprint.
+> contributeurs, encouragé). L'arbitrage est réévalué ici.
 
 **Fini quand :** un banc prouve (1) qu'une avalanche de 300 messages ne fait pas
 refuser le 301ᵉ contributeur légitime, (2) qu'un message échouant à SPF ne se pose
-jamais tout seul sur une page.
+jamais tout seul sur une page. — **Fait.**
+
+> **Le banc :** `workers/test/test-desk-dk8-porte.mjs`, **37 vérifications**, ~25 s.
+> L'avalanche est jouée **en vrai**, avec les plafonds de production : 300 messages
+> injectés un par un, puis le 301ᵉ. Aucun n'est refusé ; l'avalanche n'occupe que
+> 20 lignes du bac, les 280 autres sont mises de côté, et le contributeur légitime
+> arrive **directement** sur le bureau. Le bac est ensuite rempli à 200 pour
+> vérifier le pli de trop (reçu, mis de côté, motif `bac-plein`) et le repêchage
+> équitable. Côté SPF : même message, expéditeur connu, papier attendu **posé en
+> page** — avec `spf=fail` il s'arrête au bac, l'article reste « attendu » et sa
+> pièce n'entre pas au casier.
+>
+> **Preuve que le filet attrape** (2026-08-05, trois défauts réintroduits puis
+> restaurés) : garde d'authentification retirée → 10 rouges ; ancien
+> `return { ok:false, reason:'bac plein' }` rétabli → 11 rouges dont la ligne
+> « la contribution est REÇUE » ; plafond par expéditeur retiré → 8 rouges dont
+> « il n'est même pas mis de côté ».
+>
+> **Côté écran** (un banc de worker ne voit pas si la rédactrice l'apprend) :
+> `scripts/test-desk-ui.mjs` gagne un **parcours 6** (+11 vérifications, **63** au
+> total) qui mesure la hauteur rendue de l'avertissement et vérifie qu'un pli mis de
+> côté ouvre bien le panneau de TRI. Les deux régressions correspondantes ont été
+> vues virer au rouge.
+>
+> **Un piège en moins :** le banc prend un propriétaire daté (`sub` horodaté) —
+> sinon `MAX_PUBS_OWNED` le refuse au bout de quelques relances sur un même état
+> local, et l'échec ressemble à un bug du sprint.
+
+**Fichiers :** `workers/src/routes/desk-email.js`, `workers/src/routes/desk.js`
+(colonnes `auth`/`auth_detail`, `auth` dans le payload du bac, purge 90 j étendue
+à `differe`) ; `app/desk.js`, `app/desk.css`, `app.html` (`?v=19`) ;
+`workers/test/test-desk-dk8-porte.mjs` ; `scripts/test-desk-ui.mjs`.
 
 ---
 
@@ -238,11 +280,15 @@ cd workers && npx wrangler dev --local -c wrangler.dktest.toml --port 8799 --tes
 Puis, dans `workers/` :
 
 ```bash
-for t in dk3 dk5-board dk4 dk2 artcasier newsignal dk4b-transfert dk4c-bannette; do node test/test-desk-$t.mjs; done
+for t in dk3 dk5-board dk4 dk2 artcasier newsignal dk4b-transfert dk4c-bannette dk8-porte; do node test/test-desk-$t.mjs; done
 ```
 
 **Attendu :** DK-2 48, DK-3 30, DK-4 33, DK-4b 22, DK-4c 54, DK-5 19, casier 20,
-signal 6 — **zéro échec**.
+signal 6, DK-8 37 — **zéro échec**.
+
+> **DK-8 en dernier**, comme dans la liste ci-dessus : il écrit ~480 entrées de bac
+> (l'avalanche est jouée en vrai) et compte ~25 s. Il est relançable à volonté sans
+> effacer D1 — il se crée un propriétaire neuf à chaque passage.
 
 ### Pièges des bancs
 

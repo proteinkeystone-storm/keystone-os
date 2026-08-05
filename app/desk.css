@@ -605,6 +605,16 @@ html.light-mode .dk-bac-select { color-scheme: light; }
 .dk-bac-sort.ok      { color: var(--dk-tx2); }
 .dk-bac-sort.ecarte  { color: var(--dk-tx3); font-style: italic; }
 .dk-bac-sort.perdu   { color: #f59e0b; font-weight: 700; }
+/* DK-8 : mise de côté (bac plein). Ambre calme — c'est une file d'attente,
+   pas un incident : la contribution est là, elle remontera toute seule. */
+.dk-bac-sort.differe { color: #f59e0b; }
+/* DK-8 : SPF/DKIM en échec — l'adresse affichée peut être usurpée. */
+.dk-bac-suspect {
+  display: inline-flex; align-items: center; gap: 3px;
+  color: #f59e0b; font-weight: 700; white-space: nowrap;
+}
+.dk-bac-suspect svg { flex: 0 0 auto; }
+.dk-bac-authdet { display: block; margin-top: 2px; font-size: 11px; opacity: .8; font-variant-numeric: tabular-nums; }
 .dk-bac-alert {
   display: flex; align-items: center; gap: 7px; margin-bottom: 10px;
   padding: 8px 11px; border-radius: 10px; font-size: 12.5px;

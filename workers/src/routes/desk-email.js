@@ -41,23 +41,51 @@ import { ensureDeskSchema, dkMemberGate, dkHistoPush, dkS, dkFileExt, dkFileName
 
 const MAX_BODY_KEEP   = 20000;   // corps conservé dans le bac / versé aux notes
 const MAX_ATTACHMENTS = 10;      // pièces jointes traitées par e-mail
-const MAX_INBOX_PENDING = 200;   // garde-fou par publication
 const FUZZY_MIN_SCORE = 0.6;     // recoupement lexical minimal titre ↔ objet/fichiers
 
+/* ═══════════ DK-8 · les deux plafonds du BAC ═══════════════════════
+   Ce ne sont PAS des portes : rien n'est jamais refusé à cause d'eux.
+   Ils disent seulement combien de plis attendent DEVANT la rédactrice.
+   Au-delà, la contribution est MISE DE CÔTÉ (status 'differe') : elle
+   est reçue, stockée, visible dans la bannette, et elle revient d'
+   elle-même au bac dès qu'une place se libère (_repecherDiff).
+
+   Le plafond PAR EXPÉDITEUR est le vrai garde-fou : sans lui, une
+   avalanche d'un seul indésirable remplit les 200 places et le
+   contributeur suivant — légitime — ne trouve plus de place. Avec lui,
+   un expéditeur n'occupe jamais plus de 20 lignes du bac, quel que
+   soit le nombre de messages qu'il envoie.                            */
+const MAX_INBOX_PENDING     = 200;  // plis en attente de tri, par publication
+const MAX_PENDING_PER_SENDER = 20;  // … dont au plus 20 pour un même expéditeur
+function _cap(env, name, def) {
+  const n = parseInt(String(env && env[name] || ''), 10);
+  return Number.isFinite(n) && n > 0 ? n : def;
+}
+
 /* ═══════════════ Le handler e-mail Cloudflare ═══════════════════
-   Branché dans index.js : `async email(message, env, ctx)`. Adresse
-   inconnue ou message illisible → rejet SMTP poli (l'expéditeur est
-   prévenu, rien ne se perd en silence).                             */
+   Branché dans index.js : `async email(message, env, ctx)`.
+
+   Un seul cas vaut encore un rejet SMTP : l'adresse de dépôt n'existe
+   pas (le catch-all reçoit du courrier qui ne nous concerne pas), ou le
+   message est illisible. Le bac plein, lui, ne refoule PLUS rien —
+   c'était un échec renvoyé à l'auteur d'une contribution parfaitement
+   légitime, dont la rédaction n'entendait jamais parler (DK-8).       */
 export async function handleDeskEmail(message, env, ctx) {
   let mail;
   try {
+    // L'authentification est stampée par Cloudflare EN TÊTE du message
+    // reçu ; on la lit sur l'enveloppe et, en repli, dans le MIME parsé.
     const parsed = await PostalMime.parse(message.raw);
+    let authRaw = '';
+    try { authRaw = message.headers?.get('authentication-results') || ''; } catch (_) {}
+    if (!authRaw) authRaw = _headerFromParsed(parsed, 'authentication-results');
     mail = {
       to: String(message.to || '').toLowerCase(),
       fromEmail: String(parsed.from?.address || message.from || '').toLowerCase().trim(),
       fromName: parsed.from?.name || null,
       subject: parsed.subject || '',
       text: parsed.text || _htmlToText(parsed.html || ''),
+      authResults: authRaw,
       attachments: (parsed.attachments || []).slice(0, MAX_ATTACHMENTS).map(a => ({
         name: a.filename || 'piece', mime: a.mimeType || '', content: new Uint8Array(a.content),
       })),
@@ -66,8 +94,52 @@ export async function handleDeskEmail(message, env, ctx) {
     try { message.setReject('Message illisible'); } catch (_) {}
     return;
   }
-  const r = await digestEmail(env, mail, { ack: true }).catch(e => ({ ok: false, reason: e && e.message }));
-  if (!r.ok) { try { message.setReject(r.reason === 'adresse' ? 'Adresse de dépôt inconnue' : 'Dépôt refusé'); } catch (_) {} }
+  // Une panne de notre côté (D1, R2) ne doit pas se solder par un refus
+  // DÉFINITIF : setReject est permanent, l'exception ne l'est pas — au
+  // pire la plateforme échoue pareil, au mieux le serveur d'en face
+  // réessaie et la contribution finit par entrer.
+  const r = await digestEmail(env, mail, { ack: true });
+  if (!r.ok && r.reason === 'adresse') { try { message.setReject('Adresse de dépôt inconnue'); } catch (_) {} }
+}
+
+// postal-mime rend les en-têtes sous forme de liste { key, value }.
+function _headerFromParsed(parsed, key) {
+  const hs = (parsed && parsed.headers) || [];
+  const k = String(key).toLowerCase();
+  return hs.filter(h => String(h.key || '').toLowerCase() === k).map(h => h.value || '').join(' ; ');
+}
+
+/* ═══════════ DK-8 · SPF / DKIM / DMARC ═════════════════════════════
+   `From` est falsifiable. Tant que la rédactrice transférait elle-même
+   les copies, l'arbitrage de juillet 2026 tenait ; depuis le 4 août les
+   contributeurs écrivent DIRECTEMENT à une adresse publiée, et une
+   adresse usurpée suffirait à faire poser un faux papier sur une page,
+   tout seul, sans qu'un humain l'ait vu.
+
+   Règle : un message dont l'authentification ÉCHOUE ne déclenche jamais
+   le rattachement automatique. Il descend au bac comme n'importe quel
+   doute, avec la mention affichée à l'écran. Rien n'est refusé, rien
+   n'est perdu — c'est un humain qui tranche.
+
+   Lecture volontairement FAIL-SAFE : on balaie TOUTES les mentions du
+   champ (Cloudflare pose la sienne en tête, mais un expéditeur peut en
+   avoir glissé une autre plus bas) et le moindre `fail` l'emporte.
+   Ajouter un faux `spf=pass` n'efface donc pas le vrai `spf=fail` ;
+   ajouter un faux `spf=fail` ne fait que renvoyer le message au bac.
+   Aucune mention du tout (injection admin, vieille entrée) → 'inconnu' :
+   on ne change rien au comportement d'avant.                          */
+const AUTH_BAD = new Set(['fail', 'softfail', 'permerror']);
+export function authVerdict(raw) {
+  const s = String(raw || '').toLowerCase();
+  const seen = {};
+  const re = /\b(spf|dkim|dmarc)\s*=\s*([a-z]+)/g;
+  let m;
+  while ((m = re.exec(s))) { (seen[m[1]] = seen[m[1]] || []).push(m[2]); }
+  const keys = Object.keys(seen);
+  if (!keys.length) return { verdict: null, detail: null };
+  const bad = keys.some(k => seen[k].some(v => AUTH_BAD.has(v)));
+  const detail = keys.map(k => k + '=' + [...new Set(seen[k])].join('/')).join(' ').slice(0, 120);
+  return { verdict: bad ? 'fail' : 'pass', detail };
 }
 
 function _htmlToText(html) {
@@ -92,8 +164,12 @@ export async function digestEmail(env, mail, opts = {}) {
   if (!pub) return { ok: false, reason: 'adresse' };
   const pubId = pub.id;
 
-  const pending = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM dk_inbox WHERE pub_id = ? AND status = 'pending'`).bind(pubId).first())?.n || 0;
-  if (pending >= MAX_INBOX_PENDING) return { ok: false, reason: 'bac plein' };
+  // Le bac s'est peut-être vidé depuis le dernier pli : ce qui avait été
+  // mis de côté remonte AVANT qu'on décide du sort du message d'aujourd'hui.
+  await _repecherDiff(env, pubId);
+
+  const auth = authVerdict(mail.authResults != null ? mail.authResults : mail.auth);
+  const authFail = auth.verdict === 'fail';
 
   const fromEmail = String(mail.fromEmail || '').toLowerCase().trim();
   const subject = dkS(String(mail.subject || '').trim(), 300) || '';
@@ -140,7 +216,10 @@ export async function digestEmail(env, mail, opts = {}) {
       if (!pick && mine.length > 1) pick = _fuzzyPick(mine, subject, atts);
       if (pick) {
         // Article ciblé sans ambiguïté. Posé sur une page → rattachement AUTO.
-        const slot = await env.DB.prepare(
+        // SAUF si l'authentification a échoué : le rapprochement repose
+        // entièrement sur une adresse d'expéditeur, et celle-ci n'est pas
+        // prouvée. On garde la cible en suggestion, un humain confirme.
+        const slot = authFail ? null : await env.DB.prepare(
           `SELECT s.page_id, p.issue_id, p.n FROM dk_page_slots s JOIN dk_pages p ON p.id = s.page_id
            WHERE s.art_id = ? ORDER BY p.n LIMIT 1`).bind(pick.id).first();
         if (slot) {
@@ -150,13 +229,13 @@ export async function digestEmail(env, mail, opts = {}) {
             // art_id : le rattachement AUTOMATIQUE doit lui aussi dire où il a
             // posé la copie, sinon la bannette affiche « triée » sans pouvoir
             // nommer l'article — et ne sait pas signaler sa disparition.
-            `INSERT INTO dk_inbox (id, pub_id, from_email, from_name, orig_email, orig_name, subject, body, suggestion, attachments, status, art_id, resolved_by, resolved_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'auto', ?, 'digestion', datetime('now'))`)
+            `INSERT INTO dk_inbox (id, pub_id, from_email, from_name, orig_email, orig_name, subject, body, suggestion, attachments, status, art_id, resolved_by, resolved_at, auth, auth_detail)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'auto', ?, 'digestion', datetime('now'), ?, ?)`)
             .bind(inboxId, pubId, fromEmail, dkS(mail.fromName, DK_MAX_NAME), origEmail, origName, subject, body.slice(0, 2000),
               JSON.stringify({ kind: 'article', art_id: pick.id, via: origEmail ? 'expediteur-transfere' : 'expediteur', page_n: slot.n }),
-              JSON.stringify(atts), pick.id).run();
+              JSON.stringify(atts), pick.id, auth.verdict, auth.detail).run();
           await _accuseReception(env, { pubId, pubName: pub.name, to: authorEmail, subject, ack });
-          return { ok: true, mode: 'auto', inboxId, art_id: pick.id, orig_email: origEmail };
+          return { ok: true, mode: 'auto', inboxId, art_id: pick.id, orig_email: origEmail, auth: auth.verdict };
         }
         // Pas encore en page → bac, suggestion franche pré-cochée.
         suggestion = { kind: 'article', art_id: pick.id, via: 'expediteur' };
@@ -165,6 +244,13 @@ export async function digestEmail(env, mail, opts = {}) {
       }
     }
   }
+
+  /* ── DK-8 · le bac est-il saturé ? ────────────────────────────────
+     La question se pose ICI, et pas plus haut : un rattachement
+     automatique n'occupe aucune place dans le bac, il n'a donc pas à
+     être empêché parce que le bac déborde. Ce qui suit ne concerne que
+     ce qui va réellement se poser sur le bureau de la rédactrice.      */
+  const differe = await _placeAuBac(env, pubId, authorEmail || fromEmail);
 
   /* ── Étage 2 · suggestion (lexical → habitudes → IA légère) ──── */
   if (!suggestion) {
@@ -180,18 +266,94 @@ export async function digestEmail(env, mail, opts = {}) {
     if (habit && habit.rub_id) suggestion = { kind: 'spontane', rub_id: habit.rub_id, via: 'habitude' };
   }
   if (!suggestion) {
-    const rubId = await _suggestRubriqueIA(env, pubId, pub.name, subject, body);
+    // Un pli mis de côté ne consulte PAS l'IA : une avalanche brûlerait
+    // les neurones de la publication avant que personne n'ait rien vu. Sa
+    // suggestion reste déterministe — de toute façon c'est un humain qui
+    // tranchera quand le pli remontera au bac.
+    const rubId = differe.differe ? null : await _suggestRubriqueIA(env, pubId, pub.name, subject, body);
     suggestion = { kind: 'spontane', rub_id: rubId || null, via: rubId ? 'ia' : 'aucune' };
   }
 
   /* ── Étage 3 · le bac (jamais contourné) ──────────────────────── */
   await env.DB.prepare(
-    `INSERT INTO dk_inbox (id, pub_id, from_email, from_name, orig_email, orig_name, subject, body, suggestion, attachments)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    `INSERT INTO dk_inbox (id, pub_id, from_email, from_name, orig_email, orig_name, subject, body, suggestion, attachments, status, auth, auth_detail)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(inboxId, pubId, fromEmail || null, dkS(mail.fromName, DK_MAX_NAME), origEmail, origName, subject, body,
-      JSON.stringify(suggestion), JSON.stringify(atts)).run();
-  await _accuseReception(env, { pubId, pubName: pub.name, to: authorEmail, subject, ack });
-  return { ok: true, mode: 'bac', inboxId, suggestion, orig_email: origEmail };
+      JSON.stringify(suggestion), JSON.stringify(atts),
+      differe.differe ? 'differe' : 'pending', auth.verdict, auth.detail).run();
+  // Un accusé de réception envoyé sur une adresse dont l'authentification
+  // a échoué, c'est écrire au contributeur DONT ON A USURPÉ l'adresse pour
+  // lui annoncer un envoi qu'il n'a pas fait. On se tait.
+  if (!authFail) await _accuseReception(env, { pubId, pubName: pub.name, to: authorEmail, subject, ack });
+  return {
+    ok: true, mode: differe.differe ? 'differe' : 'bac', inboxId, suggestion, orig_email: origEmail,
+    auth: auth.verdict, auth_detail: auth.detail,
+    ...(differe.differe ? { differe: differe.motif } : {}),
+  };
+}
+
+/* ═══════════ DK-8 · reste-t-il une place au bac ? ═══════════════════
+   Deux comptes, deux plafonds. Le résultat ne conditionne JAMAIS une
+   réception : il dit seulement si le pli s'affiche tout de suite au tri
+   ('pending') ou s'il patiente de côté ('differe').                    */
+async function _placeAuBac(env, pubId, who) {
+  const capBac = _cap(env, 'DK_INBOX_MAX', MAX_INBOX_PENDING);
+  const capExp = _cap(env, 'DK_INBOX_MAX_SENDER', MAX_PENDING_PER_SENDER);
+  const n = (await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM dk_inbox WHERE pub_id = ? AND status = 'pending'`).bind(pubId).first())?.n || 0;
+  if (n >= capBac) return { differe: true, motif: 'bac-plein' };
+  const mine = (await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM dk_inbox
+      WHERE pub_id = ? AND status = 'pending' AND COALESCE(orig_email, from_email, '') = ?`)
+    .bind(pubId, String(who || '')).first())?.n || 0;
+  if (mine >= capExp) return { differe: true, motif: 'expediteur-prolifique' };
+  return { differe: false, motif: null };
+}
+
+/* ═══════════ DK-8 · le repêchage ═══════════════════════════════════
+   Ce qui a été mis de côté doit revenir tout seul : sinon « mettre de
+   côté » ne serait qu'un refus poli. On repêche à chaque nouveau pli et
+   à chaque fois qu'une entrée quitte le bac (tri, rejet, effacement).
+
+   L'ordre est le plus ancien d'abord, mais PAR EXPÉDITEUR : servir la
+   file brute rendrait les 280 messages d'un indésirable prioritaires
+   sur l'unique contribution légitime arrivée derrière eux.             */
+async function _repecherDiff(env, pubId) {
+  const capBac = _cap(env, 'DK_INBOX_MAX', MAX_INBOX_PENDING);
+  const capExp = _cap(env, 'DK_INBOX_MAX_SENDER', MAX_PENDING_PER_SENDER);
+  let n = (await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM dk_inbox WHERE pub_id = ? AND status = 'pending'`).bind(pubId).first())?.n || 0;
+  let room = capBac - n;
+  if (room <= 0) return 0;
+  // Un tour de table : chaque expéditeur ayant du courrier de côté, le plus
+  // anciennement mis de côté en premier. La fenêtre d'expéditeurs ne se règle
+  // PAS sur la place disponible — sinon le prolifique, qui est le plus ancien
+  // et qui est déjà au plafond, occuperait à lui seul la fenêtre et bloquerait
+  // le repêchage de la contribution légitime arrivée derrière lui.
+  const senders = (await env.DB.prepare(
+    `SELECT COALESCE(orig_email, from_email, '') AS who, MIN(received_at) AS t
+       FROM dk_inbox WHERE pub_id = ? AND status = 'differe'
+      GROUP BY who ORDER BY t LIMIT 50`).bind(pubId).all()).results || [];
+  if (!senders.length) return 0;
+  const dejaLa = new Map(((await env.DB.prepare(
+    `SELECT COALESCE(orig_email, from_email, '') AS who, COUNT(*) AS n
+       FROM dk_inbox WHERE pub_id = ? AND status = 'pending' GROUP BY who`).bind(pubId).all()).results || [])
+    .map(r => [r.who || '', r.n || 0]));
+  let repeches = 0;
+  for (const s of senders) {
+    if (room <= 0) break;
+    const who = s.who || '';
+    const place = Math.min(room, capExp - (dejaLa.get(who) || 0));
+    if (place <= 0) continue;
+    const ids = (await env.DB.prepare(
+      `SELECT id FROM dk_inbox WHERE pub_id = ? AND status = 'differe' AND COALESCE(orig_email, from_email, '') = ?
+        ORDER BY received_at LIMIT ?`).bind(pubId, who, place).all()).results || [];
+    for (const r of ids) {
+      await env.DB.prepare(`UPDATE dk_inbox SET status = 'pending' WHERE id = ? AND status = 'differe'`).bind(r.id).run();
+      room--; repeches++;
+    }
+  }
+  return repeches;
 }
 
 /* ═══════════ DK-4b · le mail TRANSFÉRÉ ═══════════════════════════
@@ -403,6 +565,9 @@ export async function handleEmailInject(request, env) {
     fromName: b.from_name || null,
     subject: b.subject || '',
     text: String(b.body || ''),
+    // Le champ Authentication-Results tel que Cloudflare l'aurait posé —
+    // c'est par là que le banc DK-8 rejoue un message qui échoue à SPF.
+    authResults: b.auth_results != null ? String(b.auth_results) : null,
     attachments: (Array.isArray(b.attachments) ? b.attachments : []).slice(0, MAX_ATTACHMENTS).map(a => ({
       name: a.name || 'piece',
       content: (() => { try { return Uint8Array.from(atob(a.b64 || ''), c => c.charCodeAt(0)); } catch (_) { return new Uint8Array(0); } })(),
@@ -418,7 +583,10 @@ async function _inboxGate(request, env, origin, inboxId) {
   if (!row) return { error: err('Entrée introuvable', 404, origin) };
   const u = await dkMemberGate(request, env, origin, row.pub_id);
   if (u.error) return u;
-  if (row.status !== 'pending') return { error: err('Entrée déjà triée', 400, origin) };
+  // 'differe' = mise de côté faute de place au bac (DK-8), pas triée : elle
+  // se trie exactement comme les autres si la rédactrice la sort d'elle-même
+  // de la bannette avant que le repêchage ne l'ait remontée.
+  if (row.status !== 'pending' && row.status !== 'differe') return { error: err('Entrée déjà triée', 400, origin) };
   let atts = []; try { atts = JSON.parse(row.attachments || '[]'); } catch (_) {}
   return { u, row, atts };
 }
@@ -503,7 +671,9 @@ export async function handleInboxApply(request, env, inboxId) {
   await env.DB.prepare(`UPDATE dk_inbox SET status = 'done', art_id = ?, resolved_by = ?, resolved_at = datetime('now') WHERE id = ?`)
     .bind(artId, by, inboxId).run();
   await _marquerLu(env, inboxId);
-  return json({ ok: true, art_id: artId }, 200, origin);
+  // Une place vient de se libérer : ce qui attendait de côté remonte au bac.
+  const repeches = await _repecherDiff(env, row.pub_id);
+  return json({ ok: true, art_id: artId, ...(repeches ? { repeches } : {}) }, 200, origin);
 }
 
 /* ═══════════ DK-4c · LA BANNETTE ═════════════════════════════════
@@ -526,6 +696,7 @@ export async function handleCourrier(request, env, pubId) {
   const rows = (await env.DB.prepare(
     `SELECT i.id, i.from_email, i.from_name, i.orig_email, i.orig_name, i.subject, i.body,
             i.attachments, i.suggestion, i.status, i.art_id, i.resolved_by, i.resolved_at, i.received_at, i.lu_at,
+            i.auth, i.auth_detail,
             a.title AS art_title, a.status AS art_status
        FROM dk_inbox i LEFT JOIN dk_articles a ON a.id = i.art_id
       WHERE i.pub_id = ? ORDER BY i.received_at DESC LIMIT ?`).bind(pubId, limit).all()).results || [];
@@ -536,6 +707,9 @@ export async function handleCourrier(request, env, pubId) {
       orig_email: r.orig_email, orig_name: r.orig_name,
       subject: r.subject, body: r.body, attachments: atts,
       status: r.status, received_at: r.received_at, lu: !!r.lu_at,
+      // DK-8 : l'authentification de l'expéditeur, telle qu'elle a été
+      // constatée à l'arrivée — la bannette doit pouvoir le dire.
+      auth: r.auth || null, auth_detail: r.auth_detail || null,
       resolved_by: r.resolved_by, resolved_at: r.resolved_at,
       art_id: r.art_id || null, art_title: r.art_title || null, art_status: r.art_status || null,
       // Le cas qui a coûté une contribution : l'entrée dit « rattachée »,
@@ -547,7 +721,16 @@ export async function handleCourrier(request, env, pubId) {
   // rafraîchit qu'au cycle d'équipe, contredit ce qu'on a sous les yeux.
   const nonLus = (await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM dk_inbox WHERE pub_id = ? AND lu_at IS NULL`).bind(pubId).first())?.n || 0;
-  return json({ ok: true, courrier, non_lus: nonLus }, 200, origin);
+  // DK-8 : le compte par sort, sur TOUT le courrier — la liste est plafonnée
+  // (limit), donc compter les mises de côté dans les lignes renvoyées
+  // mentirait précisément le jour où il y en a beaucoup, c'est-à-dire le seul
+  // jour où ça compte.
+  const compte = {};
+  for (const c of ((await env.DB.prepare(
+    `SELECT status, COUNT(*) AS n FROM dk_inbox WHERE pub_id = ? GROUP BY status`).bind(pubId).all()).results || [])) {
+    compte[c.status] = c.n || 0;
+  }
+  return json({ ok: true, courrier, non_lus: nonLus, compte }, 200, origin);
 }
 
 /* POST /api/desk/inbox/:id/reprendre — refaire un article À PARTIR d'un
@@ -663,7 +846,8 @@ export async function handleInboxDelete(request, env, inboxId) {
     ? await env.DB.prepare('SELECT title FROM dk_articles WHERE id = ?').bind(row.art_id).first()
     : null;
   await env.DB.prepare('DELETE FROM dk_inbox WHERE id = ?').bind(inboxId).run();
-  return json({ ok: true, pieces_purgees: pieces, article_conserve: art ? art.title : null }, 200, origin);
+  const repeches = await _repecherDiff(env, row.pub_id);
+  return json({ ok: true, pieces_purgees: pieces, article_conserve: art ? art.title : null, ...(repeches ? { repeches } : {}) }, 200, origin);
 }
 
 // POST /api/desk/inbox/:id/reject — écarter (pièces R2 purgées, trace gardée).
@@ -675,5 +859,6 @@ export async function handleInboxReject(request, env, inboxId) {
   await env.DB.prepare(`UPDATE dk_inbox SET status = 'rejete', attachments = '[]', resolved_by = ?, resolved_at = datetime('now') WHERE id = ?`)
     .bind(dkByName(g.u), inboxId).run();
   await _marquerLu(env, inboxId);
-  return json({ ok: true }, 200, origin);
+  const repeches = await _repecherDiff(env, g.row.pub_id);
+  return json({ ok: true, ...(repeches ? { repeches } : {}) }, 200, origin);
 }

@@ -275,6 +275,13 @@ async function _ensureSchema(env) {
     await env.DB.prepare(`ALTER TABLE dk_inbox ADD COLUMN lu_at TEXT`).run();
     await env.DB.prepare(`UPDATE dk_inbox SET lu_at = received_at WHERE lu_at IS NULL`).run();
   } catch (_) {}
+  // DK-8 : l'authentification constatée à l'arrivée (SPF/DKIM/DMARC lus dans
+  // l'en-tête Authentication-Results posé par Cloudflare). 'pass' | 'fail' |
+  // NULL quand le message n'en portait aucune (injection admin, entrées
+  // d'avant DK-8) — NULL se comporte comme avant, on n'invente pas un verdict
+  // rétroactif. Un 'fail' interdit le rattachement automatique.
+  try { await env.DB.prepare(`ALTER TABLE dk_inbox ADD COLUMN auth TEXT`).run(); } catch (_) {}
+  try { await env.DB.prepare(`ALTER TABLE dk_inbox ADD COLUMN auth_detail TEXT`).run(); } catch (_) {}
   _schemaReady = true;
 }
 
@@ -673,7 +680,9 @@ export async function handleIssueGet(request, env, issueId) {
     const inbox = (await env.DB.prepare(
       // `status` DOIT voyager : sans lui le client ne sait pas qu'il a affaire
       // à une entrée encore au bac, et lui ouvre le mauvais panneau.
-      `SELECT id, from_email, from_name, orig_email, orig_name, subject, body, suggestion, attachments, received_at, status, lu_at
+      // `auth` DOIT voyager aussi : c'est ce qui fait afficher « expéditeur
+      // non authentifié » sur le panneau de tri (DK-8).
+      `SELECT id, from_email, from_name, orig_email, orig_name, subject, body, suggestion, attachments, received_at, status, lu_at, auth, auth_detail
        FROM dk_inbox WHERE pub_id = ? AND status = 'pending' ORDER BY received_at DESC LIMIT 50`).bind(pubId).all()).results || [];
     // Pastille de la bannette : le courrier jamais ouvert, tous sorts confondus.
     const nonLus = (await env.DB.prepare(
@@ -1544,9 +1553,11 @@ export async function sweepDeskCasier(env) {
     stale++;
   }
   // DK-4 : entrées du bac jamais triées (> 90 j) — pièces R2 comprises.
+  // DK-8 : les mises de côté ('differe') suivent la même règle — sans quoi
+  // une avalanche resterait indéfiniment en base et en R2.
   let inbox = 0;
   const oldRows = (await env.DB.prepare(
-    `SELECT id, attachments FROM dk_inbox WHERE status = 'pending' AND received_at <= datetime('now', '-90 days')`).all()).results || [];
+    `SELECT id, attachments FROM dk_inbox WHERE status IN ('pending', 'differe') AND received_at <= datetime('now', '-90 days')`).all()).results || [];
   for (const r of oldRows) {
     let atts = []; try { atts = JSON.parse(r.attachments || '[]'); } catch (_) {}
     for (const a of atts) { if (env.DK_CASIER && a.r2_key) await env.DK_CASIER.delete(a.r2_key).catch(() => {}); }

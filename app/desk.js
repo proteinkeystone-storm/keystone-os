@@ -2135,6 +2135,7 @@ async function _poserSurPage(pageId, artId) {
    intacte en base. Ici rien ne quitte jamais la vue. */
 let _bacVue = 'trier';        // 'trier' | 'tout'
 let _courrier = null;         // cache de la vue « tout » (chargée à la demande)
+let _courrierCompte = null;   // comptes par sort, servis par le serveur (DK-8)
 
 /* Relever un courrier = l'ouvrir. On rafraîchit la pastille SUR PLACE :
    un _renderFer() complet rejouerait la frise sous l'inspecteur ouvert. */
@@ -2160,9 +2161,23 @@ function _bacQui(r) {
   return (r.orig_name || r.orig_email || r.from_name || r.from_email || '?')
     + (r.orig_email ? ' · transféré par ' + (r.from_name || r.from_email) : '');
 }
+/* DK-8 · l'expéditeur était-il vraiment celui qu'il dit être ?
+   `auth` vaut 'fail' quand SPF/DKIM/DMARC ont échoué à l'arrivée. Un tel
+   message n'est JAMAIS rattaché tout seul : il descend au bac, et on le
+   dit ici en clair — l'adresse affichée peut être usurpée. */
+function _bacSuspect(r) { return r && r.auth === 'fail'; }
+function _bacAuthAlerte(r) {
+  if (!_bacSuspect(r)) return '';
+  return `<p class="dk-bac-alert">${icon('alert-triangle', 13)} <span>Expéditeur non authentifié : les contrôles du courrier
+    (SPF/DKIM) ont échoué. L'adresse affichée peut avoir été usurpée — vérifiez avant de rattacher.
+    ${r.auth_detail ? `<span class="dk-bac-authdet">${_esc(r.auth_detail)}</span>` : ''}</span></p>`;
+}
+
 // Ce qu'un courrier est devenu — la phrase qui manquait.
 function _bacSort(r) {
   if (r.status === 'pending') return { txt: 'en attente de tri', cls: 'attente' };
+  // DK-8 : reçue, gardée, simplement pas encore posée sur le bureau.
+  if (r.status === 'differe') return { txt: 'mise de côté — le bac était plein, elle revient au tri dès qu\'une place se libère', cls: 'differe' };
   if (r.status === 'rejete')  return { txt: 'écartée' + (r.resolved_by ? ' par ' + r.resolved_by : ''), cls: 'ecarte' };
   if (r.art_perdu)            return { txt: 'rattachée à un article SUPPRIMÉ depuis', cls: 'perdu' };
   const auto = r.status === 'auto' ? ' (toute seule)' : '';
@@ -2182,11 +2197,15 @@ async function _openBacList(vue) {
     try {
       const r = await _api('/publication/' + _pubId + '/courrier');
       _courrier = r.courrier || [];
+      _courrierCompte = r.compte || null;   // comptes serveur, tous sorts (DK-8)
       _majPastille(r.non_lus || 0);   // la pastille dit la même chose que la liste
     } catch (e) { _toast(e.message, true); _bacVue = 'trier'; }
   }
   const rows = _bacVue === 'tout' ? (_courrier || []) : pend;
   const perdus = (_courrier || []).filter(r => r.art_perdu).length;
+  // Le compte vient du serveur quand il est là : la liste est plafonnée, et
+  // c'est justement quand il y a beaucoup de mises de côté qu'elle en cache.
+  const differes = (_courrierCompte && _courrierCompte.differe) || (_courrier || []).filter(r => r.status === 'differe').length;
 
   insp.innerHTML = _inspShell('Bannette — le courrier reçu', null,
     `<div class="dk-sec">
@@ -2195,6 +2214,7 @@ async function _openBacList(vue) {
         <button data-v="tout" class="${_bacVue === 'tout' ? 'on' : ''}">Tout le courrier</button>
       </div>
       ${_bacVue === 'tout' && perdus ? `<p class="dk-bac-alert">${icon('alert-triangle', 13)} ${perdus > 1 ? `${perdus} courriers ont perdu leur article — vous pouvez les reprendre.` : `1 courrier a perdu son article — vous pouvez le reprendre.`}</p>` : ''}
+      ${_bacVue === 'tout' && differes ? `<p class="dk-bac-alert">${icon('mail', 13)} <span>${differes > 1 ? `${differes} contributions ont été mises de côté` : `1 contribution a été mise de côté`} : le bac débordait. ${differes > 1 ? 'Elles reviennent' : 'Elle revient'} au tri à mesure que vous faites de la place — rien n'a été refusé.</span></p>` : ''}
       ${_bacVue === 'tout' && (_D.courrier_non_lus || 0) ? `<div class="dk-btn-row" style="margin-bottom:9px"><button class="dk-btn small" data-act="toutlu">Tout marquer comme lu (${_D.courrier_non_lus})</button></div>` : ''}
       ${rows.length ? rows.map(r => {
         const atts = _bacAtts(r);
@@ -2210,9 +2230,9 @@ async function _openBacList(vue) {
         return `<div class="dk-banc-item${nonLu ? ' dk-banc-nonlu' : ''}">
           <div class="dk-banc-info">
             <div class="dk-banc-title">${nonLu ? '<span class="dk-mailpoint" title="jamais ouvert"></span>' : ''}${_esc(r.subject || '(sans objet)')}</div>
-            <div class="dk-banc-meta">${_esc(_bacQui(r))} · ${_relTime(r.received_at)}${atts.length ? ' · ' + atts.length + ' pièce' + (atts.length > 1 ? 's' : '') : ''}<br><span class="dk-bac-sort ${sort.cls}">${_esc(ligne)}</span></div>
+            <div class="dk-banc-meta">${_esc(_bacQui(r))}${_bacSuspect(r) ? ` <span class="dk-bac-suspect" title="Les contrôles SPF/DKIM ont échoué : cette adresse peut être usurpée">${icon('alert-triangle', 11)} adresse non authentifiée</span>` : ''} · ${_relTime(r.received_at)}${atts.length ? ' · ' + atts.length + ' pièce' + (atts.length > 1 ? 's' : '') : ''}<br><span class="dk-bac-sort ${sort.cls}">${_esc(ligne)}</span></div>
           </div>
-          <button class="dk-btn small ${pending ? 'primary' : ''}" data-bac="${r.id}">${pending ? 'Trier' : 'Ouvrir'}</button>
+          <button class="dk-btn small ${pending ? 'primary' : ''}" data-bac="${r.id}">${pending || r.status === 'differe' ? 'Trier' : 'Ouvrir'}</button>
           <button class="dk-iconbtn" data-suppr="${r.id}" title="Effacer définitivement ce courrier" aria-label="Effacer définitivement">${icon('trash-2', 14)}</button>
         </div>`;
       }).join('') : `<p class="dk-empty-line">${_bacVue === 'tout' ? 'Aucun courrier reçu pour l\'instant.' : 'Le bac est vide — tout est rattaché.'}</p>`}
@@ -2239,7 +2259,9 @@ async function _openBacList(vue) {
     // champ status, absent des entrées du bac servies avec le numéro — s'y
     // fier ouvrait le panneau de REPRISE à la place de celui du tri, qui ne
     // sait ni rattacher à un article attendu ni poser sur une page.
-    if (_bacVue === 'trier' || row.status === 'pending') _openBacItem(row);
+    // 'differe' (DK-8) n'est pas un sort : c'est une contribution reçue qui
+    // attend une place. Elle se trie comme les autres.
+    if (_bacVue === 'trier' || row.status === 'pending' || row.status === 'differe') _openBacItem(row);
     else _openCourrierItem(row);
   });
   // Effacer depuis la LISTE : confirmation en toutes lettres dans la ligne
@@ -2281,7 +2303,8 @@ function _openCourrierItem(row) {
   const rubSeed = (_artById(row.art_id)?.rub_id) || _bacSugg(row).rub_id || '';
   insp.innerHTML = _inspShell(row.subject || '(sans objet)',
     `<div class="dk-insp-rub">${_esc(_bacQui(row))} · ${_relTime(row.received_at)}</div>`,
-    `<div class="dk-sec"><h4>Ce qu'il est devenu</h4>
+    `${_bacAuthAlerte(row)}
+    <div class="dk-sec"><h4>Ce qu'il est devenu</h4>
       <p class="dk-bac-sort ${sort.cls}" style="font-size:13px">${_esc(sort.txt)}</p>
       ${row.resolved_at ? `<p class="dk-note">Trié le ${_esc(String(row.resolved_at).slice(0, 10))}${row.resolved_by ? ' par ' + _esc(row.resolved_by) : ''}.</p>` : ''}
     </div>
@@ -2373,7 +2396,9 @@ function _openBacItem(row) {
         row.orig_email && row.orig_name ? ' · ' + _esc(row.orig_email) : (!auteur && row.from_email && row.from_name ? ' · ' + _esc(row.from_email) : '')
       }${row.orig_email ? ' · transféré par ' + _esc(relais) : ''} · ${_relTime(row.received_at)}</div>`;
     })(),
-    `${row.body ? `<div class="dk-sec"><h4>Message</h4><div class="dk-bac-body">${_esc(row.body.slice(0, 1500))}${row.body.length > 1500 ? '…' : ''}</div></div>` : ''}
+    `${_bacAuthAlerte(row)}
+    ${row.status === 'differe' ? `<p class="dk-note" style="margin-top:0">Cette contribution a été <strong>mise de côté</strong> parce que le bac débordait — elle n'a jamais été refusée à son auteur. Vous pouvez la trier maintenant.</p>` : ''}
+    ${row.body ? `<div class="dk-sec"><h4>Message</h4><div class="dk-bac-body">${_esc(row.body.slice(0, 1500))}${row.body.length > 1500 ? '…' : ''}</div></div>` : ''}
     ${atts.length ? `<div class="dk-sec"><h4>Pièces jointes (${atts.length})</h4>
       ${atts.map(a => `<div class="dk-file"><span class="dk-file-ico">${icon('paperclip', 13)}</span>
         <div class="dk-file-info"><div class="dk-file-name">${_esc(a.name)}</div><div class="dk-file-meta">${_fmtSize(a.size)}</div></div></div>`).join('')}
