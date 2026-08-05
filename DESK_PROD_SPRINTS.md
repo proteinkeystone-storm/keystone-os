@@ -34,9 +34,9 @@ Autrement dit : le produit est sain, les conditions de fabrication ne le sont pa
 
 | | |
 |---|---|
-| `main` | `8818066` (DK-9) |
-| Front en prod | `ks-os-v5.28.486-desk-dk9`, `app/desk.css?v=19` (vérifié : trois sondes espacées) |
-| Worker en prod | version `14757e27` (déployée depuis `8818066`) — colonnes `dk_inbox.auth`/`auth_detail` confirmées en D1 prod |
+| `main` | `0fc847f` (DK-10) |
+| Front en prod | `ks-os-v5.28.487-desk-dk10`, `app/desk.css?v=20` (vérifié : trois sondes espacées) |
+| Worker en prod | version `14d9271a` (déployée depuis `0fc847f`) — colonnes `dk_inbox.auth`/`auth_detail` confirmées en D1 prod |
 | Bancs desK | **9/9 verts** (DK-2 48, DK-3 30, DK-4 33, DK-4b 22, DK-4c 54, DK-5 19, casier 20, signal 6, **DK-8 37**) |
 | `npm test` | **zéro échec** — 76 vérifications de front (DK-7 52 + DK-8 11 + DK-9 9 + DK-10 4) et 27 sur le parseur Ghost Writer (14 avant DK-9) |
 | Front desK | `app/desk.js` **3 228 lignes**, `app/desk.css` 865 — ~~zéro test~~ → **banc `test-desk-ui.mjs`, 76 vérifications** (DK-7 + DK-8 + DK-9 + DK-10) |
@@ -307,7 +307,7 @@ Vu attraper : `.filter(Boolean)` remis → l'assertion des paragraphes vire au r
 > modèle ou de consigne : y poser des `.txt`, lancer le worker de banc, puis
 > `node scripts/mesure-relecture.mjs`.
 
-### DK-10 · La rédactrice en chef — **le vrai passage en prod** · 🟡 mine désamorcée, le reste vous appartient
+### DK-10 · La rédactrice en chef — **le vrai passage en prod** · 🟡 mine désamorcée **et en prod** ; la séance reste à faire
 
 **Ferme :** celle qui va s'en servir n'a jamais vu un écran ; toute l'ergonomie a
 été validée par une seule personne.
