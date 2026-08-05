@@ -82,6 +82,15 @@ index_name = "keystone-kortex"
 # NB : keystone-os.vercel.app a été squatté — l'URL réelle est -inky.
 # protein-keystone.com = domaine officiel (depuis mai 2025)
 [vars]
+# ── BANC desK : délai de grâce du casier à 0 ────────────────────
+# Les bancs desK partagent UNE session worker : toute variable de banc doit
+# vivre ICI, jamais dans la ligne de commande — un banc voisin l'oublierait.
+# Sans elle, la grâce reste à 30 j, le cron ne purge rien, et
+# test-desk-dk3.mjs échoue sur « purge : pièce sans article supprimée après
+# impression » alors que le code est juste (faux échec constaté deux fois,
+# le 2026-08-04 puis le 2026-08-05). En production, la valeur reste 30 j.
+DK_CASIER_GRACE_DAYS = "0"
+
 # Sprint Sécu-3 / M3 — localhost retiré de la liste prod.
 # Pour le dev local, override via `wrangler dev --var KS_ALLOWED_ORIGIN:"*"`
 # ou créer un wrangler.dev.toml dédié avec localhost autorisé.
