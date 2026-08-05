@@ -40,7 +40,7 @@ Autrement dit : le produit est sain, les conditions de fabrication ne le sont pa
 | Bancs desK | **9/9 verts** (DK-2 48, DK-3 30, DK-4 33, DK-4b 22, DK-4c 54, DK-5 19, casier 20, signal 6, **DK-8 37**) |
 | `npm test` | **zéro échec** — 76 vérifications de front (DK-7 52 + DK-8 11 + DK-9 9 + DK-10 4) et 27 sur le parseur Ghost Writer (14 avant DK-9) |
 | Front desK | `app/desk.js` **3 228 lignes**, `app/desk.css` 865 — ~~zéro test~~ → **banc `test-desk-ui.mjs`, 76 vérifications** (DK-7 + DK-8 + DK-9 + DK-10) |
-| Membres du pad | **1** (Stéphane). La rédactrice n'a aucun accès. |
+| Membres du pad | **1** (Stéphane). La rédactrice en chef aura accès quand elle aura sa licence — après le bouclage de septembre. |
 
 > Deux échecs de bancs traînaient depuis des semaines. Aucun n'était un bug —
 > les deux étaient des bancs mal outillés, et les deux ont été soldés le
@@ -307,57 +307,53 @@ Vu attraper : `.filter(Boolean)` remis → l'assertion des paragraphes vire au r
 > modèle ou de consigne : y poser des `.txt`, lancer le worker de banc, puis
 > `node scripts/mesure-relecture.mjs`.
 
-### DK-10 · La rédactrice en chef — **le vrai passage en prod** · 🟡 mine désamorcée **et en prod** ; la séance reste à faire
+### DK-10 · Boucler un vrai numéro — **le bouclage de septembre 2026**
 
-**Ferme :** celle qui va s'en servir n'a jamais vu un écran ; toute l'ergonomie a
-été validée par une seule personne.
+**Ferme :** aucun numéro entier n'est encore passé dans desK. Le chemin complet —
+de la première contribution au passage en « imprimé » — n'a jamais été parcouru
+autrement que par bancs.
 
-L'inviter (Réglages → Équipe → inviter par l'e-mail de **sa** licence Keystone),
-lui faire le tour, et lui laisser mener **un numéro complet** — pas une
-démonstration : un vrai bouclage, de la première contribution au passage en
-« imprimé ».
+> ⚠ **Correction du 2026-08-05.** Ce sprint disait « la rédactrice en chef n'a
+> jamais vu un écran ; toute l'ergonomie a été validée par une seule personne »,
+> et posait sa liste de frictions comme le juge de l'app. **C'était mal cadré.**
+> Stéphane est rédacteur en chef graphique de L'Épaulette depuis cinq ans : sur la
+> fidélité du chemin de fer, la justesse du vocabulaire et la vérité du bouclage,
+> c'est son jugement qui tranche, et il n'a pas besoin d'être doublé.
+> Et l'accès n'est pas gratuit : la rédactrice devra un abonnement, donc la
+> validation passe par lui d'abord. Le second utilisateur reste utile — on ne peut
+> pas désapprendre son propre outil — mais c'est un **bonus daté plus tard**, pas
+> une condition.
 
-**Fini quand :** un numéro est bouclé avec elle aux commandes, et la liste de ses
-frictions est écrite. C'est cette liste qui dira si l'app est bonne.
+**Ce qui compte, et qui n'a jamais eu lieu : un numéro mené d'un bout à l'autre sur
+du contenu réel.** Ce n'est pas un avis, c'est un parcours. Un banc ne trouve pas
+l'étape que personne n'a pensé à tester, ni le raccourci qui marche seulement parce
+qu'on fait toujours A avant B.
 
-**Coût :** du calendrier, pas du code. **Rien de ce qui suit ne clôt DK-10.**
+**L'occasion est prise :** **le bouclage de septembre 2026** de L'Épaulette.
 
-> **CE QUI A ÉTÉ FAIT LE 2026-08-05 — une mine sous le premier contact.**
-> Une invitation desK s'accepte par **correspondance d'adresse** : au bootstrap,
-> le worker cherche `dk_invites.email = claims.email`. Les deux côtés sont bien
-> normalisés (`.toLowerCase().trim()`), donc la casse ne pose pas de problème.
-> **Mais si l'adresse de sa licence n'est pas celle qui a été invitée** — faute de
-> frappe, adresse personnelle au lieu de la professionnelle, ou licence dont le
-> champ e-mail est vide (le JWT retombe alors sur `licence.owner`, qui est un
-> NOM) — elle n'a aucune publication, et l'écran qu'elle reçoit est **exactement
-> celui d'un desK neuf** : « Votre rédaction vous attend. Créez. »
->
-> Elle aurait créé une **seconde revue** à côté de celle de l'équipe, y aurait
-> travaillé, et personne ne l'aurait vu avant longtemps. Le pire des ratés : celui
-> qui ressemble à un succès.
->
-> Corrigé : `me.email` voyage désormais avec le bootstrap, et l'écran d'accueil
-> vide **nomme l'adresse de connexion** en ambre, avec l'avertissement qu'une
-> revue créée là serait une seconde revue. Gardé par un **parcours 7** dans
-> `scripts/test-desk-ui.mjs` (72 → **76**), qui mesure aussi que l'avertissement
-> est réellement rendu. Vu attraper : la ligne retirée, 3 assertions au rouge.
+**Fini quand :** le numéro de septembre est bouclé dans desK, passé en « imprimé »,
+et ce qui a accroché est noté.
 
-**À vérifier AVANT la séance — ce sont les trois choses qui la bloqueraient :**
+#### Ce qui, sur ce parcours, n'a JAMAIS tourné en production
 
-1. **Sa licence Keystone existe et porte la BONNE adresse e-mail.** C'est celle-là
-   qu'il faut inviter, pas une autre. Si le doute subsiste, l'écran d'accueil de
-   desK la lui affichera désormais : comparez-la à ce que montre Réglages → Équipe
-   (l'invitation en attente y est listée avec son adresse).
-2. **Son plan donne accès à desK** : le pad est en `STARTER`. Une licence `DEMO`
-   ne l'ouvrira pas. Et si sa licence porte une liste `ks_owned_assets`, `O-DSK-001`
-   doit y figurer (liste absente = tout est ouvert).
-3. **L'invitation est bien partie** : Réglages → Équipe doit montrer la ligne
-   « invitation en attente — s'activera à sa prochaine connexion ». Elle disparaît
-   au premier bootstrap de la rédactrice ; tant qu'elle est là, c'est qu'elle ne
-   s'est pas encore connectée. (Plafond : 20 membres par publication.)
+C'est là qu'il faut regarder pendant le bouclage — le reste est rodé depuis juillet.
 
-**Il faut de Stéphane :** la séance, et la liste des frictions écrite pendant —
-pas après. C'est le seul livrable de DK-10, et il n'est pas dans ce dépôt.
+| Étape | État |
+|---|---|
+| **Le rituel d'impression** (`status → 'imprime'`) | jamais joué en vrai. Il marque les titulaires « publié » avec leur page, **reverse les bancs au marbre** avec la mention du report, vide les bancs du numéro, et pose `imprime_at`. Irréversible : il ne se rejoue pas. |
+| **La purge du casier** | démarre à `imprime_at` + **30 jours** en production (0 seulement sur les bancs). Donc rien ne disparaît le jour même — mais les pièces du numéro s'effaceront début octobre. Vérifier avant que rien d'utile n'y dorme. |
+| **La numérotation d'affichage (folio)** | l'option « couverture hors numérotation, départ à 0 » n'a **jamais été cochée sur la vraie publication**. À faire AVANT de composer, sinon tous les folios affichés seront décalés d'une page. Réglages → Numérotation (propriétaire seul). |
+| **La pré-impression (DK-6)** | confrontation du PDF final au chemin de fer, jamais faite sur un vrai export InDesign. C'est le contrôle qui dira si le nombre de pages et la place des articles concordent. |
+| **Les relances par e-mail** | le brouillon et l'envoi Scaleway n'ont jamais servi sur de vrais contributeurs en retard. |
+| **Le pont booK** | « Créer l'édition numérique » depuis le PDF final, jamais fait en réel. |
+| **La relecture (DK-9)** | corrigée et mesurée le 2026-08-05 sur trois vrais papiers, mais jamais utilisée dans un vrai flux de production. |
+
+**Reste, à sa date à elle :** donner l'accès à la rédactrice en chef quand elle aura
+sa licence, et relever ses frictions — comme rodage, pas comme examen. Les trois
+choses à vérifier ce jour-là : son adresse de licence est bien celle qu'on invite
+(l'écran d'accueil vide de desK l'affiche désormais), son plan ouvre desK
+(`STARTER` minimum), et Réglages → Équipe montre « invitation en attente » tant
+qu'elle ne s'est pas connectée.
 
 ---
 
@@ -485,6 +481,6 @@ version — Actualiser »**.
 
 - Sept pièces en prod pointant des articles supprimés (résidus des tests du 4 août).
   Sans gravité, la purge les emportera.
-- Trois articles réels de L'Épaulette au marbre, sans page.
+- Trois articles réels de L'Épaulette au marbre, sans page — matière de départ pour le bouclage de septembre (DK-10).
 
 Rien d'autre : au 2026-08-05, **aucun banc rouge dans le dépôt**.
