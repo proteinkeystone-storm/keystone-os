@@ -14,7 +14,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import {
-  shouldReload, remainingCapCents, PACK_PRICE_CENTS,
+  shouldReload, remainingCapCents, monthUtcOf, PACK_PRICE_CENTS,
   DEFAULT_CAP_EUR, DEFAULT_THRESHOLD, MIN_INTERVAL_MS, PAUSE,
 } from '../workers/src/lib/auto-reload.js';
 
@@ -72,6 +72,15 @@ t('dépense d\'un mois RÉVOLU ne compte plus',
   shouldReload(cfg({ spent_cents: 2000, spent_month: '2026-06' }), 0, T0, MOIS).ok, true);
 t('remainingCapCents ignore l\'autre mois',
   remainingCapCents(cfg({ spent_cents: 2000, spent_month: '2026-06' }), MOIS), 2000);
+// Tous les tests ci-dessus passent le mois À LA MAIN — le DÉFAUT, lui,
+// n'était jamais éprouvé. Il lisait l'horloge du serveur : le plafond de
+// juillet était vu comme « un mois révolu » dès qu'on était en août, donc
+// remis à zéro, donc jamais atteint. Le balayage débitait au lieu de
+// s'arrêter au mur. Ces deux lignes tiennent la porte fermée.
+t('sans mois explicite, le mois vient de nowMs (pas de l\'horloge du serveur)',
+  shouldReload(cfg({ spent_cents: 2000 }), 0, T0).reason, PAUSE.CAP);
+t('monthUtcOf lit l\'instant qu\'on lui donne',
+  monthUtcOf(T0), MOIS);
 
 console.log('\n\x1b[1m▶ Verrou 3 — trace de consentement\x1b[0m');
 t('aucun consentement → refus', verdict(cfg({ consent_at: null }), 0), 'no_consent');

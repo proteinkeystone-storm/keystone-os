@@ -118,8 +118,17 @@ export async function ensureAutoReloadSchema(env) {
   _ready = true;
 }
 
+/** Le mois ('YYYY-MM', UTC) d'un instant donné. Une horloge injectée ne
+ *  sert à rien si le mois, lui, continue de lire l'heure du serveur : le
+ *  verdict mélangerait alors DEUX horloges. Tout ce qui décide part
+ *  d'ici. */
+export function monthUtcOf(ms) {
+  const t = Number(ms);
+  return new Date(Number.isFinite(t) ? t : Date.now()).toISOString().slice(0, 7);
+}
+
 export function currentMonthUtc() {
-  return new Date().toISOString().slice(0, 7);
+  return monthUtcOf(Date.now());
 }
 
 /** Combien reste-t-il à dépenser ce mois-ci, en centimes ? */
@@ -136,12 +145,14 @@ export function remainingCapCents(cfg, month = currentMonthUtc()) {
  * @param {object}  cfg        ligne ai_auto_reload (ou null)
  * @param {?number} remaining  conversations restantes (null = illimité)
  * @param {number}  nowMs      horloge, injectée pour rendre le test déterministe
- * @param {string}  month      'YYYY-MM'
+ * @param {string}  month      'YYYY-MM' — par défaut le mois DE `nowMs`, pas
+ *   celui du serveur : sinon la fonction n'est plus pure, et le plafond
+ *   mensuel se relit à travers une horloge que l'appelant ne contrôle pas.
  * @returns {{ ok: boolean, reason: string, packLookup?, amountCents?, conversations? }}
  *   `reason` est TOUJOURS renseigné, y compris sur ok:true — c'est ce
  *   qu'on journalise, et sans ça un refus devient indébuggable.
  */
-export function shouldReload(cfg, remaining, nowMs, month = currentMonthUtc()) {
+export function shouldReload(cfg, remaining, nowMs, month = monthUtcOf(nowMs)) {
   if (!cfg)                     return { ok: false, reason: 'not_configured' };
   if (cfg.enabled !== 1)        return { ok: false, reason: 'disabled' };          // verrou 1
   if (cfg.paused_at)            return { ok: false, reason: 'paused:' + (cfg.paused_reason || '?') }; // verrou 5
