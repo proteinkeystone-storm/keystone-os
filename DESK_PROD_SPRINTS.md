@@ -38,8 +38,8 @@ Autrement dit : le produit est sain, les conditions de fabrication ne le sont pa
 | Front en prod | `ks-os-v5.28.484-desk-confirm-vue`, `app/desk.css?v=18` |
 | Worker en prod | version `740b8747` (déployée depuis `40d9146`) |
 | Bancs desK | **8/8 verts** (DK-2 48, DK-3 30, DK-4 33, DK-4b 22, DK-4c 54, DK-5 19, casier 20, signal 6) |
-| `npm test` | **869 assertions, zéro échec** |
-| Front desK | `app/desk.js` **3 203 lignes**, `app/desk.css` 855 — **zéro test** |
+| `npm test` | **869 assertions, zéro échec** — puis **+52** avec DK-7 (2026-08-05) |
+| Front desK | `app/desk.js` **3 203 lignes**, `app/desk.css` 855 — ~~zéro test~~ → **banc `test-desk-ui.mjs`, 52 vérifications** (DK-7) |
 | Membres du pad | **1** (Stéphane). La rédactrice n'a aucun accès. |
 
 > Deux échecs de bancs traînaient depuis des semaines. Aucun n'était un bug —
@@ -65,9 +65,40 @@ confirmations amenées à l'écran.
 
 ## 3. Les sprints
 
-### DK-7 · Le filet du front — **bloquant, à faire en premier**
+### DK-7 · Le filet du front — ✅ **LIVRÉ le 2026-08-05**
 
 **Ferme :** 3 203 lignes sans un test ; des bancs verts pendant que l'app était cassée.
+
+> **Ce qui existe maintenant :** `scripts/test-desk-ui.mjs`, **52 vérifications**,
+> dans la chaîne `npm test` (et `npm run test:desk-ui` seul, ~12 s). Il démarre le
+> **vrai** `app/desk.js` dans Chrome (puppeteer, déjà dépendance du dépôt) avec
+> `app/desk.css` et `app/ghostwriter.js` — rien n'est réimplémenté. Le worker,
+> lui, est **doublé en mémoire** dans le script (mêmes routes, mêmes formes de
+> payload que `workers/src/routes/desk.js` et `desk-email.js`) : le banc tourne
+> donc **sans `wrangler dev`**, sinon `npm test` virerait au rouge dès que le
+> worker n'est pas lancé. Aucun harnais à supprimer avant commit : la page de
+> test est servie depuis la mémoire par le script.
+>
+> **Pourquoi un navigateur et pas jsdom :** le parcours 5 mesure un dépassement
+> en pixels. jsdom n'a pas de moteur de mise en page — `getBoundingClientRect()`
+> y rend des zéros et le test passerait au vert sans rien prouver.
+>
+> **Deux partis pris à connaître avant d'y toucher :**
+> - Le bac est servi **sans la colonne `status`** sur une des entrées — c'est
+>   exactement le payload de production du 4 août. Le front doit ouvrir le
+>   panneau de tri quand même. Remettre `status` partout rendrait l'assertion
+>   muette. (Le worker, lui, est gardé par `workers/test/test-desk-dk4c-bannette.mjs`.)
+> - Chaque confirmation du parcours 5 est vérifiée **deux fois** : dépassement
+>   réel = 0 px, ET « sans le guetteur, elle serait sous le pli » > 0 px. La
+>   seconde assertion empêche le test de passer au vert pour rien le jour où la
+>   mise en page changera.
+>
+> **Preuve que le filet attrape** (faite le 2026-08-05, chacun des neuf défauts
+> réintroduit dans `desk.js` puis restauré) : les 9 font virer le banc au rouge,
+> avec l'assertion nommée. Le plus parlant — le guetteur de confirmations retiré
+> donne 1 197 px hors cadre sur « Supprimer un article ». Pendant ce temps, les
+> **875 autres assertions de `npm test` restent vertes** : c'est précisément
+> l'angle mort que ce banc ferme.
 
 Un banc qui démarre le **vrai** `app/desk.js` et rejoue les cinq parcours qui ont
 cassé le 4 août. Le patron existe déjà dans le dépôt : `scripts/test-kora-desk.mjs`
@@ -91,7 +122,8 @@ Les cinq parcours, choisis parce que ce sont **exactement** ceux qui ont lâché
    panneau (mesurer le dépassement, pas « ça a l'air bon »).
 
 **Fini quand :** `npm test` échoue si l'un des sept défauts du 4 août revient.
-C'est le seul critère qui compte.
+C'est le seul critère qui compte. — **Vérifié** : avec le défaut du panneau de tri
+réintroduit, `npm test` sort en code 1.
 
 **Fichiers :** `app/desk.js`, `app/ghostwriter.js` (lecture) ; nouveau
 `scripts/test-desk-ui.mjs` ; `package.json` (chaîne `npm test`).
@@ -99,7 +131,12 @@ C'est le seul critère qui compte.
 **Piège connu :** en préversion, le navigateur ressert les modules depuis son cache
 — `desk.js` importe `./ghostwriter.js` sans cache-buster, donc une modif de
 Ghost Writer peut rester invisible. Forcer `fetch(url, {cache:'reload'})` puis
-recharger, ou importer avec un suffixe `?t=Date.now()`.
+recharger, ou importer avec un suffixe `?t=Date.now()`. (Le banc contourne le
+piège en important `/app/desk.js?t=<horodatage>` et en servant tout en `no-store`.)
+
+**Reste possible plus tard, hors DK-7 :** le banc ne couvre que les cinq parcours
+qui ont lâché. Le glisser-déposer de la frise, la pré-impression et le bouclage
+n'ont toujours aucun test de front.
 
 ---
 
