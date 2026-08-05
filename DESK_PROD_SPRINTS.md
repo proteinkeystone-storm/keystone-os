@@ -34,9 +34,9 @@ Autrement dit : le produit est sain, les conditions de fabrication ne le sont pa
 
 | | |
 |---|---|
-| `main` | `558bb2c` |
-| Front en prod | `ks-os-v5.28.485-desk-dk8`, `app/desk.css?v=19` (vérifié : `/app` les sert) |
-| Worker en prod | version `36580790` (déployée depuis `558bb2c`) — colonnes `dk_inbox.auth`/`auth_detail` confirmées en D1 prod |
+| `main` | `515ca8f` |
+| Front en prod | `ks-os-v5.28.486-desk-dk9`, `app/desk.css?v=19` (vérifié : trois sondes espacées) |
+| Worker en prod | version `14757e27` (déployée depuis `8818066`) — colonnes `dk_inbox.auth`/`auth_detail` confirmées en D1 prod |
 | Bancs desK | **9/9 verts** (DK-2 48, DK-3 30, DK-4 33, DK-4b 22, DK-4c 54, DK-5 19, casier 20, signal 6, **DK-8 37**) |
 | `npm test` | **zéro échec** — 72 vérifications de front (DK-7 52 + DK-8 11 + DK-9 9) et 27 sur le parseur Ghost Writer (14 avant DK-9) |
 | Front desK | `app/desk.js` **3 228 lignes**, `app/desk.css` 865 — ~~zéro test~~ → **banc `test-desk-ui.mjs`, 72 vérifications** (DK-7 + DK-8 + DK-9) |
@@ -215,7 +215,7 @@ jamais tout seul sur une page. — **Fait.**
 
 ---
 
-### DK-9 · La relecture tenue à sa promesse — ✅ **CLOS le 2026-08-05** (non déployé)
+### DK-9 · La relecture tenue à sa promesse — ✅ **EN PROD le 2026-08-05**
 
 **Fermait :** le modal affichait « Les mots de l'auteur sont préservés » et personne
 ne l'avait vérifié.
