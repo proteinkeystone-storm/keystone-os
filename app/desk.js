@@ -95,6 +95,13 @@ let _size = (() => { const v = parseInt(localStorage.getItem('dk_cardsize'), 10)
 let _msel = new Set(), _mselAnchor = null, _embark = false;
 let _mf = { q: '', rub: '', fresh: '', statut: 'vivant' };   // filtres du marbre
 let _toastTimer = null;
+// Défilement de la frise et du marbre, mémorisé HORS du DOM. _renderFer()
+// remplace main.innerHTML : le conteneur qui défile est DÉTRUIT, donc lire son
+// scrollTop après coup rend toujours 0. Le premier chargement (cache → serveur)
+// et le sondage d'équipe (45 s) faisaient ainsi « remonter la page toute seule »
+// pendant qu'on travaillait (retour Stéphane, 05/08). On relève AVANT de
+// remplacer le HTML, on restaure APRÈS — même principe que l'inspecteur.
+let _friseY = 0, _marbreY = 0;
 let _ppFile = null;             // DK-6 : PDF final retenu en mémoire (contrôle + pont booK)
 let _writer = null;             // éditeur d'article ouvert : { artId, timer, dirty, saving, back }
 
@@ -368,6 +375,7 @@ function _openPubMenu(e) {
     if (b.dataset.newpub) { _renderCreatePub(true); return; }
     if (b.dataset.newissue) { _pubId = b.dataset.pub; _renderCreateIssue(); return; }
     _pubId = b.dataset.pub; _issueId = b.dataset.issue; _selN = null; _clearMsel();
+    _friseY = 0; _marbreY = 0;    // autre numéro = autre chemin de fer, on repart en haut
     _renderPubSlot(); _loadIssue();
   });
   setTimeout(() => document.addEventListener('click', function h(ev) {
@@ -515,6 +523,26 @@ function _rubVars(rub, alpha = 0.3) {
   return ` style="--dk-rub:${rub.color};--dk-rub-tint:${_rgba(rub.color, alpha)};--dk-rub-lite:${_mixTo(rub.color, 255, 0.55)};--dk-rub-deep:${_mixTo(rub.color, 0, 0.4)}"`;
 }
 function _slotsOf(p) { return (_D.slots || []).filter(s => s.page_id === p.id).sort((a, b) => a.position - b.position); }
+function _pageByN(n) { return (_D.pages || []).find(p => p.n === n) || null; }
+
+// Un dossier tient rarement sur une page. _runLibre = la suite de pages
+// LIBRES à partir de la page n (celle-ci comprise) : une page figée (pub,
+// sommaire) ou déjà occupée arrête la suite — on ne pose jamais un dossier
+// par-dessus le travail de quelqu'un d'autre, on s'arrête devant.
+function _runLibre(startN, max = 16) {
+  const out = [];
+  for (let n = startN; out.length < max; n++) {
+    const p = _pageByN(n);
+    if (!p || p.kind === 'fixe' || _slotsOf(p).length) break;
+    out.push(p);
+  }
+  return out;
+}
+// « 3 pages (p. 12–14) » — le libellé que la rédactrice relit avant de cliquer.
+function _spanLabel(run, k) {
+  return k === 1 ? `1 page (p. ${_pn(run[0].n)})`
+                 : `${k} pages (p. ${_pn(run[0].n)}–${_pn(run[k - 1].n)})`;
+}
 function _bancOf(s) { try { const b = JSON.parse(s.banc || '[]'); return Array.isArray(b) ? b : []; } catch (_) { return []; } }
 const _isDone = a => ['maquette', 'publie'].includes(a.status);
 
@@ -900,6 +928,7 @@ function _renderFer() {
   if (!_D || !_D.issue) return;
   _renderPubSlot();
   const main = _root.querySelector('[data-slot="main"]');
+  _keepScrollY();               // relever AVANT de détruire les conteneurs
   main.classList.add('dk-main-fer');
   const marbreN = (_D.articles || []).filter(_estAuMarbre).length;
   const newMarbre = _newMarbreCount();
@@ -1162,10 +1191,21 @@ function _cardHTML(p, prevP) {
   </div>`;
 }
 
+// Relève la position de défilement des deux conteneurs encore vivants.
+// data-rendered distingue un conteneur VIVANT (scrollTop fiable) d'un
+// conteneur FRAÎCHEMENT recréé par _renderFer (scrollTop = 0, à ignorer).
+function _keepScrollY() {
+  const f = _root?.querySelector('[data-slot="frise"]');
+  if (f && f.dataset.rendered) _friseY = f.scrollTop;
+  const m = _root?.querySelector('.dk-marbre-list');
+  if (m) _marbreY = m.scrollTop;
+}
+
 function _renderFrise(keepScroll = true) {
   const f = _root.querySelector('[data-slot="frise"]');
   if (!f) return;
-  const sc = keepScroll ? f.scrollTop : 0;
+  if (keepScroll && f.dataset.rendered) _friseY = f.scrollTop;
+  const sc = keepScroll ? _friseY : (_friseY = 0);
   const pls = _planches();
   let prev = null;
   f.innerHTML = pls.map(pl => {
@@ -1176,6 +1216,7 @@ function _renderFrise(keepScroll = true) {
     </div>`;
     return html;
   }).join('');
+  f.dataset.rendered = '1';
   f.scrollTop = sc;
   if (_selN !== null) f.querySelector(`.dk-pcard[data-n="${_selN}"]`)?.classList.add('sel');
 }
@@ -1534,6 +1575,7 @@ function _flipPlay(firstRects) {
 function _renderMarbre() {
   const wrap = _root.querySelector('[data-slot="marbre"]');
   if (!wrap) return;
+  _keepScrollY();               // relever AVANT de remplacer la liste
   const rubs = _D.rubriques || [];
   const arts = (_D.articles || []).filter(a => {
     // « au marbre » = vivant ET pas encore posé sur une page. Sans la seconde
@@ -1589,9 +1631,12 @@ function _renderMarbre() {
         </div>`;
       }).join('') : `<p class="dk-empty-line" style="padding:18px">Aucun article ne correspond — le marbre est ${(_D.articles || []).length ? 'filtré' : 'vide : créez un article avec le bouton ci-dessus'}.</p>`}
     </div>`;
+  const list = wrap.querySelector('.dk-marbre-list');
+  if (list) list.scrollTop = _marbreY;
   wrap.querySelectorAll('.dk-marbre-head [data-k]').forEach(el => {
     el.addEventListener(el.dataset.k === 'q' ? 'input' : 'change', () => {
       _mf[el.dataset.k] = el.value;
+      if (list) list.scrollTop = 0;   // changer de filtre = repartir en haut
       _renderMarbre();
       if (el.dataset.k === 'q') { const q = wrap.querySelector('[data-k="q"]'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
     });
@@ -1641,11 +1686,10 @@ function _openInspMarbre(artId) {
     </div>
     ${_artCasierSectionHTML(a)}
     ${vivant ? `<div class="dk-sec"><h4>Réserver sur une page du n° ${_esc(_D.issue.num)}</h4>
-      <div class="dk-pagepick">${targets.slice(0, 200).map(p => {
-        const nb = _slotsOf(p).length;
-        return `<button class="dk-pagepick-btn ${nb ? 'has' : ''}" data-pg="${p.id}" data-n="${p.n}" title="${nb ? nb + ' article(s) déjà sur cette page' : 'page vide'}">${_pn(p.n)}${nb ? '+' : ''}</button>`;
-      }).join('') || '<p class="dk-empty-line">Aucune page disponible.</p>'}</div>
-      <p class="dk-note">Chiffre + = la page porte déjà un article ; le vôtre s'y ajoutera (brèves, encadré…).</p>
+      ${targets.length ? `<label class="dk-field"><span>Où le poser</span><select data-k="mpage">${_pageChoixHTML(a.id)}</select></label>
+      <div class="dk-btn-row"><button class="dk-btn primary" data-act="reservepage" disabled>Réserver sur cette page</button></div>
+      <p class="dk-note">Une fois posé, sa fiche permet de l'étaler sur les pages suivantes (dossier).</p>`
+      : '<p class="dk-empty-line">Aucune page disponible.</p>'}
     </div>` : ''}
     ${histo.length ? `<div class="dk-sec"><h4>Historique</h4>${histo.slice(0, 20).map(h => `<div class="dk-histo">${_esc(h)}</div>`).join('')}</div>` : ''}
     ${_passerellesHTML(a)}
@@ -1662,12 +1706,18 @@ function _openInspMarbre(artId) {
   _bindArtCasier(insp, a, () => _openInspMarbre(a.id));
   _bindPasserelles(insp, a);
   insp.querySelector('[data-act="write"]')?.addEventListener('click', () => _openWriter(a.id, () => _openInspMarbre(a.id)));
-  insp.querySelectorAll('[data-pg]').forEach(b => b.onclick = async () => {
+  const selPage = insp.querySelector('[data-k="mpage"]');
+  const btnPage = insp.querySelector('[data-act="reservepage"]');
+  selPage?.addEventListener('change', () => { btnPage.disabled = !selPage.value; });
+  btnPage?.addEventListener('click', async () => {
+    const pageId = selPage.value;
+    if (!pageId) return;
+    const p = (_D.pages || []).find(x => x.id === pageId);
     try {
-      await _api('/page/' + b.dataset.pg + '/slot', { method: 'POST', body: { art_id: a.id } });
-      _toast('Article réservé sur la page ' + _pn(parseInt(b.dataset.n, 10)) + '.');
+      await _api('/page/' + pageId + '/slot', { method: 'POST', body: { art_id: a.id } });
+      _toast('Article réservé sur la ' + (p ? _pageLabel(p) : 'page') + '.');
       await _loadIssue(true);
-      _ackCardById(b.dataset.pg);   // réservation par moi → pas de halo pour moi
+      _ackCardById(pageId);   // réservation par moi → pas de halo pour moi
       if (_view === 'marbre') _renderMarbre();
       _openInspMarbre(a.id);
     } catch (e) { _toast(e.message, true); }
@@ -1800,8 +1850,13 @@ function _renderInspVide(insp, p) {
   const placed = new Set((_D.slots || []).map(s => s.art_id).filter(Boolean));
   const libres = (_D.articles || []).filter(a => !placed.has(a.id) && !['publie', 'abandonne'].includes(a.status));
   const rubs = _D.rubriques || [];
+  const run = _runLibre(p.n);
   insp.innerHTML = _inspShell('Emplacement libre — ' + _pageLabel(p), null,
     `<div class="dk-sec"><h4>Réserver un article</h4>
+      ${run.length > 1 ? `<label class="dk-field"><span>Sur combien de pages ?</span>
+        <select data-k="span">${run.map((_x, i) => `<option value="${i + 1}">${_spanLabel(run, i + 1)}</option>`).join('')}</select>
+      </label>
+      <p class="dk-note" style="margin:-4px 0 10px">Un dossier de plusieurs pages : l'article s'étale à partir d'ici, les pages suivantes portent la mention « suite ». La suite s'arrête devant la première page occupée ou figée.</p>` : ''}
       ${libres.length ? libres.slice(0, 40).map(a => {
         const rub = _rubById(a.rub_id);
         return `<div class="dk-banc-item">
@@ -1811,7 +1866,7 @@ function _renderInspVide(insp, p) {
           </div>
           <button class="dk-btn small" data-act="reserve" data-a="${a.id}">Réserver</button>
         </div>`;
-      }).join('') : `<p class="dk-empty-line">Aucun article disponible — créez-en un ci-dessous, ou étalez-en un déjà réservé via la sélection multiple.</p>`}
+      }).join('') : `<p class="dk-empty-line">Aucun article disponible — créez-en un ci-dessous, ou prolongez un article déjà posé depuis sa fiche (« Étaler sur les pages suivantes »).</p>`}
     </div>
     <div class="dk-sec"><h4>Préparer la page</h4>
       <label class="dk-field"><span>Rubrique prévue (avant réservation)</span><select data-k="prerub">
@@ -1826,10 +1881,21 @@ function _renderInspVide(insp, p) {
   _bindClose(insp);
   _bindCasier(insp, p, () => _openInsp(p.n, true));
   insp.querySelectorAll('[data-act="reserve"]').forEach(b => b.onclick = async () => {
+    const span = Math.max(1, Math.min(run.length, parseInt(insp.querySelector('[data-k="span"]')?.value, 10) || 1));
+    const cible = run.slice(0, span);
     try {
-      await _api('/page/' + p.id + '/slot', { method: 'POST', body: { art_id: b.dataset.a } });
-      _toast('Article réservé sur la page ' + _pn(p.n) + '.');
-      await _loadIssue(true); _ackCardById(p.id); _openInsp(p.n, true);
+      if (span > 1) {
+        // Étalement : une seule écriture pour tout le dossier (op « spread »),
+        // la même que la sélection multiple — pas de second chemin côté serveur.
+        const r = await _api('/issue/' + _issueId + '/batch', { method: 'POST', body: { op: 'spread', ns: cible.map(x => x.n), art_id: b.dataset.a } });
+        _toast(`Article réservé sur ${r.done} page${r.done > 1 ? 's' : ''} (p. ${_pn(cible[0].n)}–${_pn(cible[cible.length - 1].n)}).`);
+      } else {
+        await _api('/page/' + p.id + '/slot', { method: 'POST', body: { art_id: b.dataset.a } });
+        _toast('Article réservé sur la page ' + _pn(p.n) + '.');
+      }
+      await _loadIssue(true);
+      cible.forEach(x => _ackCardById(x.id));
+      _openInsp(p.n, true);
     } catch (e) { _toast(e.message, true); }
   });
   insp.querySelector('[data-k="prerub"]').addEventListener('change', async e => {
@@ -1907,15 +1973,25 @@ function _renderInspArticle(insp, p) {
   const histo = _histoOf(a);
   const canSim = st.needsCopy && a.due;
   const card = _computeCard(p);
+  // Étalement : jusqu'où cet article court-il déjà, et que reste-t-il de libre
+  // juste derrière ? (un dossier se prolonge page à page, sans quitter la fiche)
+  let _last = p.n;
+  while (true) { const nx = _pageByN(_last + 1); if (nx && _slotsOf(nx).some(s => s.art_id === a.id)) _last++; else break; }
+  const etale = _placementsOf(a.id).tit.length;
+  const extRun = _runLibre(_last + 1);
 
   insp.innerHTML = _inspShell(a.title,
-    `<div class="dk-insp-rub"><span class="dk-pc-dot" style="background:${rub ? rub.color : '#8d93a8'}"></span>${_esc(rub ? rub.name : 'Sans rubrique')} · ${_pageLabel(p)}</div>`,
+    `<div class="dk-insp-rub"><span class="dk-pc-dot" style="background:${rub ? rub.color : '#8d93a8'}"></span>${_esc(rub ? rub.name : 'Sans rubrique')} · ${_pageLabel(p)}${etale > 1 ? ` · dossier de ${etale} pages` : ''}</div>`,
     `<div class="dk-sec dk-sec-state">
     ${slots.length > 1 ? `<div class="dk-slotchips">${slots.map((s, i) => {
         const sa = _artById(s.art_id);
         return `<button class="dk-slotchip ${i === _selSlot ? 'on' : ''}" data-slotidx="${i}" title="${_esc(sa ? sa.title : '')}">${i + 1}. ${_esc(sa ? (sa.title.length > 18 ? sa.title.slice(0, 17) + '…' : sa.title) : '?')}</button>`;
       }).join('')}</div>
       <p class="dk-note" style="margin:2px 0 10px">${slots.length} articles sur cette page — marge de la carte : <strong class="${_stateOf(card.marge)}">${card.allDone ? 'prêt' : (_margeTxt(card.marge) || '—')}</strong> (la plus serrée).</p>` : ''}
+    <label class="dk-field dk-field-rub"><span>Rubrique</span><select data-k="artrub">
+      <option value="">Sans rubrique</option>
+      ${(_D.rubriques || []).map(r => `<option value="${r.id}" ${a.rub_id === r.id ? 'selected' : ''}>${_esc(r.name)}</option>`).join('')}
+    </select></label>
     ${_vitalsHTML(a, c)}
     ${_stepsHTML(a)}
     </div>
@@ -1959,8 +2035,9 @@ function _renderInspArticle(insp, p) {
       <button class="dk-btn primary" data-act="write">${icon('edit-3', 14)} ${_hasCopy(a) ? 'Éditer le texte' : 'Écrire le texte'}</button>
       <button class="dk-btn" data-act="editart">${icon('edit-3', 14)} Modifier la fiche</button>
       <button class="dk-btn" data-act="unreserve">Retirer de la page</button>
+      ${extRun.length ? `<button class="dk-btn ghost" data-act="spread">${icon('copy', 14)} Étaler sur les pages suivantes</button>` : ''}
       ${slots.length < 12 ? `<button class="dk-btn ghost" data-act="addslot">${icon('plus', 14)} Ajouter un article ici</button>` : ''}
-    </div><div data-slot="slotpick"></div></div>
+    </div><div data-slot="spreadpick"></div><div data-slot="slotpick"></div></div>
     ${p.updated_by ? `<p class="dk-modified">Carte modifiée par ${_esc(p.updated_by)} ${_relTime(p.updated_at)}</p>` : ''}`);
   _bindClose(insp);
 
@@ -1983,6 +2060,11 @@ function _renderInspArticle(insp, p) {
   // cliquable — le retour arrière passe par « Modifier », choix assumé).
   insp.querySelectorAll('.dk-step[data-step]').forEach(b =>
     b.addEventListener('click', () => patchArt({ status: b.dataset.step }, STEP_MSG[b.dataset.step] || 'Statut mis à jour.')));
+  // Changer la rubrique SANS quitter la fiche : c'est la couleur de la carte
+  // dans le chemin de fer, on la corrige d'un geste (la POSITION, elle, se
+  // change en glissant la carte — chacun son geste, aucun formulaire).
+  insp.querySelector('[data-k="artrub"]')?.addEventListener('change', e =>
+    patchArt({ rub_id: e.target.value || null }, 'Rubrique mise à jour.'));
   insp.querySelector('[data-act="editart"]').addEventListener('click', () => _openArtForm(p, a));
   insp.querySelector('[data-act="unreserve"]').addEventListener('click', async () => {
     try {
@@ -1991,6 +2073,38 @@ function _renderInspArticle(insp, p) {
       _selSlot = 0;
       await _loadIssue(true); _openInsp(p.n, true);
     } catch (e) { _toast(e.message, true); }
+  });
+
+  // Étaler ce même article sur les pages suivantes (dossier). Sans passer par
+  // la sélection multiple : le geste naturel est « celui-ci fait 4 pages »,
+  // depuis la fiche de l'article, pas depuis un lasso sur la frise.
+  insp.querySelector('[data-act="spread"]')?.addEventListener('click', () => {
+    const box = insp.querySelector('[data-slot="spreadpick"]');
+    box.innerHTML = `<div class="dk-confirm">
+      Prolonger <strong>« ${_esc(a.title)} »</strong> après la page ${_pn(_last)} :
+      <label class="dk-field" style="margin:8px 0 0"><span>Pages à ajouter</span>
+        <select data-k="ext">${extRun.map((_x, i) => `<option value="${i + 1}">${_spanLabel(extRun, i + 1)}</option>`).join('')}</select>
+      </label>
+      <div class="dk-btn-row" style="margin-top:8px">
+        <button class="dk-btn primary small" data-act="extok">Étaler</button>
+        <button class="dk-btn small" data-act="extno">Annuler</button>
+      </div>
+      <span class="dk-note">Pour raccourcir un dossier : ouvrez la page en trop et « Retirer de la page ».</span>
+    </div>`;
+    box.querySelector('[data-act="extno"]').onclick = () => { box.innerHTML = ''; };
+    box.querySelector('[data-act="extok"]').onclick = async () => {
+      const k = Math.max(1, Math.min(extRun.length, parseInt(box.querySelector('[data-k="ext"]').value, 10) || 1));
+      const cible = extRun.slice(0, k);
+      box.innerHTML = '';
+      try {
+        const r = await _api('/issue/' + _issueId + '/batch', { method: 'POST', body: { op: 'spread', ns: cible.map(x => x.n), art_id: a.id } });
+        _toast(`Article étalé sur ${r.done} page${r.done > 1 ? 's' : ''} de plus.`);
+        await _loadIssue(true);
+        cible.forEach(x => _ackCardById(x.id));
+        _openInsp(p.n, true);
+      } catch (e) { _toast(e.message, true); }
+    };
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
 
   // Ajouter un 2ᵉ (3ᵉ…) article sur la même page (§2.4 — brèves, encadré).
@@ -2116,6 +2230,28 @@ const BAC_VIA = { expediteur: 'expéditeur connu', 'expediteur-ambigu': 'expédi
 function _pagesLibres() {
   return (_D.pages || []).filter(p => p.kind !== 'fixe' && !_slotsOf(p).some(s => s.art_id));
 }
+/* Choisir une page depuis le MARBRE. La grille de numéros nus obligeait à se
+   rappeler de tête ce qu'il y avait page 53 — et un chemin de fer de 64 pages
+   y devenait un damier illisible (retour Stéphane, 05/08). On reprend donc la
+   forme du tri du courrier, la seule qui marchait : une liste où chaque page
+   est NOMMÉE avec sa rubrique en face. Les pages déjà occupées restent
+   proposées (brèves, encadré…) mais dans leur propre groupe, et elles disent
+   qui les occupe — on ne s'ajoute plus à l'aveugle sur la page d'un autre. */
+function _pageChoixHTML(artId) {
+  const cibles = (_D.pages || []).filter(p => p.kind !== 'fixe' && !_slotsOf(p).some(s => s.art_id === artId));
+  const opt = p => {
+    const tit = _slotsOf(p).map(s => _artById(s.art_id)).filter(Boolean)[0] || null;
+    const r = _rubById(p.rub_id) || (tit ? _rubById(tit.rub_id) : null);
+    const qui = tit ? ' · ' + (tit.title.length > 32 ? tit.title.slice(0, 31) + '…' : tit.title) : '';
+    return `<option value="${p.id}" data-n="${p.n}">${_esc(_pageLabel(p))}${r ? ' — ' + _esc(r.name) : ''}${_esc(qui)}</option>`;
+  };
+  const libres = cibles.filter(p => !_slotsOf(p).length);
+  const prises = cibles.filter(p => _slotsOf(p).length);
+  return `<option value="">— choisir une page —</option>
+    ${libres.length ? `<optgroup label="Pages libres">${libres.map(opt).join('')}</optgroup>` : ''}
+    ${prises.length ? `<optgroup label="Pages occupées — l’article s’y ajouterait">${prises.map(opt).join('')}</optgroup>` : ''}`;
+}
+
 function _pageOptionsHTML(rubId) {
   const libres = _pagesLibres();
   const cible = rubId ? libres.find(p => p.rub_id === rubId) : null;
@@ -2978,6 +3114,13 @@ async function _openSettings() {
       <p class="dk-note">On ajoute ou retire des pages vides <strong>juste avant la 4ᵉ de couverture</strong> — le reste du chemin de fer ne bouge pas. Réduire n'est possible que si les pages retirées sont vides (sinon desK vous dit lesquelles libérer).</p>
     </div>` : ''}
 
+    ${_D?.issue?.status === 'imprime' ? `<div class="dk-sec"><h4>Vider le casier du n° ${_esc(_D.issue.num)}</h4>
+      <p class="dk-note" style="margin-top:0">Le casier est une <strong>transmission</strong>, pas une archive : une fois le numéro imprimé et les fichiers récupérés chez vous, ses pièces n'ont plus de raison d'occuper la place. <strong>Rien ne part tout seul</strong> — c'est vous qui décidez, quand vous êtes sûr.</p>
+      <div class="dk-btn-row"><button class="dk-btn small" data-act="purgecasier">${icon('trash-2', 14)} Voir ce qui partirait</button></div>
+      <div data-slot="purgebox"></div>
+      <p class="dk-note">Les pièces d'un article <strong>déjà réservé pour un numéro à venir</strong> ne sont jamais emportées : elles suivent l'article.</p>
+    </div>` : ''}
+
     <div class="dk-sec"><h4>Rubriques (liste fermée)</h4>
       <div data-slot="rublist">${rubs.map((r, i) => `
         <div class="dk-banc-item">
@@ -3152,6 +3295,42 @@ async function _openSettings() {
       } else apply();
     });
   }
+  /* DK-10 · vider le casier d'un numéro imprimé, à la main.
+     En deux temps VOLONTAIREMENT : on demande d'abord au serveur ce qui
+     partirait (simulation, rien n'est touché), on l'affiche en toutes
+     lettres — nombre, poids, noms —, et seulement ensuite on efface.
+     Un « êtes-vous sûr ? » sans contenu ne protège de rien : il fait
+     cliquer « oui » sans savoir. Ici on sait avant de cliquer. */
+  insp.querySelector('[data-act="purgecasier"]')?.addEventListener('click', async () => {
+    const box = insp.querySelector('[data-slot="purgebox"]');
+    if (!box || box.querySelector('[data-act="purgeyes"]')) return;
+    box.innerHTML = `<p class="dk-note">Calcul…</p>`;
+    let vue;
+    try { vue = await _api('/issue/' + _issueId + '/casier/purge', { method: 'POST', body: { simuler: true } }); }
+    catch (e) { box.innerHTML = ''; _toast(e.message, true); return; }
+    if (!vue.pieces) {
+      box.innerHTML = `<p class="dk-note">Rien à vider : ce numéro n'a plus de pièce dans son casier${vue.conservees ? ` (${vue.conservees} suivent un article réservé pour la suite)` : ''}.</p>`;
+      return;
+    }
+    const noms = (vue.noms || []).slice(0, 8);
+    box.innerHTML = `<div class="dk-confirm" style="margin-top:8px">
+      <strong>${vue.pieces} pièce${vue.pieces > 1 ? 's' : ''} · ${_fmtSize(vue.poids || 0)}</strong> — effacées définitivement, y compris le fichier lui-même.
+      ${noms.length ? `<div class="dk-note" style="margin-top:6px">${noms.map(n => _esc(n)).join(' · ')}${vue.pieces > noms.length ? ` … et ${vue.pieces - noms.length} autre(s)` : ''}</div>` : ''}
+      ${vue.conservees ? `<div class="dk-note" style="margin-top:6px">${vue.conservees} pièce${vue.conservees > 1 ? 's' : ''} conservée${vue.conservees > 1 ? 's' : ''} : elle${vue.conservees > 1 ? 's suivent' : ' suit'} un article déjà réservé pour un numéro à venir.</div>` : ''}
+      <div class="dk-btn-row" style="margin-top:10px">
+        <button class="dk-btn small dk-btn-danger" data-act="purgeyes">Vider maintenant</button>
+        <button class="dk-btn small" data-act="purgeno">Annuler</button>
+      </div></div>`;
+    box.querySelector('[data-act="purgeno"]').onclick = () => { box.innerHTML = ''; };
+    box.querySelector('[data-act="purgeyes"]').onclick = async () => {
+      try {
+        const r = await _api('/issue/' + _issueId + '/casier/purge', { method: 'POST', body: {} });
+        _toast(`Casier vidé — ${r.pieces} pièce${r.pieces > 1 ? 's' : ''} effacée${r.pieces > 1 ? 's' : ''}.`);
+        box.innerHTML = '';
+        await _loadIssue(true);
+      } catch (e) { _toast(e.message, true); }
+    };
+  });
   insp.querySelector('[data-act="savejalons"]')?.addEventListener('click', async () => {
     const body = {};
     insp.querySelectorAll('[data-jalon]').forEach(i => { if (i.value) body[i.dataset.jalon] = i.value; });

@@ -389,6 +389,26 @@ function apiDesk(method, path, body) {
     return [200, { ok: true, slot: { id, page_id: page.id, position: existing.length, art_id: art.id, banc: '[]' } }];
   }
 
+  // Opération par lot — ici seul « spread » (étaler un article sur plusieurs
+  // pages) est doublé : c'est celui qu'un parcours exerce. Mêmes garde-fous que
+  // le worker (page figée / déjà porteuse de l'article → ignorée, comptée).
+  if ((m = path.match(/^\/issue\/([^/]+)\/batch$/)) && method === 'POST') {
+    if (body.op !== 'spread') return [400, { error: 'Opération inconnue' }];
+    const art = artById(body.art_id);
+    if (!art) return [400, { error: 'Article inconnu dans cette publication' }];
+    let done = 0, skipped = 0;
+    for (const n of [...new Set((body.ns || []).map(Number))].sort((a, b) => a - b)) {
+      const page = DB.pages.find(p => p.n === n);
+      if (!page || page.kind === 'fixe') { skipped++; continue; }
+      const existing = slotsOf(page.id);
+      if (existing.some(s => s.art_id === art.id)) { skipped++; continue; }
+      DB.slots.push({ id: nouvelId('sl'), page_id: page.id, position: existing.length, art_id: art.id, banc: '[]', created_at: SQL_NOW() });
+      page.kind = 'article'; page.updated_at = SQL_NOW(); page.updated_by = 'Stéphane';
+      done++;
+    }
+    return [200, { ok: true, done, skipped }];
+  }
+
   if ((m = path.match(/^\/page\/([^/]+)$/)) && method === 'PATCH') {
     const page = pageById(m[1]);
     if (!page) return [404, { error: 'Page introuvable' }];
@@ -421,7 +441,9 @@ function apiDesk(method, path, body) {
     }
     if (body.histo_add) { const h = JSON.parse(a.histo || '[]'); h.unshift(body.histo_add); a.histo = JSON.stringify(h); }
     a.updated_at = SQL_NOW();
-    return [200, { ok: true }];
+    // Le vrai worker RENVOIE l'article relu (le front s'en sert pour rafraîchir
+    // sa fiche sans recharger tout le numéro). Sans ça, le double mentirait.
+    return [200, { ok: true, article: { ...a } }];
   }
 
   if ((m = path.match(/^\/article\/([^/]+)$/)) && method === 'DELETE') {
@@ -455,6 +477,31 @@ function apiDesk(method, path, body) {
       uploaded_by: 'Stéphane', created_at: SQL_NOW() });
     return [200, { ok: true, file: { id, page_id: '', art_id: a.id, name: body.name, size, status: 'pending' },
       upload: { mode: 'direct', path: `/casier/${id}/put` }, quota: { used: 0, max: 500 * 1048576 } }];
+  }
+
+  /* DK-10 · vider le casier d'un numéro imprimé, à la main. Le worker ne
+     purge QUE les pièces réellement posées sur une page de ce numéro
+     (page_id non vide) : celles qui dorment « au marbre » appartiennent à
+     un article qui attend encore, pas au numéro qu'on vient d'imprimer.
+     `simuler` rend le compte sans rien toucher. */
+  if ((m = path.match(/^\/issue\/([^/]+)\/casier\/purge$/)) && method === 'POST') {
+    if (DB.issue.status !== 'imprime') {
+      return [400, { error: 'Seul un numéro « imprimé » peut être vidé — celui-ci est encore en fabrication' }];
+    }
+    const vivant = a => a && !['publie', 'abandonne'].includes(a.status);
+    const reserve = id => DB.slots.some(sl => sl.art_id === id || (() => {
+      try { return (JSON.parse(sl.banc || '[]') || []).includes(id); } catch (_) { return false; }
+    })());
+    const dans = DB.files.filter(f => f.issue_id === DB.issue.id && f.page_id !== '');
+    const retenues = dans.filter(f => vivant(artById(f.art_id)) && reserve(f.art_id));
+    const aPurger = dans.filter(f => !retenues.includes(f));
+    const poids = aPurger.reduce((n, f) => n + (f.size || 0), 0);
+    if (body && body.simuler === true) {
+      return [200, { ok: true, simulation: true, num: DB.issue.num, pieces: aPurger.length, poids,
+        noms: aPurger.map(f => f.name), conservees: retenues.length, noms_conservees: retenues.map(f => f.name) }];
+    }
+    DB.files = DB.files.filter(f => !aPurger.includes(f));
+    return [200, { ok: true, num: DB.issue.num, pieces: aPurger.length, poids, conservees: retenues.length }];
   }
 
   if ((m = path.match(/^\/casier\/([^/]+)\/put$/)) && method === 'POST') {
@@ -1249,12 +1296,263 @@ await parcours('Parcours 7 — DK-10 · l\'invitation qui n\'a pas pris', async 
 });
 
 /* ─────────────────────────────────────────────────────────────────
+   PARCOURS 8 · DK-10 — vider le casier, à la main et en connaissance
+
+   Jusqu'au 2026-08-05, les pièces d'un numéro partaient toutes seules
+   30 jours après son passage en « imprimé » : personne ne l'avait
+   demandé, personne n'était prévenu, et les objets sont détruits pour
+   de bon. Sur une revue dont le cycle chevauche le numéro suivant, un
+   mois après l'impression est encore tôt — un erratum, un retirage, une
+   photo à repiquer, et la pièce n'est plus là.
+
+   Désormais rien ne part sans un clic. Et le clic doit être ÉCLAIRÉ :
+   on demande d'abord au serveur ce qui partirait, on l'affiche en
+   toutes lettres, et seulement ensuite on efface. Un « êtes-vous
+   sûr ? » sans contenu ne protège de rien.
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 8 — DK-10 · vider le casier à la main', async () => {
+  await ouvrirLePad(page, BASE);
+
+  // Une pièce posée sur une PAGE du numéro (les 8 autres sont au marbre).
+  const pageCible = DB.pages.find(p => p.n === 3);
+  DB.files.push({ id: 'fi-page', issue_id: DB.issue.id, page_id: pageCible.id, art_id: null,
+    name: 'gabarit-imprimeur.pdf', mime: 'application/pdf', size: 1600000,
+    status: 'ok', uploaded_by: 'Stéphane', created_at: SQL_NOW(-40) });
+
+  await cliquer(page, '[data-act="settings"]');
+  await attendSel(page, '.dk-insp [data-k="istatus"]', 'les réglages');
+  check('tant que le numéro est en fabrication, pas de bouton pour vider',
+    !(await existe(page, '.dk-insp [data-act="purgecasier"]')));
+
+  // On boucle le numéro.
+  await choisir(page, '.dk-insp [data-k="istatus"]', 'imprime');
+  await attendSel(page, '.dk-insp .dk-confirm', 'la confirmation du bouclage');
+  await cliquer(page, '.dk-insp .dk-confirm .dk-btn.primary');
+  await attendre(400);
+  await cliquer(page, '[data-act="settings"]');
+  await attendSel(page, '.dk-insp [data-act="purgecasier"]', 'le bouton de purge');
+  check('une fois imprimé, desK propose de vider son casier',
+    await existe(page, '.dk-insp [data-act="purgecasier"]'));
+
+  // Premier temps : ce qui partirait, nommé — sans rien effacer.
+  const avant = DB.files.length;
+  await cliquer(page, '.dk-insp [data-act="purgecasier"]');
+  await attendSel(page, '.dk-insp [data-act="purgeyes"]', 'l\'annonce de ce qui partirait');
+  const annonce = await texte(page, '.dk-insp [data-slot="purgebox"]');
+  check('l\'annonce NOMME le fichier qui va disparaître',
+    annonce.includes('gabarit-imprimeur.pdf'), annonce.slice(0, 140));
+  check('elle chiffre aussi le poids libéré', /1[,.]5|1[,.]6|Mo/.test(annonce), annonce.slice(0, 140));
+  check('et elle dit que l\'effacement est définitif',
+    /définitiv/i.test(annonce), annonce.slice(0, 200));
+  check('rien n\'a encore été effacé à ce stade', DB.files.length === avant,
+    `${avant} → ${DB.files.length}`);
+
+  // On peut se raviser.
+  await cliquer(page, '.dk-insp [data-act="purgeno"]');
+  await attendAbsence(page, '[data-act="purgeyes"]', 'l\'annonce refermée');
+  check('annuler ne touche à rien', DB.files.length === avant);
+
+  // Second temps : pour de vrai.
+  await cliquer(page, '.dk-insp [data-act="purgecasier"]');
+  await attendSel(page, '.dk-insp [data-act="purgeyes"]', 'l\'annonce, à nouveau');
+  await cliquer(page, '.dk-insp [data-act="purgeyes"]');
+  await attendCote(() => !DB.files.some(f => f.id === 'fi-page'), 4000);
+  check('la pièce posée en page a bien été effacée',
+    !DB.files.some(f => f.id === 'fi-page'), DB.files.map(f => f.id).join(','));
+  check('les pièces au marbre, elles, n\'ont pas bougé',
+    DB.files.filter(f => f.page_id === '').length === 8,
+    'restantes au marbre : ' + DB.files.filter(f => f.page_id === '').length);
+});
+
+/* ─────────────────────────────────────────────────────────────────
+   PARCOURS 9 · Le chemin de fer qui remontait tout seul (5 août 2026)
+
+   Signalé par Stéphane : « au bout de quelques secondes sur le chemin
+   de fer, saut vers le haut de la page ». _renderFer() remplace tout
+   le contenu principal ; le conteneur QUI DÉFILE est donc détruit et
+   recréé. _renderFrise() croyait sauvegarder la position en lisant
+   f.scrollTop — mais il lisait le conteneur NEUF, qui vaut 0. Deux
+   déclencheurs, tous deux invisibles : le premier chargement (cache
+   rendu tout de suite, puis serveur) et le rafraîchissement d'équipe
+   toutes les 45 s. On travaillait, la page remontait.
+
+   Le parcours emprunte le MÊME chemin de code que le sondage
+   (visibilitychange → _loadIssue(true) → _renderFer).
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 9 — le chemin de fer qui remontait tout seul', async () => {
+  await ouvrirLePad(page, BASE);
+
+  // Cartes au plus grand cran : sur 640 px de haut, la frise déborde à coup sûr.
+  await page.evaluate(() => {
+    const s = document.querySelector('[data-k="size"]');
+    s.value = '3'; s.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await attendre(200);
+  const deborde = await page.evaluate(() => {
+    const f = document.querySelector('.dk-frise');
+    return f.scrollHeight - f.clientHeight;
+  });
+  check('la frise déborde vraiment (sans quoi le parcours ne prouverait rien)',
+    deborde > 120, 'débordement mesuré : ' + deborde + ' px');
+
+  await page.evaluate(() => { document.querySelector('.dk-frise').scrollTop = 200; });
+  await attendre(100);
+  check('on est bien descendu dans le chemin de fer',
+    (await page.evaluate(() => document.querySelector('.dk-frise').scrollTop)) >= 190);
+
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await attendre(700);
+  const apres = await page.evaluate(() => document.querySelector('.dk-frise').scrollTop);
+  check('après un rafraîchissement d\'équipe, la frise est restée où on l\'avait laissée',
+    apres >= 190, 'scrollTop après rafraîchissement : ' + apres);
+
+  // Et le chemin de fer a bien été re-rendu (sinon on aurait juste prouvé
+  // qu'il ne se passe rien du tout).
+  check('le rafraîchissement a bien eu lieu (le numéro a été redemandé)',
+    appels('GET', /^\/issue\/iss-1$/).length >= 2,
+    'appels /issue : ' + appels('GET', /^\/issue\/iss-1$/).length);
+});
+
+/* ─────────────────────────────────────────────────────────────────
+   PARCOURS 10 · Poser un dossier sur plusieurs pages (5 août 2026)
+
+   Demandé par Stéphane : « j'aimerais pouvoir placer un article sur
+   une ou plusieurs pages ». C'était possible — mais seulement par un
+   lasso sur la frise (Maj+clic) puis « Étaler un article » dans la
+   barre de sélection. Le geste naturel est l'inverse : on est sur la
+   page, on choisit l'article, on dit qu'il fait quatre pages.
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 10 — poser un dossier sur plusieurs pages', async () => {
+  await ouvrirLePad(page, BASE);
+
+  // Page n° 4 (folio 2) : libre, et onze pages libres la suivent.
+  await cliquer(page, '.dk-frise .dk-pcard[data-n="4"]');
+  await attendSel(page, '.dk-insp [data-act="reserve"]', 'la fiche d\'emplacement libre');
+
+  check('la fiche demande sur combien de pages poser l\'article',
+    await existe(page, '.dk-insp [data-k="span"]'));
+  const options = await textesDe(page, '.dk-insp [data-k="span"] option');
+  check('et elle NOMME les pages que le dossier occuperait',
+    (options[2] || '') === '3 pages (p. 2–4)', options.slice(0, 4).join(' | '));
+
+  await choisir(page, '.dk-insp [data-k="span"]', '3');
+  await cliquer(page, '.dk-insp [data-act="reserve"]');
+  await attendCote(() => DB.slots.filter(s => s.art_id === 'art-copie').length === 3, 5000);
+
+  const pris = DB.slots.filter(s => s.art_id === 'art-copie').map(s => DB.pages.find(p => p.id === s.page_id).n).sort((a, b) => a - b);
+  check('l\'article occupe les trois pages demandées', String(pris) === '4,5,6', 'pages : ' + pris.join(','));
+  check('et pas une de plus', DB.slots.filter(s => s.art_id === 'art-copie').length === 3);
+
+  // La frise le dit : les pages suivantes portent la mention « suite ».
+  await attendSel(page, '.dk-frise .dk-pcard[data-n="6"] .dk-pc-rub', 'la carte de la 3e page');
+  check('les pages suivantes sont marquées « suite » sur la frise',
+    /suite/.test(await texte(page, '.dk-frise .dk-pcard[data-n="6"] .dk-pc-rub')),
+    await texte(page, '.dk-frise .dk-pcard[data-n="6"] .dk-pc-rub'));
+
+  // Prolonger depuis la fiche de l'article, sans lasso ni sélection multiple.
+  await cliquer(page, '.dk-frise .dk-pcard[data-n="4"]');
+  await attendSel(page, '.dk-insp [data-act="spread"]', 'le bouton d\'étalement');
+  check('la fiche annonce que c\'est un dossier de 3 pages',
+    /dossier de 3 pages/.test(await texte(page, '.dk-insp .dk-insp-rub')),
+    await texte(page, '.dk-insp .dk-insp-rub'));
+
+  await cliquer(page, '.dk-insp [data-act="spread"]');
+  await attendSel(page, '.dk-insp [data-k="ext"]', 'le choix des pages à ajouter');
+  const ext = await textesDe(page, '.dk-insp [data-k="ext"] option');
+  check('l\'étalement repart APRÈS la dernière page du dossier',
+    (ext[0] || '') === '1 page (p. 5)', ext.slice(0, 3).join(' | '));
+
+  await choisir(page, '.dk-insp [data-k="ext"]', '2');
+  await cliquer(page, '.dk-insp [data-act="extok"]');
+  await attendCote(() => DB.slots.filter(s => s.art_id === 'art-copie').length === 5, 5000);
+  const pris2 = DB.slots.filter(s => s.art_id === 'art-copie').map(s => DB.pages.find(p => p.id === s.page_id).n).sort((a, b) => a - b);
+  check('le dossier court maintenant sur cinq pages consécutives',
+    String(pris2) === '4,5,6,7,8', 'pages : ' + pris2.join(','));
+
+  // Garde-fou : une page déjà occupée arrête la suite. La page 3 porte
+  // « Le mot du président » — un dossier posé en 2 ne doit pas l'écraser.
+  // Attendre que le front ait fini de se re-rendre (sinon le clic suivant est
+  // écrasé par la réouverture de fiche qui suit le rechargement du numéro).
+  await attend(page, () => /dossier de 5 pages/.test(document.querySelector('.dk-insp .dk-insp-rub')?.textContent || ''),
+    null, 'la fiche remise à jour sur 5 pages');
+  await cliquer(page, '.dk-frise .dk-pcard[data-n="2"]');
+  await attendSel(page, '.dk-insp [data-act="newarthere"]', 'la fiche de la page 2');
+  check('devant une page occupée, aucune longueur n\'est proposée',
+    !(await existe(page, '.dk-insp [data-k="span"]')));
+});
+
+/* ─────────────────────────────────────────────────────────────────
+   PARCOURS 11 · Rubrique sous la main, pages NOMMÉES (5 août 2026)
+
+   Deux retours de Stéphane le même soir :
+   · corriger la rubrique d'un article posé obligeait à rouvrir « Modifier
+     la fiche » — alors que c'est la COULEUR de la carte dans le chemin de
+     fer, le geste le plus courant du bouclage ;
+   · réserver depuis le marbre passait par une grille de numéros nus. Sur
+     un 64 pages, un damier de 64 cases où rien ne dit ce qu'il y a page
+     53. La liste du tri du courrier, elle, nomme la page ET sa rubrique.
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 11 — rubrique sous la main, pages nommées', async () => {
+  await ouvrirLePad(page, BASE);
+
+  // ── La rubrique se change depuis la fiche de la page, sans formulaire.
+  await cliquer(page, '.dk-frise .dk-pcard[data-n="3"]');
+  await attendSel(page, '.dk-insp [data-k="artrub"]', 'le sélecteur de rubrique');
+  check('la fiche d\'un article posé porte son sélecteur de rubrique',
+    await existe(page, '.dk-insp [data-k="artrub"]'));
+  check('il montre la rubrique actuelle', (await valeur(page, '.dk-insp [data-k="artrub"]')) === 'rub-unites');
+
+  await choisir(page, '.dk-insp [data-k="artrub"]', 'rub-histoire');
+  await attendCote(() => DB.articles.find(a => a.id === 'art-place').rub_id === 'rub-histoire', 5000);
+  check('changer la rubrique l\'écrit tout de suite',
+    DB.articles.find(a => a.id === 'art-place').rub_id === 'rub-histoire',
+    'rub_id : ' + DB.articles.find(a => a.id === 'art-place').rub_id);
+  const envoi = appels('PATCH', /^\/article\/art-place$/).filter(x => 'rub_id' in (x.body || {}));
+  check('un seul appel, et il ne porte QUE la rubrique',
+    envoi.length === 1 && Object.keys(envoi[0].body).join() === 'rub_id',
+    JSON.stringify(envoi.map(x => x.body)));
+  await attend(page, () => /Histoire/.test(document.querySelector('.dk-frise .dk-pcard[data-n="3"] .dk-pc-rub')?.textContent || ''),
+    null, 'la carte repeinte dans la frise');
+  check('et la carte du chemin de fer change de rubrique sans recharger',
+    /Histoire/.test(await texte(page, '.dk-frise .dk-pcard[data-n="3"] .dk-pc-rub')));
+
+  // ── Réserver depuis le marbre : des pages nommées, plus une grille.
+  await cliquer(page, '[data-slot="view"] [data-v="marbre"]');
+  await attendSel(page, '.dk-mrow[data-a="art-copie"]', 'le marbre');
+  await cliquer(page, '.dk-mrow[data-a="art-copie"]');
+  await attendSel(page, '.dk-insp [data-k="mpage"]', 'le choix de page');
+
+  check('la grille de numéros nus a disparu', !(await existe(page, '.dk-insp .dk-pagepick')));
+  const opts = await textesDe(page, '.dk-insp [data-k="mpage"] option');
+  check('chaque page est NOMMÉE avec sa rubrique en face',
+    opts.includes('page 3 — Actualités'), opts.slice(0, 6).join(' | '));
+  const groupes = await textesDe(page, '.dk-insp [data-k="mpage"] optgroup');
+  check('les pages déjà occupées sont à part, et disent qui les occupe',
+    (await page.evaluate(() => [...document.querySelectorAll('[data-k="mpage"] optgroup')]
+      .find(g => /occupées/.test(g.label))?.textContent || '')).includes('Le mot du président'),
+    groupes.length + ' groupes');
+
+  check('rien n\'est réservable tant qu\'aucune page n\'est choisie',
+    await page.evaluate(() => document.querySelector('[data-act="reservepage"]').disabled));
+
+  // La page 9 (folio 7) porte la rubrique « Actualités » en pré-assignation.
+  const cible = DB.pages.find(p => p.n === 9);
+  await choisir(page, '.dk-insp [data-k="mpage"]', cible.id);
+  check('choisir une page arme le bouton',
+    !(await page.evaluate(() => document.querySelector('[data-act="reservepage"]').disabled)));
+  await cliquer(page, '.dk-insp [data-act="reservepage"]');
+  await attendCote(() => DB.slots.some(s => s.art_id === 'art-copie' && s.page_id === cible.id), 5000);
+  check('l\'article est posé sur la page choisie',
+    DB.slots.some(s => s.art_id === 'art-copie' && s.page_id === cible.id));
+});
+
+/* ─────────────────────────────────────────────────────────────────
    Hygiène : aucune erreur JS n'a été avalée en chemin.
    ───────────────────────────────────────────────────────────────── */
 console.log('\n\x1b[1m▶ Hygiène\x1b[0m');
 {
   const graves = erreursPage.filter(e => !/favicon|LOGOS|ERR_/.test(e));
-  check('aucune erreur JavaScript pendant les sept parcours', graves.length === 0,
+  check('aucune erreur JavaScript pendant les onze parcours', graves.length === 0,
     graves.slice(0, 4).join(' | '));
 }
 

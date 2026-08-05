@@ -75,6 +75,10 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
 .dk-btn.primary { background: var(--dk-gold); border-color: var(--dk-gold); color: #17130a; }
 .dk-btn.primary:hover { color: #17130a; filter: brightness(1.07); }
 .dk-btn.ghost { border-color: transparent; background: none; }
+/* Un bouton en attente d'un choix doit AVOIR L'AIR en attente : doré plein
+   sur un geste impossible, c'est une promesse que le clic ne tient pas. */
+.dk-btn:disabled { opacity: .4; cursor: not-allowed; }
+.dk-btn:disabled:hover { border-color: rgba(127, 127, 127, .22); color: inherit; filter: none; }
 .dk-btn.small { padding: 6px 11px; font-size: 12px; }
 /* Action principale de la barre (« + Article ») — violet plein, elle doit
    se voir du premier coup d'œil au milieu des boutons discrets. */
@@ -402,16 +406,6 @@ html.light-mode .dk-pcard.rubbed .dk-pc-marge, html.light-mode .dk-pcard.rubbed.
 .dk-mchip.libre { border-style: dashed; }
 .dk-mchip.report { border-color: rgba(109, 141, 214, .55); color: #6d8dd6; }
 
-/* Réserver depuis le marbre : grille des pages du numéro */
-.dk-pagepick { display: flex; flex-wrap: wrap; gap: 5px; }
-.dk-pagepick-btn {
-  min-width: 34px; height: 30px; border-radius: 8px; border: 1px dashed rgba(127, 127, 127, .35);
-  background: none; color: inherit; font: inherit; font-size: 12px; cursor: pointer;
-  font-variant-numeric: tabular-nums;
-}
-.dk-pagepick-btn:hover { border-color: var(--dk-gold); color: var(--dk-gold); }
-.dk-pagepick-btn.has { border-style: solid; background: rgba(127, 127, 127, .08); }
-
 /* ── Inspecteur (latéral desktop / feuille du bas mobile) ─────── */
 .dk-insp {
   position: fixed; top: 0; right: 0; bottom: 0; width: 400px; max-width: 92vw;
@@ -462,6 +456,11 @@ html.light-mode .dk-pcard.rubbed .dk-pc-marge, html.light-mode .dk-pcard.rubbed.
 /* Champs de l'inspecteur */
 .dk-field { display: block; margin-bottom: 11px; font-size: 12.5px; }
 .dk-field > span { display: block; color: var(--dk-tx2); margin-bottom: 5px; }
+/* Rubrique d'un article, changeable depuis sa fiche de page : une ligne, pas
+   un formulaire — le libellé à gauche, le sélecteur qui prend le reste. */
+.dk-field-rub { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+.dk-field-rub > span { margin: 0; flex: 0 0 auto; }
+.dk-field-rub select { flex: 1; min-width: 0; }
 .dk-field input {
   width: 100%; padding: 9px 12px; border-radius: 10px; font: inherit; font-size: 14px;
   background: rgba(127, 127, 127, .1); border: 1px solid rgba(127, 127, 127, .25); color: inherit;
