@@ -9,9 +9,13 @@
      npx wrangler dev --local -c wrangler.dktest.toml --port 8799 \
        --test-scheduled \
        --var KS_JWT_SECRET:dk2-test-secret --var "KS_ALLOWED_ORIGIN:*" \
-       --var DK_CASIER_GRACE_DAYS:0
+       --var KS_ADMIN_SECRET:dk4-admin --var DK_EMAIL_IA:off
    Puis :
      node test/test-desk-dk3.mjs
+   (Commande IDENTIQUE aux autres bancs desK — ils partagent une seule
+   session worker. Le délai de grâce du casier ramené à 0, indispensable
+   à la purge en une passe de cron, vit dans wrangler.dktest.toml et non
+   plus dans un --var qu'une commande voisine oubliait.)
    ═══════════════════════════════════════════════════════════════ */
 
 import crypto from 'node:crypto';

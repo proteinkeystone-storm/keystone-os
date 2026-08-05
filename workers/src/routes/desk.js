@@ -1496,7 +1496,11 @@ export async function handleCasierDelete(request, env, fileId) {
    - dépôts « pending » abandonnés depuis > 24 h.                        */
 export async function sweepDeskCasier(env) {
   await _ensureSchema(env);
-  const grace = Math.max(0, parseInt(env.DK_CASIER_GRACE_DAYS ?? CASIER_GRACE_DAYS, 10) || 0);
+  // Délai de grâce : un réglage illisible (typo, chaîne vide) retombe sur les
+  // 30 j de production, JAMAIS sur 0 — sinon la purge emporterait les pièces
+  // à la seconde où le numéro passe « imprimé ». « 0 » explicite reste 0.
+  const graceRaw = parseInt(env.DK_CASIER_GRACE_DAYS, 10);
+  const grace = Math.max(0, Number.isFinite(graceRaw) ? graceRaw : CASIER_GRACE_DAYS);
   let purged = 0, retained = 0, stale = 0;
 
   // Filet legacy : un numéro imprimé sans horodatage démarre sa grâce ici.

@@ -82,15 +82,6 @@ index_name = "keystone-kortex"
 # NB : keystone-os.vercel.app a été squatté — l'URL réelle est -inky.
 # protein-keystone.com = domaine officiel (depuis mai 2025)
 [vars]
-# ── BANC desK : délai de grâce du casier à 0 ────────────────────
-# Les bancs desK partagent UNE session worker : toute variable de banc doit
-# vivre ICI, jamais dans la ligne de commande — un banc voisin l'oublierait.
-# Sans elle, la grâce reste à 30 j, le cron ne purge rien, et
-# test-desk-dk3.mjs échoue sur « purge : pièce sans article supprimée après
-# impression » alors que le code est juste (faux échec constaté deux fois,
-# le 2026-08-04 puis le 2026-08-05). En production, la valeur reste 30 j.
-DK_CASIER_GRACE_DAYS = "0"
-
 # Sprint Sécu-3 / M3 — localhost retiré de la liste prod.
 # Pour le dev local, override via `wrangler dev --var KS_ALLOWED_ORIGIN:"*"`
 # ou créer un wrangler.dev.toml dédié avec localhost autorisé.
@@ -105,6 +96,18 @@ KS_ALLOWED_ORIGIN = "https://protein-keystone.com,https://www.protein-keystone.c
 # /api/proxy/llm (BYOK explicite déjà en prod : Brief, Annonces, pads).
 # Lu par lib/llm-router.js → byokRoutingEnabled(env).
 BYOK_ROUTING = "off"
+
+# ── desK — délai de grâce du casier (config de BANC uniquement) ──
+# 0 = une pièce devient purgeable dès que son numéro passe « imprimé »,
+# au lieu d'attendre les 30 j de production. C'est ce qui permet à
+# test-desk-dk3.mjs de vérifier la purge post-impression en une passe
+# de cron. La valeur vit ICI (et non dans la ligne de commande) : les
+# bancs desK partagent une seule session worker, et la commande de
+# lancement documentée par DK-4/DK-4b ne portait pas ce --var → la
+# purge restait à 30 j et l'assertion « pièce sans article supprimée »
+# échouait sans qu'aucun code soit en cause (faux échec constaté deux fois,
+# les 2026-08-04 et 2026-08-05). En production, la valeur reste 30 j.
+DK_CASIER_GRACE_DAYS = "0"
 
 # ── SDQR — RGPD (Sprint SDQR-5) ─────────────────────────────
 # Rétention des logs de scan en jours (purge auto via Cron, voir [triggers])
