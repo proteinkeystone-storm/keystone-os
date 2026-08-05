@@ -34,9 +34,9 @@ Autrement dit : le produit est sain, les conditions de fabrication ne le sont pa
 
 | | |
 |---|---|
-| `main` | `40d9146` |
-| Front en prod | `ks-os-v5.28.484-desk-confirm-vue`, `app/desk.css?v=18` — **DK-8 non déployé** (`?v=19` en attente de regroupement) |
-| Worker en prod | version `740b8747` (déployée depuis `40d9146`) — **DK-8 non déployé** |
+| `main` | `558bb2c` |
+| Front en prod | `ks-os-v5.28.485-desk-dk8`, `app/desk.css?v=19` (vérifié : `/app` les sert) |
+| Worker en prod | version `36580790` (déployée depuis `558bb2c`) — colonnes `dk_inbox.auth`/`auth_detail` confirmées en D1 prod |
 | Bancs desK | **9/9 verts** (DK-2 48, DK-3 30, DK-4 33, DK-4b 22, DK-4c 54, DK-5 19, casier 20, signal 6, **DK-8 37**) |
 | `npm test` | **869 assertions, zéro échec** — puis **+63** avec DK-7 (52) et DK-8 (11) |
 | Front desK | `app/desk.js` **3 228 lignes**, `app/desk.css` 865 — ~~zéro test~~ → **banc `test-desk-ui.mjs`, 63 vérifications** (DK-7 + DK-8) |
@@ -140,7 +140,7 @@ n'ont toujours aucun test de front.
 
 ---
 
-### DK-8 · La porte d'entrée increvable — ✅ **LIVRÉ le 2026-08-05**
+### DK-8 · La porte d'entrée increvable — ✅ **EN PROD le 2026-08-05**
 
 **Fermait :** une vague d'indésirables refoulait les vrais contributeurs ; `From`
 restait falsifiable alors qu'on s'apprête à publier l'adresse à tous les
