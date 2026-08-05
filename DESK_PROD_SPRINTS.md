@@ -34,12 +34,23 @@ Autrement dit : le produit est sain, les conditions de fabrication ne le sont pa
 
 | | |
 |---|---|
+| `main` | `40d9146` |
 | Front en prod | `ks-os-v5.28.484-desk-confirm-vue`, `app/desk.css?v=18` |
-| Worker en prod | dernier commit le touchant : `7784178` |
+| Worker en prod | version `740b8747` (déployée depuis `40d9146`) |
 | Bancs desK | **8/8 verts** (DK-2 48, DK-3 30, DK-4 33, DK-4b 22, DK-4c 54, DK-5 19, casier 20, signal 6) |
-| `npm test` | 1 échec **antérieur et sans rapport** : `test-auto-reload-sweep.mjs` → « plafond → cap_reached » (session séparée) |
+| `npm test` | **869 assertions, zéro échec** |
 | Front desK | `app/desk.js` **3 203 lignes**, `app/desk.css` 855 — **zéro test** |
 | Membres du pad | **1** (Stéphane). La rédactrice n'a aucun accès. |
+
+> Deux échecs de bancs traînaient depuis des semaines. Aucun n'était un bug —
+> les deux étaient des bancs mal outillés, et les deux ont été soldés le
+> 2026-08-05 en corrigeant au passage une vraie fragilité de production :
+> `sweepDeskCasier` retombait sur un délai de grâce **0** si la variable était
+> illisible (la purge aurait emporté les pièces à la seconde où un numéro passe
+> « imprimé ») ; `shouldReload` recevait une horloge injectée mais lisait le mois
+> sur celle du serveur. **Leçon à garder : un banc rouge depuis longtemps est
+> plus souvent un banc mal outillé qu'un bug — mais le diagnostiquer révèle
+> parfois autre chose.**
 
 Ce qui a été livré le 4-5 août (tout en prod) : adresse du contributeur saisie à la
 création d'article, mail transféré attribué à son auteur, habitudes protégées de
@@ -284,8 +295,8 @@ version — Actualiser »**.
 
 ## 8. Ce qui reste ouvert, hors sprints
 
-- `test-auto-reload-sweep.mjs` → « plafond → cap_reached ». **Antérieur**, sans
-  rapport avec desK (packs de recharge). Session séparée.
 - Sept pièces en prod pointant des articles supprimés (résidus des tests du 4 août).
   Sans gravité, la purge les emportera.
 - Trois articles réels de L'Épaulette au marbre, sans page.
+
+Rien d'autre : au 2026-08-05, **aucun banc rouge dans le dépôt**.
