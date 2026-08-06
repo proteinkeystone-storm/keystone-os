@@ -885,17 +885,25 @@ function _authHeaders(extra = {}) {
 // la bibliothèque locale ceux qui n'y sont PAS encore (local-first : on
 // n'écrase jamais une édition locale en cours).
 //
-// Admin EXCLU : son endpoint /api/pulsa/forms renvoie TOUS les forms (il
-// verrait ceux de tous les clients). Lui crée/livre depuis sa biblio locale.
+// L'admin était EXCLU parce que son endpoint renvoyait TOUS les forms (il
+// aurait vu ceux de tous les clients dans sa bibliothèque). Conséquence
+// (retour Stéphane 06/08) : son pad annonçait « 1 publié » — la Fiche
+// établissement du Concierge, bien réelle — sans que Key Form ne l'affiche
+// jamais. Le worker sait désormais restreindre (`?mine=1`, même filtre que
+// le compteur du dashboard) : tout le monde hydrate, admin compris.
 // Silencieux si non connecté / offline (best-effort).
 async function _hydrateFromServer() {
-  if (isAdminUser()) return;                          // admin = local-only
   if (!localStorage.getItem('ks_jwt')) return;        // pas connecté → rien
+  const admin = isAdminUser();
   let serverForms = [];
   try {
-    const res = await fetch(CF_API + '/api/pulsa/forms', { headers: _authHeaders() });
+    const res = await fetch(CF_API + '/api/pulsa/forms?mine=1', { headers: _authHeaders() });
     if (!res.ok) return;
     const data = await res.json().catch(() => ({}));
+    /* Ceinture : si le worker est plus vieux que le filtre, il ignore
+       `mine=1` et renvoie tout le monde. On ne déverse RIEN dans la
+       bibliothèque d'un admin sans la garantie du périmètre. */
+    if (admin && data?.scope !== 'mine') return;
     serverForms = Array.isArray(data?.forms) ? data.forms : [];
   } catch (_) { return; }
   if (!serverForms.length) return;

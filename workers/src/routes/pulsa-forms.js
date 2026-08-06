@@ -230,12 +230,27 @@ export async function handlePulsaList(request, env) {
 
   await _ensureSchema(env);
 
-  const sql = owner.isAdmin
-    ? 'SELECT * FROM pulsa_forms ORDER BY updated_at DESC LIMIT 200'
-    : 'SELECT * FROM pulsa_forms WHERE owner_sub = ? ORDER BY updated_at DESC LIMIT 200';
-  const stmt = owner.isAdmin ? env.DB.prepare(sql) : env.DB.prepare(sql).bind(owner.sub);
+  /* ?mine=1 — « seulement MES formulaires », même pour un admin.
+     Sans ce garde-fou, la liste d'un admin renvoie les formulaires de TOUS
+     les clients : la bibliothèque Key Form ne pouvait donc rien rapatrier
+     pour lui, et son pad annonçait « 1 publié » sans jamais montrer lequel
+     (retour Stéphane 06/08 — c'était la Fiche établissement du Concierge).
+     Le filtre est EXACTEMENT celui du compteur du dashboard
+     (living-layer-board `_sensorPulsa` : owner_sub = claims.sub), pour que
+     les deux racontent la même chose. Les lignes owner_sub='admin' (atelier
+     partagé de la console /admin) restent donc dehors.
+     Défaut inchangé (pas de paramètre = comportement d'avant) : les écrans
+     qui listent pour importer/livrer continuent de tout voir. */
+  const mine = new URL(request.url).searchParams.get('mine') === '1';
+  const scoped = mine || !owner.isAdmin;
+  const sql = scoped
+    ? 'SELECT * FROM pulsa_forms WHERE owner_sub = ? ORDER BY updated_at DESC LIMIT 200'
+    : 'SELECT * FROM pulsa_forms ORDER BY updated_at DESC LIMIT 200';
+  const stmt = scoped ? env.DB.prepare(sql).bind(owner.sub) : env.DB.prepare(sql);
   const { results = [] } = await stmt.all();
-  return json({ ok: true, forms: results.map(_rowToForm) }, 200, origin);
+  /* `scope` permet au front de REFUSER de fusionner si le worker déployé est
+     antérieur à ce filtre (il renverrait « all » alias tout le monde). */
+  return json({ ok: true, scope: scoped ? 'mine' : 'all', forms: results.map(_rowToForm) }, 200, origin);
 }
 
 // ═══════════════════════════════════════════════════════════════
