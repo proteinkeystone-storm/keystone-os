@@ -91,12 +91,16 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
 .dk-btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* ── Sélecteur de publication (topbar) ─────────────────────────── */
-.dk-pub-slot { display: flex; align-items: center; min-width: 0; }
+/* Le slot doit pouvoir MAIGRIR : c'est lui qui, sur iPhone, écrasait le
+   nom de l'outil à « d.. » (min-width:auto par défaut sur un item flex →
+   le bouton imposait la largeur de son texte à toute la topbar). */
+.dk-pub-slot { display: flex; align-items: center; min-width: 0; flex: 0 1 auto; }
 .dk-pub-btn {
-  display: inline-flex; align-items: center; gap: 8px; max-width: 300px;
+  display: inline-flex; align-items: center; gap: 8px; max-width: 300px; min-width: 0;
   border: 1px solid var(--dk-line); border-radius: 10px; padding: 6px 11px;
   background: rgba(127, 127, 127, .06); color: inherit; font: inherit; font-size: 12.5px; cursor: pointer;
 }
+.dk-pub-btn > .ws-icon, .dk-pub-btn > svg { flex: 0 0 auto; }
 .dk-pub-btn:hover { border-color: var(--dk-gold); }
 .dk-pub-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dk-pub-issue { color: var(--dk-tx3); flex: 0 0 auto; }
@@ -119,6 +123,10 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
 .dk-rail {
   flex: 0 0 auto; overflow-x: auto; scrollbar-width: none;
   border-bottom: 1px solid var(--dk-line); padding: 10px 0 6px;
+  /* barre qui déborde toujours en largeur : le doigt qui glisse
+     VERTICALEMENT dessus doit scroller la page, pas accrocher la frise
+     (pattern posé sur .kb-tabs, Key Brand 04/07). */
+  touch-action: pan-x; overscroll-behavior-x: contain;
 }
 .dk-rail::-webkit-scrollbar { display: none; }
 .dk-tl { position: relative; height: 96px; min-width: max(560px, calc(var(--tl-n, 4) * 150px)); margin: 0 105px; }
@@ -171,7 +179,10 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
 
 /* ── Barre au-dessus de la frise ───────────────────────────────── */
 .dk-ferbar { display: flex; align-items: center; gap: 12px; padding: 8px 18px 0; flex: 0 0 auto; }
-.dk-ferbar-issue { font-size: 12px; color: var(--dk-tx3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* min-width:0 : sans lui l'ellipsis ne sert à rien dans une rangée flex
+   (min-width:auto = le texte impose sa largeur) et « n° 234 · 68 pages »
+   sortait de l'écran sur iPhone. */
+.dk-ferbar-issue { font-size: 12px; color: var(--dk-tx3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .dk-ferbar-spacer { flex: 1; }
 .dk-seg { display: inline-flex; border: 1px solid var(--dk-line); border-radius: 9px; overflow: hidden; flex: 0 0 auto; }
 .dk-seg button { padding: 5px 11px; font-size: 12px; color: var(--dk-tx2); background: none; border: none; cursor: pointer; font-family: inherit; }
@@ -682,6 +693,27 @@ html.light-mode .dk-mailbadge { box-shadow: 0 0 0 2px #fff; }
   }
   .dk-insp.on { transform: translateY(0); }
   .dk-insp::before { content: ''; display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--dk-tx3); margin: 8px auto 0; flex: 0 0 auto; }
+}
+
+/* ── Smartphone : l'entête doit tenir ENTIÈRE ───────────────────
+   desK est le seul pad qui ajoute un sélecteur de publication dans la
+   topbar. À 390 px, cinq blocs se disputaient la ligne (retour + picto +
+   nom + publication + galet Kora + burger) : le nom tombait à « d.. »
+   et le sélecteur restait large. On rend au nom sa place en retirant le
+   pictogramme (le nom identifie mieux que l'icône) et on laisse le
+   sélecteur maigrir jusqu'à son ellipse. */
+@media (max-width: 600px) {
+  .dk-app .ws-topbar-app-picto { display: none; }
+  /* Ordre de sacrifice EXPLICITE : le nom de l'outil ne maigrit jamais
+     (flex:0 0 auto), c'est le sélecteur de publication qui absorbe le
+     manque de place et ellipse son titre. Sans ça, .ws-topbar-title
+     (flex:1 1 0) cédait le premier et « desK » tombait à « d.. ». */
+  .dk-app .ws-topbar-title { gap: 0; padding-left: 10px; flex: 0 0 auto; }
+  .dk-app .ws-topbar-title .name { font-size: 17px; }
+  .dk-app .dk-pub-slot { flex: 1 1 auto; padding-left: 8px; }
+  /* plus de largeur FIGÉE : le bouton prend ce qui reste (le slot est
+     élastique) et s'arrête à 190. C'est l'ellipse du titre qui encaisse. */
+  .dk-pub-btn { max-width: 190px; padding: 6px 9px; gap: 6px; }
 }
 
 /* ── DK-6 · Pré-impression (contrôle du PDF final) ── */

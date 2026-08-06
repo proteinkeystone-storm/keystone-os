@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kora — banc « le galet ne couvre jamais une croix »</title>
+<!-- ═══════════════════════════════════════════════════════════════
+     BANC DE RECOUVREMENT DU GALET — 06/08/2026
+     Le VRAI kora.js tourne (canvas WebGL compris). On ouvre à côté de
+     lui des panneaux ancrés en haut à droite (le panneau Symboles Ω,
+     l'inspecteur desK) et on vérifie que l'onde s'efface au lieu de se
+     dessiner par-dessus leur croix de fermeture.
+     ═══════════════════════════════════════════════════════════════ -->
+<link id="kora-css" rel="stylesheet" href="../app/kora.css">
+<style>
+  html,body{margin:0;height:100%;background:#0d0f14;color:#e8e9f5;
+    font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;}
+  .topbar{position:fixed;top:0;left:0;right:0;height:54px;background:#161a2b;
+    border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;
+    padding:0 16px;gap:14px;z-index:100;}
+  .cc-bar{margin-left:auto;display:flex;align-items:center;gap:8px;}
+  .cc-bar button{width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.12);color:inherit;}
+  .main{padding:80px 20px;}
+  button.act{padding:10px 14px;border-radius:10px;background:#818cf8;color:#fff;border:0;font:inherit;margin:4px;}
+  /* copie fidèle du panneau Symboles (symbols-panel.js) et de l'inspecteur desK */
+  .ksym-panel{position:fixed;top:0;right:0;bottom:0;z-index:10002;width:min(400px,100vw);
+    background:#0f1424;border-left:1px solid rgba(255,255,255,.1);display:none;padding:18px;}
+  .ksym-panel.on{display:block;}
+  .ksym-x{position:absolute;top:16px;right:16px;width:34px;height:34px;border-radius:9px;
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#fff;}
+  .dk-insp{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:92vw;z-index:10005;
+    background:#1c2234;border-left:1px solid rgba(255,255,255,.1);display:none;padding:18px;}
+  .dk-insp.on{display:block;}
+  #probe{position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,.85);color:#9ae6b4;
+    font:12px/1.5 ui-monospace,monospace;padding:8px;white-space:pre-wrap;z-index:200000;}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <strong>Keystone</strong>
+  <div class="cc-bar">
+    <button title="clair/sombre">◐</button>
+    <button title="réglages">⚙</button>
+  </div>
+</header>
+<div class="main">
+  <button class="act" data-o="sym">Ouvrir le panneau Symboles</button>
+  <button class="act" data-o="insp">Ouvrir l'inspecteur desK</button>
+  <button class="act" data-o="none">Tout fermer</button>
+</div>
+<aside class="ksym-panel"><button class="ksym-x">✕</button><h3>Ω Symboles</h3></aside>
+<aside class="dk-insp"><button class="ksym-x">✕</button><h3>Fiche de page</h3></aside>
+<pre id="probe"></pre>
+<script type="module">
+  /* ⚠ piège connu du labo : sans cache-bust, le navigateur ressert un
+     kora.js périmé (heuristique de fraîcheur, aucun Cache-Control en
+     http.server) et le banc valide l'ANCIEN code. */
+  const { initKora } = await import('../app/kora.js?v=' + Date.now());
+  initKora();
+  const sym = document.querySelector('.ksym-panel');
+  const insp = document.querySelector('.dk-insp');
+  document.querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => {
+    sym.classList.toggle('on', b.dataset.o === 'sym');
+    insp.classList.toggle('on', b.dataset.o === 'insp');
+  }));
+  window.__probe = () => {
+    const cv = document.querySelector('.kora-canvas');
+    const dock = document.querySelector('.kora-dock');
+    const r = dock.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    const t = [
+      'panneau ouvert : ' + (sym.classList.contains('on') ? 'Symboles'
+                          : insp.classList.contains('on') ? 'inspecteur desK' : 'aucun'),
+      'galet ' + Math.round(r.left) + '→' + Math.round(r.right) + ' (top ' + Math.round(r.top) + ')',
+      'élément au point du galet : ' + (hit ? hit.className || hit.tagName : 'null'),
+      'canvas visibility : ' + (cv ? (cv.style.visibility || 'visible') : 'ABSENT'),
+    ].join('\n');
+    document.getElementById('probe').textContent = t;
+    return t;
+  };
+  setInterval(window.__probe, 300);
+</script>
+</body>
+</html>

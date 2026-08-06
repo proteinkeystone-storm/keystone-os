@@ -377,6 +377,43 @@ export function initKora() {
 /* ═══ Boucle de rendu — veille énergie gravée (30 fps repos, pause si
    onglet caché via rAF, dpr ≤ 2) ═══ */
 const DPR = Math.min(devicePixelRatio || 1, 2);
+
+/* ── Le galet ne se dessine JAMAIS par-dessus un panneau ──────────
+   Le canvas flotte en z-index 100002 : TOUT panneau qui recouvre la
+   barre où vit le dock (Réglages, inspecteur desK, panneau Symboles Ω,
+   tiroirs à venir…) voit sa croix de fermeture disparaître sous l'onde.
+   La liste blanche de sélecteurs ne tenait pas le rythme — trois
+   régressions successives, une par nouveau panneau (26/07 Réglages,
+   26/07 inspecteur desK, 06/08 Symboles sur iPhone + iPad). On teste
+   donc la GÉOMÉTRIE, pas des noms de classes : si le dock n'est plus le
+   premier élément touchable à sa propre place, c'est qu'un panneau est
+   passé devant → Kora s'efface.
+   ⚠ elementFromPoint force un hit-test : throttlé à 5 Hz (largement
+   assez, un panneau ne s'ouvre pas 60 fois par seconde). Trois points
+   testés : un panneau ancré à droite ne recouvre parfois que la fin du
+   galet (le canvas déborde de 14 px de halo, la croix tombe dedans).
+   Le canvas lui-même est pointer-events:none → jamais son propre
+   masque. */
+let _coverAt = -1e9, _coverVal = false;
+function _dockCovered(now) {
+  if (now - _coverAt < 200) return _coverVal;
+  _coverAt = now;
+  const r = _dock.getBoundingClientRect();
+  if (!r.width || !r.height) { _coverVal = true; return _coverVal; }
+  const y = r.top + r.height / 2;
+  _coverVal = [r.left + 3, r.left + r.width / 2, r.right - 3].some(x => {
+    const hit = document.elementFromPoint(x, y);
+    /* hit === dock (ou un de ses enfants) → libre ; un ANCÊTRE (la barre
+       qui l'héberge) ne le recouvre pas non plus. Tout le reste = panneau.
+       ⚠ SA PROPRE fenêtre est exclue : la feuille mobile est calée au ras
+       du header, un pixel d'écart la ferait s'auto-fermer en boucle. */
+    if (!hit) return true;
+    if (hit === _dock || _dock.contains(hit) || hit.contains(_dock)) return false;
+    if (_panel && (hit === _panel || _panel.contains(hit))) return false;
+    return true;
+  });
+  return _coverVal;
+}
 function _frame(now) {
   if (!_inited) return;
   requestAnimationFrame(_frame);
@@ -398,7 +435,8 @@ function _frame(now) {
      + inspecteur desK (.dk-insp, z 10005) : même géométrie — il recouvre
      le header d'outil qui héberge le dock, sa croix tombe pile sous le
      galet (retour Stéphane 26/07, panneaux Nouvel article & Pré-presse). */
-  const locked = !!document.querySelector('#ks-lockscreen.ls-visible, #ks-fullscreen.open, #settings-panel.open, .dk-insp.on');
+  const locked = !!document.querySelector('#ks-lockscreen.ls-visible, #ks-fullscreen.open, #settings-panel.open, .dk-insp.on')
+              || _dockCovered(now);
   _cv.style.visibility = locked ? 'hidden' : 'visible';
   if (locked && _panel.classList.contains('kora-open')) koraClose();
 

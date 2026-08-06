@@ -730,11 +730,45 @@ function _duplicateForm(id) {
   _openForm(copy.id);
 }
 
-function _deleteForm(id) {
+// Supprimer, c'est supprimer PARTOUT — ici et en ligne.
+// Jusqu'ici la suppression ne retirait le formulaire que de la bibliothèque
+// locale : la ligne restait « publiée » côté serveur, donc sa page publique
+// répondait encore ET le pad du dashboard continuait d'annoncer « 1 publié »
+// alors que l'app n'affichait plus rien (retour Stéphane 06/08).
+// Un formulaire livré à un client n'est déjà plus dans la bibliothèque de
+// l'admin (la livraison en retire la copie locale) : aucun risque d'effacer
+// le formulaire de quelqu'un d'autre depuis cet écran.
+async function _deleteForm(id) {
   const form = getForm(id);
   if (!form) return;
   const title = form.meta?.title?.trim() || 'ce formulaire';
-  if (!confirm(`Supprimer définitivement « ${title} » ? Cette action est irréversible.`)) return;
+  const enLigne = form.output?.status === 'published' || !!form.output?.published_url;
+  const msg = enLigne
+    ? `Supprimer définitivement « ${title} » ?\n\nSa page publique cessera de répondre et les réponses déjà reçues ne seront plus consultables. Cette action est irréversible.`
+    : `Supprimer définitivement « ${title} » ? Cette action est irréversible.`;
+  if (!confirm(msg)) return;
+
+  // Le serveur d'abord : si le retrait en ligne échoue, on ne fait pas
+  // disparaître le formulaire de l'écran (sinon plus aucun moyen d'y revenir
+  // pour réessayer — c'est exactement comme ça que les orphelins sont nés).
+  if (enLigne && localStorage.getItem('ks_jwt')) {
+    try {
+      const res = await fetch(`${CF_API}/api/pulsa/forms/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: _authHeaders(),
+      });
+      // 404 = déjà absent côté serveur : rien à retirer, on continue.
+      if (!res.ok && res.status !== 404) {
+        const data = await res.json().catch(() => ({}));
+        alert(`Suppression impossible : la page publique n'a pas pu être retirée.\n\n${data?.error || 'Erreur HTTP ' + res.status}\n\nLe formulaire est conservé ici — réessayez plus tard.`);
+        return;
+      }
+    } catch (e) {
+      alert(`Suppression impossible : pas de réseau pour retirer la page publique.\n\nLe formulaire est conservé ici — réessayez une fois reconnecté.`);
+      return;
+    }
+  }
+
   deleteForm(id);
   if (getCurrentFormId() === id) setCurrentFormId(null);
   _renderMain();

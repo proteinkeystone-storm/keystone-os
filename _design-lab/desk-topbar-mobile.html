@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>desK — banc d'entête mobile</title>
+<!-- ═══════════════════════════════════════════════════════════════
+     BANC D'ENTÊTE desK (responsive smartphone) — 06/08/2026
+     Le markup est celui de desk.js (openDesk + _renderPubSlot +
+     _renderFer) ; les CSS sont les VRAIS fichiers de prod. On mesure
+     donc la vraie mise en page, pas une maquette.
+     Vérif : aucun débordement horizontal, le nom « desK » entier,
+     le sélecteur de publication lisible, la croix du panneau Symboles
+     jamais recouverte.
+     ═══════════════════════════════════════════════════════════════ -->
+<link rel="stylesheet" href="../app/style.css">
+<link rel="stylesheet" href="../app/workspace.css">
+<link rel="stylesheet" href="../app/desk.css">
+<link rel="stylesheet" href="../app/kora.css">
+<style>
+  html, body { margin:0; height:100%; background:#0d0f14; color:#f8fafc;
+    font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif; }
+  .ws-app { position:fixed; inset:0; display:flex; flex-direction:column; }
+  #probe { position:fixed; bottom:0; left:0; right:0; z-index:99; font:11px/1.4 ui-monospace, monospace;
+    background:rgba(0,0,0,.85); color:#9ae6b4; padding:6px 8px; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<div class="ws-app dk-app">
+  <header class="ws-topbar">
+    <div class="ws-topbar-brand">
+      <a class="ws-topbar-logo" href="#"><img src="../LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone" class="ws-logo-dark"></a>
+      <button class="ws-topbar-back" aria-label="Retour"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 18l-6-6 6-6"/></svg></button>
+    </div>
+    <div class="ws-topbar-title">
+      <span class="ws-topbar-app-picto"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/></svg></span>
+      <span class="name">desK</span>
+    </div>
+    <div class="dk-pub-slot">
+      <button class="dk-pub-btn">
+        <span class="dk-pub-name">L'ÉPAULETTE</span>
+        <span class="dk-pub-issue">n° 234</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+    </div>
+    <!-- galet Kora : posé par kora.js AVANT le burger, taille réelle (38px mini) -->
+    <span class="kora-slot"><span class="kora-dock kora-mini" style="background:rgba(129,140,248,.35);border-radius:10px"></span></span>
+    <button class="ws-topbar-burger" aria-label="Menu actions"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+    <div class="ws-topbar-actions">
+      <button class="ws-iconbtn">R</button>
+    </div>
+  </header>
+  <div class="ws-body">
+    <main class="ws-main dk-main">
+      <div class="dk-rail" data-slot="rail">
+        <div class="dk-tl" style="--tl-n:4">
+          <div class="dk-tl-track"><i style="width:22%"></i></div>
+          <span class="dk-tl-now" style="left:22%"></span>
+          <span class="dk-tl-nowlbl" style="left:22%">aujourd'hui</span>
+          <div class="dk-tl-node ambre" style="left:62%">
+            <span class="dk-tl-name" style="width:210px">MAQUETTE · BOUCLAGE · IMPRIMEUR</span>
+            <span class="dk-tl-dot"></span>
+            <span class="dk-tl-days">J−36</span>
+            <span class="dk-tl-meta" style="width:210px">11 sept. – 14 sept. – 15 sept.</span>
+          </div>
+          <div class="dk-tl-node rouge" style="left:96%">
+            <span class="dk-tl-name">PARUTION</span>
+            <span class="dk-tl-dot"></span>
+            <span class="dk-tl-days">J−45</span>
+            <span class="dk-tl-meta">24 sept.</span>
+          </div>
+        </div>
+      </div>
+      <div class="dk-ferbar">
+        <div class="dk-seg">
+          <button class="on">Chemin de fer</button>
+          <button>Marbre (1)</button>
+        </div>
+        <div class="dk-sizer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h16M4 18h16"/></svg><input type="range" min="0" max="3" step="1" value="2"></div>
+        <span class="dk-ferbar-issue">n° 234 · 68 pages</span>
+        <span class="dk-ferbar-spacer"></span>
+        <button class="dk-btn ghost small"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="2"/></svg><span class="dk-btn-txt"> Courrier</span></button>
+        <button class="dk-btn ghost small"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="9" width="12" height="8"/></svg><span class="dk-btn-txt"> Pré-impression</span></button>
+        <button class="dk-btn cta small"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M5 12h14"/></svg><span class="dk-btn-txt"> Article</span></button>
+      </div>
+      <div class="dk-frise-wrap" data-size="2"><div class="dk-frise"></div></div>
+    </main>
+  </div>
+</div>
+<pre id="probe"></pre>
+<script>
+window.__probe = function () {
+  const vw = document.documentElement.clientWidth;
+  const out = [];
+  out.push('viewport ' + vw + ' · scrollWidth ' + document.documentElement.scrollWidth);
+  const q = s => document.querySelector(s);
+  const box = (s) => { const e = q(s); if (!e) return s + ' ABSENT';
+    const r = e.getBoundingClientRect();
+    return s + ' x=' + Math.round(r.left) + '→' + Math.round(r.right) + ' w=' + Math.round(r.width); };
+  ['.ws-topbar-brand', '.ws-topbar-title', '.ws-topbar-title .name', '.dk-pub-slot',
+   '.dk-pub-btn', '.kora-slot', '.ws-topbar-burger', '.dk-ferbar-issue'].forEach(s => out.push(box(s)));
+  const nm = q('.ws-topbar-title .name');
+  out.push('nom tronqué : ' + (nm.scrollWidth > nm.clientWidth + 1));
+  const pn = q('.dk-pub-name');
+  out.push('publication tronquée : ' + (pn.scrollWidth > pn.clientWidth + 1));
+  const iss = q('.dk-ferbar-issue');
+  out.push('n°/pages hors écran : ' + (iss.getBoundingClientRect().right > vw));
+  const over = [...document.querySelectorAll('.ws-app *')].filter(e => e.getBoundingClientRect().right > vw + 1)
+    .map(e => e.className).slice(0, 8);
+  out.push('déborde à droite : ' + (over.length ? over.join(' | ') : 'aucun'));
+  const t = out.join('\n');
+  document.getElementById('probe').textContent = t;
+  return t;
+};
+window.__probe();
+</script>
+</body>
+</html>
