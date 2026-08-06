@@ -1090,6 +1090,13 @@ html.light-mode .modal-close:hover {
     min-width: 200px;
   }
   .ws-topbar-actions.is-open { display: flex; }
+  /* ⚠ Ce menu ne peut PAS passer au-dessus d'un panneau posé sur la page
+     (fenêtre Kora, z-index 100001) : `.ws-app` est en z-index 9999 et forme
+     un plan d'empilement — tout ce qu'il contient y reste enfermé, quel que
+     soit son propre z-index. C'est donc le menu qu'on ÉCARTE, et la règle
+     vit dans kora.css (elle dépend de la largeur de la fenêtre Kora).
+     Défaut trouvé le 06/08/2026 : le menu s'ouvrait derrière la fenêtre,
+     ses boutons paraissaient avoir disparu. */
   /* Dans le dropdown, les boutons s'étirent et le rating reprend sa
      largeur naturelle pour être lisible */
   .ws-topbar-actions.is-open .ws-iconbtn,

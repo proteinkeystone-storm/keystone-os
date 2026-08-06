@@ -69,12 +69,41 @@ body.kora-holding, body.kora-holding *{
      cadre .ws-app n'est plus pincé : son fond couvre tout l'écran, le
      dashboard sous-jacent reste inatteignable (leçon de la faille
      précédente), et la fenêtre flotte dessus comme au dashboard. */
+  /* ⚠ Cette poussée touche TOUS les enfants de l'outil, y compris les
+     panneaux GARÉS hors écran par un `translateX(10x%)` — qui se compte sur
+     leur propre largeur, pas sur l'écran. Un panneau rangé revient donc DANS
+     l'écran et recouvre l'entête (défaut du 06/08/2026 : l'inspecteur desK
+     fermé masquait publication, réglages, aide, noter et galet). Tout panneau
+     rangé DOIT être `visibility:hidden` — voir .dk-insp dans desk.css. */
   body.kora-open .ws-app > :not([class*="topbar"]),
   body.kora-open .sdqr-fullscreen > :not([class*="topbar"]){
     margin-right:calc(min(40vw, 560px) + 24px);
   }
   .ws-app > :not([class*="topbar"]),
   .sdqr-fullscreen > :not([class*="topbar"]){ transition:margin-right .3s ease; }
+  /* Le menu ⋯ d'un outil ne peut PAS monter au-dessus de la fenêtre : il est
+     enfermé dans le plan d'empilement de .ws-app (9999). On lui fait donc de
+     la place à GAUCHE de la fenêtre — les deux restent visibles et cliquables. */
+  body.kora-open .ws-topbar-actions.is-open,
+  body.kora-open .sdqr-topbar-right.is-open{
+    right:calc(min(40vw, 560px) + 36px);
+  }
+}
+/* Téléphone : la feuille de Kora occupe TOUT l'écran, elle n'a aucune place à
+   céder. Dès qu'une surface de l'outil s'ouvre par-dessus — le menu ⋯, ou un
+   panneau que le pad dresse (la fiche d'une page dans desK) — la feuille
+   s'efface le temps de cette surface, puis revient. Le fil de conversation est
+   INTACT : `koraClose()` n'est jamais appelé, seule la peinture est suspendue.
+   Sans ça, sur iPhone, toucher une carte n'avait l'air de rien faire : la
+   fiche s'ouvrait DERRIÈRE la feuille (fiche z-index 10005, feuille 100001).
+
+   Contrat, volontairement générique — aucun nom de pad ici (la liste blanche
+   de panneaux a déjà coûté trois régressions côté galet) : un pad qui dresse
+   un panneau par-dessus son écran le marque `.on` en ENFANT DIRECT de son
+   `.ws-app`. C'est déjà la convention de desK (.dk-insp.on). */
+@media (max-width:640px){
+  body.kora-open.ws-menu-open .kora-panel,
+  body.kora-open:has(.ws-app > .on) .kora-panel{ visibility:hidden; }
 }
 /* le canvas WebGL voyage par-dessus le dock (position pilotée en JS).
    Z-index OS : au-dessus des workspaces (9999) ET du modal GW (99999) —

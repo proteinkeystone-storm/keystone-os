@@ -1547,6 +1547,175 @@ await parcours('Parcours 11 — rubrique sous la main, pages nommées', async ()
 });
 
 /* ─────────────────────────────────────────────────────────────────
+   PARCOURS 12 · Kora ouverte dans desK — l'entête reste ENTIÈRE
+   (retour Stéphane 06/08/2026 : « la fenêtre ne se referme plus, mais
+   les boutons ont disparu ».)
+
+   Le VRAI kora.js est démarré au-dessus du VRAI desk.js, avec la
+   .cc-bar du dashboard sous l'outil — c'est elle que kora.js cherche
+   au démarrage, et c'est depuis elle que le galet migre dans le header
+   de l'outil. On ouvre la fenêtre et on exige, pour CHAQUE commande de
+   l'entête : rendue ET atteignable au doigt (elementFromPoint), pas
+   seulement « présente dans le DOM ».
+
+   Deux largeurs, les deux qu'utilise Stéphane :
+   · 1194 (iPad paysage) — les actions sont une rangée, galet compris ;
+   · 1024 — les actions se replient derrière le ⋯, le galet prend sa
+     propre place ; c'est le ⋯ qui doit rester atteignable, et son
+     dépliage doit rendre les actions atteignables à leur tour.
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 12 — Kora ouverte, entête desK intacte', async () => {
+  // Sonde partagée : rendu + atteignabilité réelle, jamais « présent » seul.
+  const sonder = (page, cibles) => page.evaluate((liste) => {
+    const vw = innerWidth, vh = innerHeight;
+    return liste.map(([nom, sel]) => {
+      const el = document.querySelector(sel);
+      if (!el) return { nom, etat: 'absent' };
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      if (!(r.width > 0 && r.height > 0) || cs.visibility === 'hidden' || +cs.opacity === 0)
+        return { nom, etat: 'non rendu', detail: `${Math.round(r.width)}×${Math.round(r.height)} display:${cs.display}` };
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      if (!(cx >= 0 && cx < vw && cy >= 0 && cy < vh))
+        return { nom, etat: 'hors écran', detail: `${Math.round(r.left)}→${Math.round(r.right)} / ${vw}` };
+      const hit = document.elementFromPoint(cx, cy);
+      const ok = !!hit && (hit === el || el.contains(hit) || hit.contains(el));
+      return ok ? { nom, etat: 'ok', detail: `${Math.round(r.left)}→${Math.round(r.right)}` }
+                : { nom, etat: 'recouvert', detail: 'par ' + (hit ? (hit.className || hit.tagName) : 'rien') };
+    });
+  }, cibles);
+
+  /* Preuve à l'œil : `DK_SHOTS=/un/dossier node scripts/test-desk-ui.mjs`
+     dépose les captures du parcours. Rien n'est écrit sans cette variable —
+     le banc reste muet et le dépôt propre. */
+  const SHOTS = process.env.DK_SHOTS || '';
+  const capturer = async (nom) => {
+    if (!SHOTS) return;
+    try { fs.mkdirSync(SHOTS, { recursive: true }); } catch (_) {}
+    await page.screenshot({ path: `${SHOTS}/${nom}.png` });
+  };
+
+  const demarrerKora = async () => {
+    await page.evaluate(async () => {
+      // La .cc-bar du dashboard : point d'attache d'origine du galet dans
+      // l'app réelle (app.html). Sans elle, initKora() renonce.
+      if (!document.querySelector('.cc-bar')) {
+        const bar = document.createElement('div');
+        bar.className = 'cc-bar';
+        bar.style.cssText = 'position:fixed;top:8px;right:16px;display:flex;gap:8px;z-index:100';
+        document.body.appendChild(bar);
+      }
+      const m = await import('/app/kora.js?t=' + Date.now());
+      m.initKora();
+    });
+    await attendSel(page, '.kora-dock', 'le galet Kora');
+    await attendre(500);            // migration du dock + quelques frames
+  };
+
+  // ── 1194 px : la rangée d'actions complète ──────────────────────
+  await page.setViewport({ width: 1194, height: 834 });
+  await ouvrirLePad(page, BASE);
+  await demarrerKora();
+  await page.evaluate(() => window.kora.open());
+  await attendre(600);
+
+  await capturer('1194-kora-ouverte-entete');
+  check('la fenêtre Kora reste ouverte dans desK (elle ne se referme plus)',
+    await page.evaluate(() => document.querySelector('.kora-panel').classList.contains('kora-open')));
+
+  const large = await sonder(page, [
+    ['retour', '.dk-app .ws-topbar-back'],
+    ['sélecteur de publication', '.dk-app .dk-pub-btn'],
+    ['réglages', '.dk-app .ws-topbar-actions [data-act="settings"]'],
+    ['aide', '.dk-app .ws-help-trigger'],
+    ['noter', '.dk-app .ws-rating-trigger'],
+    ['galet Kora', '.kora-dock'],
+  ]);
+  for (const c of large)
+    check(`1194 px · ${c.nom} : atteignable`, c.etat === 'ok', `${c.etat}${c.detail ? ' — ' + c.detail : ''}`);
+
+  // ── 1024 px : actions repliées derrière le ⋯ ────────────────────
+  await page.setViewport({ width: 1024, height: 768 });
+  await ouvrirLePad(page, BASE);
+  await demarrerKora();
+  await page.evaluate(() => window.kora.open());
+  await attendre(600);
+
+  check('1024 px · la fenêtre Kora reste ouverte',
+    await page.evaluate(() => document.querySelector('.kora-panel').classList.contains('kora-open')));
+
+  const etroit = await sonder(page, [
+    ['retour', '.dk-app .ws-topbar-back'],
+    ['sélecteur de publication', '.dk-app .dk-pub-btn'],
+    ['menu ⋯', '.dk-app .ws-topbar-burger'],
+    ['galet Kora', '.kora-dock'],
+  ]);
+  for (const c of etroit)
+    check(`1024 px · ${c.nom} : atteignable`, c.etat === 'ok', `${c.etat}${c.detail ? ' — ' + c.detail : ''}`);
+
+  // Le ⋯ doit RENDRE les actions : sinon « les boutons ont disparu » est vrai.
+  await cliquer(page, '.dk-app .ws-topbar-burger');
+  await attendre(400);
+  await capturer('1024-menu-deplie');
+  const deplie = await sonder(page, [
+    ['réglages (déplié)', '.dk-app .ws-topbar-actions [data-act="settings"]'],
+    ['aide (dépliée)', '.dk-app .ws-help-trigger'],
+    ['noter (déplié)', '.dk-app .ws-rating-trigger'],
+  ]);
+  for (const c of deplie)
+    check(`1024 px · ${c.nom} : atteignable`, c.etat === 'ok', `${c.etat}${c.detail ? ' — ' + c.detail : ''}`);
+  check('1024 px · la fenêtre Kora reste ouverte pendant le menu',
+    await page.evaluate(() => document.querySelector('.kora-panel').classList.contains('kora-open')));
+
+  // ── 390 px (iPhone) : la feuille occupe tout — elle doit céder au menu ──
+  await page.setViewport({ width: 390, height: 844 });
+  await ouvrirLePad(page, BASE);
+  await demarrerKora();
+  await page.evaluate(() => window.kora.open());
+  await attendre(600);
+  const tel = await sonder(page, [
+    ['retour', '.dk-app .ws-topbar-back'],
+    ['menu ⋯', '.dk-app .ws-topbar-burger'],
+    ['galet Kora', '.kora-dock'],
+  ]);
+  for (const c of tel)
+    check(`390 px · ${c.nom} : atteignable`, c.etat === 'ok', `${c.etat}${c.detail ? ' — ' + c.detail : ''}`);
+  await cliquer(page, '.dk-app .ws-topbar-burger');
+  await attendre(400);
+  const telDeplie = await sonder(page, [
+    ['réglages (déplié)', '.dk-app .ws-topbar-actions [data-act="settings"]'],
+    ['aide (dépliée)', '.dk-app .ws-help-trigger'],
+    ['noter (déplié)', '.dk-app .ws-rating-trigger'],
+  ]);
+  for (const c of telDeplie)
+    check(`390 px · ${c.nom} : atteignable`, c.etat === 'ok', `${c.etat}${c.detail ? ' — ' + c.detail : ''}`);
+  check('390 px · le fil de Kora n\'est PAS perdu (la feuille s\'efface, elle ne se ferme pas)',
+    await page.evaluate(() => document.querySelector('.kora-panel').classList.contains('kora-open')));
+  // Menu refermé → la feuille revient.
+  await cliquer(page, '.dk-app .ws-topbar-burger');
+  await attendre(400);
+  check('390 px · la feuille Kora revient quand le menu se referme',
+    await page.evaluate(() => getComputedStyle(document.querySelector('.kora-panel')).visibility === 'visible'));
+
+  // ── Le point de départ de la journée : la croix d'une fiche, sur iPhone.
+  // L'onde doit s'effacer pour la libérer, et la fiche doit bien s'ouvrir
+  // (la mise en `visibility` d'un panneau rangé ne doit pas l'empêcher).
+  await cliquer(page, '.dk-frise .dk-pcard');
+  await attendSel(page, '.dk-insp.on .dk-insp-close', 'la fiche de page ouverte');
+  await attendre(500);
+  check('390 px · la fiche s\'ouvre bel et bien (panneau rangé = seulement invisible)',
+    await page.evaluate(() => getComputedStyle(document.querySelector('.dk-insp')).visibility === 'visible'));
+  await capturer('390-fiche-ouverte-croix-libre');
+  const croix = await sonder(page, [['croix de la fiche', '.dk-insp .dk-insp-close']]);
+  check('390 px · la croix de la fiche est atteignable (rien ne flotte dessus)',
+    croix[0].etat === 'ok', `${croix[0].etat}${croix[0].detail ? ' — ' + croix[0].detail : ''}`);
+  check('390 px · l\'onde du galet s\'efface sous la fiche',
+    await page.evaluate(() => document.querySelector('.kora-canvas').style.visibility === 'hidden'));
+  check('390 px · et la fenêtre Kora, elle, N\'EST PAS refermée',
+    await page.evaluate(() => document.querySelector('.kora-panel').classList.contains('kora-open')));
+});
+
+/* ─────────────────────────────────────────────────────────────────
    Hygiène : aucune erreur JS n'a été avalée en chemin.
    ───────────────────────────────────────────────────────────────── */
 console.log('\n\x1b[1m▶ Hygiène\x1b[0m');

@@ -424,8 +424,25 @@ html.light-mode .dk-pcard.rubbed .dk-pc-marge, html.light-mode .dk-pcard.rubbed.
   transform: translateX(102%); transition: transform .28s cubic-bezier(.22, 1, .36, 1);
   z-index: 10005; display: flex; flex-direction: column;
   box-shadow: -18px 0 44px rgba(0, 0, 0, .35);
+  /* ⚠ GARÉ HORS ÉCRAN NE SUFFIT PAS (défaut trouvé le 06/08/2026).
+     `translateX(102%)` se compte sur la LARGEUR DU PANNEAU, pas sur l'écran :
+     il ne sort du cadre que tant que le bord droit du panneau touche le bord
+     droit de l'écran. Or la fenêtre Kora pousse tous les enfants de .ws-app
+     d'un `margin-right` (kora.css) — l'inspecteur FERMÉ revenait donc DANS
+     l'écran, son fond opaque par-dessus toute la droite de l'entête :
+     sélecteur de publication, réglages, aide, noter et galet invisibles et
+     inatteignables (« les boutons ont disparu », Stéphane, iPad).
+     La visibilité, elle, ne dépend d'aucune géométrie : un panneau rangé est
+     `hidden` — donc ni peint, ni cliquable, où qu'il soit. Le délai aligné
+     sur la glissade laisse l'animation de sortie se jouer entièrement. */
+  visibility: hidden;
+  transition: transform .28s cubic-bezier(.22, 1, .36, 1), visibility 0s .28s;
 }
-.dk-insp.on { transform: translateX(0); }
+.dk-insp.on {
+  transform: translateX(0);
+  visibility: visible;
+  transition: transform .28s cubic-bezier(.22, 1, .36, 1), visibility 0s 0s;
+}
 .dk-insp-hd { display: flex; align-items: flex-start; gap: 10px; padding: 16px 18px 10px; flex: 0 0 auto; }
 .dk-insp-hd-main { flex: 1; min-width: 0; }
 .dk-insp-rub { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--dk-tx2); margin-bottom: 5px; }
@@ -542,6 +559,10 @@ html.light-mode .dk-field input, html.light-mode .dk-field select { color-scheme
   border-radius: 12px; padding: 10px 17px; font-size: 13px; z-index: 10030;
   opacity: 0; transition: opacity .22s, transform .22s; max-width: min(92vw, 480px); text-align: center;
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  /* invisible mais TOUJOURS cliquable sans ça : une boîte transparente
+     restait posée en bas au centre et avalait les clics (même famille de
+     défaut que l'inspecteur garé, trouvée en la cherchant le 06/08). */
+  pointer-events: none;
 }
 .dk-toast.on { opacity: 1; transform: translate(-50%, 0); }
 .dk-toast.err { border-color: rgba(229, 72, 77, .6); }

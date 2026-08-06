@@ -32,12 +32,21 @@ export function bindBurger(rootEl) {
   const actions = rootEl.querySelector('.ws-topbar-actions, .sdqr-topbar-right');
   if (!burger || !actions) return;
 
+  /* `ws-menu-open` sur le BODY : le menu d'un outil est enfermé dans le plan
+     d'empilement de `.ws-app` (z-index 9999) et ne peut donc jamais passer
+     au-dessus d'un panneau posé sur la page — la fenêtre Kora naissait par
+     -dessus lui et ses boutons paraissaient avoir disparu (retour Stéphane,
+     iPad, 06/08/2026). Le marqueur est sur le body pour que kora.css puisse
+     faire de la place au menu (l'écarter sur grand écran, s'effacer sur
+     téléphone où sa feuille occupe tout). */
   const close = () => {
     actions.classList.remove('is-open');
+    document.body.classList.remove('ws-menu-open');
     burger.setAttribute('aria-expanded', 'false');
   };
   const open = () => {
     actions.classList.add('is-open');
+    document.body.classList.add('ws-menu-open');
     burger.setAttribute('aria-expanded', 'true');
   };
   const toggle = () => actions.classList.contains('is-open') ? close() : open();

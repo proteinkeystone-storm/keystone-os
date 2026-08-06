@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>desK × Kora — banc des boutons d'entête</title>
+<!-- ═══════════════════════════════════════════════════════════════
+     BANC « LES BOUTONS DE L'ENTÊTE desK NE DOIVENT PAS DISPARAÎTRE »
+     06/08/2026 — retour Stéphane : fenêtre Kora ouverte dans desK, les
+     boutons de la topbar (aide, noter, réglages, galet) manquent.
+
+     L'entête est construite AVEC LES VRAIS HELPERS de desk.js
+     (helpButtonHTML, ratingButtonHTML, burgerHTML, icon) et les VRAIS
+     CSS de prod ; kora.js est le vrai module. Le banc mesure donc la
+     prod, pas une maquette.
+
+     La sonde liste chaque bouton attendu : présent dans le DOM ?
+     visible ? ATTEIGNABLE au doigt (elementFromPoint) ?
+     ═══════════════════════════════════════════════════════════════ -->
+<link rel="stylesheet" href="../app/style.css">
+<link rel="stylesheet" href="../app/workspace.css">
+<link rel="stylesheet" href="../app/desk.css">
+<link id="kora-css" rel="stylesheet" href="../app/kora.css">
+<style>
+  html, body { margin:0; height:100%; background:#0d0f14; color:#f8fafc;
+    font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif; }
+  /* le dashboard sous l'outil : c'est lui qui porte la .cc-bar d'origine */
+  .topbar{position:fixed;top:0;left:0;right:0;height:54px;background:#161a2b;
+    display:flex;align-items:center;padding:0 16px;gap:14px;z-index:100;}
+  .cc-bar{margin-left:auto;display:flex;align-items:center;gap:8px;}
+  .cc-bar button{width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.12);color:inherit;}
+  .main{padding:70px 20px;}
+  .ws-app{position:fixed;inset:0;display:flex;flex-direction:column;}
+  #probe{position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,.88);color:#9ae6b4;
+    font:11px/1.45 ui-monospace,monospace;padding:6px 8px;white-space:pre-wrap;z-index:200000;}
+  .lab{position:fixed;bottom:120px;left:12px;z-index:200000;display:flex;gap:6px;flex-wrap:wrap;}
+  .lab button{padding:7px 10px;border-radius:8px;background:#818cf8;color:#fff;border:0;font:12px/1 inherit;}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <strong>Keystone</strong>
+  <div class="cc-bar"><button>◐</button><button>⚙</button></div>
+</header>
+<div class="main">dashboard</div>
+
+<div class="ws-app dk-app" id="desk"></div>
+
+<div class="lab">
+  <button data-open>Ouvrir Kora</button>
+  <button data-close>Fermer Kora</button>
+  <button data-burger-click>Cliquer le ⋯</button>
+</div>
+<pre id="probe"></pre>
+
+<script type="module">
+  /* cache-bust obligatoire : sans lui le labo ressert un module périmé */
+  const V = '?v=' + Date.now();
+  const { icon }              = await import('../app/lib/ui-icons.js' + V);
+  const { helpButtonHTML }    = await import('../app/lib/help-overlay.js' + V);
+  const { ratingButtonHTML }  = await import('../app/lib/rating-widget.js' + V);
+  const { burgerHTML, bindBurger } = await import('../app/lib/topbar-burger.js' + V);
+  const { initKora }          = await import('../app/kora.js' + V);
+
+  /* ── Entête desK : COPIE CONFORME de openDesk() (app/desk.js) ── */
+  document.getElementById('desk').innerHTML = `
+    <header class="ws-topbar">
+      <div class="ws-topbar-brand">
+        <a class="ws-topbar-logo" href="#"><img src="../LOGOS/Logo KEYSTONE dark-gold.svg" alt="Keystone" class="ws-logo-dark"></a>
+        <button class="ws-topbar-back" data-act="back" title="Retour">${icon('chevron-left', 34)}</button>
+      </div>
+      <div class="ws-topbar-title">
+        <span class="ws-topbar-app-picto">${icon('desk', 24)}</span>
+        <span class="name">desK</span>
+      </div>
+      <div class="dk-pub-slot">
+        <button class="dk-pub-btn"><span class="dk-pub-name">L'ÉPAULETTE</span><span class="dk-pub-issue">n° 234</span>${icon('chevron-down', 14)}</button>
+      </div>
+      ${burgerHTML()}
+      <div class="ws-topbar-actions">
+        <button class="ws-iconbtn" data-act="settings" title="Réglages">${icon('settings', 20)}</button>
+        ${helpButtonHTML('O-DSK-001')}
+        ${ratingButtonHTML('O-DSK-001')}
+      </div>
+    </header>
+    <div class="ws-body"><main class="ws-main dk-main">contenu desK</main></div>
+    <aside class="dk-insp" data-slot="insp"><div class="dk-insp-hd"><div class="dk-insp-hd-main"><div class="dk-insp-title">Fiche de page</div></div><button class="dk-insp-close">✕</button></div></aside>
+    <div class="dk-veil"></div><div class="dk-toast"></div>`;
+  bindBurger(document.getElementById('desk'));
+  initKora();
+
+  document.querySelector('[data-open]').addEventListener('click', () => window.kora.open());
+  document.querySelector('[data-close]').addEventListener('click', () => window.kora.close());
+  document.querySelector('[data-burger-click]').addEventListener('click', () =>
+    document.querySelector('#desk [data-burger]').click());
+
+  /* ── Sonde : chaque bouton attendu est-il là, visible, ATTEIGNABLE ? ── */
+  const CIBLES = [
+    ['retour',   '#desk .ws-topbar-back'],
+    ['publication', '#desk .dk-pub-btn'],
+    ['burger ⋯', '#desk .ws-topbar-burger'],
+    ['réglages', '#desk [data-act="settings"]'],
+    ['aide',     '#desk .ws-help-trigger'],
+    ['noter',    '#desk .ws-rating-trigger'],
+    ['galet Kora', '.kora-dock'],
+  ];
+  window.__probe = () => {
+    const vw = innerWidth, vh = innerHeight;
+    const out = ['viewport ' + vw + '×' + vh
+      + ' · Kora ' + (document.querySelector('.kora-panel').classList.contains('kora-open') ? 'OUVERTE' : 'fermée')
+      + ' · onde ' + (document.querySelector('.kora-canvas').style.visibility || 'visible')];
+    for (const [nom, sel] of CIBLES) {
+      const el = document.querySelector(sel);
+      if (!el) { out.push(`✗ ${nom} : ABSENT du DOM`); continue; }
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      const rendu = r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && +cs.opacity > 0;
+      if (!rendu) { out.push(`✗ ${nom} : présent mais NON RENDU (${Math.round(r.width)}×${Math.round(r.height)}, display ${cs.display}, opacity ${cs.opacity})`); continue; }
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const dansEcran = cx >= 0 && cx < vw && cy >= 0 && cy < vh;
+      const hit = dansEcran ? document.elementFromPoint(cx, cy) : null;
+      const atteignable = !!hit && (hit === el || el.contains(hit) || hit.contains(el));
+      out.push(`${atteignable ? '✓' : '✗'} ${nom} : ${Math.round(r.left)}→${Math.round(r.right)} @${Math.round(r.top)}`
+        + (dansEcran ? '' : ' HORS ÉCRAN')
+        + (atteignable ? '' : ' — recouvert par ' + (hit ? (hit.className || hit.tagName) : 'rien')));
+    }
+    const t = out.join('\n');
+    document.getElementById('probe').textContent = t;
+    return t;
+  };
+  window.__probe();
+</script>
+</body>
+</html>
