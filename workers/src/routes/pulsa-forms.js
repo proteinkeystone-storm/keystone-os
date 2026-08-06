@@ -28,9 +28,22 @@ import { requireJWT } from '../lib/jwt.js';
 const VALID_STATUS = ['draft', 'published', 'archived'];
 
 // ── Auth resolver (pattern Kodex) ─────────────────────────────
+// ⚠ UN COMPTE ADMIN A DEUX IDENTITÉS, et c'est la source du « compteur qui
+// ne bouge jamais » (retour Stéphane 06/08/2026) :
+//   · il ÉCRIT sous `owner_sub = 'admin'` (ci-dessous, historique) ;
+//   · mais il POSSÈDE aussi ce qui a été créé sous son propre `sub` par
+//     d'autres chemins (la Fiche établissement du Concierge, via sdqr.js).
+// Le capteur du pad, lui, comptait uniquement `owner_sub = claims.sub` : quoi
+// qu'il fasse dans Key Form, le chiffre du pad ne bougeait pas d'un pouce.
+// `subs` porte donc les DEUX identités ; c'est cette liste qui sert aux
+// LECTURES « les miens » (ici et dans living-layer-board.js), pour que le pad
+// et l'app racontent enfin la même histoire. Les contrôles de propriété
+// (PATCH/DELETE) continuent, eux, de s'appuyer sur `sub`/`isAdmin`.
 async function _resolveOwner(request, env) {
   if (requireAdmin(request, env)) {
-    return { sub: 'admin', tenant: 'default', isAdmin: true };
+    const c = await requireJWT(request, env).catch(() => null);
+    return { sub: 'admin', tenant: 'default', isAdmin: true,
+             subs: c?.sub ? ['admin', c.sub] : ['admin'] };
   }
   const claims = await requireJWT(request, env);
   if (claims?.sub) {
@@ -39,11 +52,13 @@ async function _resolveOwner(request, env) {
     // (owner_sub = 'admin'), et pas seulement ceux qui matchent son
     // lookup_hmac. Sinon la Biennale (créée via /admin) devient invisible
     // après un re-login en JWT classique (cas Stéphane 24/05).
-    return { sub: claims.sub, tenant: claims.sub, isAdmin: !!claims.isAdmin };
+    return { sub: claims.sub, tenant: claims.sub, isAdmin: !!claims.isAdmin,
+             subs: [claims.sub] };
   }
   const device = await requireDevice(request, env);
   if (device?.tenant_id) {
-    return { sub: 'device:' + device.id, tenant: device.tenant_id, isAdmin: false };
+    return { sub: 'device:' + device.id, tenant: device.tenant_id, isAdmin: false,
+             subs: ['device:' + device.id] };
   }
   return null;
 }
@@ -243,10 +258,14 @@ export async function handlePulsaList(request, env) {
      qui listent pour importer/livrer continuent de tout voir. */
   const mine = new URL(request.url).searchParams.get('mine') === '1';
   const scoped = mine || !owner.isAdmin;
+  /* « les miens » = TOUTES les identités du compte (cf. _resolveOwner) —
+     exactement l'ensemble que compte le pad. */
+  const subs = (owner.subs && owner.subs.length) ? owner.subs : [owner.sub];
+  const trous = subs.map(() => '?').join(', ');
   const sql = scoped
-    ? 'SELECT * FROM pulsa_forms WHERE owner_sub = ? ORDER BY updated_at DESC LIMIT 200'
+    ? `SELECT * FROM pulsa_forms WHERE owner_sub IN (${trous}) ORDER BY updated_at DESC LIMIT 200`
     : 'SELECT * FROM pulsa_forms ORDER BY updated_at DESC LIMIT 200';
-  const stmt = scoped ? env.DB.prepare(sql).bind(owner.sub) : env.DB.prepare(sql);
+  const stmt = scoped ? env.DB.prepare(sql).bind(...subs) : env.DB.prepare(sql);
   const { results = [] } = await stmt.all();
   /* `scope` permet au front de REFUSER de fusionner si le worker déployé est
      antérieur à ce filtre (il renverrait « all » alias tout le monde). */

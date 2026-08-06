@@ -387,32 +387,41 @@ async function _sensorKeyBrand(env, tenantId) {
 
 // Pulsa : nombre de réponses des dernières 24h pour cet owner (si JWT)
 // sinon agrégat global.
-async function _sensorPulsa(env, ownerSub) {
+// ⚠ UN COMPTE ADMIN A DEUX IDENTITÉS (voir _resolveOwner dans
+// routes/pulsa-forms.js) : il ÉCRIT ses formulaires sous `owner_sub='admin'`,
+// mais possède aussi ce qui a été créé sous son propre `sub` par d'autres
+// chemins (Fiche établissement du Concierge). Ne compter que `claims.sub`
+// donnait un chiffre FIGÉ, insensible à tout ce qu'il faisait dans Key Form
+// (« le compteur du pad ne fonctionne pas du tout », Stéphane 06/08/2026).
+// On compte donc le MÊME ensemble que celui listé par /api/pulsa/forms?mine=1.
+async function _sensorPulsa(env, ownerSub, isAdmin = false) {
   try {
+    const subs = ownerSub ? (isAdmin ? ['admin', ownerSub] : [ownerSub]) : null;
+    const trous = subs ? subs.map(() => '?').join(', ') : '';
     let row;
-    if (ownerSub) {
+    if (subs) {
       row = await env.DB.prepare(`
         SELECT COUNT(*) AS n
         FROM pulsa_responses r
         JOIN pulsa_forms f ON f.id = r.form_id
-        WHERE f.owner_sub = ? AND r.created_at >= datetime('now', '-1 day')
-      `).bind(ownerSub).first().catch(() => null);
+        WHERE f.owner_sub IN (${trous}) AND r.created_at >= datetime('now', '-1 day')
+      `).bind(...subs).first().catch(() => null);
     } else {
       row = await env.DB.prepare(
         `SELECT COUNT(*) AS n FROM pulsa_responses WHERE created_at >= datetime('now', '-1 day')`
       ).first().catch(() => null);
     }
     const totalForms = await env.DB.prepare(
-      ownerSub
-        ? `SELECT COUNT(*) AS n FROM pulsa_forms WHERE owner_sub = ? AND status = 'published'`
+      subs
+        ? `SELECT COUNT(*) AS n FROM pulsa_forms WHERE owner_sub IN (${trous}) AND status = 'published'`
         : `SELECT COUNT(*) AS n FROM pulsa_forms WHERE status = 'published'`
-    ).bind(...(ownerSub ? [ownerSub] : [])).first().catch(() => null);
+    ).bind(...(subs || [])).first().catch(() => null);
     // Total cumulé (pour la mémoire des chiffres / tendances)
     const totalResp = await env.DB.prepare(
-      ownerSub
-        ? `SELECT COUNT(*) AS n FROM pulsa_responses r JOIN pulsa_forms f ON f.id = r.form_id WHERE f.owner_sub = ?`
+      subs
+        ? `SELECT COUNT(*) AS n FROM pulsa_responses r JOIN pulsa_forms f ON f.id = r.form_id WHERE f.owner_sub IN (${trous})`
         : `SELECT COUNT(*) AS n FROM pulsa_responses`
-    ).bind(...(ownerSub ? [ownerSub] : [])).first().catch(() => null);
+    ).bind(...(subs || [])).first().catch(() => null);
     return {
       responses24h: row?.n || 0,
       responsesTotal: totalResp?.n || 0,
@@ -1372,7 +1381,7 @@ export async function handleLivingBoard(request, env) {
   const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, relances, pilotable, followedQr, followedSite, desk] = await Promise.all([
     _sensorSmartQR(env, padTenant),
     _sensorQrTop(env, padTenant),
-    _sensorPulsa(env, lookupHmac),
+    _sensorPulsa(env, lookupHmac, isAdminClaim),
     _sensorGhostWriter(env, lookupHmac, claims?.plan),
     _sensorKodex(env, lookupHmac),
     _sensorSmartAgentGaps(env, padTenant),
