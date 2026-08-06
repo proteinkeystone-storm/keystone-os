@@ -290,6 +290,12 @@
 
     /* Header : lien URL (gauche) · téléphone · onde voix (droite) */
     .sav2-top { display: flex; align-items: center; gap: 11px; padding: calc(env(safe-area-inset-top,0px) + 16px) 16px 6px; }
+    /* Label « AI » officiel UE — premier élément en haut à gauche, présent
+       aussi en ?embed=1 (la landing) et dans le mode vocal plein écran : la
+       mention doit tenir partout où l'on peut parler à l'agent. Discret par
+       la taille et l'opacité, jamais masqué. */
+    .sav2-ai { flex-shrink: 0; width: 30px; height: 30px; opacity: .75; }
+    .sav2-ai svg { width: 100%; height: 100%; display: block; }
     .sav2-url { flex: 1; min-width: 0; height: 46px; display: flex; align-items: center; gap: 11px; padding: 0 16px;
       border: 2px solid var(--sav2-brand-lt); border-radius: 24px; background: rgba(255,255,255,.045); text-decoration: none; }
     .sav2-url-globe { flex-shrink: 0; color: var(--sav2-brand-lt); display: flex; align-items: center; justify-content: center; }
@@ -412,7 +418,11 @@
     /* SA-13.3 — choix de langue DANS le mode vocal (seul endroit où il est
        techniquement requis : la reconnaissance doit connaître la langue
        à l'avance). Pré-positionné sur la langue détectée, mémorisé session. */
-    .sav2-vm-langs { display: flex; gap: 7px; }
+    /* margin-right auto : le head est en space-between et vient de passer à
+       TROIS enfants (label AI, langues, fermer) — sans ça les pilules de
+       langue partaient se planter au milieu. Le auto les raccroche au label,
+       et « fermer » reste seul à droite. */
+    .sav2-vm-langs { display: flex; gap: 7px; margin-right: auto; }
     .sav2-vm-langpill { min-width: 42px; height: 32px; padding: 0 10px; border-radius: 999px; cursor: pointer;
       border: 1px solid rgba(164,162,255,.35); background: transparent; color: #c2c0ff;
       font: 700 12.5px/1 -apple-system, system-ui, sans-serif; letter-spacing: .04em;
@@ -510,7 +520,7 @@
       fr: { ask: 'Posez-nous vos questions', yourQ: 'Votre question', dictate: 'Dicter votre question', send: 'Envoyer', call: 'Appeler', lang: 'Langue',
             voiceOn: 'Couper la lecture vocale', voiceOff: 'Lire les réponses à voix haute', voicePrep: 'Préparation de la voix (une seule fois)…',
             rgpd: 'Réponses issues du savoir de l\'assistant. Vos questions sont anonymes et effacées après 90 jours.',
-            suggested: 'Question suggérée', greeting: 'Bonjour ! Je suis un assistant IA. Comment puis-je vous aider ?', listen: 'Toucher pour écouter',
+            suggested: 'Question suggérée', greeting: 'Bonjour ! Comment puis-je vous aider ?', listen: 'Toucher pour écouter', aiLabel: 'Assistant IA',
             err: 'Une erreur est survenue. Réessayez.', offline: 'Connexion impossible. ', retry: 'Réessayer',
             micBlocked: 'Le micro est bloqué par votre navigateur — autorisez-le dans les réglages du site pour dicter votre question.',
             vmEnter: 'Converser de vive voix', vmClose: 'Quitter le mode vocal',
@@ -520,7 +530,7 @@
       en: { ask: 'Ask us anything', yourQ: 'Your question', dictate: 'Dictate your question', send: 'Send', call: 'Call', lang: 'Language',
             voiceOn: 'Turn off voice', voiceOff: 'Read answers aloud', voicePrep: 'Preparing the voice (one time only)…',
             rgpd: 'Answers based on the assistant\'s knowledge. Your questions are anonymous and deleted after 90 days.',
-            suggested: 'Suggested question', greeting: 'Hello! I am an AI assistant. How can I help you?', listen: 'Tap to listen',
+            suggested: 'Suggested question', greeting: 'Hello! How can I help you?', listen: 'Tap to listen', aiLabel: 'AI assistant',
             err: 'Something went wrong. Please try again.', offline: 'Connection failed. ', retry: 'Retry',
             micBlocked: 'The microphone is blocked by your browser — allow it in the site settings to dictate your question.',
             vmEnter: 'Talk with me', vmClose: 'Leave voice mode',
@@ -530,7 +540,7 @@
       es: { ask: 'Pregúntenos lo que quiera', yourQ: 'Su pregunta', dictate: 'Dictar su pregunta', send: 'Enviar', call: 'Llamar', lang: 'Idioma',
             voiceOn: 'Desactivar la voz', voiceOff: 'Leer las respuestas en voz alta', voicePrep: 'Preparando la voz (solo una vez)…',
             rgpd: 'Respuestas basadas en el conocimiento del asistente. Sus preguntas son anónimas y se eliminan tras 90 días.',
-            suggested: 'Pregunta sugerida', greeting: '¡Hola! Soy un asistente de IA. ¿En qué puedo ayudarle?', listen: 'Toque para escuchar',
+            suggested: 'Pregunta sugerida', greeting: '¡Hola! ¿En qué puedo ayudarle?', listen: 'Toque para escuchar', aiLabel: 'Asistente de IA',
             err: 'Se produjo un error. Inténtelo de nuevo.', offline: 'Sin conexión. ', retry: 'Reintentar',
             micBlocked: 'El micrófono está bloqueado por su navegador — permítalo en los ajustes del sitio para dictar su pregunta.',
             vmEnter: 'Hablar de viva voz', vmClose: 'Salir del modo de voz',
@@ -540,7 +550,7 @@
       de: { ask: 'Stellen Sie uns Ihre Fragen', yourQ: 'Ihre Frage', dictate: 'Frage diktieren', send: 'Senden', call: 'Anrufen', lang: 'Sprache',
             voiceOn: 'Sprachausgabe ausschalten', voiceOff: 'Antworten vorlesen', voicePrep: 'Stimme wird vorbereitet (einmalig)…',
             rgpd: 'Antworten basierend auf dem Wissen des Assistenten. Ihre Fragen sind anonym und werden nach 90 Tagen gelöscht.',
-            suggested: 'Vorgeschlagene Frage', greeting: 'Hallo! Ich bin ein KI-Assistent. Wie kann ich Ihnen helfen?', listen: 'Zum Anhören tippen',
+            suggested: 'Vorgeschlagene Frage', greeting: 'Hallo! Wie kann ich Ihnen helfen?', listen: 'Zum Anhören tippen', aiLabel: 'KI-Assistent',
             err: 'Ein Fehler ist aufgetreten. Bitte erneut versuchen.', offline: 'Verbindung fehlgeschlagen. ', retry: 'Erneut',
             micBlocked: 'Das Mikrofon ist von Ihrem Browser blockiert — erlauben Sie es in den Website-Einstellungen, um Ihre Frage zu diktieren.',
             vmEnter: 'Mit mir sprechen', vmClose: 'Sprachmodus verlassen',
@@ -916,6 +926,7 @@
       div.className = 'sav2-vm'; div.id = 'sav2-vm';
       div.innerHTML = `
         <div class="sav2-vm-head">
+          <span class="sav2-ai" role="img" aria-label="${escape(t('aiLabel'))}" title="${escape(t('aiLabel'))}">${SVG_V2.aiLabel}</span>
           <div class="sav2-vm-langs" role="radiogroup" aria-label="${escape(t('lang'))}">${SA_LANGS.map(l =>
             `<button class="sav2-vm-langpill${l === _lang ? ' is-active' : ''}" type="button" role="radio" aria-checked="${l === _lang ? 'true' : 'false'}" data-l="${l}">${l.toUpperCase()}</button>`).join('')}</div>
           <button class="sav2-vm-close" id="sav2-vm-close" type="button" aria-label="${escape(t('vmClose'))}">${SVG_V2.close}</button>
@@ -1373,6 +1384,22 @@
       /* SA-13 — entrée du mode conversation vocale (bouton envoyer, champ vide) */
       vm:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4"/><path d="M8.5 7v10"/><path d="M12 4.5v15"/><path d="M15.5 7v10"/><path d="M20 10v4"/></svg>',
       close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+      /* Label « AI » officiel de la Commission européenne (art. 50 du
+         règlement UE 2024/1689) : le visiteur voit qu'il parle à une machine
+         AVANT d'écrire, sans qu'on touche à un seul mot de l'accueil écrit
+         par le propriétaire. Icône publiée par la Commission, libre d'usage.
+         Le tracé est celui du fichier officiel, à deux choses près.
+         (1) Ses classes .cls-1/.cls-2 vivaient dans un <style> interne, qui
+             inliné ici fuiterait dans TOUTE la page — converties en attributs
+             de présentation, rendu strictement identique.
+         (2) C'est la variante « white transparent », pas la noire : le haut
+             de cette page est TOUJOURS sombre (le thème du propriétaire ne
+             touche que le bas du dégradé), et sur ce fond le disque noir à
+             50 % disparaît — il ne restait que deux lettres flottantes, plus
+             reconnaissables comme le label officiel. Les deux variantes sont
+             publiées par la Commission ; celle-ci est faite pour les fonds
+             sombres. */
+      aiLabel: '<svg viewBox="0 0 566.93 566.93" aria-hidden="true"><path fill="#fff" fill-rule="evenodd" opacity=".5" d="M272.03,100.72c100.92,0,182.74,81.82,182.74,182.75s-81.82,182.74-182.74,182.74-182.75-81.82-182.75-182.74,81.82-182.75,182.75-182.75"/><path fill="#1d1d1b" d="M170.79,353.74c-1.08,0-2.05-.43-2.92-1.31-.88-.87-1.31-1.84-1.31-2.92,0-.67.07-1.27.2-1.81l47.34-129.32c.4-1.48,1.24-2.79,2.52-3.93,1.27-1.14,3.05-1.71,5.34-1.71h29.81c2.28,0,4.06.57,5.34,1.71,1.27,1.14,2.11,2.45,2.52,3.93l47.14,129.32c.27.54.4,1.14.4,1.81,0,1.08-.44,2.05-1.31,2.92s-1.91,1.31-3.12,1.31h-24.78c-2.01,0-3.52-.5-4.53-1.51-1.01-1.01-1.65-1.91-1.91-2.72l-7.86-20.55h-53.78l-7.65,20.55c-.27.81-.88,1.71-1.81,2.72-.94,1.01-2.55,1.51-4.83,1.51h-24.78ZM218.13,299.96h37.47l-18.93-53.18-18.53,53.18Z"/><path fill="#1d1d1b" d="M328.11,353.74c-1.48,0-2.69-.47-3.63-1.41-.94-.94-1.41-2.15-1.41-3.63v-130.93c0-1.48.47-2.68,1.41-3.63s2.15-1.41,3.63-1.41h26.99c1.48,0,2.68.47,3.63,1.41.94.94,1.41,2.15,1.41,3.63v130.93c0,1.48-.47,2.69-1.41,3.63-.94.94-2.15,1.41-3.63,1.41h-26.99Z"/></svg>',
       mic:   '<svg viewBox="0 0 96 96" fill="currentColor" aria-hidden="true"><path d="M84,36a6,6,0,0,0-12,0,24,24,0,0,1-48,0,6,6,0,0,0-12,0A35.9772,35.9772,0,0,0,42,71.3936V84H30a6,6,0,0,0,0,12H66a6,6,0,0,0,0-12H54V71.3936A35.9772,35.9772,0,0,0,84,36Z"/><path d="M48,48A12.0157,12.0157,0,0,0,60,36V12a12,12,0,0,0-24,0V36A12.0157,12.0157,0,0,0,48,48Z"/></svg>',
       send:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.0004 18.5816V12.5M12.7976 18.754L15.8103 19.7625C17.4511 20.3118 18.2714 20.5864 18.7773 20.3893C19.2166 20.2182 19.5499 19.8505 19.6771 19.3965C19.8236 18.8737 19.4699 18.0843 18.7624 16.5053L14.2198 6.36709C13.5279 4.82299 13.182 4.05094 12.7001 3.81172C12.2814 3.60388 11.7898 3.60309 11.3705 3.80958C10.8878 4.04726 10.5394 4.8182 9.84259 6.36006L5.25633 16.5082C4.54325 18.086 4.18671 18.875 4.33169 19.3983C4.4576 19.8528 4.78992 20.2216 5.22888 20.394C5.73435 20.5926 6.55603 20.3198 8.19939 19.7744L11.2797 18.752C11.5614 18.6585 11.7023 18.6117 11.8464 18.5933C11.9742 18.5769 12.1036 18.5771 12.2314 18.5938C12.3754 18.6126 12.5162 18.6597 12.7976 18.754Z"/></svg>'
     };
@@ -1434,6 +1461,7 @@
 
       document.getElementById('sa-root').outerHTML = `
         <header class="sav2-top">
+          <span class="sav2-ai" role="img" aria-label="${escape(t('aiLabel'))}" title="${escape(t('aiLabel'))}">${SVG_V2.aiLabel}</span>
           ${url
             ? `<a class="sav2-url" href="${escape(fullUrl(url))}" target="_blank" rel="noopener noreferrer"><span class="sav2-url-globe">${SVG_V2.globe}</span><span class="sav2-url-txt">${escape((meta.url_label || '').trim() || prettyUrl(url))}</span></a>`
             : `<div class="sav2-top-spacer"></div>`}

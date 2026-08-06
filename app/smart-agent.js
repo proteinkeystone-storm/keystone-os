@@ -524,7 +524,7 @@ function _enterAgent(id, tab = 'savoir') {
     _kx.packId = null; _kx.packBusy = false;         // SA-9
     _gold.loaded = false; _gold.replay = null; _gold.items = [];
     // bac à sable : amorce l'accueil de cet agent
-    const opening = a.config?.identity?.opening || `Bonjour ! Je suis « ${a.name} », un assistant IA. Comment puis-je vous aider ?`;
+    const opening = a.config?.identity?.opening || `Bonjour ! Je suis « ${a.name} ». Comment puis-je vous aider ?`;
     _chat.agentId = a.id; _chat.agentName = a.name; _chat.sessionId = null; _chat.busy = false;
     _chat.lang = a.config?.identity?.lang || 'fr';   // SA-11.2 — langue de test par défaut = langue native de l'agent
     _chat.messages = [{ role: 'agent', content: opening, citations: [], opening: true }];
@@ -1067,9 +1067,9 @@ function _agentFormHTML() {
 
       <label class="sa-field" style="margin-top:14px;">
         <span class="sa-field-label">Accueil — l'agent parle en premier (terminé par une question)</span>
-        <textarea class="sa-textarea" data-field="opening" rows="2" placeholder="Bonjour ! Je suis un assistant IA. Que puis-je vous faire découvrir aujourd'hui ?">${_esc(d.opening)}</textarea>
+        <textarea class="sa-textarea" data-field="opening" rows="2" placeholder="Bonjour ! Que puis-je vous faire découvrir aujourd'hui ?">${_esc(d.opening)}</textarea>
       </label>
-      <p class="sa-field-hint">La loi impose de dire au visiteur qu'il parle à une machine. Si votre accueil ne le dit pas, la page publique ajoute « Je suis un assistant IA. » en première ligne — vous n'avez rien à faire, mais vous pouvez l'écrire vous-même, à votre façon.</p>
+      <p class="sa-field-hint">Écrivez ce que vous voulez : la loi est déjà satisfaite par le label « AI » officiel affiché en haut de votre page publique.</p>
       <label class="sa-field" style="margin-top:8px;">
         <span class="sa-field-label">Accueil traduit (optionnel) — sinon, accueil générique dans la langue du visiteur</span>
         <div class="sa-tr-col">${[['en', 'anglais'], ['es', 'espagnol'], ['de', 'allemand']].map(([lg, lbl]) => `<input class="sa-input" data-field="opening-i18n-${lg}" value="${_escAttr((d.openingI18n && d.openingI18n[lg]) || '')}" maxlength="300" placeholder="Accueil en ${lbl}">`).join('')}</div>
