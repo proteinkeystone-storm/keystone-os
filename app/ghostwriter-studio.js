@@ -32,6 +32,7 @@ import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 import { icon }                                from './lib/ui-icons.js';
 import { symbolsButtonHTML, openSymbolsPanel, closeSymbolsPanel } from './lib/symbols-panel.js';
+import { aiLabelSVG }                          from './lib/ai-label.js';
 import {
   rewriteText, getGhostwriterQuotaRemaining, getGhostwriterQuotaMax,
   getGhostwriterPlan, getGhostwriterQuotaPeriod, getGhostwriterQuotaLabel,
@@ -325,6 +326,14 @@ function _renderMain(scrollToTop) {
           ${_renderVariants()}
         </section>
       </div>
+      ${_variants ? `<div class="gw-ai-foot">
+        <p class="gw-ai-label">
+          <span class="gw-ai-on-dark">${aiLabelSVG(16, 'dark')}</span>
+          <span class="gw-ai-on-light">${aiLabelSVG(16, 'light')}</span>
+          <span>Texte généré par IA</span>
+        </p>
+        <p class="gw-ai-law">Conformément au règlement européen sur l'intelligence artificielle, un contenu généré par IA doit être signalé comme tel lors de sa publication.</p>
+      </div>` : ''}
     </div>
   `;
 
@@ -848,6 +857,26 @@ html.light-mode .gw-fam:hover:not(.is-active) { color: #334155; background: rgba
 .gw-select:focus { outline: 0; border-color: rgba(120,160,255,.4); }
 
 .gw-actions-row { margin-top: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* Label « AI » officiel UE + mention, en pied de fenêtre, seulement une fois
+   des variantes produites. Discret par la taille et l'opacité — c'est un
+   rappel de ce qu'on a sous les yeux, pas un bandeau. */
+.gw-ai-foot { margin-top: 22px; text-align: center; }
+.gw-ai-label { display: flex; align-items: center; justify-content: center; gap: 7px;
+    margin: 0; opacity: .5; font-size: 11.5px; letter-spacing: .01em; color: var(--text-muted, #9aa0b4); }
+/* La phrase de rappel : plus effacée encore que la mention, et bornée en
+   largeur — une ligne de 90 caractères en pied de page ne se lit pas. */
+.gw-ai-law { margin: 6px auto 0; max-width: 62ch; opacity: .38; font-size: 11px; line-height: 1.5;
+    color: var(--text-muted, #9aa0b4); }
+html.light-mode .gw-ai-law { color: #64748b; }
+.gw-ai-label svg { display: block; flex-shrink: 0; }
+/* Les deux variantes officielles sont rendues, le CSS choisit : le disque du
+   label est translucide, donc la blanche s'évanouit sur fond clair et la
+   noire sur fond sombre. Basculer en CSS plutôt qu'au rendu évite d'avoir à
+   re-rendre le studio quand l'utilisateur change de thème. */
+.gw-ai-label .gw-ai-on-light { display: none; }
+html.light-mode .gw-ai-label { color: #64748b; }
+html.light-mode .gw-ai-label .gw-ai-on-dark  { display: none; }
+html.light-mode .gw-ai-label .gw-ai-on-light { display: block; }
 .gw-btn-primary {
   flex: 1; padding: 13px 22px;
   background: linear-gradient(135deg, #6496ff, #8060ff);
