@@ -730,28 +730,55 @@ function _duplicateForm(id) {
   _openForm(copy.id);
 }
 
-// Supprimer, c'est supprimer PARTOUT — ici et en ligne.
-// Jusqu'ici la suppression ne retirait le formulaire que de la bibliothèque
-// locale : la ligne restait « publiée » côté serveur, donc sa page publique
-// répondait encore ET le pad du dashboard continuait d'annoncer « 1 publié »
-// alors que l'app n'affichait plus rien (retour Stéphane 06/08).
-// Un formulaire livré à un client n'est déjà plus dans la bibliothèque de
-// l'admin (la livraison en retire la copie locale) : aucun risque d'effacer
-// le formulaire de quelqu'un d'autre depuis cet écran.
+// ── Supprimer : DEUX questions, jamais une seule ────────────────
+// Retirer de sa bibliothèque et retirer d'Internet sont deux gestes
+// différents ; les confondre coûte cher. Le 06/08/2026, la suppression est
+// devenue « partout » d'un coup : deux formulaires publiés ont disparu du
+// serveur en un clic, dont celui d'une biennale qui portait douze réponses
+// d'artistes. Leçon gravée ici — un seul « OK » ne doit JAMAIS pouvoir
+// débrancher une page publique vivante.
+//   1. « Retirer de votre bibliothèque ? »  → toujours posée.
+//   2. « Faut-il aussi le retirer d'Internet ? » → posée seulement s'il est
+//      publié, avec le NOMBRE DE RÉPONSES en jeu, et ANNULER = on le laisse
+//      en ligne (le défaut protège l'actif vivant).
+// Le comportement d'origine (retrait local seul) reste donc atteignable, et
+// le formulaire ne redevient pas fantôme : le pad compte le serveur, l'app
+// le rapatriera à la prochaine ouverture.
 async function _deleteForm(id) {
   const form = getForm(id);
   if (!form) return;
   const title = form.meta?.title?.trim() || 'ce formulaire';
   const enLigne = form.output?.status === 'published' || !!form.output?.published_url;
-  const msg = enLigne
-    ? `Supprimer définitivement « ${title} » ?\n\nSa page publique cessera de répondre et les réponses déjà reçues ne seront plus consultables. Cette action est irréversible.`
-    : `Supprimer définitivement « ${title} » ? Cette action est irréversible.`;
-  if (!confirm(msg)) return;
+
+  if (!confirm(`Retirer « ${title} » de votre bibliothèque ?`)) return;
+
+  let aussiEnLigne = false;
+  if (enLigne && localStorage.getItem('ks_jwt')) {
+    // Combien de réponses sont en jeu ? On le DIT, on ne le suppose pas.
+    let nbRep = null;
+    try {
+      const r = await fetch(`${CF_API}/api/pulsa/responses?form_id=${encodeURIComponent(id)}`,
+                            { headers: _authHeaders() });
+      if (r.ok) {
+        const d = await r.json().catch(() => ({}));
+        if (Array.isArray(d?.responses)) nbRep = d.responses.length;
+      }
+    } catch (_) { /* hors ligne : on posera la question sans le chiffre */ }
+
+    const phraseRep = nbRep === null ? ''
+      : (nbRep === 0 ? '\nAucune réponse reçue à ce jour.'
+                     : `\n${nbRep} réponse${nbRep > 1 ? 's' : ''} déjà reçue${nbRep > 1 ? 's' : ''} ne ${nbRep > 1 ? 'seront' : 'sera'} plus consultable${nbRep > 1 ? 's' : ''}.`);
+    aussiEnLigne = confirm(
+      `« ${title} » est PUBLIÉ.\n\nFaut-il aussi le retirer d'Internet ?`
+      + `\nSa page publique cessera de répondre.${phraseRep}`
+      + `\n\nOK = le retirer partout (irréversible).`
+      + `\nAnnuler = le retirer d'ici seulement, la page reste en ligne.`);
+  }
 
   // Le serveur d'abord : si le retrait en ligne échoue, on ne fait pas
   // disparaître le formulaire de l'écran (sinon plus aucun moyen d'y revenir
   // pour réessayer — c'est exactement comme ça que les orphelins sont nés).
-  if (enLigne && localStorage.getItem('ks_jwt')) {
+  if (aussiEnLigne) {
     try {
       const res = await fetch(`${CF_API}/api/pulsa/forms/${encodeURIComponent(id)}`, {
         method: 'DELETE',

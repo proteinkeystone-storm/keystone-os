@@ -218,16 +218,37 @@ try {
   check('le compteur du pad annonce 1 publié pour le client', await compteurDuPad(CLIENT) === 1);
 
   // ── Supprimer depuis l'app : la ligne serveur part, le compteur retombe.
+  // ── (a) On répond OUI au retrait local, NON au retrait d'Internet :
+  // la page publique DOIT rester debout. C'est le garde-fou né de la
+  // disparition du formulaire de la Biennale (12 réponses) le 06/08.
   await ouvrirLApp('/__kf-admin.html');
-  await page.evaluate(() => { window.confirm = () => true; });
+  await page.evaluate(() => {
+    window.__questions = [];
+    window.confirm = (m) => { window.__questions.push(m); return window.__questions.length === 1; };
+  });
   const aCliqué = await page.evaluate(() => {
     const b = document.querySelector('[data-act="delete-form"]');
     if (!b) return false; b.click(); return true;
   });
   check('le bouton « supprimer » est bien là', aCliqué);
   await attendre(1500);
+  const questions = await page.evaluate(() => window.__questions || []);
+  check('deux questions sont posées, jamais une seule', questions.length === 2,
+    questions.map(q => q.split('\n')[0]).join(' // '));
+  check('la seconde annonce que la page publique cessera de répondre',
+    /page publique/i.test(questions[1] || ''), questions[1]);
+  const apresNon = (await api(ADMIN, '/api/pulsa/forms?mine=1')).data.forms || [];
+  check('« Annuler » sur la 2e question LAISSE le formulaire en ligne',
+    apresNon.length === 2, apresNon.map(f => f.id).join(','));
+  check('et le compteur du pad ne bouge pas (2)', await compteurDuPad(ADMIN) === 2);
+
+  // ── (b) Cette fois on répond OUI aux deux : la ligne serveur part.
+  await ouvrirLApp('/__kf-admin.html');
+  await page.evaluate(() => { window.confirm = () => true; });
+  await page.evaluate(() => document.querySelector('[data-act="delete-form"]')?.click());
+  await attendre(1500);
   const resteServeur = (await api(ADMIN, '/api/pulsa/forms?mine=1')).data.forms || [];
-  check('la suppression retire AUSSI la ligne serveur (plus de fantôme)',
+  check('deux « oui » retirent AUSSI la ligne serveur (plus de fantôme)',
     resteServeur.length === 1, resteServeur.map(f => f.id).join(','));
   check('et le compteur du pad suit (2 → 1)', await compteurDuPad(ADMIN) === 1);
 
