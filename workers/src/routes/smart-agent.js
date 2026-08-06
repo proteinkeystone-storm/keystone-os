@@ -2716,6 +2716,35 @@ export async function handleAgentCardImageUpload(request, env, agentId) {
   return json({ key, url: new URL(request.url).origin + '/api/smart-agent/card-img/' + key }, 200, origin);
 }
 
+// ── Mention « IA » dans l'accueil — filet de sécurité ──────────────
+// La loi d'août 2026 veut que le visiteur sache qu'il s'adresse à une
+// machine AVANT d'engager la conversation. On ne PARIE pas sur le client
+// pour l'écrire : s'il ne l'a pas dit, on le dit à sa place, en tête de
+// l'accueil. Le filet est posé ICI, à la sortie publique, et non à
+// l'enregistrement : il couvre donc aussi les agents publiés AVANT la
+// règle, sans republication ni migration de base.
+//
+// Deux détections séparées, et c'est volontaire : les sigles se cherchent
+// en MAJUSCULES (sinon le « ai » de « je vous ai attendu » ferait croire
+// que la mention est déjà là et le filet ne tomberait jamais), les formes
+// longues sans distinction de casse. Pur → testé.
+const AI_ACRONYM_RE = /\b(IA|AI|A\.I\.|KI)\b/;
+const AI_PHRASE_RE  = /(intelligence\s+artificielle|artificial\s+intelligence|inteligencia\s+artificial|k(ü|ue)nstliche\s+intelligenz)/i;
+const AI_DISCLOSURE = {
+  fr: 'Je suis un assistant IA.',
+  en: 'I am an AI assistant.',
+  es: 'Soy un asistente de IA.',
+  de: 'Ich bin ein KI-Assistent.',
+};
+export function withAiDisclosure(text, lang) {
+  const t = (typeof text === 'string') ? text.trim() : '';
+  // Accueil vide : le front public pose son accueil générique localisé,
+  // qui porte déjà la mention. Rien à faire ici.
+  if (!t) return '';
+  if (AI_ACRONYM_RE.test(t) || AI_PHRASE_RE.test(t)) return t;
+  return (AI_DISCLOSURE[normLang(lang)] || AI_DISCLOSURE.fr) + '\n' + t;
+}
+
 // Pur (testé) : config STRIPPÉE servie au visiteur anonyme. JAMAIS le tenant,
 // la mission interne, les collections ni le coffre — juste de quoi accueillir.
 // apiOrigin = origine du worker (pour bâtir l'URL absolue des images de cartes).
@@ -2724,16 +2753,22 @@ export function publicAgentMeta(agent, apiOrigin = '') {
   const cnt = (agent && agent.config && agent.config.contact) ? agent.config.contact : {};
   const cds = Array.isArray(agent && agent.config && agent.config.cards) ? agent.config.cards : [];
   const thm = (agent && agent.config && agent.config.theme && typeof agent.config.theme === 'object') ? agent.config.theme : {};
+  const nat = normLang(idn.lang);
+  // Chaque accueil traduit reçoit la mention DANS SA LANGUE, pas dans celle
+  // de l'agent : un visiteur allemand doit lire « KI », pas « IA ».
+  const i18n = sanitizeI18nMap(idn.opening_i18n, 300);
+  for (const lg of Object.keys(i18n)) i18n[lg] = withAiDisclosure(i18n[lg], lg);
   return {
     name:    (agent && typeof agent.name === 'string' && agent.name) ? agent.name : 'Assistant',
-    opening: (typeof idn.opening === 'string' && idn.opening.trim()) ? idn.opening.trim() : '',
+    // La mention « IA » est posée ici si le propriétaire l'a oubliée (loi août 2026).
+    opening: withAiDisclosure(idn.opening, nat),
     // SA-11.3 — accueil traduit (le front résout selon la langue du visiteur, repli natif).
-    opening_i18n: sanitizeI18nMap(idn.opening_i18n, 300),
+    opening_i18n: i18n,
     tone:    (typeof idn.tone === 'string') ? idn.tone : '',
     // SA-8.0 — le rôle (métier) est public par nature : affiché sous le nom.
     role:    (typeof idn.role === 'string' && idn.role.trim()) ? idn.role.trim() : '',
     // SA-11.0 — langue native de l'agent (le front public peut s'y caler par défaut).
-    lang:    normLang(idn.lang),
+    lang:    nat,
     // Lot 2 (page v2) — lien web + téléphone : boutons du header public (masqués si vides).
     // url_label : nom affiché dans la pill (la destination reste url).
     url:       (typeof cnt.website_url === 'string') ? cnt.website_url.trim() : '',
@@ -3146,7 +3181,7 @@ async function _generateOpening(env, { name, mission, posture, lang = 'fr' }, by
   try {
     const raw = await _agentLLM(env, {
       engine: byok?.engine, apiKey: byok?.apiKey,
-      system: `Tu rédiges le message d'accueil d'un agent conversationnel nommé « ${name || 'l\'agent'} », dont la mission est : ${mission || 'renseigner les visiteurs'}. ${hint} Écris 1 à 2 phrases EN ${langName.toUpperCase()} qui se TERMINENT par UNE question ouverte invitant la personne à exprimer son besoin. N'invente AUCUN fait précis (ni horaire, ni prix, ni service particulier). Réponds uniquement par le message, sans guillemets.`,
+      system: `Tu rédiges le message d'accueil d'un agent conversationnel nommé « ${name || 'l\'agent'} », dont la mission est : ${mission || 'renseigner les visiteurs'}. ${hint} Écris 1 à 2 phrases EN ${langName.toUpperCase()} qui se TERMINENT par UNE question ouverte invitant la personne à exprimer son besoin. Le message doit dire clairement, dès le début, que l'interlocuteur s'adresse à une intelligence artificielle (loi août 2026). N'invente AUCUN fait précis (ni horaire, ni prix, ni service particulier). Réponds uniquement par le message, sans guillemets.`,
       messages: [{ role: 'user', content: 'Rédige le message d\'accueil.' }],
       max_tokens: 160,
     });

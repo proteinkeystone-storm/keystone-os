@@ -38,15 +38,49 @@
   const jwt  = localStorage.getItem('ks_jwt') || localStorage.getItem('ks_admin_token');
   if (!jwt) { console.error('⛔ Connectez-vous au dashboard d\'abord (aucun jeton trouvé).'); return; }
 
+  // Incident du 06/08 : sur 38 suppressions d'affilée, UNE a rendu 500. Le
+  // navigateur ne montre même pas le 500 — une réponse d'erreur sans en-tête
+  // CORS est signalée comme « Access-Control-Allow-Origin », ce qui envoie
+  // chercher un problème d'origine qui n'existe pas. Résultat : la table rase
+  // s'est arrêtée à mi-chemin et la démo de la landing a servi un savoir à
+  // trous jusqu'à la relance.
+  //
+  // On réessaie donc les appels IDEMPOTENTS (GET, DELETE) : les rejouer ne
+  // peut rien abîmer. Les POST, eux, ne sont JAMAIS rejoués — une création
+  // dont seule la réponse s'est perdue ferait un doublon de fiche. Pour
+  // ceux-là, le filet reste la relance du script, qui reprend où il en est.
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const api = async (path, body, method) => {
-    const res = await fetch(API + path, {
-      method: method || (body ? 'POST' : 'GET'),
-      headers: { 'Authorization': 'Bearer ' + jwt, ...(body ? { 'Content-Type': 'application/json' } : {}) },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
-    return data;
+    const verb = method || (body ? 'POST' : 'GET');
+    const rejouable = (verb === 'GET' || verb === 'DELETE');
+    let dernier;
+    for (let essai = 1; essai <= (rejouable ? 3 : 1); essai++) {
+      try {
+        const res = await fetch(API + path, {
+          method: verb,
+          headers: { 'Authorization': 'Bearer ' + jwt, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) return data;
+        const e = new Error(data.error || ('HTTP ' + res.status));
+        // 4xx = refus argumenté du worker (« introuvable », droits…) : le
+        // rejouer donnera exactement la même réponse. On le marque définitif
+        // AVANT de le lancer — sinon le catch ci-dessous, qui ne voit qu'un
+        // message métier (« Fiche introuvable », sans code), le rejouerait
+        // trois fois pour rien et `wipe` mettrait une plombe à passer.
+        e.definitif = (res.status < 500);
+        throw e;
+      } catch (e) {
+        // Panne réseau OU 500 sans CORS : le navigateur rend « Load failed »
+        // sans qu'on puisse lire le corps. Indiscernables ici, et tous deux
+        // transitoires — donc traités pareil.
+        if (e.definitif || !rejouable) throw e;
+        dernier = e;
+      }
+      if (essai < 3) { console.warn(`   ↻ ${verb} ${path} — ${dernier.message}, nouvel essai (${essai}/2)`); await sleep(400 * essai); }
+    }
+    throw dernier;
   };
   // Envoi d'une image (multipart) → { key, url }. La carte elle-même est
   // ensuite enregistrée dans config.cards avec cette clé.
@@ -66,11 +100,11 @@
     role:    'conseiller Keystone OS',
     mission: 'Présenter Keystone OS et ses 14 applications aux professionnels (commerces, artisans, lieux culturels, services, presse, immobilier), répondre à leurs questions sans jamais rien inventer, et les amener à essayer — en commençant par les applications gratuites ou en choisissant celle qui leur sert.',
     tone:    'chaleureux, concret et confiant',
-    style:   'Tu parles comme un bon conseiller de terrain, pas comme une plaquette : phrases courtes, exemples concrets tirés des fiches, bénéfice avant la technique. Tu reformules le métier de ton interlocuteur (« Si je comprends bien, vous êtes… ») pour lui montrer les applications qui LE concernent — deux ou trois, jamais le catalogue entier. Tu termines volontiers par une invitation simple : essayer une application gratuite, ou regarder celle qui répond à son besoin.',
-    avoid:   'le jargon technique non expliqué, les promesses chiffrées absentes des fiches, dénigrer les concurrents, les pavés de texte, réciter les 14 applications d\'affilée',
+    style:   'Tu parles comme un bon conseiller de terrain, pas comme une plaquette : phrases courtes, exemples concrets tirés des fiches, bénéfice avant la technique. Tu reformules le métier de ton interlocuteur (« Si je comprends bien, vous êtes… ») pour lui montrer les applications qui LE concernent — deux ou trois, jamais le catalogue entier. Quand l\'interlocuteur dit « oui » ou « montre-moi », tu apportes du NOUVEAU : un exemple, une étape concrète, une autre application — jamais la même réponse reformulée. Tes invitations sont des actions que le visiteur peut faire tout seul, maintenant : essayer une application gratuite, regarder la page d\'une application, te poser une autre question.',
+    avoid:   'le jargon technique non expliqué, les promesses chiffrées absentes des fiches, dénigrer les concurrents, les pavés de texte, réciter les 14 applications d\'affilée, promettre une démonstration ou une suite que tu ne peux pas tenir (« je vous montre ensuite… »), redonner une réponse déjà donnée, présenter une application payante comme essayable gratuitement',
     objective: 'vendre',
     posture:   'proactif',
-    opening: 'Bonjour !\nJe suis le conseiller Keystone.\nTouchez une application, ou dites-moi votre métier.',
+    opening: 'Bonjour !\nJe suis le conseiller IA Keystone.\nTouchez une application, ou dites-moi quel est votre métier.',
   };
   const SCOPE = {
     fallback_text: 'Bonne question — je n\'ai pas ce détail sous la main, et je préfère vous le dire plutôt que d\'inventer. L\'équipe Keystone vous répondra précisément. En attendant, je peux vous montrer le reste ?',
@@ -195,7 +229,26 @@
       context: 'À sortir quand quelqu\'un s\'inquiète du plafond de conversations, ou quand il tient à choisir son moteur.' } },
   ];
 
+  const QUOTIDIEN = [
+    { type: 'procedure', title: 'Comment on démarre, concrètement', body: {
+      goal: 'Passer de « ça m\'intéresse » à « je travaille avec » — sans installation et sans engagement.',
+      steps: [
+        'Créez votre compte sur protein-keystone.com — deux minutes, sans carte bancaire.',
+        'Votre tableau de bord s\'ouvre : ajoutez une application gratuite depuis le K-Store (Missive, booK ou Keynapse) et servez-vous-en pour de vrai.',
+        'Quand une application payante vous fait envie, activez-la : elle est complète dès le premier jour, l\'intelligence artificielle est comprise.',
+        'Épinglez Keystone sur votre écran d\'accueil (mobile ou ordinateur) : il s\'ouvre ensuite comme une vraie application.',
+      ],
+    } },
+    { type: 'case', title: 'Keystone au quotidien : une semaine type', body: {
+      situation: 'Un professionnel veut savoir à quoi ressemble Keystone une fois intégré à sa routine — pas la liste des fonctions, la vraie vie.',
+      action: 'Le lundi, dix minutes : Brainstorming sort les idées de la semaine, Ghost Writer rédige, Social Manager programme les posts. Le reste de la semaine, Keystone travaille seul : le Smart Agent répond aux questions des clients, les QR en vitrine comptent leurs scans, les formulaires collectent les réponses. Chaque matin, un coup d\'œil au Living Layer en haut du tableau de bord : ce qui a été demandé, scanné, reçu — et ce qu\'il reste à faire.',
+      result: 'L\'outil s\'efface derrière la routine : quelques minutes par jour pour piloter, et les questions répétitives, la publication et le suivi ne reposent plus sur une seule personne.' } },
+  ];
+
   const CONFIANCE = [
+    { type: 'rule', title: 'Gratuit ne concerne QUE trois applications', body: {
+      rule: 'Seules Missive, booK et Keynapse sont gratuites. Toutes les autres applications (desK, Smart Agent, Social Manager, Sentinel, Ghost Writer, Brainstorming, Key Form, Key Brand, networK, Brief Prod, Smart Dynamic QR) sont payantes : ne jamais les présenter comme essayables « sans carte bancaire ». La bonne formulation pour une application payante : « complète dès le premier jour, à tel prix par mois » — et proposer les trois gratuites à qui veut d\'abord se faire la main sur Keystone.',
+      rationale: 'Annoncer un essai gratuit qui n\'existe pas détruit la confiance au moment exact où le prospect vérifie.' } },
     { type: 'rule', title: 'Vos données restent les vôtres', body: {
       rule: 'Le savoir saisi dans Keystone appartient à son propriétaire. Un agent publié ne révèle jamais son coffre de fiches, ni ses sources : le visiteur voit le nom de l\'agent, son métier et ses réponses, rien d\'autre. Les questions posées ne sont pas rattachées à l\'identité du visiteur et sont effacées après 90 jours.',
       rationale: 'La confiance est la condition de tout le reste — c\'est une règle de conception, pas une option commerciale.' } },
@@ -256,6 +309,9 @@
     { type: 'qa', title: 'Puis-je essayer avant de payer ?', body: {
       question: 'Est-ce qu\'on peut tester Keystone gratuitement ?',
       answer: 'Oui, et pas avec un essai de quinze jours : trois applications complètes sont gratuites pour toujours, sans carte bancaire — Missive, booK et Keynapse. Vous travaillez vraiment avec, et vous ajoutez une application payante seulement si elle vous sert.' } },
+    { type: 'qa', title: 'Essayer gratuitement une application payante ?', body: {
+      question: 'Puis-je essayer gratuitement desK, Smart Agent, Social Manager ou une autre application payante ?',
+      answer: 'Non — les applications payantes n\'ont pas de période d\'essai : elles sont complètes dès le premier jour, à 19, 49 ou 99 € par mois selon l\'application, intelligence artificielle comprise. Pour vous faire la main gratuitement sur Keystone, commencez par le trio gratuit — Missive, booK et Keynapse — puis activez l\'application payante quand elle vous sert vraiment.' } },
     { type: 'qa', title: 'Mes clients doivent-ils créer un compte ?', body: {
       question: 'Est-ce que mes clients doivent s\'inscrire pour utiliser ce que je publie ?',
       answer: 'Jamais. Un agent publié, un formulaire, un QR, une missive ou un livre booK s\'ouvrent d\'un simple lien, sans compte et sans installation. C\'est vous qui avez un compte, pas eux.' } },
@@ -276,7 +332,7 @@
       statement: a.pitch,
       context: `${a.ctx} Tarif : ${a.prix}${a.prix === 'gratuit' ? '' : ` (${a.conv} par mois incluses)`}. Comprise dans l'OS complet à 129 €/mois.`,
     } })),
-    ...PRIX, ...CONFIANCE, ...OBJECTIONS, ...CAS, ...QA,
+    ...PRIX, ...QUOTIDIEN, ...CONFIANCE, ...OBJECTIONS, ...CAS, ...QA,
   ];
 
   console.log(`Mise à jour de « ${NAME} » — ${FICHES.length} fiches, ${APPS.length} cartes-photos.`);
