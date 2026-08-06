@@ -12,6 +12,8 @@
      dessiner par-dessus leur croix de fermeture.
      ═══════════════════════════════════════════════════════════════ -->
 <link id="kora-css" rel="stylesheet" href="../app/kora.css">
+<link rel="stylesheet" href="../app/workspace.css">
+<link rel="stylesheet" href="../app/desk.css">
 <style>
   html,body{margin:0;height:100%;background:#0d0f14;color:#e8e9f5;
     font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;}
@@ -48,6 +50,21 @@
   <button class="act" data-o="sym">Ouvrir le panneau Symboles</button>
   <button class="act" data-o="insp">Ouvrir l'inspecteur desK</button>
   <button class="act" data-o="none">Tout fermer</button>
+  <button class="act" data-desk>Entrer dans desK (topbar d'outil)</button>
+  <button class="act" data-open>Ouvrir Kora</button>
+</div>
+<!-- L'OUTIL desK par-dessus le dashboard : sa topbar accueille le dock
+     (kora.js le déplace tout seul). C'est la topbar la plus chargée du
+     produit (sélecteur de publication en plus) — donc celle où le galet
+     ÉTENDU (180-190 px à l'ouverture) déborde le bord droit. -->
+<div class="ws-app dk-app" id="desk" hidden>
+  <header class="ws-topbar">
+    <div class="ws-topbar-brand"><button class="ws-topbar-back">‹</button></div>
+    <div class="ws-topbar-title"><span class="ws-topbar-app-picto"></span><span class="name">desK</span></div>
+    <div class="dk-pub-slot"><button class="dk-pub-btn"><span class="dk-pub-name">L'ÉPAULETTE</span><span class="dk-pub-issue">n° 234</span></button></div>
+    <button class="ws-topbar-burger">⋯</button>
+    <div class="ws-topbar-actions"><button class="ws-iconbtn">⚙</button></div>
+  </header>
 </div>
 <aside class="ksym-panel"><button class="ksym-x">✕</button><h3>Ω Symboles</h3></aside>
 <aside class="dk-insp"><button class="ksym-x">✕</button><h3>Fiche de page</h3></aside>
@@ -64,6 +81,9 @@
     sym.classList.toggle('on', b.dataset.o === 'sym');
     insp.classList.toggle('on', b.dataset.o === 'insp');
   }));
+  const desk = document.getElementById('desk');
+  document.querySelector('[data-desk]').addEventListener('click', () => { desk.hidden = !desk.hidden; });
+  document.querySelector('[data-open]').addEventListener('click', () => window.kora.open());
   window.__probe = () => {
     const cv = document.querySelector('.kora-canvas');
     const dock = document.querySelector('.kora-dock');
@@ -73,8 +93,11 @@
       'panneau ouvert : ' + (sym.classList.contains('on') ? 'Symboles'
                           : insp.classList.contains('on') ? 'inspecteur desK' : 'aucun'),
       'galet ' + Math.round(r.left) + '→' + Math.round(r.right) + ' (top ' + Math.round(r.top) + ')',
+      'galet hors écran à droite : ' + (r.right > innerWidth),
+      'hôte du galet : ' + (dock.parentElement.className || dock.parentElement.tagName),
       'élément au point du galet : ' + (hit ? hit.className || hit.tagName : 'null'),
       'canvas visibility : ' + (cv ? (cv.style.visibility || 'visible') : 'ABSENT'),
+      'fenêtre Kora ouverte : ' + document.querySelector('.kora-panel').classList.contains('kora-open'),
     ].join('\n');
     document.getElementById('probe').textContent = t;
     return t;

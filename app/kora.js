@@ -401,7 +401,16 @@ function _dockCovered(now) {
   const r = _dock.getBoundingClientRect();
   if (!r.width || !r.height) { _coverVal = true; return _coverVal; }
   const y = r.top + r.height / 2;
-  _coverVal = [r.left + 3, r.left + r.width / 2, r.right - 3].some(x => {
+  if (y < 0 || y >= innerHeight) { _coverVal = true; return _coverVal; }
+  /* ⚠ HORS ÉCRAN ≠ RECOUVERT (régression du 06/08, desK) : à l'ouverture le
+     galet s'étend (38 → 180 px) et, dans une topbar chargée, sa fin dépasse
+     le bord droit. `elementFromPoint` rend null hors viewport → on croyait à
+     un panneau et la fenêtre se refermait au clic. On ne sonde donc que les
+     points RÉELLEMENT à l'écran ; plus aucun point visible = galet parti. */
+  const xs = [r.left + 3, r.left + r.width / 2, r.right - 3]
+    .filter(x => x >= 0 && x < innerWidth);
+  if (!xs.length) { _coverVal = true; return _coverVal; }
+  _coverVal = xs.some(x => {
     const hit = document.elementFromPoint(x, y);
     /* hit === dock (ou un de ses enfants) → libre ; un ANCÊTRE (la barre
        qui l'héberge) ne le recouvre pas non plus. Tout le reste = panneau.
@@ -425,20 +434,25 @@ function _frame(now) {
   if (resting && _acc < 1/30) return;          // veille : 30 fps suffisent à respirer
   const step = _acc; _acc = 0;
 
-  /* Kora s'efface : économiseur (nos z-index OS passeraient au-dessus
-     du lock) ET K-Store (surface boutique, aucune action Kora là — le
-     galet y flottait orphelin, retour Stéphane 18/07).
-     ⚠ ces overlays vivent dans le DOM éteints : tester la classe
-     d'activation, jamais la présence (leçon lockfix). */
-  /* + panneau Réglages : il glisse par-dessus la cc-bar (z 601 < nos
-     100002) — sans ça le galet flotte sur sa croix de fermeture.
-     + inspecteur desK (.dk-insp, z 10005) : même géométrie — il recouvre
-     le header d'outil qui héberge le dock, sa croix tombe pile sous le
-     galet (retour Stéphane 26/07, panneaux Nouvel article & Pré-presse). */
-  const locked = !!document.querySelector('#ks-lockscreen.ls-visible, #ks-fullscreen.open, #settings-panel.open, .dk-insp.on')
-              || _dockCovered(now);
-  _cv.style.visibility = locked ? 'hidden' : 'visible';
-  if (locked && _panel.classList.contains('kora-open')) koraClose();
+  /* DEUX niveaux, à ne pas confondre (leçon du 06/08) :
+
+     1. SILENCE — Kora n'a rien à faire là : l'économiseur (nos z-index OS
+        passeraient au-dessus du lock) et le K-Store (surface boutique, où
+        le galet flottait orphelin, retour Stéphane 18/07). Là, on efface
+        ET on referme.
+        ⚠ ces overlays vivent dans le DOM éteints : tester la classe
+        d'activation, jamais la présence (leçon lockfix).
+
+     2. SIMPLE RECOUVREMENT — un panneau passe devant le galet (Réglages,
+        inspecteur desK, panneau Symboles Ω…). Là, on efface l'onde pour
+        libérer la croix de fermeture, et RIEN D'AUTRE. Refermer la fenêtre
+        était une fausse bonne idée : dans desK on travaille fiche ouverte,
+        donc Kora se refermait à la seconde où on la sollicitait (« on clique
+        et la fenêtre se referme de suite », 06/08). Effacer de trop se voit
+        et se rattrape ; fermer de trop détruit ce qui était en cours. */
+  const silence = !!document.querySelector('#ks-lockscreen.ls-visible, #ks-fullscreen.open');
+  _cv.style.visibility = (silence || _dockCovered(now)) ? 'hidden' : 'visible';
+  if (silence && _panel.classList.contains('kora-open')) koraClose();
 
   /* MÊME ergonomie partout (retour Stéphane 18/07) : quand un outil
      plein écran est ouvert, le dock est PHYSIQUEMENT déplacé dans son
