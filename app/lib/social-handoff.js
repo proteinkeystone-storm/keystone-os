@@ -44,6 +44,12 @@ export function normalizeComposePayload(payload, opts = {}) {
     if (t.length) out.targets = t;
   }
   out.append = payload.append === true;
+  // Origine IA du texte (Ghost Writer → composeur). Transportée seulement :
+  // à ce stade elle sert à AFFICHER, jamais à modifier ce qui est publié.
+  // Elle doit exister ici parce que cette fonction est une allowlist stricte —
+  // un champ non déclaré est silencieusement perdu, et l'information n'existe
+  // plus nulle part une fois le texte arrivé dans le composeur.
+  out.ai = payload.ai === true;
 
   return (out.text || out.imageUrl || out.targets) ? out : null;
 }

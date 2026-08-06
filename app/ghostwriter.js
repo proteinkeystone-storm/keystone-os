@@ -1018,7 +1018,11 @@ async function _sendToSocialManager(text, networkOverride) {
     const chain   = getChain();
     const network = networkOverride || chain?.network || null;
     if (chain) setChain({ step: 'publish' });   // avance l'étape, garde le réseau
-    const payload = network ? { text, targets: [network] } : { text };
+    // ai: true — ce texte sort de Ghost Writer, il est donc écrit par l'IA
+    // par construction. Le drapeau voyage jusqu'au composeur, qui l'affiche.
+    // Il ne change RIEN à ce qui est publié : étiqueter le post reste une
+    // décision humaine, prise dans Social Manager.
+    const payload = network ? { text, targets: [network], ai: true } : { text, ai: true };
     try {
         const m = await import('./social-manager.js');
         _closeModal();

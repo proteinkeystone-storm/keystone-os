@@ -23,6 +23,7 @@ import { burgerHTML, bindBurger }            from './lib/topbar-burger.js';
 import { icon }                              from './lib/ui-icons.js';
 import { CF_API }                            from './pads-loader.js';
 import { normalizeComposePayload }           from './lib/social-handoff.js';
+import { aiLabelSVG }                        from './lib/ai-label.js';
 import { renderChainRail, setChain, clearChain } from './lib/content-chain.js';
 
 const APP_ID    = 'O-SOC-001';
@@ -60,7 +61,7 @@ let _styles   = false;
 let _busy     = false;
 let _accounts = null;          // null = pas chargé, [] = chargé/vide
 let _caps     = null;          // null = pas chargé ; map platformId → capacités
-let _form     = { text: '', targets: [], images: [], video: null };   // images: [{url,name}] carrousel · video: {url,name,durationSec} — EXCLUSIF des images
+let _form     = { text: '', targets: [], images: [], video: null, ai: false };   // images: [{url,name}] carrousel · video: {url,name,durationSec} — EXCLUSIF des images · ai: texte venu de Ghost Writer
 let _connect  = null;          // état du wizard « Connecter un réseau social » (null = fermé)
 let _schedOpen = false;        // panneau de programmation déplié ?
 let _queue     = null;         // null = pas chargé ; [] = chargé ; file des posts (programmés + récents)
@@ -195,6 +196,10 @@ function _applyCompose(payload, { silent = false } = {}) {
   if (!d) return false;
   if (typeof d.text === 'string') {
     _form.text = (d.append && _form.text) ? `${_form.text}\n\n${d.text}` : d.text;
+    // Le drapeau suit le texte : un remplacement l'impose ou le lève, un ajout
+    // ne peut que le poser (le composeur contient alors DU texte d'IA, même
+    // si ce n'est pas tout).
+    _form.ai = d.append ? (_form.ai || d.ai) : !!d.ai;
   }
   if (d.imageUrl) { _form.images = [{ url: d.imageUrl, name: d.imageName || 'image' }]; }
   if (d.targets)  { _form.targets  = d.targets.slice(); }
@@ -212,12 +217,12 @@ function _applyCompose(payload, { silent = false } = {}) {
 // Brouillon (localStorage)
 // ══════════════════════════════════════════════════════════════
 function _saveDraft() {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ text: _form.text, targets: _form.targets })); } catch (_) {}
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ text: _form.text, targets: _form.targets, ai: _form.ai })); } catch (_) {}
 }
 function _loadDraft() {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
-    if (raw) { const d = JSON.parse(raw); _form.text = d.text || ''; _form.targets = Array.isArray(d.targets) ? d.targets : []; }
+    if (raw) { const d = JSON.parse(raw); _form.text = d.text || ''; _form.targets = Array.isArray(d.targets) ? d.targets : []; _form.ai = d.ai === true; }
   } catch (_) {}
 }
 
@@ -290,6 +295,13 @@ function _renderMain() {
             <textarea id="sm-text" class="sm-textarea" data-field="text" rows="7"
               placeholder="Rédigez votre publication…">${_esc(_form.text)}</textarea>
             <div class="sm-counter" data-slot="counter" aria-live="polite"></div>
+            <!-- Origine IA du texte. Étape 1 : on AFFICHE, on ne touche pas
+                 encore à ce qui est publié. -->
+            ${_form.ai ? `<p class="sm-ai-origin">
+              <span class="sm-ai-on-dark">${aiLabelSVG(15, 'dark')}</span>
+              <span class="sm-ai-on-light">${aiLabelSVG(15, 'light')}</span>
+              <span>Ce texte vient de Ghost Writer — il a été écrit par une IA.</span>
+            </p>` : ''}
           </div>
 
           <div class="sm-field">
@@ -859,7 +871,7 @@ function _setResult(html) {
 
 // Réinitialise le composer (CTA Reset topbar — pattern partagé des pads Keystone).
 function _reset() {
-  _form = { text: '', targets: [], images: [], video: null };
+  _form = { text: '', targets: [], images: [], video: null, ai: false };
   _schedOpen = false;
   try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
   // Re-pré-sélectionne les réseaux connectés, comme à l'ouverture.
@@ -1568,6 +1580,16 @@ function _injectStyles() {
   .sm-textarea { width:100%; resize:vertical; min-height:140px; background: var(--navy3); color: var(--text); border:1px solid var(--bd); border-radius: var(--r); padding:12px 14px; font:inherit; font-size:14px; line-height:1.5; }
   .sm-textarea:focus { outline:none; border-color: var(--gold); box-shadow:0 0 0 3px var(--gold3); }
   .sm-counter { margin-top:6px; font-size:12px; color: var(--tx3); text-align:right; min-height:16px; }
+  /* Origine IA du texte porté depuis Ghost Writer. Les DEUX variantes du
+     label officiel sont rendues et le CSS choisit : son disque est
+     translucide, la blanche s'évanouit sur fond clair et la noire sur fond
+     sombre (même mécanique que le pied de Ghost Writer). */
+  .sm-ai-origin { display:flex; align-items:center; gap:7px; margin:8px 0 0;
+    font-size:11.5px; line-height:1.4; color: var(--tx3); opacity:.72; }
+  .sm-ai-origin svg { display:block; flex-shrink:0; }
+  .sm-ai-origin .sm-ai-on-light { display:none; }
+  html.light-mode .sm-ai-origin .sm-ai-on-dark  { display:none; }
+  html.light-mode .sm-ai-origin .sm-ai-on-light { display:block; }
   .sm-counter-num.over { color: var(--danger); font-weight:800; }
   .sm-counter-net { color: var(--tx3); }
 
