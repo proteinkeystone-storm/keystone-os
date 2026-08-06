@@ -61,7 +61,7 @@ let _styles   = false;
 let _busy     = false;
 let _accounts = null;          // null = pas chargé, [] = chargé/vide
 let _caps     = null;          // null = pas chargé ; map platformId → capacités
-let _form     = { text: '', targets: [], images: [], video: null, ai: false };   // images: [{url,name}] carrousel · video: {url,name,durationSec} — EXCLUSIF des images · ai: texte venu de Ghost Writer
+let _form     = { text: '', targets: [], images: [], video: null, ai: false, aiNotice: true };   // images: [{url,name}] carrousel · video: {url,name,durationSec} — EXCLUSIF des images · ai: texte venu de Ghost Writer
 let _connect  = null;          // état du wizard « Connecter un réseau social » (null = fermé)
 let _schedOpen = false;        // panneau de programmation déplié ?
 let _queue     = null;         // null = pas chargé ; [] = chargé ; file des posts (programmés + récents)
@@ -200,6 +200,7 @@ function _applyCompose(payload, { silent = false } = {}) {
     // ne peut que le poser (le composeur contient alors DU texte d'IA, même
     // si ce n'est pas tout).
     _form.ai = d.append ? (_form.ai || d.ai) : !!d.ai;
+    if (_form.ai) _form.aiNotice = true;
   }
   if (d.imageUrl) { _form.images = [{ url: d.imageUrl, name: d.imageName || 'image' }]; }
   if (d.targets)  { _form.targets  = d.targets.slice(); }
@@ -217,12 +218,12 @@ function _applyCompose(payload, { silent = false } = {}) {
 // Brouillon (localStorage)
 // ══════════════════════════════════════════════════════════════
 function _saveDraft() {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ text: _form.text, targets: _form.targets, ai: _form.ai })); } catch (_) {}
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ text: _form.text, targets: _form.targets, ai: _form.ai, aiNotice: _form.aiNotice })); } catch (_) {}
 }
 function _loadDraft() {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
-    if (raw) { const d = JSON.parse(raw); _form.text = d.text || ''; _form.targets = Array.isArray(d.targets) ? d.targets : []; _form.ai = d.ai === true; }
+    if (raw) { const d = JSON.parse(raw); _form.text = d.text || ''; _form.targets = Array.isArray(d.targets) ? d.targets : []; _form.ai = d.ai === true; _form.aiNotice = d.aiNotice !== false; }
   } catch (_) {}
 }
 
@@ -297,11 +298,12 @@ function _renderMain() {
             <div class="sm-counter" data-slot="counter" aria-live="polite"></div>
             <!-- Origine IA du texte. Étape 1 : on AFFICHE, on ne touche pas
                  encore à ce qui est publié. -->
-            ${_form.ai ? `<p class="sm-ai-origin">
+            ${_form.ai ? `<label class="sm-ai-origin">
+              <input type="checkbox" data-field="ai-notice" ${_form.aiNotice ? 'checked' : ''}>
               <span class="sm-ai-on-dark">${aiLabelSVG(15, 'dark')}</span>
               <span class="sm-ai-on-light">${aiLabelSVG(15, 'light')}</span>
-              <span>Ce texte vient de Ghost Writer — il a été écrit par une IA.</span>
-            </p>` : ''}
+              <span>Ajouter « ${AI_NOTICE} » à la fin du post — ce texte a été écrit par une IA.</span>
+            </label>` : ''}
           </div>
 
           <div class="sm-field">
@@ -447,11 +449,29 @@ function _renderMedia() {
     (imgs.length > 1 ? `<div class="sm-media-hint">${imgs.length} images — publiées en carrousel sur les réseaux compatibles (jusqu'à ${SM_MAX_IMAGES}).</div>` : '');
 }
 
+// ── Mention IA : un seul point de vérité ───────────────────────
+// `_form.text` est ce que l'utilisateur ÉDITE ; `_effectiveText()` est ce qui
+// sera PUBLIÉ. Tout ce qui juge le post — compteur, garde-fous par réseau,
+// aperçu — et tout ce qui l'envoie doit lire cette fonction, jamais
+// `_form.text` : sinon un post calibré au caractère près passe le contrôle de
+// longueur, puis dépasse une fois la mention ajoutée, et il échoue à l'envoi
+// — au moment où plus personne ne regarde (cas du post programmé).
+//
+// Les seules lectures qui restent sur `_form.text` sont les renvois vers
+// Brainstorming et Ghost Writer : on leur repasse le texte à retravailler,
+// pas le post fini, sinon la mention finirait dans le brief.
+const AI_NOTICE = 'Généré par IA';
+function _effectiveText() {
+  const t = (_form.text || '').trim();
+  if (!_form.ai || !_form.aiNotice) return t;
+  return t ? `${t}\n\n${AI_NOTICE}` : AI_NOTICE;
+}
+
 // ── Aperçu live du post (identité réelle du compte) ────────────
 function _renderPreview() {
   const box = _root && _root.querySelector('[data-slot="preview"]');
   if (!box) return;
-  const txt      = _form.text.trim();
+  const txt      = _effectiveText();
   const identity = _previewIdentity();
   const initial  = (identity.trim()[0] || 'P').toUpperCase();
   const glyphs   = _form.targets.length
@@ -516,12 +536,12 @@ function _counterInfo() {
     if (max && (!best || max < best.limit)) best = { limit: max, label: c.label || _labelOf(p) };
   }
   if (!best) return null;
-  return { used: _form.text.trim().length, limit: best.limit, label: best.label };
+  return { used: _effectiveText().length, limit: best.limit, label: best.label };
 }
 
 // Calcule les problèmes par réseau À PARTIR DU REGISTRE (pas de règle en dur).
 function _validate() {
-  const text   = _form.text.trim();
+  const text   = _effectiveText();
   const hasImg = (_form.images?.length || 0) > 0;
   const hasVid = !!_form.video;
   const hasMedia = hasImg || hasVid;
@@ -824,7 +844,7 @@ async function _publish() {
   const v = _renderValidation();
   if (!v.canPublish) { _toast(v.reasons[0] || 'Vérifie les contraintes par réseau.', 'warn'); return; }
 
-  const text = _form.text.trim();
+  const text = _effectiveText();
   _busy = true;
   _setResult(`<div class="sm-result-pending">${icon('zap', 16)}&nbsp;Publication en cours…</div>`);
   const btn = _root.querySelector('[data-act="publish"]'); if (btn) btn.disabled = true;
@@ -871,7 +891,7 @@ function _setResult(html) {
 
 // Réinitialise le composer (CTA Reset topbar — pattern partagé des pads Keystone).
 function _reset() {
-  _form = { text: '', targets: [], images: [], video: null, ai: false };
+  _form = { text: '', targets: [], images: [], video: null, ai: false, aiNotice: true };
   _schedOpen = false;
   try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
   // Re-pré-sélectionne les réseaux connectés, comme à l'ouverture.
@@ -1017,7 +1037,7 @@ async function _doSchedule() {
 
   const body = {
     targets: _form.targets,
-    text: _form.text.trim(),
+    text: _effectiveText(),
     source: 'social-manager',
     scheduledAt: when.toISOString(),
     ..._mediaPayload(),
@@ -1351,6 +1371,15 @@ function _onInput(e) {
 
 function _onChange(e) {
   if (e.target.dataset.field === 'image' && e.target.files?.length) _uploadMedia(e.target.files);
+  // Décocher la mention change la LONGUEUR du post : compteur, garde-fous par
+  // réseau et aperçu doivent être recalculés dans la foulée, pas seulement à
+  // la prochaine frappe.
+  if (e.target.dataset.field === 'ai-notice') {
+    _form.aiNotice = e.target.checked;
+    _renderPreview();
+    _renderValidation();
+    _scheduleSave();
+  }
 }
 
 let _saveT = null;
@@ -1585,7 +1614,8 @@ function _injectStyles() {
      translucide, la blanche s'évanouit sur fond clair et la noire sur fond
      sombre (même mécanique que le pied de Ghost Writer). */
   .sm-ai-origin { display:flex; align-items:center; gap:7px; margin:8px 0 0;
-    font-size:11.5px; line-height:1.4; color: var(--tx3); opacity:.72; }
+    font-size:11.5px; line-height:1.4; color: var(--tx3); opacity:.72; cursor:pointer; }
+  .sm-ai-origin input { flex-shrink:0; margin:0; cursor:pointer; accent-color:#818cf8; }
   .sm-ai-origin svg { display:block; flex-shrink:0; }
   .sm-ai-origin .sm-ai-on-light { display:none; }
   html.light-mode .sm-ai-origin .sm-ai-on-dark  { display:none; }
