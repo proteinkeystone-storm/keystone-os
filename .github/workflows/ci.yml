@@ -16,6 +16,8 @@
 #   lui aussi ; seul `workers/node_modules/` est ignoré.)
 # ⚠ Les vars ci-dessous sont des secrets de TEST (pas les vrais), figés pour
 #   coller aux conventions des suites (JWT dk2-test-secret, admin dk4-admin).
+# ⚠ checkout/setup-node en v7 : les majors ≤ v4 tournent sur Node 20, déprécié
+#   et aujourd'hui forcé sur Node 24 par le runner — ne pas redescendre.
 # ═══════════════════════════════════════════════════════════════
 name: CI
 
@@ -38,8 +40,8 @@ jobs:
     name: node --check (tout le JS)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: node --check sur app / scripts / workers/src
@@ -60,8 +62,8 @@ jobs:
       run:
         working-directory: workers
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - run: npm ci
@@ -84,8 +86,8 @@ jobs:
       BK_JWT_SECRET: dk2-test-secret
       BK_ADMIN: dk4-admin
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - run: npm ci
