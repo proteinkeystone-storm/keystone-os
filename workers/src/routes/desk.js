@@ -1503,52 +1503,98 @@ export async function handleCasierDelete(request, env, fileId) {
   return json({ ok: true }, 200, origin);
 }
 
-/* Purge planifiée du casier (§6 — cron quotidien 3h) :
-   - pièces des numéros « imprimé » depuis > CASIER_GRACE_DAYS jours,
-     SAUF rétention prolongée : la pièce d'un article encore vivant ET
-     réservé quelque part (emplacement ou banc d'un numéro non imprimé)
-     survit tant que la réservation tient (§12, option recommandée) ;
-   - dépôts « pending » abandonnés depuis > 24 h.                        */
-export async function sweepDeskCasier(env) {
-  await _ensureSchema(env);
-  // Délai de grâce : un réglage illisible (typo, chaîne vide) retombe sur les
-  // 30 j de production, JAMAIS sur 0 — sinon la purge emporterait les pièces
-  // à la seconde où le numéro passe « imprimé ». « 0 » explicite reste 0.
-  const graceRaw = parseInt(env.DK_CASIER_GRACE_DAYS, 10);
-  const grace = Math.max(0, Number.isFinite(graceRaw) ? graceRaw : CASIER_GRACE_DAYS);
-  let purged = 0, retained = 0, stale = 0;
+/* ═══════ RÉTENTION — une pièce est-elle encore attendue ailleurs ? ═══
+   La pièce d'un article encore VIVANT et RÉSERVÉ quelque part (emplacement
+   ou banc d'un numéro non imprimé) ne se purge pas : elle sert au numéro
+   suivant (§12, option recommandée). Sortie ici pour être partagée par la
+   purge à la main et le compte qui l'annonce.                            */
+async function _pieceRetenue(env, artId) {
+  if (!artId) return false;
+  const alive = await env.DB.prepare(
+    `SELECT a.id FROM dk_articles a WHERE a.id = ? AND a.status NOT IN ('publie', 'abandonne')`).bind(artId).first();
+  if (!alive) return false;
+  const slots = (await env.DB.prepare(
+    `SELECT s.art_id, s.banc FROM dk_page_slots s
+     JOIN dk_pages p ON p.id = s.page_id
+     JOIN dk_issues i ON i.id = p.issue_id
+     WHERE i.status != 'imprime' AND s.pub_id = (SELECT pub_id FROM dk_articles WHERE id = ?)`).bind(artId).all()).results || [];
+  return slots.some(s => {
+    if (s.art_id === artId) return true;
+    try { const b = JSON.parse(s.banc || '[]'); return Array.isArray(b) && b.includes(artId); } catch (_) { return false; }
+  });
+}
 
-  // Filet legacy : un numéro imprimé sans horodatage démarre sa grâce ici.
-  await env.DB.prepare(`UPDATE dk_issues SET imprime_at = datetime('now') WHERE status = 'imprime' AND imprime_at IS NULL`).run();
+/* ═══════ POST /api/desk/issue/:id/casier/purge — VIDER À LA MAIN ═══════
+   Décidé le 2026-08-05 avec Stéphane, avant le bouclage de septembre.
+
+   Avant : le cron de 3 h emportait les pièces d'un numéro 30 jours après
+   son passage en « imprimé ». Personne ne l'avait demandé, personne n'en
+   était prévenu, et c'était irréversible — les objets R2 partent pour de
+   bon. Sur une revue dont le cycle chevauche le numéro suivant, un mois
+   après l'impression est encore tôt : un erratum, un retirage, une photo
+   à repiquer, et la pièce n'est plus là.
+
+   Désormais RIEN ne part tout seul. On vide quand on a décidé de vider.
+
+   Deux garde-fous :
+   · seul un numéro « imprimé » peut être vidé — on ne touche pas au casier
+     d'un numéro en cours de fabrication ;
+   · `{ simuler: true }` rend le compte SANS rien effacer, pour que la
+     confirmation puisse nommer ce qui va disparaître au lieu de demander
+     un blanc-seing.                                                       */
+export async function handleCasierPurge(request, env, issueId) {
+  const origin = getAllowedOrigin(env, request);
+  const pubId = await pubOf(env, 'dk_issues', issueId);
+  const u = await memberGate(request, env, origin, pubId);
+  if (u.error) return u.error;
+  const issue = await env.DB.prepare('SELECT id, num, status FROM dk_issues WHERE id = ?').bind(issueId).first();
+  if (!issue) return err('Numéro introuvable', 404, origin);
+  if (issue.status !== 'imprime') {
+    return err('Seul un numéro « imprimé » peut être vidé — celui-ci est encore en fabrication', 400, origin);
+  }
+  const body = await parseBody(request).catch(() => ({}));
+  const simuler = body && body.simuler === true;
 
   const rows = (await env.DB.prepare(
-    `SELECT f.id, f.r2_key, f.art_id FROM dk_files f
-     JOIN dk_issues i ON i.id = f.issue_id
-     WHERE i.status = 'imprime' AND i.imprime_at <= datetime('now', ?)`)
-    .bind(`-${grace} days`).all()).results || [];
+    `SELECT id, r2_key, art_id, name, size FROM dk_files WHERE issue_id = ? AND page_id != '' ORDER BY created_at`)
+    .bind(issueId).all()).results || [];
 
-  for (const f of rows) {
-    if (f.art_id) {
-      // Rétention prolongée : article vivant + réservé dans un numéro non imprimé ?
-      const alive = await env.DB.prepare(
-        `SELECT a.id FROM dk_articles a WHERE a.id = ? AND a.status NOT IN ('publie', 'abandonne')`).bind(f.art_id).first();
-      if (alive) {
-        const slots = (await env.DB.prepare(
-          `SELECT s.art_id, s.banc FROM dk_page_slots s
-           JOIN dk_pages p ON p.id = s.page_id
-           JOIN dk_issues i ON i.id = p.issue_id
-           WHERE i.status != 'imprime' AND s.pub_id = (SELECT pub_id FROM dk_articles WHERE id = ?)`).bind(f.art_id).all()).results || [];
-        const reserved = slots.some(s => {
-          if (s.art_id === f.art_id) return true;
-          try { const b = JSON.parse(s.banc || '[]'); return Array.isArray(b) && b.includes(f.art_id); } catch (_) { return false; }
-        });
-        if (reserved) { retained++; continue; }
-      }
-    }
+  const aPurger = [], retenues = [];
+  for (const f of rows) ((await _pieceRetenue(env, f.art_id)) ? retenues : aPurger).push(f);
+
+  const poids = aPurger.reduce((n, f) => n + (f.size || 0), 0);
+  if (simuler) {
+    return json({
+      ok: true, simulation: true, num: issue.num,
+      pieces: aPurger.length, poids,
+      noms: aPurger.slice(0, 40).map(f => f.name),
+      conservees: retenues.length,
+      noms_conservees: retenues.slice(0, 40).map(f => f.name),
+    }, 200, origin);
+  }
+
+  let purged = 0;
+  for (const f of aPurger) {
     if (env.DK_CASIER) await env.DK_CASIER.delete(f.r2_key).catch(() => {});
     await env.DB.prepare('DELETE FROM dk_files WHERE id = ?').bind(f.id).run();
     purged++;
   }
+  return json({ ok: true, num: issue.num, pieces: purged, poids, conservees: retenues.length }, 200, origin);
+}
+
+/* Balai planifié (cron quotidien 3 h) — ce qu'il reste à ramasser.
+
+   ⚠ IL NE PURGE PLUS LE CASIER DES NUMÉROS IMPRIMÉS (2026-08-05). Cette
+   partie-là est passée à la main (`handleCasierPurge`) : rien de ce qu'un
+   humain a déposé ne disparaît sans qu'un humain l'ait demandé. Ce qui
+   suit ne touche QUE des résidus techniques :
+   · les dépôts annoncés puis jamais aboutis (> 24 h) — des objets R2 sans
+     fichier réel derrière, jamais visibles dans une fiche ;
+   · les entrées du bac jamais triées (> 90 j), pièces comprises.
+   `CASIER_GRACE_DAYS` / `DK_CASIER_GRACE_DAYS` n'ont plus d'effet ici.    */
+export async function sweepDeskCasier(env) {
+  await _ensureSchema(env);
+  let purged = 0, retained = 0, stale = 0;
 
   // Dépôts annoncés jamais aboutis (> 24 h) — nettoyage silencieux.
   const pend = (await env.DB.prepare(

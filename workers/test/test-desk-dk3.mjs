@@ -167,14 +167,52 @@ async function main() {
   const iss2 = await call(A, '/publication/' + pubId + '/issue', { method: 'POST', body: { num: '145', pages: 8, jalons: {} } });
   const d2 = await call(A, '/issue/' + iss2.data.issue.id);
   await call(A, '/page/' + pageN(d2, 3).id + '/slot', { method: 'POST', body: { art_id: a7.id } });
-  await call(A, '/issue/' + issueId, { method: 'PATCH', body: { status: 'imprime' } });   // grâce = 0 (var de test)
+  /* ── DK-10 (2026-08-05) · LA PURGE EST PASSÉE À LA MAIN ──────────
+     Le cron emportait les pièces 30 jours après l'impression, sans que
+     personne l'ait demandé et sans prévenir — irréversible, les objets R2
+     partent pour de bon. Sur une revue dont le cycle chevauche le numéro
+     suivant, un mois après l'impression est encore tôt : un erratum, un
+     retirage, une photo à repiquer, et la pièce n'est plus là.
+     Décision de Stéphane : plus RIEN ne part tout seul.                  */
+  // Le numéro doit être imprimé pour qu'on puisse le vider.
+  let pg = await call(A, '/issue/' + issueId + '/casier/purge', { method: 'POST', body: { simuler: true } });
+  ok(pg.status === 400, 'un numéro en fabrication ne peut PAS être vidé', pg.data);
+
+  await call(A, '/issue/' + issueId, { method: 'PATCH', body: { status: 'imprime' } });
+
+  // Le cron passe : il ne doit RIEN emporter du casier (c'était son travail avant).
   const sched = await fetch(API + '/__scheduled?cron=0+3+*+*+*');
   ok(sched.status === 200, 'déclenchement du cron de maintenance (wrangler --test-scheduled)');
   await new Promise(res => setTimeout(res, 1200));
   d = await call(A, '/issue/' + issueId);
-  const ids = d.data.files.map(f => f.id);
-  ok(!ids.includes(fA.id), 'purge : pièce sans article supprimée après impression', ids);
+  let ids = d.data.files.map(f => f.id);
+  ok(ids.includes(fA.id) && ids.includes(fB.id),
+    'le cron NE PURGE PLUS le casier d\'un numéro imprimé — rien ne part tout seul', ids);
+
+  // La simulation annonce ce qui partirait, sans rien toucher.
+  pg = await call(A, '/issue/' + issueId + '/casier/purge', { method: 'POST', body: { simuler: true } });
+  ok(pg.status === 200 && pg.data.simulation === true, 'simulation acceptée sur un numéro imprimé', pg.data);
+  ok(pg.data.pieces === 1 && pg.data.noms.includes('purgeable.pdf'),
+    'elle NOMME la pièce qui partirait', pg.data);
+  ok(pg.data.conservees === 1 && pg.data.noms_conservees.includes('retenue.jpg'),
+    'et celle qui reste — l\'article est réservé au numéro suivant', pg.data);
+  ok(pg.data.poids > 0, 'elle annonce aussi le poids libéré', pg.data.poids);
+  d = await call(A, '/issue/' + issueId);
+  ok(d.data.files.length === ids.length, 'la simulation n\'a EFFACÉ rien du tout', d.data.files.length);
+
+  // Un intrus ne vide pas le casier d'autrui.
+  const intrus = await call(C, '/issue/' + issueId + '/casier/purge', { method: 'POST', body: {} });
+  ok(intrus.status === 403, 'un non-membre ne peut pas vider le casier', intrus.status);
+
+  // Et pour de vrai.
+  pg = await call(A, '/issue/' + issueId + '/casier/purge', { method: 'POST', body: {} });
+  ok(pg.status === 200 && pg.data.pieces === 1, 'purge à la main : une pièce effacée', pg.data);
+  d = await call(A, '/issue/' + issueId);
+  ids = d.data.files.map(f => f.id);
+  ok(!ids.includes(fA.id), 'la pièce sans article a bien disparu', ids);
   ok(ids.includes(fB.id), 'rétention : pièce d\'un article réservé au n° suivant conservée', ids);
+  pg = await call(A, '/issue/' + issueId + '/casier/purge', { method: 'POST', body: { simuler: true } });
+  ok(pg.data.pieces === 0, 'vider deux fois ne casse rien : il ne reste plus rien à prendre', pg.data);
 
   console.log(`\n${pass} ✓ · ${fail} ✗`);
   process.exit(fail ? 1 : 0);

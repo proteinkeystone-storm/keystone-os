@@ -37,9 +37,9 @@ Autrement dit : le produit est sain, les conditions de fabrication ne le sont pa
 | `main` | `0fc847f` (DK-10) |
 | Front en prod | `ks-os-v5.28.487-desk-dk10`, `app/desk.css?v=20` (vérifié : trois sondes espacées) |
 | Worker en prod | version `14d9271a` (déployée depuis `0fc847f`) — colonnes `dk_inbox.auth`/`auth_detail` confirmées en D1 prod |
-| Bancs desK | **9/9 verts** (DK-2 48, DK-3 30, DK-4 33, DK-4b 22, DK-4c 54, DK-5 19, casier 20, signal 6, **DK-8 37**) |
-| `npm test` | **zéro échec** — 76 vérifications de front (DK-7 52 + DK-8 11 + DK-9 9 + DK-10 4) et 27 sur le parseur Ghost Writer (14 avant DK-9) |
-| Front desK | `app/desk.js` **3 228 lignes**, `app/desk.css` 865 — ~~zéro test~~ → **banc `test-desk-ui.mjs`, 76 vérifications** (DK-7 + DK-8 + DK-9 + DK-10) |
+| Bancs desK | **9/9 verts** (DK-2 48, DK-3 40, DK-4 33, DK-4b 22, DK-4c 54, DK-5 19, casier 20, signal 6, **DK-8 37**) |
+| `npm test` | **zéro échec** — 85 vérifications de front (DK-7 52 + DK-8 11 + DK-9 9 + DK-10 13) et 27 sur le parseur Ghost Writer (14 avant DK-9) |
+| Front desK | `app/desk.js` **3 228 lignes**, `app/desk.css` 865 — ~~zéro test~~ → **banc `test-desk-ui.mjs`, 85 vérifications** (DK-7 + DK-8 + DK-9 + DK-10) |
 | Membres du pad | **1** (Stéphane). La rédactrice en chef aura accès quand elle aura sa licence — après le bouclage de septembre. |
 
 > Deux échecs de bancs traînaient depuis des semaines. Aucun n'était un bug —
@@ -309,6 +309,32 @@ Vu attraper : `.filter(Boolean)` remis → l'assertion des paragraphes vire au r
 
 ### DK-10 · Boucler un vrai numéro — **le bouclage de septembre 2026**
 
+> **Fait le 2026-08-05, avant le bouclage — la purge ne part plus toute seule.**
+> Le cron de 3 h emportait les pièces d'un numéro **30 jours** après son passage
+> en « imprimé » : personne ne l'avait demandé, personne n'était prévenu, et les
+> objets R2 sont détruits pour de bon. Sur une revue dont le cycle chevauche le
+> numéro suivant, un mois après l'impression est encore tôt — un erratum, un
+> retirage, une photo à repiquer, et la pièce n'est plus là.
+>
+> Désormais **rien ne part sans un clic**, et le clic est éclairé : `POST
+> /api/desk/issue/:id/casier/purge` avec `{ simuler: true }` rend le compte SANS
+> rien toucher, le front l'affiche en toutes lettres — noms des fichiers, poids,
+> et ce qui est **conservé** (une pièce dont l'article est déjà réservé pour un
+> numéro à venir ne part jamais) — et n'efface qu'au second clic. Un « êtes-vous
+> sûr ? » sans contenu ne protège de rien.
+>
+> Deux garde-fous : seul un numéro **imprimé** peut être vidé, et seules les
+> pièces **posées sur une page** de ce numéro sont concernées — celles qui
+> dorment « au marbre » appartiennent à un article qui attend encore.
+> Le balai automatique ne ramasse plus que des résidus techniques : les dépôts
+> annoncés jamais aboutis (> 24 h) et les entrées du bac jamais triées (> 90 j).
+>
+> Bancs : `test-desk-dk3.mjs` **30 → 40** (le cron ne purge plus, la simulation
+> n'efface rien, un non-membre est refusé, vider deux fois ne casse rien) ;
+> `test-desk-ui.mjs` **76 → 85** avec un parcours 8 qui vérifie que l'annonce
+> nomme le fichier et que rien ne bouge avant le second clic. Vu attraper : la
+> simulation transformée en vraie purge, l'assertion vire au rouge.
+
 **Ferme :** aucun numéro entier n'est encore passé dans desK. Le chemin complet —
 de la première contribution au passage en « imprimé » — n'a jamais été parcouru
 autrement que par bancs.
@@ -341,7 +367,7 @@ C'est là qu'il faut regarder pendant le bouclage — le reste est rodé depuis 
 | Étape | État |
 |---|---|
 | **Le rituel d'impression** (`status → 'imprime'`) | jamais joué en vrai. Il marque les titulaires « publié » avec leur page, **reverse les bancs au marbre** avec la mention du report, vide les bancs du numéro, et pose `imprime_at`. Irréversible : il ne se rejoue pas. |
-| **La purge du casier** | démarre à `imprime_at` + **30 jours** en production (0 seulement sur les bancs). Donc rien ne disparaît le jour même — mais les pièces du numéro s'effaceront début octobre. Vérifier avant que rien d'utile n'y dorme. |
+| **Vider le casier** | **passé à la main le 2026-08-05** — plus rien ne part tout seul. Réglages d'un numéro imprimé → « Voir ce qui partirait » : desK nomme les fichiers, chiffre le poids, dit ce qu'il conserve, et n'efface qu'au second clic. Le cron ne touche plus au casier. |
 | **La numérotation d'affichage (folio)** | l'option « couverture hors numérotation, départ à 0 » n'a **jamais été cochée sur la vraie publication**. À faire AVANT de composer, sinon tous les folios affichés seront décalés d'une page. Réglages → Numérotation (propriétaire seul). |
 | **La pré-impression (DK-6)** | confrontation du PDF final au chemin de fer, jamais faite sur un vrai export InDesign. C'est le contrôle qui dira si le nombre de pages et la place des articles concordent. |
 | **Les relances par e-mail** | le brouillon et l'envoi Scaleway n'ont jamais servi sur de vrais contributeurs en retard. |
@@ -365,7 +391,9 @@ qu'elle ne s'est pas connectée.
   limites connues et assumées. Pas avant que la rédactrice ait dit si ça la gêne.
 - **Chercher un bug dans la purge du casier.** Élucidé le 2026-08-05 : c'était un
   **faux échec**, il manquait `DK_CASIER_GRACE_DAYS = "0"` dans
-  `workers/wrangler.dktest.toml`. La variable y est maintenant, DK-3 passe 30/30.
+  `workers/wrangler.dktest.toml`. ⚠ **Cette variable n'a plus d'effet** depuis que
+  la purge est passée à la main (même jour) : le cron ne touche plus au casier.
+  DK-3 passe 40/40 et vérifie désormais que le cron n'emporte **rien**.
 
 ---
 

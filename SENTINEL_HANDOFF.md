@@ -1,5 +1,157 @@
 # 🛰️ SENTINEL — Ordres de reprise (nouvelle conversation)
 
+> ## ✅ S17.2 « GARDE-FOU D'ÉCART » LIVRÉ (2026-08-04) — `engine:S17.2`, SW `v5.28.469`, **85 tests**.
+> **Né d'un exercice de détracteur demandé par Stéphane** : « prouve que ce qui a été fait ne fonctionne
+> pas ». Trois attaques ont porté sur S17.0, reproduites avec le code en prod :
+> 1. **Le lissage étouffait une dégradation réelle** — un site passant de 3,0 s à 6,2 s voyait sa note de
+>    vitesse **monter de 55 à 82**, et « Chargement lent » rétrogradé en « à améliorer ».
+> 2. **Le lissage punissait le client qui applique le correctif** — de 5,0 s à 1,9 s : perf 55 maintenue,
+>    « Chargement lent » toujours affiché. **L'incident fondateur du 04/08 refabriqué par nous**, cette
+>    fois sur la vitesse. La boucle Détecte → Prescris → Applique → **Vérifie** ne vérifiait plus.
+> 3. **Deux étiquettes contradictoires au repli S12.3** — prouvé sur l'objet réellement en base : il
+>    contient `smooth`, que `_lastCwv` relisait tel quel. « mesure du jour seule : 3,4 s » ET « mesure du
+>    jour indisponible » se seraient affichés ensemble.
+> **`CWV_JUMP = 40 %`** : le lissage reste le DÉFAUT ; au-delà de 40 % d'écart entre la mesure du jour et
+> la médiane, c'est la mesure du jour qui compte et le rapport le dit. Écart jugé sur le **LCP seul**
+> (45 % de l'axe, chiffre du KPI ; le CLS écarté — 0,02 → 0,05 fait +150 % sans rien vouloir dire).
+> `_lastCwv` reprend désormais la mesure BRUTE du jour concerné.
+> **Calibrage sur données réelles** : les 7 transitions des trois sites surveillés (lues en D1) donnent un
+> bruit maximal de **26,8 %** → le garde-fou n'aurait déclenché **aucune** de ces sept fois. Un test rejoue
+> ces 7 transitions et exige qu'aucune ne le déclenche. ⚠ 7 points, c'est peu : **à revoir dans deux
+> semaines** quand les deux sites tiers auront une trentaine de relevés.
+> **Trois attaques qui n'ont PAS porté** (notées pour ne pas les refaire) : faux positifs d'adresse sur le
+> texte aplati (rien sur 22 sites réels — presse, Sénat, Légifrance, INSEE, Wikipédia) ; l'ordre du renvoi
+> « le bloc donné plus haut » (correct par construction : tri stable par sévérité + keeper le plus
+> prioritaire) ; le mélange de conditions de mesure dans le lissage (trou réel dans le code — aucun filtre
+> sur `conditions` — mais 14/14 audits en base sont en `mobile-4g-cpu4x`, jamais survenu).
+>
+> ## ✅ S17.1 — vérifié sur le 3ᵉ export + virgule décimale (2026-08-04) — `engine:S17.1`, SW `v5.28.468`.
+> **Tout S17 est confirmé dans les PDF réels** : pied de page « Vitesse lissée : médiane des 3 derniers
+> audits (mesure du jour seule : 3,4 s) » sur les deux rapports ; « cache de Squarespace (42 h) : c'est
+> son fonctionnement normal » ; en-tête « districtcafe.ca · **Squarespace** · » (libellé enfin présent) ;
+> et la contradiction S16.4 a disparu (« Affichez d'abord vos horaires » + « rien à coller ici »).
+> **Chiffres, lecture honnête** — WordPress 67 → 63 → **66** (LCP 3,3 / 3,8 / **3,4** lissé) ;
+> Squarespace 81 → 75 → **79** (LCP 3,2 / 4,0 / **3,5** lissé). Le 3ᵉ audit est le PREMIER lissé (les
+> deux premiers étaient bruts) : la valeur lissée tombe entre les deux extrêmes bruts, ce que fait une
+> médiane. **La preuve de stabilité viendra des audits 4 et 5**, tous deux lissés sur fenêtre glissante.
+> **S17.1** : le 3ᵉ export rendait le mélange visible sur UNE page — carte KPI « 3.4 s », résumé en clair
+> « 3,4 s », ligne S17 « 3,4 s ». `_fr1()` côté worker (titres LCP/poids) + virgule sur les deux cartes
+> KPI. Les coordonnées SVG gardent le point.
+>
+> ## ✅ S17 « VITESSE LISSÉE » LIVRÉ (2026-08-04) — `engine:S17.0`, SW `v5.28.467`, **80 tests**, commit `1e40203`.
+> **Premier sprint déclenché par le dogfooding EN CONDITIONS RÉELLES** (les deux sites tiers surveillés).
+> - **Le score bougeait tout seul.** À périmètre égal, sites INCHANGÉS, 25 min d'écart :
+>   `tourisme-lacadieredazur.fr` **67 → 63** (vitesse 77 → 61, LCP 3,3 → 3,8 s) ;
+>   `districtcafe.ca` **81 → 75** (vitesse 65 → 40, LCP 3,2 → 4,0 s). Tous les autres axes identiques au
+>   point près. Deux causes cumulées : la médiane de 3 chargements (S11.2) réduit la variance sans
+>   l'effacer, et le **seuil « mauvais » est à 4,0 s** — pile là où ces sites se situent (3,9 s vaut encore
+>   des points, 4,0 s en vaut zéro). Le produit affiche pourtant sa règle : à périmètre égal, stable.
+> - **`smoothCwv`** (lib, pur) = médiane des **3 derniers relevés**, fenêtre 30 j. Trois garde-fous :
+>   on repart toujours des mesures **BRUTES** (`rawCwv`) — une médiane de médianes dérive et fige le
+>   score ; une mesure **reprise** (S12.3) n'est jamais lissée (une étiquette à la fois) ; une métrique
+>   absente est ignorée, jamais comptée zéro. La mesure du jour est conservée (`smooth.raw`) **et
+>   affichée** à côté du chiffre lissé — sinon le LCP du rapport ne correspondrait à aucune mesure.
+>   Câblé sur les DEUX chemins (express + crawl complet).
+> - **Ligne cache selon la plateforme** : sur managé (Wix/Squarespace/Shopify) un cache de plusieurs
+>   heures est le fonctionnement NORMAL du CDN → seuil **6 h** et ton neutre ; ailleurs, inchangé (5 min).
+>   Durées en heures au-delà de 90 min (« 39 h » plutôt que « 2372 min »).
+> - **Au passage** : `PLATFORM_LABEL` ignorait squarespace/shopify — reconnus par le moteur depuis S13.4
+>   mais sans libellé, d'où un en-tête de PDF **sans plateforme** sur districtcafe.ca (repli `|| ''`).
+> **Non-régression vérifiée** : 80 tests ; balayage moteur sur les 12 sites réels → scores et findings
+> identiques ; les 6 cas des lignes de transparence rejoués hors navigateur sur le VRAI code front ;
+> dry-run worker ; santé S17.0 tous colos + smart-agent/keynapse verts ; SW propagé en prod.
+> ⚠ **Un attendu de test S17 était faux (40 au lieu de 53)** : le moteur avait raison, valeur recalculée
+> à la main puis corrigée — jamais l'inverse, comme le veut la règle d'en-tête du harnais.
+>
+> ## ✅ S16.4 « FINITIONS DU RAPPORT » LIVRÉ (2026-08-04) — `engine:S16.4`, **75 tests**, commit `1f40221`.
+> 2ᵉ export des deux PDF, relu page à page. **Les 4 correctifs S16.3 sont confirmés** : `@id` présent dans
+> le snippet, bloc LocalBusiness imprimé UNE fois (WordPress 5 → **4 pages**), plus de guillemets vides,
+> étape Business Information sur le Squarespace. Deux choses restaient :
+> - ⚠ **régression que j'avais introduite** : retirer le bloc ne suffisait pas, les étapes qui servaient à
+>   le coller restaient. « 3. Collez le code ci-dessous » suivi de « 4. Le bloc plus haut couvre aussi ce
+>   point » — contradictoire, et un « ci-dessous » qui ne désigne rien. `dedupeFixCode` ne garde plus que
+>   les étapes qui valent SANS code.
+> - **le titre promettait autre chose que le correctif** : « Téléphone non détecté — affichez un numéro
+>   cliquable (lien tel:) » ne livrait qu'un JSON-LD. Le geste VISIBLE passe en 1ʳᵉ étape pour
+>   `nap_phone`/`nap_address`/`nap_hours` ; le balisage reste le complément structuré.
+> **Leçon** : un correctif qui retire du contenu doit retirer AUSSI ce qui n'existait que pour lui.
+>
+> ## ✅ S16.3 « LE PREMIER VRAI RAPPORT » LIVRÉ (2026-08-04) — `engine:S16.3`, **74 tests**, commit `7a9b75c`.
+> Stéphane a mis les deux sites sous surveillance et exporté les PDF : WordPress
+> `tourisme-lacadieredazur.fr` **67/100, 11 actions, 5 pages sur 12** ; Squarespace `districtcafe.ca`
+> **81/100, 5 actions, 5 pages sur 13**. Lus page à page — **4 défauts, dont un sérieux**.
+> - ⚠ **Le correctif FABRIQUAIT le défaut que C24 signale.** La fiche LocalBusiness proposée pour
+>   `jsonld`/`nap_*` n'avait **pas d'`@id`**. Or les deux sites ont déjà une `Organization` : coller ce bloc
+>   y ajoute une fiche non reliée → `jsonld_entity_split` au prochain audit. L'outil prescrivait la maladie
+>   qu'il venait d'apprendre à diagnostiquer. Le snippet porte désormais l'`@id` que C24 réclame.
+> - **Le même bloc de 15 lignes imprimé 3×** dans le rapport WordPress (`jsonld`, `nap_localbiz`,
+>   `nap_hours` partagent la fiche), une 4ᵉ fois sur le Squarespace pour `nap_phone`. PDF gonflé de 3 à 5
+>   pages, lu comme du remplissage. `dedupeFixCode` (lib, pur) garde le bloc sur le finding le plus
+>   prioritaire du groupe et fait renvoyer les autres vers lui. Les 4 rendus (cockpit, PDF, e-mail HTML,
+>   e-mail texte) testent déjà `fix.code` → **aucun changement front, aucun bump SW**.
+> - **« votre établissement » entre guillemets** quand aucune fiche ne déclare de nom (districtcafe.ca :
+>   rapprochement par téléphone) — lu comme un texte à trous resté vide.
+> - **« Si votre site tourne sous WordPress… » servi à un site Squarespace.** Les étapes C24 suivent
+>   maintenant la plateforme détectée (Squarespace → Réglages › Business Information).
+> **Confirmé au passage** : la détection S16.2 est juste en prod (WordPress → conseils Yoast/WPCode,
+> sécurité 40 ; Squarespace → managé, sécurité 100), et la ligne cache S15.2 s'affiche bien
+> (« jusqu'à 2347 min » = 39 h sur Squarespace) — **elle sera permanente sur cette plateforme, à trancher**.
+>
+> ## ✅ S16.0/16.1/16.2 « CE QUE L'USAGE RÉEL TROUVE » LIVRÉ (2026-08-04) — `engine:S16.2`, **70 tests**, smokes prod verts.
+> **Worker uniquement** (aucun changement front → pas de bump SW). Commits `d6725c2`, `d55c46b`, `6756749`.
+> **Origine : le dogfooding fait AVANT le sprint**, comme prévu au chantier (c). Deux constats d'entrée :
+> il n'y avait que **3 sites surveillés, pas 5** (PKS custom, L'Épaulette wix, le Mas wix) et **aucun
+> WordPress ni Squarespace** — le dogfooding tel qu'écrit ne pouvait pas couvrir ces plateformes. Faute de
+> sites sous surveillance, le moteur PUR a été passé **hors prod sur 12 sites réels** (8 WordPress français :
+> offices de tourisme, mairies, une agence web au Beausset ; 8 Squarespace anglophones). Harnais local,
+> zéro auth, zéro coût. **Bilan : 6 bugs, tous invisibles au harnais de 50 tests.**
+>
+> - **S16.0 · NAP lu sur le TEXTE, pas sur le balisage.** Les heuristiques de secours lisaient `vis` — HTML
+>   sans scripts mais AVEC ses attributs. Un attribut n'est pas du texte. **Deux faux négatifs** : téléphone
+>   français au format national (« 04 94 98 25 25 », « 07.70.16.39.89 ») jamais vu → −30 pts ; adresse
+>   « 11 place Charles de Gaulle 83740 La Cadière d'Azur » jamais vue (« place » hors liste, et le motif
+>   exigeait voie ET code postal dans le MÊME nœud de texte). **Deux faux positifs** : « 0033 85.3467 »
+>   (coordonnée d'un tracé SVG) comptée comme un téléphone ; « chemin-crea-282-29-960w.jpg » (nom de
+>   fichier) compté comme une voie. Sur `mirobolus.fr`, vraie TPE au NAP complet affiché : **présence 0/100**.
+>   Correctif : texte aplati et décodé ; format national réintroduit (impossible avant — c'est lui qui
+>   matchait le SVG) ; homographes `place/square/cours/voie/passage` acceptés seulement précédés d'un numéro
+>   de voie ; code postal exigé SUIVI d'une commune capitalisée ; motif international resserré à 8-10
+>   chiffres d'abonné, aucun groupe > 3.
+> - **S16.1 · C24 fusion d'entités — la promesse enfin tenue.** `entitySplit()` : deux nœuds de la famille
+>   LocalBusiness/Organization décrivant la même entité (même nom normalisé, ou même téléphone une fois la
+>   mise en forme retirée, ou même rue) **sans @id commun** et sans que l'un cite celui de l'autre →
+>   `jsonld_entity_split`. **Informatif, hors barème** comme tous les contrôles S10+ (zéro re-calibration
+>   client). Correctif clé en main avec le **chemin Wix réel** (vérifié dans la doc Wix) : Réglages SEO ›
+>   Page d'accueil › Personnaliser les valeurs par défaut › Aperçu du préréglage › **« Convertir en balisage
+>   personnalisé »** — c'est CE geste qui rend le JSON-LD Wix éditable, donc l'@id posable. Variante offerte :
+>   exclure le balisage Local Business (LodgingBusiness est plus spécifique pour un hébergement).
+>   **Passe adverse : 1 seule détection sur 12 sites réels — le Mas, le cas fondateur. Zéro faux positif.**
+> - **S16.2 · la plateforme se déduit d'une signature, pas d'un hasard.** ⚠ Trouvé PENDANT la passe adverse
+>   de C24 : `districtcafe.ca` (Squarespace) ressortait tantôt « squarespace », tantôt « wix ». `_probe`
+>   cherchait « wix » dans la valeur de TOUS les en-têtes ; Squarespace renvoie `x-contextid` et un cookie
+>   `crumb`, **jetons base64 tirés au hasard à chaque requête** — une fois sur ~500 le tirage contient w-i-x.
+>   Et la plateforme n'était déduite qu'**une fois, à la création du site** : l'erreur restait figée à vie.
+>   Coût réel : « wix » est MANAGÉE (S9/C8) → CSP/XFO/Referrer-Policy « non applicables » → **un site
+>   sur-mesure passait de 40 à 100 en sécurité sans rien corriger** (le chiffre indéfendable que S9 voulait
+>   bannir), plus des instructions d'éditeur Wix à un client qui n'est pas sous Wix. Correctif :
+>   `detectPlatform(html, headers)` dans la lib, sur signatures relevées à la main (Wix `server: Pepyaka` +
+>   NOM d'en-tête `x-wix-*` + wixstatic/parastorage + generator ; Squarespace `server: Squarespace` +
+>   static1/assets ; WordPress `/wp-content/` ; Shopify `cdn.shopify.com` + NOM `x-shopify-*`). **Un NOM
+>   d'en-tête ne peut pas être un jeton aléatoire** — c'est là que se joue la correction.
+>   **AUTO-RÉPARATION** : chaque audit re-déduit la plateforme du document déjà téléchargé (zéro requête en
+>   plus) et corrige la valeur stockée — uniquement sur signature TROUVÉE, jamais sur son absence (asymétrie
+>   S8). Les sites déjà mal étiquetés se réparent au prochain audit. Passe adverse : 4 requêtes × 11 sites
+>   réels → 11/11 stables.
+>
+> **LEÇON, à graver** : le harnais de 50 tests n'a rien vu ; l'usage réel a sorti 6 bugs en une session.
+> Le bilan du 03-04/08 (4 bugs par l'usage, 0 par le harnais) se répète à l'identique. **Le dogfooding
+> n'est pas une formalité de fin de sprint : c'est la source principale de défauts.**
+>
+> **⚠ RESTE (action Stéphane)** : mettre sous surveillance **1 WordPress + 1 Squarespace** (proposés :
+> `tourisme-lacadieredazur.fr` — WordPress français, NAP complet, ET la source n°1 citée par les IA pour le
+> Mas ; `districtcafe.ca` — Squarespace, `age` CDN ~38 h, porte lui aussi une scission d'entités C24).
+> Le dogfooding en conditions réelles (cron, historique, tendance, PDF) reste impossible sans eux.
+
 > ## ✅ S15.0/S15.1 « COHÉRENCE D'URL & TRANSPARENCE DU CACHE » LIVRÉ (2026-08-04) — `engine:S15.0`, SW `v5.28.466`, smokes 20 VERT.
 > **DoD atteinte le soir même** : audit du Mas en couverture complète 11/11 → **96/100, ZÉRO finding**
 > (SEO 100, sécurité 100, présence 100 ; reste vitesse 80 et GEO 0 = absence des annuaires, pas un défaut de site).

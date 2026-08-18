@@ -182,7 +182,7 @@ import { handleDeskHealth, handleDeskBootstrap, handlePubCreate, handlePubPatch,
          handleIssueMove, handleIssueBatch, handleIssueResize,
          handlePagePatch, handleSlotCreate, handleSlotPatch, handleSlotDelete,
          handleArtCreate, handleArtPatch, handleArtDelete,
-         handleCasierRequest, handleArtCasierRequest, handleCasierPut, handleCasierComplete,
+         handleCasierRequest, handleArtCasierRequest, handleCasierPut, handleCasierComplete, handleCasierPurge,
          handleCasierUrl, handleCasierDl, handleCasierDelete,
          handleContribUpsert, handleRelanceSend, sweepDeskCasier } from './routes/desk.js';
 // desK DK-4 — adresse de dépôt redaction-*@ : digestion des e-mails + bac à trier.
@@ -415,6 +415,11 @@ export default {
       const dkIssue = path.match(/^\/api\/desk\/issue\/([A-Za-z0-9-]+)$/);
       if (dkIssue && method === 'GET')   return handleIssueGet(request, env, dkIssue[1]);
       if (dkIssue && method === 'PATCH') return handleIssuePatch(request, env, dkIssue[1]);
+      // DK-10 : vider le casier d'un numéro imprimé À LA MAIN. Le cron ne le
+      // fait plus (2026-08-05) — rien de déposé par un humain ne disparaît
+      // sans qu'un humain l'ait demandé. { simuler: true } = compte à blanc.
+      const dkCasierPurge = path.match(/^\/api\/desk\/issue\/([A-Za-z0-9-]+)\/casier\/purge$/);
+      if (dkCasierPurge && method === 'POST') return handleCasierPurge(request, env, dkCasierPurge[1]);
       const dkSwap = path.match(/^\/api\/desk\/issue\/([A-Za-z0-9-]+)\/swap$/);
       if (dkSwap && method === 'POST') return handleIssueSwap(request, env, dkSwap[1]);
       const dkMove = path.match(/^\/api\/desk\/issue\/([A-Za-z0-9-]+)\/move$/);
