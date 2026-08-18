@@ -35,6 +35,7 @@ import {
   getGhostwriterQuotaPeriod,
   getGhostwriterQuotaLabel,
 } from '../ghostwriter.js';
+import { isNaturalWriting } from './ghostwriter-prefs.js';
 
 const CSS_INJECTED_FLAG = '__ks_gw_inline_css_injected__';
 
@@ -403,6 +404,9 @@ export async function openGhostwriterInline(targetEl, opts = {}) {
       action      : opts.action      || null,
       lengthTarget: opts.lengthTarget || null,
       intent      : finalIntent,
+      // Écriture naturelle : la préférence de compte choisie dans la fenêtre
+      // Ghost Writer ou le Studio vaut aussi pour les boutons ✦ des pads.
+      naturalWriting: isNaturalWriting(),
     };
 
     try {

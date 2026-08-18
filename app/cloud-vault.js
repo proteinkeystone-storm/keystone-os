@@ -60,6 +60,10 @@ export const PREFS_KEYS = [
     // téléphone — et comme Keynapse/Missive rangent côté serveur, il
     // revient ensuite sur l'ordinateur. Même motif que ks_is_demo.
     'ks_samples_seeded',
+    // Ghost Writer — « écriture naturelle » (2026-08-17) : préférence de
+    // COMPTE, comme le moteur actif. Elle est LUE au moment de générer
+    // (jamais mise en cache au boot) → aucun risque de clobber à l'hydrate.
+    'ks_gw_natural',
     // ⚠ ks_living_layer_on VOLONTAIREMENT ABSENT (retiré 2026-06-17).
     // C'est une préférence d'AFFICHAGE par-appareil, pas une donnée à
     // synchroniser. Le synchroniser provoquait un bug : revenir au dashboard

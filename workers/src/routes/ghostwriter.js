@@ -15,7 +15,9 @@
    Route exposée :
      POST /api/ghostwriter/rewrite
      Auth : JWT licence requise (pas anonyme).
-     Body : { text, tone?, intent?, vouvoie?, maxOutputTokens? }
+     Body : { text, tone?, intent?, vouvoie?, maxOutputTokens?,
+              mode?, audience?, action?, lengthTarget?, variants?,
+              naturalWriting? (true = cahier des charges anti-tics, ignoré en relecture) }
      Réponse : { variants: [{label, text}×3], model, usage }
 
    Pré-requis Cloudflare (à activer par Stéphane avant deploy) :
@@ -225,6 +227,7 @@ export async function handleGhostwriterRewrite(request, env) {
     variants,                               // 1 = relecture (desK) ; défaut 3
     engine, apiKey,                          // BYOK
     source,                                  // Chaîne de contenu — { text, ref } source fournie par l'utilisateur
+    naturalWriting,                          // Écriture naturelle (2026-08-17) : true = cahier des charges anti-tics d'IA
   } = body;
 
   // BYOK (D1/D3) : flag + moteur + clé → vendor à SES frais, HORS compteur
@@ -430,6 +433,12 @@ export async function handleGhostwriterRewrite(request, env) {
   };
   const lengthDirective = LENGTH_DIRECTIVES[lengthTarget] || '';
 
+  // ÉCRITURE NATURELLE (2026-08-17) — option, silencieuse si absente. Sans
+  // objet en RELECTURE (on ne réécrit pas le texte d'un auteur) : ignorée
+  // quand solo. Le cahier des charges est le MÊME que celui du mode
+  // « composer un post » (une seule source de vérité : NATURAL_WRITING).
+  const naturalDirective = naturalWriting === true ? NATURAL_WRITING : '';
+
   // RELECTURE (variants:1) — on rend UNE copie corrigée, pas un choix de
   // formulations : demander « 3 variantes tonales » n'a aucun sens quand on
   // relit le texte d'un auteur. Défaut inchangé (3) pour tous les autres pads.
@@ -486,6 +495,7 @@ export async function handleGhostwriterRewrite(request, env) {
     audienceDirective,
     actionDirective,
     lengthDirective,
+    naturalDirective,
     '- Préserver le sens original (faits, dates, montants, noms propres)',
     '- Pas de commentaire, pas de préface, pas d\'explication',
     '- Aucun markdown (pas de **, *, _, #, etc.)',
@@ -638,6 +648,30 @@ const _NET_GUIDE = {
   telegram : 'Réseau : Telegram (canal). Ton informatif, clair et direct. Longueur moyenne. Va à l\'essentiel, structure lisible.',
 };
 
+/* ── ÉCRITURE NATURELLE — le cahier des charges anti-tics d'IA ──────────
+   Une seule source de vérité, partagée par l'option « écriture naturelle »
+   du rewrite (naturalWriting:true) et par le mode « composer un post »
+   (toujours actif là : un post publiable ne doit jamais sentir la machine).
+
+   Ce n'est PAS un filigrane qu'on retire : c'est de l'écriture. Ce que les
+   lecteurs repèrent en pratique, ce sont des HABITUDES — et un petit modèle
+   suit mieux des interdits NOMMÉS et des consignes positives concrètes qu'un
+   vague « écris moins comme une IA ». D'où la liste ci-dessous, en deux
+   temps : ce qu'on fait, ce qu'on ne fait pas. Copie client sans jargon :
+   côté pad on parle d'« écriture naturelle », jamais de « signature IA ». */
+const NATURAL_WRITING = [
+  'ÉCRITURE NATURELLE — écris comme une personne qui connaît son sujet et parle à un lecteur, pas comme un assistant :',
+  '- Phrases de longueurs variées : des courtes, des longues, un rythme qui respire. Zéro remplissage.',
+  '- Va au concret : un fait, un exemple, un chiffre, un point de vue assumé — plutôt qu\'une généralité.',
+  '- Le lien logique se met dans la phrase, pas dans un connecteur d\'annonce en tête (« En effet », « De plus », « Par ailleurs », « En conclusion »).',
+  '- Pas de listes à puces ni de titres, sauf si le texte source en avait ou si le contexte l\'exige.',
+  '- Pas de tirets cadratins (—) en série pour rythmer les phrases : une virgule, un point, deux points.',
+  '- Pas de triades systématiques (trois adjectifs, trois exemples, trois membres) : deux suffisent souvent, ou un seul, bien choisi.',
+  '- Pas de tournures d\'assistant : « n\'hésitez pas à », « il est important de », « dans un monde où », « plongeons », « en somme », « que ce soit… ou… », « ce n\'est pas seulement… c\'est… », « véritable », « incontournable », « optimal », « crucial », « essentiel », « au cœur de », superlatifs creux.',
+  '- Pas de conclusion moralisatrice ni de phrase-bilan qui répète ce qui vient d\'être dit ; le texte s\'arrête quand il a fini.',
+  '- Pas de question rhétorique en ouverture, pas d\'emphase artificielle, pas d\'emoji.',
+].join('\n');
+
 // Prompt système du mode « composer un post » : UN post développé, ton calé sur
 // le réseau, écriture humaine (anti-tics d'IA). Sortie = texte brut prêt à publier.
 function _composePostPrompt(network) {
@@ -650,12 +684,7 @@ function _composePostPrompt(network) {
     '',
     guide,
     '',
-    'Écriture (important) :',
-    '- Développe avec du concret : un exemple, un bénéfice clair, un point de vue assumé.',
-    '- Écris comme un HUMAIN : phrases de longueurs variées, rythme naturel, zéro remplissage.',
-    '- ÉVITE les tics d\'IA : « dans un monde où », « il est important de », « plongeons »,',
-    '  « en somme », « n\'hésitez pas à », superlatifs creux, tirets cadratins à répétition,',
-    '  listes à puces génériques, conclusions moralisatrices.',
+    NATURAL_WRITING,
     '- Pas de méta-commentaire, pas de titre « Post : », pas de guillemets autour, pas de markdown.',
     '',
     'Sortie : UNIQUEMENT le texte du post, prêt à publier. Rien d\'autre.',
@@ -841,6 +870,7 @@ export async function handleGhostwriterQuota(request, env) {
    le modèle pour vérifier une règle de lecture. */
 export { _parseVariants as gwParseVariants };
 export { _recollerParagraphes as gwRecollerParagraphes };
+export { NATURAL_WRITING as gwNaturalWriting, _composePostPrompt as gwComposePostPrompt };
 
 /* ═══════ DK-9 · rendre à l'article SA découpe en paragraphes ═══════
    Mesuré le 2026-08-05 sur trois vrais papiers de L'Épaulette : le

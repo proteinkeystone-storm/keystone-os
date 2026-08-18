@@ -36,6 +36,8 @@
 import { CF_API } from './pads-loader.js';
 import { byokRequestFields } from './lib/engines.js';
 import { renderChainRail, bindChainRail, getChain, setChain, networkLabel } from './lib/content-chain.js';
+import { sanitizeText, sanitizeVariants } from './lib/text-hygiene.js';
+import { isNaturalWriting, setNaturalWriting, NATURAL_LABELS } from './lib/ghostwriter-prefs.js';
 
 // ── Constants ─────────────────────────────────────────────────────
 const FLAG_LS_KEY     = 'ks_ghostwriter';
@@ -249,7 +251,11 @@ async function _callReal(text, opts) {
         },
         body: JSON.stringify({
             ...byokRequestFields(),   // BYOK : moteur actif + clé (flag worker tranche)
-            text,
+            // Hygiène en ENTRÉE aussi : un texte collé depuis Word, un site ou
+            // un autre assistant peut charrier des caractères cachés (dont le
+            // bloc « Tags », support connu d'instructions dissimulées). On ne
+            // les envoie pas au modèle. Sans effet sur un texte déjà propre.
+            text        : sanitizeText(text),
             tone        : opts?.tone         || null,
             intent      : opts?.intent       || null,
             vouvoie     : opts?.vouvoie     ?? null,
@@ -257,6 +263,9 @@ async function _callReal(text, opts) {
             audience    : opts?.audience     || null,
             action      : opts?.action       || null,
             lengthTarget: opts?.lengthTarget || null,
+            // Écriture naturelle (2026-08-17) : cahier des charges anti-tics
+            // d'IA côté worker. Absent = prompt inchangé (rétro-compat).
+            naturalWriting: opts?.naturalWriting === true || undefined,
             // Nombre de propositions. 1 = relecture (desK) : on rend UNE copie
             // corrigée. Absent = 3, comportement historique de tous les pads.
             variants    : opts?.variants === 1 ? 1 : undefined,
@@ -315,6 +324,14 @@ async function _callReal(text, opts) {
     // On l'ingère pour resync le cache (autoritatif côté serveur).
     const payload = await res.json();
     if (payload?.quota) _ingestQuota(payload.quota);
+    // Hygiène invisible (2026-08-17) : TOUT texte rendu par Ghost Writer
+    // sort débarrassé de ses caractères cachés (espaces de largeur nulle,
+    // BOM, traits d'union conditionnels…). Ici et pas ailleurs : modal,
+    // Studio, pads inline, desK et le mode « composer un post » passent
+    // tous par _callReal — géré ou BYOK, peu importe le moteur.
+    if (payload && Array.isArray(payload.variants)) {
+        payload.variants = sanitizeVariants(payload.variants);
+    }
     return payload;
 }
 
@@ -653,6 +670,10 @@ function _buildModalHTML(initialText, presetOpts) {
     // (sous la méta) → plus de place quand elle grossit ; la droite ne garde
     // que le post courant + ses actions. Hors chaîne : pas d'archive.
     const archiveSlot = chainMode ? '<div class="gw-archive" id="gw-archive"></div>' : '';
+    // « Écriture » (Standard / Naturelle) vit sous les tons, aux mêmes
+    // conditions : ni en chaîne (le post est déjà écrit naturellement, cf.
+    // NATURAL_WRITING côté worker), ni en relecture (on ne réécrit pas).
+    const natural = isNaturalWriting();
     const tonesHTML = (chainMode || relecture) ? '' : `
                     <div class="gw-label">Ton souhaité</div>
                     <div class="gw-options" id="gw-tones" data-selected="${_escapeHtml(presetTone)}">
@@ -661,6 +682,11 @@ function _buildModalHTML(initialText, presetOpts) {
                         <button class="gw-option-btn ${isOn('chaleureux empathique')}" data-tone="chaleureux empathique">Chaleureux</button>
                         <button class="gw-option-btn ${isOn('concis direct')}" data-tone="concis direct">Concis</button>
                         <button class="gw-option-btn ${isOn('persuasif vendeur')}" data-tone="persuasif vendeur">Persuasif</button>
+                    </div>
+                    <div class="gw-label">${NATURAL_LABELS.legend}</div>
+                    <div class="gw-options" id="gw-writing" title="${_escapeHtml(NATURAL_LABELS.hint)}">
+                        <button class="gw-option-btn ${natural ? '' : 'gw-on'}" data-natural="0">${NATURAL_LABELS.standard}</button>
+                        <button class="gw-option-btn ${natural ? 'gw-on' : ''}" data-natural="1">${NATURAL_LABELS.natural}</button>
                     </div>`;
 
     return `
@@ -818,13 +844,25 @@ function _bindModalEvents(overlay) {
     };
     document.addEventListener('keydown', escHandler);
 
-    // Tone selector (radio-like)
-    const toneBtns = overlay.querySelectorAll('.gw-option-btn');
+    // Tone selector (radio-like) — restreint à SON groupe : le groupe
+    // « Écriture » juste dessous réutilise la même classe de bouton.
+    const toneBtns = overlay.querySelectorAll('#gw-tones .gw-option-btn');
     toneBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             toneBtns.forEach(b => b.classList.remove('gw-on'));
             btn.classList.add('gw-on');
             overlay.querySelector('#gw-tones').dataset.selected = btn.dataset.tone || '';
+        });
+    });
+
+    // Écriture (Standard / Naturelle) — préférence de compte, mémorisée
+    // au clic : elle vaut pour cette fenêtre, le Studio et les pads inline.
+    const writingBtns = overlay.querySelectorAll('#gw-writing .gw-option-btn');
+    writingBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            writingBtns.forEach(b => b.classList.remove('gw-on'));
+            btn.classList.add('gw-on');
+            setNaturalWriting(btn.dataset.natural === '1');
         });
     });
 
@@ -870,9 +908,12 @@ async function _handleGenerate(overlay) {
         tone: presetTone,
         ...presetRest
     } = _presetOpts || {};
+    // Écriture naturelle : préférence de compte, lue à l'instant du clic
+    // (jamais mise en cache). Sans objet en chaîne (déjà naturel d'office) ni
+    // en relecture (on ne réécrit pas) — le worker l'ignore alors de lui-même.
     const callOpts = chainMode
         ? { composePost: true, network: getChain()?.network || null }
-        : { ...presetRest, tone: tone || presetTone || null };
+        : { ...presetRest, tone: tone || presetTone || null, naturalWriting: isNaturalWriting() };
 
     const text = (source?.value || '').trim();
     if (text.length < MIN_TEXT_LENGTH) {
@@ -1268,7 +1309,10 @@ function _diffAnnote(avant, apres) {
    d'archive (il n'y a rien à collectionner). */
 function _renderRelecture(container, variant) {
     const texte = variant?.text || '';
-    const source = container.closest('.gw-modal')?.querySelector('#gw-source')?.value || '';
+    // Le comparatif se fait entre ce qui a été ENVOYÉ (source assainie par
+    // _callReal) et ce qui est revenu : un trait d'union conditionnel hérité
+    // d'un .docx ne doit pas passer pour une correction sur un mot.
+    const source = sanitizeText(container.closest('.gw-modal')?.querySelector('#gw-source')?.value || '');
     const { parts, nMots, nTypo } = _diffAnnote(source, texte);
     const rien = !nMots && !nTypo;
     const compte = rien ? 'Aucune correction'

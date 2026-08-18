@@ -33,6 +33,7 @@ import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 import { icon }                                from './lib/ui-icons.js';
 import { symbolsButtonHTML, openSymbolsPanel, closeSymbolsPanel } from './lib/symbols-panel.js';
 import { aiLabelSVG }                          from './lib/ai-label.js';
+import { isNaturalWriting, setNaturalWriting, NATURAL_LABELS } from './lib/ghostwriter-prefs.js';
 import {
   rewriteText, getGhostwriterQuotaRemaining, getGhostwriterQuotaMax,
   getGhostwriterPlan, getGhostwriterQuotaPeriod, getGhostwriterQuotaLabel,
@@ -116,6 +117,14 @@ const LENGTHS = [
   { id: 'shorter-50', value: 'Raccourcir d\'environ 50 %' },
   { id: 'keep',       value: 'Garder à peu près identique' },
   { id: 'longer',     value: 'Développer (étoffer)' },
+];
+
+// « Écriture » (2026-08-17) : Standard ou Naturelle. Ce n'est PAS un critère du
+// brouillon mais une préférence de COMPTE (ghostwriter-prefs.js) — la même que
+// dans la fenêtre Ghost Writer et les boutons inline des pads.
+const WRITINGS = [
+  { id: '0', value: NATURAL_LABELS.standard },
+  { id: '1', value: `${NATURAL_LABELS.natural} — sans tournures d'assistant` },
 ];
 
 // ── État ────────────────────────────────────────────────────────
@@ -305,6 +314,7 @@ function _renderMain(scrollToTop) {
               ${_renderSelect('audience',     'Public cible',   AUDIENCES, _formData.audience)}
               ${_renderSelect('intent',       'Intention',      INTENTS,   _formData.intent)}
               ${_renderSelect('lengthTarget', 'Longueur cible', LENGTHS,   _formData.lengthTarget)}
+              ${_renderSelect('writing',      NATURAL_LABELS.legend, WRITINGS, isNaturalWriting() ? '1' : '0')}
             </div>
           </div>
 
@@ -504,6 +514,8 @@ function _onInput(e) {
   const el = e.target;
   const fieldId = el.dataset && el.dataset.field;
   if (!fieldId) return;
+  // « Écriture » = préférence de compte, pas un champ du brouillon.
+  if (fieldId === 'writing') { setNaturalWriting(el.value === '1'); return; }
   _formData[fieldId] = el.value;
   _saveDraft();
   // Update char counter live (sans re-render complet)
@@ -603,6 +615,7 @@ async function _handleGenerate() {
     audience     : _formData.audience || modeDefaults.audience,
     intent       : _formData.intent   || modeDefaults.intent,
     lengthTarget : _formData.lengthTarget || '',
+    naturalWriting: isNaturalWriting(),   // préférence de compte, lue à l'instant du clic
   };
 
   _generating = true;

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Harnais — Ghost Writer (modal réel, worker doublé)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  Harnais du modal Ghost Writer : le VRAI app/ghostwriter.js dans une vraie
+  page, avec `fetch` doublé en mémoire (patron des bancs front). Sert à VOIR :
+  · la ligne « Écriture » (Standard / Naturelle) sous les tons ;
+  · que le choix est envoyé au worker (naturalWriting dans le body capturé) ;
+  · que l'hygiène invisible agit : la 2e variante rendue par le faux worker
+    est truffée de caractères invisibles (ZWSP, soft hyphen, BOM, Tags) —
+    ce qui arrive dans le modal et dans le presse-papiers doit être propre.
+  Ouvrir : http://localhost:3001/_design-lab/ghost-writer-harness.html
+  ⚠ Désenregistrer le SW localhost avant de vérifier (mémoire brief-prod).
+-->
+<!-- Feuilles maîtresses du dashboard : le Studio (workspace plein écran) en dépend. -->
+<link rel="stylesheet" href="/app/style.css">
+<link rel="stylesheet" href="/app/workspace.css">
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; padding: 24px; background: #0b0d12; color: #e5e7eb; }
+  h1 { font-weight: 900; letter-spacing: -0.02em; font-size: 20px; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid #334; background: #1a1f2e; color: #e5e7eb; cursor: pointer; }
+  pre { background: #11141c; border: 1px solid #222; padding: 12px; border-radius: 8px; font-size: 12px; white-space: pre-wrap; }
+  .row { display: flex; gap: 12px; align-items: center; margin: 12px 0; }
+  .ok { color: #4ade80; } .ko { color: #f87171; }
+</style>
+</head>
+<body>
+<h1>Ghost Writer — harnais du modal</h1>
+<div class="row">
+  <button id="open">Ouvrir le modal (Cmd+Shift+G)</button>
+  <button id="studio">Ouvrir le Studio</button>
+  <button id="reset">Remettre « Standard »</button>
+  <span id="pref"></span>
+</div>
+<p>Dernier body envoyé au worker :</p>
+<pre id="body">—</pre>
+<p>Contrôle d'hygiène sur ce que le modal a reçu :</p>
+<pre id="hyg">—</pre>
+
+<script type="module">
+  // Contexte minimal : JWT factice (le modal l'exige) + drapeau d'activation.
+  localStorage.setItem('ks_jwt', 'harness.jwt.token');
+  window.__KS_GHOSTWRITER__ = true;
+
+  // Faux worker : capture le body, rend 3 variantes dont une SALE.
+  const ZWSP = '​', SHY = '­', BOM = '﻿', TAG = String.fromCodePoint(0xE0041);
+  const NBSP = ' ';
+  const realFetch = window.fetch.bind(window);
+  window.__lastBody = null;
+  window.__lastPayload = null;
+  window.fetch = async (url, init) => {
+    const u = String(url);
+    if (u.includes('/api/ghostwriter/quota')) {
+      return new Response(JSON.stringify({ plan: 'ADMIN', used: 0, max: null, remaining: null, unlimited: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (u.includes('/api/ghostwriter/rewrite')) {
+      window.__lastBody = JSON.parse(init.body);
+      document.getElementById('body').textContent = JSON.stringify(window.__lastBody, null, 2);
+      const payload = {
+        variants: [
+          { label: 'Ton formel',     text: `Bonjour, je souhaite décaler notre rendez-vous${NBSP}: la semaine prochaine me conviendrait mieux.` },
+          { label: 'Ton chaleureux', text: `${BOM}Bon${ZWSP}jour${TAG} ! Serait-il pos${SHY}sible de décaler notre rendez-vous${NBSP}? Merci d'avance.` },
+          { label: 'Ton concis',     text: `Peut-on décaler le rendez-vous à la semaine prochaine${NBSP}?` },
+        ],
+        model: 'harness', usage: {},
+        quota: { plan: 'ADMIN', used: 1, max: null, remaining: null, unlimited: true },
+      };
+      window.__lastPayload = payload;
+      return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return realFetch(url, init);
+  };
+
+  const gw = await import('/app/ghostwriter.js');
+  const { inspectText } = await import('/app/lib/text-hygiene.js');
+  const prefs = await import('/app/lib/ghostwriter-prefs.js');
+  gw.initGhostwriter();
+
+  const showPref = () => { document.getElementById('pref').textContent = 'Préférence de compte : ' + (prefs.isNaturalWriting() ? 'Naturelle' : 'Standard'); };
+  showPref();
+  window.addEventListener('ks-gw-natural-changed', showPref);
+
+  document.getElementById('open').onclick = () => gw.openGhostwriter('Bonjour, je vous écris au sujet de notre rendez-vous de la semaine prochaine, que je souhaiterais décaler si possible.');
+  document.getElementById('reset').onclick = () => { prefs.setNaturalWriting(false); showPref(); };
+  document.getElementById('studio').onclick = async () => { const st = await import('/app/ghostwriter-studio.js'); st.openGhostwriterStudio(); };
+
+  // Contrôle d'hygiène : ce que le modal AFFICHE doit être propre alors que le
+  // faux worker a rendu une variante sale. On lit le DOM des variantes.
+  const check = () => {
+    const nodes = [...document.querySelectorAll('#gw-variants .gw-variant-text, #gw-variants textarea, #gw-variants [class*="text"]')];
+    const texts = nodes.map(n => n.value ?? n.textContent ?? '').filter(Boolean);
+    if (!texts.length) return;
+    const raw = window.__lastPayload?.variants?.[1]?.text || '';
+    const rawI = inspectText(raw);
+    const lines = [`Variante 2 telle que RENDUE par le faux worker : ${rawI.removed} caractère(s) à retirer, ${rawI.preserved} préservé(s) (insécables).`];
+    let allClean = true;
+    texts.forEach((t, i) => {
+      const r = inspectText(t);
+      const clean = r.removed === 0 && r.normalized === 0;
+      allClean = allClean && clean;
+      lines.push(`${clean ? '✓' : '✗'} bloc ${i + 1} affiché : ${r.removed} à retirer, ${r.normalized} à normaliser, ${r.preserved} préservé(s) — « ${t.slice(0, 60)}… »`);
+    });
+    const el = document.getElementById('hyg');
+    el.textContent = lines.join('\n');
+    el.className = allClean ? 'ok' : 'ko';
+    window.__hygieneClean = allClean;
+  };
+  // À la demande (un observateur sur tout le DOM relit les variantes à chaque
+  // mutation du modal — inutilement lourd) : exposé pour le pilotage.
+  window.__checkHygiene = check;
+  document.addEventListener('click', (e) => { if (e.target.closest('#gw-go')) setTimeout(check, 800); });
+</script>
+</body>
+</html>
