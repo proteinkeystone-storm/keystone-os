@@ -36,7 +36,8 @@ import { openGhostwriterInline }                 from './lib/ghostwriter-inline.
 import { lock, unlock, isLocked }              from './lockscreen.js';
 // Onboarding entièrement délégué à la landing page (index.html).
 import { scheduleAutoSave } from './vault.js';
-import { activateLicence, getLicenceStatus, revokeLicence }            from './licence.js';
+import { activateLicence, getLicenceStatus, revokeLicence, getLicenceExpiry } from './licence.js';
+import { renderTrialChrono, refreshTrialChrono, TRIAL_CHRONO_CSS, trialEndLabel } from './lib/trial-chrono.js';
 // Identité de session + reconnexion propre (incident 2026-06-14).
 import { ksWhoami, ksCleanLogout }                                     from './lib/session-guard.js';
 import { exportArtifactPDF }                                           from './pdf-export.js';
@@ -365,6 +366,7 @@ function renderHeroDate() {
     }
 
     _removeLegacyDemoChrome();
+    _renderTrialChronoInHero();
 
     if (!_heroClockTimer) _heroClockTimer = setInterval(renderHeroDate, 30_000);
 }
@@ -379,6 +381,38 @@ function _removeLegacyDemoChrome() {
     if (_legacyDemoCleaned || typeof document === 'undefined') return;
     _legacyDemoCleaned = true;
     document.querySelectorAll('.ks-demo-chrono, #ks-demo-styles, .ks-demo-modal').forEach(el => el.remove());
+}
+
+// ── Chronomètre d'ESSAI (licence à date) dans .hero-meta ──────────
+// Ressuscité le 2026-08-19 (lib/trial-chrono.js) pour les licences qui
+// portent une échéance serveur — l'essai de 7 jours posé depuis l'Admin.
+// Rien à voir avec l'ancien mode démo : pas de décompte local, la date
+// vient de `/api/licence/me` (cache `ks_licence_expires`, cf. licence.js).
+// Idempotent, appelé à chaque tick de l'horloge : crée la pill si elle
+// manque, la rafraîchit sinon, la retire si l'échéance a disparu (un
+// essai devenu abonnement) ou si la licence n'est plus active.
+let _trialCssInjected = false;
+function _renderTrialChronoInHero() {
+    if (typeof document === 'undefined') return;
+    const heroMeta = document.querySelector('.hero-meta');
+    if (!heroMeta) return;
+    const existing  = heroMeta.querySelector('.ks-trial-chrono');
+    const expiresAt = getLicenceStatus().active ? getLicenceExpiry() : null;
+    if (!expiresAt) { if (existing) existing.remove(); return; }
+
+    if (!_trialCssInjected) {
+        const style = document.createElement('style');
+        style.id = 'ks-trial-chrono-styles';
+        style.textContent = TRIAL_CHRONO_CSS;
+        document.head.appendChild(style);
+        _trialCssInjected = true;
+    }
+    if (existing) {
+        refreshTrialChrono(existing, { expiresAt });
+    } else {
+        const html = renderTrialChrono({ expiresAt });
+        if (html) heroMeta.insertAdjacentHTML('afterbegin', html);
+    }
 }
 
 // Descriptions courtes des artefacts pour les pads du Dashboard
@@ -4969,9 +5003,15 @@ function _renderSettingsBody() {
                 // résiliation → le mailto de résiliation a été retiré
                 // (2026-06-15), il faisait doublon.
                 const _isAdminLic  = /admin/i.test(lic.plan || '');
-                const _showCancel  = lic.active && !_isAdminLic;
+                // Licence à date (essai) : on dit « Essai · jusqu'au … » plutôt
+                // que le plan technique, et pas de portail Stripe — il n'y a
+                // pas encore d'abonnement à gérer.
+                const _trialEnd    = lic.active && lic.expiresAt ? trialEndLabel(lic.expiresAt) : '';
+                const _showCancel  = lic.active && !_isAdminLic && !_trialEnd;
                 const statusBadge = lic.active
-                    ? `<span class="sp-badge-green">Active · ${lic.plan}</span>`
+                    ? (_trialEnd
+                        ? `<span class="sp-badge-gold">Essai · jusqu'au ${_trialEnd}</span>`
+                        : `<span class="sp-badge-green">Active · ${lic.plan}</span>`)
                     : `<span class="sp-badge-warn">Non activée</span>`;
                 const toolBadge = lic.active
                     ? `<span class="sp-badge-gold">${lic.toolCount} outil${lic.toolCount !== 1 ? 's' : ''}</span>`

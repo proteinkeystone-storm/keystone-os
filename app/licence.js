@@ -111,10 +111,28 @@ export function getLicenceStatus() {
         plan,
         owner,
         ownedAssets,
+        expiresAt: getLicenceExpiry(),
         active:    !!key,
         demoMode:  ownedAssets === null,
         toolCount: Array.isArray(ownedAssets) ? ownedAssets.length : '∞',
     };
+}
+
+// ── Échéance de la licence (licence « à date » : essai de 7 jours posé
+// depuis l'Admin, testeur à durée limitée) ────────────────────────────
+// Simple CACHE de ce que le serveur a dit au dernier démarrage
+// (`/api/licence/me` → licence.expires_at), hors PREFS_KEYS : ce n'est
+// pas une préférence, le Cloud Vault n'a pas à la synchroniser ni à la
+// restaurer. null = pas d'échéance = rien à décompter.
+const LS_EXPIRES = 'ks_licence_expires';
+export function getLicenceExpiry() {
+    try { return localStorage.getItem(LS_EXPIRES) || null; } catch (_) { return null; }
+}
+function _setLicenceExpiry(value) {
+    try {
+        if (value) localStorage.setItem(LS_EXPIRES, String(value));
+        else       localStorage.removeItem(LS_EXPIRES);
+    } catch (_) {}
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -122,7 +140,7 @@ export function getLicenceStatus() {
 // ═══════════════════════════════════════════════════════════════
 export function revokeLicence() {
     [
-        LS_KEY, LS_PLAN, LS_OWNER, 'ks_owned_assets',
+        LS_KEY, LS_PLAN, LS_OWNER, 'ks_owned_assets', LS_EXPIRES,
         // Marqueurs de l'ancien mode démo — purgés tant qu'il peut en
         // rester chez des utilisateurs déjà installés.
         'ks_is_demo', 'ks_demo_started_at',
@@ -190,6 +208,14 @@ export async function syncOwnedAssetsFromServer() {
         if (!res.ok) return null;                 // 401/500 → on ne dégrade rien
         data = await res.json();
     } catch (_) { return null; }                  // hors ligne → on garde l'existant
+
+    // Échéance (licence à date) : on la mémorise telle que le serveur la
+    // donne ; `null` explicite = plus d'échéance (un essai qui a payé, le
+    // webhook a effacé la date) → on l'oublie. Champ ABSENT (worker
+    // ancien) → on ne touche à rien.
+    if (data?.licence && 'expires_at' in data.licence) {
+        _setLicenceExpiry(data.licence.expires_at || null);
+    }
 
     const bag = data?.licence?.owned_assets;
     if (Array.isArray(bag)) {
