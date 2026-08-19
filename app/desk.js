@@ -217,6 +217,7 @@ export function openDesk(opts = {}) {
   _root.querySelector('[data-act="settings"]').addEventListener('click', () => _openSettings());
   _root.querySelector('[data-slot="veil"]').addEventListener('click', _closeInsp);
   _veilleConfirmations(_root.querySelector('[data-slot="insp"]'));
+  _veilleSaisie(_root.querySelector('[data-slot="insp"]'));
   document.addEventListener('keydown', _onKey);
   document.addEventListener('visibilitychange', _onVisibility);
   _boot();
@@ -258,6 +259,7 @@ export function closeDesk() {
   _root.remove();
   _root = null; _me = null; _pubs = []; _pubId = null; _issueId = null;
   _D = null; _selN = null; _selSlot = 0; _offline = false; _view = 'fer';
+  _inspTouchedAt = 0; _refreshDue = false;
   _msel = new Set(); _mselAnchor = null; _embark = false;
   _ppFile = null;
   document.body.style.overflow = '';
@@ -271,7 +273,59 @@ function _onKey(e) {
   _onBack();
 }
 function _onBack() { if (_writer) { _closeWriter(); return; } closeDesk(); }
-function _onVisibility() { if (!document.hidden && _issueId && !_writer) _loadIssue(true); }
+function _onVisibility() { if (!document.hidden) _autoRefresh(); }
+
+/* ── Rafraîchissement d'équipe POLI (retour Stéphane 2026-08-19 : « la
+   modale se réinitialise et ne garde pas ce que j'ai saisi ») ──────────
+   Toutes les 45 s et au retour d'onglet, _loadIssue(true) reconstruit
+   l'écran (_renderFer → _openInsp). Un formulaire ouvert dans le panneau
+   (article, relance, tri du courrier, réglages, pré-impression), un champ
+   en cours de saisie, une confirmation ou un choix ouvert dans la fiche, un
+   écran de création : tout cela était EFFACÉ par la reconstruction. Le
+   rafraîchissement attend donc que le travail soit fini — et se rattrape dès
+   que le panneau se ferme ou au tic suivant. */
+const TOUCH_GRACE_MS = 120000;   // 2 min sans toucher la fiche avant de la reconstruire sous les doigts
+let _inspTouchedAt = 0, _refreshDue = false;
+function _fieldDirty(el) {
+  if (el.tagName === 'SELECT') {
+    const def = [...el.options].findIndex(o => o.defaultSelected);
+    return el.selectedIndex !== (def < 0 ? 0 : def);
+  }
+  if (el.type === 'checkbox' || el.type === 'radio') return el.checked !== el.defaultChecked;
+  if (el.type === 'file' || el.type === 'range' || el.type === 'hidden') return false;   // le curseur de taille n'est pas une saisie
+  return el.value !== el.defaultValue;
+}
+function _refreshBlocked() {
+  if (!_root) return true;
+  if (_writer) return true;                                                 // l'éditeur de texte
+  const insp = _root.querySelector('[data-slot="insp"]');
+  if (insp && insp.classList.contains('on')) {
+    if (insp.querySelector('.dk-insp-hd')?.dataset.kind !== 'fiche') return true;   // formulaire, liste, réglages…
+    if (Date.now() - _inspTouchedAt < TOUCH_GRACE_MS) return true;                 // on y travaille (confirmation, choix, curseur)
+  }
+  if (_root.querySelector('[data-slot="main"] .dk-hero')) return true;     // écran de création (publication, numéro)
+  // Un panneau FERMÉ garde son dernier contenu dans le DOM (le formulaire
+  // qu'on vient de quitter, ses champs remplis) : il ne compte plus.
+  const cache = '.dk-insp:not(.on), .dk-writer:not(.on)';
+  const ae = document.activeElement;   // un champ de saisie a le focus (le curseur de taille, une case à cocher : non)
+  if (ae && ae !== document.body && _root.contains(ae) && !ae.closest(cache)
+      && ((/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && !/^(range|checkbox|radio|button|submit|file|hidden)$/.test(ae.type || ''))
+          || ae.isContentEditable)) return true;
+  return [..._root.querySelectorAll('input, textarea, select')].some(el => !el.closest(cache) && _fieldDirty(el));
+}
+function _autoRefresh() {
+  if (document.hidden || !_issueId) return;
+  if (_refreshBlocked()) { _refreshDue = true; return; }
+  _refreshDue = false;
+  _loadIssue(true, true);
+}
+// Toute activité dans le panneau repousse sa reconstruction (pointer ET
+// touch : sur iPhone/iPad un bouton touché ne garde pas le focus).
+function _veilleSaisie(insp) {
+  const touch = () => { _inspTouchedAt = Date.now(); };
+  ['pointerdown', 'touchstart', 'keydown', 'input', 'change', 'click'].forEach(ev =>
+    insp.addEventListener(ev, touch, { capture: true, passive: true }));
+}
 
 // ── Boot : bootstrap → publication → numéro ─────────────────────
 async function _boot() {
@@ -292,7 +346,7 @@ async function _boot() {
     _issueId = pub.issues.find(i => i.id === localStorage.getItem('dk_last_issue'))?.id || pub.issues[0].id;
     await _loadIssue();
     clearInterval(_pollTimer);
-    _pollTimer = setInterval(() => { if (!document.hidden && _issueId && !_writer) _loadIssue(true); }, POLL_MS);
+    _pollTimer = setInterval(_autoRefresh, POLL_MS);
     // Passerelle (Kora…) : une fois seulement, le numéro chargé — le
     // brouillon de relance a besoin de _D (articles, contribs, relances).
     const o = _pendingOpts; _pendingOpts = {}; _applyOpts(o);
@@ -313,10 +367,15 @@ function _writeCache() {
   try { localStorage.setItem('dk_cache_v1', JSON.stringify({ pubId: _pubId, issueId: _issueId, data: _D })); } catch (_) {}
 }
 
-async function _loadIssue(silent) {
+async function _loadIssue(silent, polite) {
   if (!_issueId) return;
   try {
     const d = await _api('/issue/' + _issueId);
+    // Rafraîchissement automatique (polite) : si, le temps de la réponse, un
+    // travail a commencé — formulaire ouvert, écran de création, saisie — on
+    // JETTE la réponse plutôt que de reconstruire l'écran sous les doigts ;
+    // le tic suivant (ou la fermeture du panneau) la redemandera.
+    if (polite && _refreshBlocked()) { _refreshDue = true; return; }
     _D = d; _offline = false;
     localStorage.setItem('dk_last_pub', _pubId);
     localStorage.setItem('dk_last_issue', _issueId);
@@ -997,11 +1056,19 @@ function _renderFer() {
       main.querySelector('.dk-frise-wrap').dataset.size = String(_size);
     });
     _bindFrise();
-    if (_selN !== null) _openInsp(_selN, true);
+    // Re-rendre la fiche ouverte — mais JAMAIS par-dessus un travail en cours
+    // (formulaire, liste, réglages rendus dans le même panneau) : un
+    // rafraîchissement différé dont la réponse arrive après coup soufflerait
+    // ce qu'on vient d'ouvrir. Chaque flux revient à sa fiche de lui-même.
+    if (_selN !== null && _inspShowsFiche()) _openInsp(_selN, true);
   } else {
     _renderMarbre();
   }
   _renderMselBar();
+}
+function _inspShowsFiche() {
+  const insp = _root && _root.querySelector('[data-slot="insp"]');
+  return !!insp && insp.classList.contains('on') && insp.querySelector('.dk-insp-hd')?.dataset.kind === 'fiche';
 }
 
 // Rail des jalons = TIMELINE graphique v2 (retours Stéphane 2026-07-13).
@@ -1719,7 +1786,7 @@ function _openInspMarbre(artId) {
       ${(STATUS[a.status] || {}).needsCopy && a.contrib ? `<button class="dk-btn ${_relanceInfo(a) ? 'primary' : ''}" data-act="relancem">${icon('mail', 14)} Relancer</button>` : ''}
       ${vivant ? `<button class="dk-btn" data-act="abandon">Abandonner</button>` : ''}
       <button class="dk-btn ghost" data-act="delart">${icon('trash-2', 14)} Supprimer</button>
-    </div><div data-slot="confirm"></div></div>`);
+    </div><div data-slot="confirm"></div></div>`, 'fiche');
   _bindClose(insp);
   _inspScrollSet('marbre:' + artId, _sy);
   insp.classList.add('on');
@@ -1811,9 +1878,14 @@ function _closeInsp() {
   _root.querySelector('[data-slot="veil"]').classList.remove('on');
   _root.querySelectorAll('.dk-pcard.sel').forEach(x => x.classList.remove('sel'));
   _selN = null; _selSlot = 0;
+  if (_refreshDue) _autoRefresh();     // le rafraîchissement différé se rattrape
 }
-function _inspShell(title, rubHTML, body) {
-  return `<div class="dk-insp-hd">
+// kind : 'fiche' (page, page vide, page figée, article au marbre — un état
+// qu'on peut reconstruire sans rien perdre) ou 'panel' (formulaire, liste à
+// traiter, réglages, pré-impression — un travail en cours, à ne pas souffler).
+// Lu par _refreshBlocked.
+function _inspShell(title, rubHTML, body, kind = 'panel') {
+  return `<div class="dk-insp-hd" data-kind="${kind}">
     <div class="dk-insp-hd-main">${rubHTML || ''}<div class="dk-insp-title">${_esc(title)}</div></div>
     <button class="dk-insp-close" data-act="close" aria-label="Fermer">${icon('x', 18)}</button>
   </div><div class="dk-insp-body">${body}</div>`;
@@ -1849,7 +1921,7 @@ function _renderInspFixe(insp, p) {
       <p class="dk-note">Une page figée ne bouge pas quand le contenu coule autour (repagination) — une pub vendue « page ${_pn(p.n)} » reste page ${_pn(p.n)}.</p>
     </div>
     ${_casierSectionHTML(p)}
-    ${p.updated_by ? `<p class="dk-modified">Modifié par ${_esc(p.updated_by)} ${_relTime(p.updated_at)}</p>` : ''}`);
+    ${p.updated_by ? `<p class="dk-modified">Modifié par ${_esc(p.updated_by)} ${_relTime(p.updated_at)}</p>` : ''}`, 'fiche');
   _bindClose(insp);
   _bindCasier(insp, p, () => _openInsp(p.n, true));
   insp.querySelector('[data-act="savefixe"]').onclick = async () => {
@@ -1898,7 +1970,7 @@ function _renderInspVide(insp, p) {
     </div>
     <div class="dk-sec"><div class="dk-btn-row"><button class="dk-btn primary" data-act="newarthere">${icon('plus', 14)} Nouvel article sur cette page</button></div></div>
     ${_casierSectionHTML(p)}
-    ${p.updated_by ? `<p class="dk-modified">Modifié par ${_esc(p.updated_by)} ${_relTime(p.updated_at)}</p>` : ''}`);
+    ${p.updated_by ? `<p class="dk-modified">Modifié par ${_esc(p.updated_by)} ${_relTime(p.updated_at)}</p>` : ''}`, 'fiche');
   _bindClose(insp);
   _bindCasier(insp, p, () => _openInsp(p.n, true));
   insp.querySelectorAll('[data-act="reserve"]').forEach(b => b.onclick = async () => {
@@ -2080,7 +2152,7 @@ function _renderInspArticle(insp, p) {
       ${extRun.length ? `<button class="dk-btn" data-act="spread">${icon('copy', 14)} Étaler sur les pages suivantes</button>` : ''}
       ${slots.length < 12 ? `<button class="dk-btn" data-act="addslot">${icon('plus', 14)} Ajouter un article ici</button>` : ''}
     </div><div data-slot="spreadpick"></div><div data-slot="slotpick"></div></div>
-    ${p.updated_by ? `<p class="dk-modified">Carte modifiée par ${_esc(p.updated_by)} ${_relTime(p.updated_at)}</p>` : ''}`);
+    ${p.updated_by ? `<p class="dk-modified">Carte modifiée par ${_esc(p.updated_by)} ${_relTime(p.updated_at)}</p>` : ''}`, 'fiche');
   _bindClose(insp);
 
   insp.querySelectorAll('[data-slotidx]').forEach(b => b.onclick = () => { _selSlot = parseInt(b.dataset.slotidx, 10); _openInsp(p.n, true); });

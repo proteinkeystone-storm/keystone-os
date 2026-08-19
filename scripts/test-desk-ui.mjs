@@ -1960,12 +1960,126 @@ await parcours('Parcours 14 — la fiche de page : décocher, casier en évidenc
 });
 
 /* ─────────────────────────────────────────────────────────────────
+   PARCOURS 15 · La saisie survit au rafraîchissement d'équipe (19 août 2026)
+
+   Stéphane : « quand on remplit les champs de la modale, elle se
+   réinitialise de temps en temps et ne garde pas ce qui est saisi. »
+   Cause : toutes les 45 s et à chaque retour d'onglet, desK redemande le
+   numéro et RECONSTRUIT l'écran — fiche comprise (_renderFer →
+   _openInsp). Un formulaire ouvert dans la fiche (article, relance, tri,
+   réglages), un choix ou une confirmation ouverts, un écran de création :
+   tout était remplacé par la fiche fraîche. Sur iPad, un aller-retour
+   dans Mail pour copier une adresse suffisait à tout perdre.
+
+   Le retour d'onglet (visibilitychange) emprunte EXACTEMENT le chemin du
+   minuteur (_autoRefresh) : c'est lui qu'on déclenche ici.
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 15 — la saisie survit au rafraîchissement d\'équipe', async () => {
+  await page.setViewport({ width: 1280, height: 640 });
+  await ouvrirLePad(page, BASE);
+  const nGet = () => appels('GET', /^\/issue\/iss-1$/).length;
+  const retourOnglet = async () => {
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await attendre(700);
+  };
+
+  // ── 0 · Une fiche ouverte qu'on ne touche pas se rafraîchit, elle (l'équipe continue d'arriver).
+  await cliquer(page, '.dk-frise .dk-pcard[data-n="3"]');
+  await attendSel(page, '.dk-insp.on [data-act="editart"]', 'la fiche de page');
+  let avant = nGet();
+  await retourOnglet();
+  check('une fiche ouverte, pas touchée : le retour d\'onglet redemande bien le numéro',
+    nGet() === avant + 1, `appels /issue : ${avant} → ${nGet()}`);
+  check('… et la fiche est toujours ouverte après', await existe(page, '.dk-insp.on [data-act="editart"]'));
+
+  // ── 1 · « Modifier la fiche », on tape, retour d'onglet.
+  await cliquer(page, '.dk-insp [data-act="editart"]');
+  await attendSel(page, '.dk-insp [data-k="title"]', 'le formulaire « Modifier l\'article »');
+  await saisir(page, '.dk-insp [data-k="title"]', 'Le mot du président — version longue');
+  await saisir(page, '.dk-insp [data-k="contribmail"]', 'j.riviere@exemple.fr');
+  avant = nGet();
+  await retourOnglet();
+  check('formulaire ouvert : le retour d\'onglet ne le remplace PAS par la fiche',
+    await existe(page, '.dk-insp [data-k="title"]'));
+  check('… ce qui était tapé y est encore (titre + adresse)',
+    (await valeur(page, '.dk-insp [data-k="title"]')) === 'Le mot du président — version longue'
+      && (await valeur(page, '.dk-insp [data-k="contribmail"]')) === 'j.riviere@exemple.fr',
+    `${await valeur(page, '.dk-insp [data-k="title"]')} / ${await valeur(page, '.dk-insp [data-k="contribmail"]')}`);
+  check('le rafraîchissement a été DIFFÉRÉ (le numéro n\'a pas été redemandé)',
+    nGet() === avant, `appels /issue : ${avant} → ${nGet()}`);
+
+  // Annuler → fiche (touchée à l'instant : toujours pas reconstruite) ; Échap → fermée → rattrapage.
+  await cliquer(page, '.dk-insp [data-act="cancelart"]');
+  await attendSel(page, '.dk-insp [data-act="editart"]', 'retour à la fiche');
+  await retourOnglet();
+  check('fiche qu\'on vient de toucher : toujours pas reconstruite sous les doigts',
+    nGet() === avant, `appels /issue : ${avant} → ${nGet()}`);
+  await page.keyboard.press('Escape');
+  await attend(page, () => !document.querySelector('.dk-insp').classList.contains('on'), null, 'la fiche fermée');
+  await attendCote(() => nGet() > avant, 3000);
+  check('fiche fermée : le rafraîchissement en retard se rattrape tout seul',
+    nGet() > avant, `appels /issue : ${avant} → ${nGet()}`);
+
+  // ── 2 · « Nouvel article » sur une page vide.
+  await cliquer(page, '.dk-frise .dk-pcard[data-n="4"]');
+  await attendSel(page, '.dk-insp.on [data-act="newarthere"]', 'la fiche d\'une page vide');
+  await cliquer(page, '.dk-insp [data-act="newarthere"]');
+  await attendSel(page, '.dk-insp [data-k="title"]', 'le formulaire « Nouvel article »');
+  await saisir(page, '.dk-insp [data-k="title"]', 'Brève de dernière minute');
+  await retourOnglet();
+  check('nouvel article : le titre tapé survit au retour d\'onglet',
+    (await valeur(page, '.dk-insp [data-k="title"]')) === 'Brève de dernière minute',
+    String(await valeur(page, '.dk-insp [data-k="title"]')));
+  await cliquer(page, '.dk-insp [data-act="cancelart"]');
+  await attendSel(page, '.dk-insp [data-act="newarthere"]', 'retour à la fiche vide');
+
+  // ── 3 · Un choix ouvert DANS la fiche (ajouter un remplaçant) n'est pas soufflé.
+  await page.keyboard.press('Escape');
+  await attend(page, () => !document.querySelector('.dk-insp').classList.contains('on'), null, 'fiche fermée');
+  await cliquer(page, '.dk-frise .dk-pcard[data-n="3"]');
+  await attendSel(page, '.dk-insp.on [data-act="addbanc"]', 'la fiche de page');
+  await cliquer(page, '.dk-insp [data-act="addbanc"]');
+  await attendSel(page, '.dk-insp [data-slot="bancpick"] select, .dk-insp [data-slot="bancpick"] button', 'le choix du remplaçant');
+  await retourOnglet();
+  check('un choix ouvert dans la fiche est toujours là après le retour d\'onglet',
+    await existe(page, '.dk-insp [data-slot="bancpick"] select, .dk-insp [data-slot="bancpick"] button'));
+  await page.keyboard.press('Escape');
+  await attend(page, () => !document.querySelector('.dk-insp').classList.contains('on'), null, 'fiche fermée');
+
+  // ── 3b · Un formulaire quitté par Échap (ses champs restent dans le DOM, cachés)
+  //        ne doit PAS retenir le rafraîchissement pour autant.
+  await cliquer(page, '.dk-frise .dk-pcard[data-n="4"]');
+  await attendSel(page, '.dk-insp.on [data-act="newarthere"]', 'la fiche d\'une page vide');
+  await cliquer(page, '.dk-insp [data-act="newarthere"]');
+  await attendSel(page, '.dk-insp [data-k="title"]', 'le formulaire « Nouvel article »');
+  await saisir(page, '.dk-insp [data-k="title"]', 'Abandonné en route');
+  await page.keyboard.press('Escape');
+  await attend(page, () => !document.querySelector('.dk-insp').classList.contains('on'), null, 'le formulaire fermé par Échap');
+  await attendre(300);
+  avant = nGet();
+  await retourOnglet();
+  check('formulaire quitté par Échap : le champ resté dans le panneau caché ne bloque pas le rafraîchissement',
+    nGet() === avant + 1, `appels /issue : ${avant} → ${nGet()}`);
+
+  // ── 4 · L'écran « Nouveau numéro » survit lui aussi.
+  await cliquer(page, '[data-act="pubmenu"]');
+  await attendSel(page, '.dk-menu [data-newissue]', 'le menu des publications');
+  await cliquer(page, '.dk-menu [data-newissue]');
+  await attendSel(page, '[data-slot="main"] [data-k="num"]', 'l\'écran « Nouveau numéro »');
+  await saisir(page, '[data-slot="main"] [data-k="num"]', '144');
+  await retourOnglet();
+  check('écran « Nouveau numéro » : il est toujours là, avec le numéro tapé',
+    (await valeur(page, '[data-slot="main"] [data-k="num"]')) === '144',
+    String(await valeur(page, '[data-slot="main"] [data-k="num"]')));
+});
+
+/* ─────────────────────────────────────────────────────────────────
    Hygiène : aucune erreur JS n'a été avalée en chemin.
    ───────────────────────────────────────────────────────────────── */
 console.log('\n\x1b[1m▶ Hygiène\x1b[0m');
 {
   const graves = erreursPage.filter(e => !/favicon|LOGOS|ERR_/.test(e));
-  check('aucune erreur JavaScript pendant les quatorze parcours', graves.length === 0,
+  check('aucune erreur JavaScript pendant les quinze parcours', graves.length === 0,
     graves.slice(0, 4).join(' | '));
 }
 
