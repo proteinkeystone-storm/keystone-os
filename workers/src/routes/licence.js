@@ -53,6 +53,18 @@ export async function handleActivate(request, env) {
     ? undefined
     : (parseInt(devicesMax, 10) === 0 ? null : parseInt(devicesMax, 10));
 
+  // `expiresAt` — même logique que `devicesMax` : le champ ABSENT laisse
+  // l'échéance telle quelle ; `null` ou '' la RETIRE ; une date la pose.
+  // Avant, l'upsert écrivait `excluded.expires_at` sans condition : toute
+  // édition depuis l'Admin (propriétaire, appareils, apps) — dont le
+  // formulaire n'avait pas le champ — remettait l'échéance à NULL en
+  // silence, et un essai de 7 jours devenait permanent.
+  const hasExpiry = expiresAt !== undefined;
+  const expiry    = hasExpiry ? (expiresAt || null) : null;
+  if (expiry !== null && (typeof expiry !== 'string' || Number.isNaN(Date.parse(expiry)))) {
+    return err('Champ "expiresAt" invalide (AAAA-MM-JJ)', 400, origin);
+  }
+
   if (!key || typeof key !== 'string')   return err('Champ "key" requis', 400, origin);
   if (!owner || typeof owner !== 'string') return err('Champ "owner" requis', 400, origin);
 
@@ -83,15 +95,16 @@ export async function handleActivate(request, env) {
       plan         = excluded.plan,
       is_active    = 1,
       owned_assets = excluded.owned_assets,
-      expires_at   = excluded.expires_at,
+      expires_at   = CASE WHEN ? THEN excluded.expires_at ELSE licences.expires_at END,
       lookup_hmac  = excluded.lookup_hmac,
       key_hash     = excluded.key_hash,
       salt         = excluded.salt,
       devices_max  = CASE WHEN ? THEN excluded.devices_max ELSE licences.devices_max END,
       customer_email = COALESCE(excluded.customer_email, licences.customer_email),
       updated_at   = datetime('now')
-  `).bind(upperKey, tenantId, owner, plan, assetsJson, expiresAt || null, lookupHmac, hash, salt,
+  `).bind(upperKey, tenantId, owner, plan, assetsJson, expiry, lookupHmac, hash, salt,
           dMax === undefined ? null : dMax, customerEmail || null,
+          hasExpiry ? 1 : 0,
           dMax === undefined ? 0 : 1).run();
 
   const licence = await env.DB
@@ -105,7 +118,7 @@ export async function handleActivate(request, env) {
     action:   'licence_activate',
     target:   key.toUpperCase(),
     tenantId,
-    details:  { plan, owner, expiresAt: expiresAt || null, hasAssets: !!ownedAssets },
+    details:  { plan, owner, expiresAt: hasExpiry ? expiry : '(inchangé)', hasAssets: !!ownedAssets },
     request,
   });
 

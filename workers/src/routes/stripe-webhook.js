@@ -104,11 +104,21 @@ async function _readOwnedAssets(env, lookupHmac) {
  *
  * On ne l'abaisse JAMAIS (voir le CASE) : retirer un plafond en silence
  * serait la mauvaise moitié de la symétrie.
+ *
+ * `expires_at = NULL` — une licence créée à la main avec une DATE (essai
+ * de 7 jours posé depuis l'Admin, testeur à durée limitée) garde cette
+ * date quand son propriétaire finit par payer : le webhook retrouvait la
+ * licence par son e-mail, agrandissait le sac… et la date restait. La
+ * personne payait, et se voyait répondre « Licence expirée » à la
+ * connexion, au renouvellement du jeton et sur chaque appel d'API. Dès
+ * qu'un paiement Stripe confirme un droit, c'est l'abonnement qui dit
+ * jusqu'à quand — plus une échéance manuelle.
+ * (Exportée pour le banc scripts/test-stripe-webhook-expiry.mjs.)
  */
-async function _writeOwnedAssets(env, lookupHmac, bag) {
+export async function _writeOwnedAssets(env, lookupHmac, bag) {
   await env.DB.prepare(`
     UPDATE licences
-       SET plan = ?, owned_assets = ?, is_active = 1,
+       SET plan = ?, owned_assets = ?, is_active = 1, expires_at = NULL,
            enforce_ai_credits_v1 = CASE WHEN ? = 1 THEN 1 ELSE enforce_ai_credits_v1 END,
            updated_at = datetime('now')
      WHERE lookup_hmac = ?`
@@ -516,6 +526,21 @@ async function _handleCheckoutCompleted(env, event) {
       // l'accès du client au lieu de l'étendre.
       const next = addEntitlement(bag === null ? null : (bag || []), target.app);
       if (next !== null) await _writeOwnedAssets(env, known, next);
+      // Une licence née HORS Stripe (palier gratuit, essai posé dans l'Admin,
+      // testeur) n'a pas de client Stripe. Sans lui, « Gérer mon abonnement »
+      // (POST /api/billing/portal) répond 404 « Aucun abonnement Stripe
+      // rattaché » — or le portail est le SEUL canal de résiliation en
+      // self-service. On rattache donc le client au premier paiement, et on
+      // complète l'e-mail de facturation s'il manquait. COALESCE : un client
+      // déjà connu n'est jamais remplacé (les licences historiques gardent le
+      // leur, rien ne bouge pour elles).
+      await env.DB.prepare(`
+        UPDATE licences
+           SET stripe_customer_id = COALESCE(stripe_customer_id, ?),
+               customer_email     = COALESCE(customer_email, ?),
+               updated_at         = datetime('now')
+         WHERE lookup_hmac = ?`
+      ).bind(customerId, customerEmail, known).run();
       await env.DB.prepare(`
         INSERT OR REPLACE INTO licence_subscriptions (subscription_id, lookup_hmac, app_id, status, updated_at)
         VALUES (?, ?, ?, 'active', datetime('now'))
@@ -696,8 +721,10 @@ async function _handleSubscriptionUpdated(env, event) {
       await env.DB.prepare(
         "UPDATE licence_subscriptions SET status = 'active', updated_at = datetime('now') WHERE subscription_id = ?"
       ).bind(sub.id).run();
+      // Même règle que _writeOwnedAssets : un abonnement qui vit (renouvelé,
+      // réactivé) efface toute échéance manuelle posée avant le paiement.
       await env.DB.prepare(
-        "UPDATE licences SET is_active = 1 WHERE lookup_hmac = ?"
+        "UPDATE licences SET is_active = 1, expires_at = NULL WHERE lookup_hmac = ?"
       ).bind(map.lookup_hmac).run();
     }
     return;

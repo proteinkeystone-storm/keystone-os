@@ -567,13 +567,13 @@ async function renderLicences(panel) {
           <td><code style="font-size:12px;font-family:'SF Mono',monospace;color:var(--gold)">${esc(l.key)}</code></td>
           <td>${esc(l.owner || '—')}</td>
           <td>${_accesCellHTML(l)}</td>
-          <td><span class="badge ${l.active ? 'badge-active' : 'badge-revoked'}">${l.active ? 'Active' : 'Révoquée'}</span></td>
+          <td><span class="badge ${l.active ? 'badge-active' : 'badge-revoked'}">${l.active ? 'Active' : 'Révoquée'}</span>${l.active ? _expiryHTML(l) : ''}</td>
           <td style="font-size:13px">${devicesCell}</td>
           <td>${flagsCell}</td>
           <td style="color:var(--text-muted);font-size:12px">${date}</td>
           <td style="display:flex;gap:8px;align-items:center">
             ${l.active ? `<button class="btn btn-danger btn-sm" data-key="${esc(l.key)}" data-action="revoke">Révoquer</button>` : ''}
-            <button class="btn btn-secondary btn-sm" data-key="${esc(l.key)}" data-owner="${esc(l.owner||'')}" data-plan="${esc(l.plan||'')}" data-assets="${esc((l.owned_assets || []).join(','))}" data-action="edit">Éditer</button>
+            <button class="btn btn-secondary btn-sm" data-key="${esc(l.key)}" data-owner="${esc(l.owner||'')}" data-plan="${esc(l.plan||'')}" data-assets="${esc((l.owned_assets || []).join(','))}" data-expires="${esc(l.expiresAt ? String(l.expiresAt).slice(0, 10) : '')}" data-action="edit">Éditer</button>
           </td>`;
         tbody.appendChild(tr);
       });
@@ -583,7 +583,7 @@ async function renderLicences(panel) {
         const btn = e.target.closest('[data-action]');
         if (!btn) return;
         if (btn.dataset.action === 'revoke') confirmRevoke(btn.dataset.key, panel);
-        if (btn.dataset.action === 'edit')   showEditLicenceModal(btn.dataset.key, btn.dataset.owner, btn.dataset.plan, btn.dataset.assets, panel);
+        if (btn.dataset.action === 'edit')   showEditLicenceModal(btn.dataset.key, btn.dataset.owner, btn.dataset.plan, btn.dataset.assets, panel, btn.dataset.expires || '');
       });
 
       // S5.4 — toggle flags via POST /api/admin/licences/:key/flag
@@ -642,6 +642,23 @@ async function runExpirationRemindersNow(panel) {
   }
 }
 
+// ── Échéance d'une licence (essai, testeur à durée limitée) ──────────
+// `expires_at` = 'AAAA-MM-JJ' (ou ISO) ; le worker ferme dès que
+// `new Date(expires_at) < now` → minuit UTC du jour indiqué.
+function _daysFromNow(n) { const d = new Date(); d.setUTCDate(d.getUTCDate() + n); return d; }
+function _dateInputValue(d) { return d.toISOString().slice(0, 10); }
+function _expiryHTML(l) {
+  if (!l.expiresAt) return '';
+  const d = new Date(l.expiresAt);
+  if (Number.isNaN(d.getTime())) return '';
+  const fr = d.toLocaleDateString('fr-FR', { timeZone: 'UTC' });
+  const passed = d < new Date();
+  return `<div style="font-size:11px;margin-top:3px;white-space:nowrap;color:${passed ? 'var(--danger)' : 'var(--text-muted)'}"
+               title="${passed ? 'Échéance passée — l\'accès est fermé par le serveur' : 'Accès jusqu\'au début de ce jour (minuit UTC)'}">
+            ${passed ? 'Expirée le' : 'Essai → '} ${esc(fr)}
+          </div>`;
+}
+
 function showCreateLicenceModal(panel) {
   openModal('Nouvelle Licence', `
     <div class="form-grid">
@@ -671,8 +688,12 @@ function showCreateLicenceModal(panel) {
       </div>
       ${_appPickerHTML('m', null, true)}
       <div class="form-group">
-        <label class="form-label">Expiration <span style="font-weight:400;text-transform:none">(optionnel)</span></label>
-        <input type="date" class="form-input" id="m-expires">
+        <label class="form-label">Expiration <span style="font-weight:400;text-transform:none">(optionnel — l'accès s'arrête au début du jour indiqué, minuit UTC)</span></label>
+        <div style="display:flex;gap:8px">
+          <input type="date" class="form-input" id="m-expires" style="flex:1">
+          <button class="btn btn-secondary" id="btn-trial-7" type="button" style="white-space:nowrap;flex-shrink:0"
+                  title="Essai : 7 jours pleins à partir de demain — l'accès s'arrête à la date posée">7 jours</button>
+        </div>
       </div>
     </div>
     <p class="form-error" id="m-error"></p>`,
@@ -682,6 +703,9 @@ function showCreateLicenceModal(panel) {
   _wireAppPicker('m');
   document.getElementById('btn-gen-key').addEventListener('click', () => {
     document.getElementById('m-key').value = generateKey();
+  });
+  document.getElementById('btn-trial-7').addEventListener('click', () => {
+    document.getElementById('m-expires').value = _dateInputValue(_daysFromNow(8));
   });
   document.getElementById('m-cancel').addEventListener('click', closeModal);
   document.getElementById('m-confirm').addEventListener('click', () => submitCreateLicence(panel));
@@ -851,7 +875,7 @@ function _readAppPicker(p) {
   return [...document.querySelectorAll(`input[data-app-pick="${p}"]:checked`)].map(el => el.value);
 }
 
-function showEditLicenceModal(key, owner, plan, assets, panel) {
+function showEditLicenceModal(key, owner, plan, assets, panel, expires = '') {
   openModal('Éditer la licence', `
     <div class="form-grid">
       <div class="form-group form-full">
@@ -872,6 +896,10 @@ function showEditLicenceModal(key, owner, plan, assets, panel) {
         </select>
       </div>
       ${_appPickerHTML('e', assets)}
+      <div class="form-group">
+        <label class="form-label">Expiration <span style="font-weight:400;text-transform:none">(vide = sans échéance)</span></label>
+        <input type="date" class="form-input" id="e-expires" value="${esc(expires)}">
+      </div>
     </div>
     <p class="form-error" id="e-error"></p>`,
   `<button class="btn btn-secondary" id="e-cancel">Annuler</button>
@@ -896,6 +924,10 @@ function showEditLicenceModal(key, owner, plan, assets, panel) {
     try {
       const corps = { key, plan: newPlan, owner: newOwner, ownedAssets };
       if (devicesMax !== '') corps.devicesMax = devicesMax;
+      // L'échéance est TOUJOURS renvoyée, telle que le champ l'affiche :
+      // pré-remplie = inchangée, vidée = retirée (null explicite). Avant,
+      // elle n'était pas envoyée et l'upsert l'effaçait en silence.
+      corps.expiresAt = document.getElementById('e-expires').value || null;
       await api('/api/licence/activate', 'POST', corps);
       closeModal(); toast('Licence mise à jour ✓'); renderLicences(panel);
     } catch (err) {
