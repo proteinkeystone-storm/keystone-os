@@ -518,9 +518,23 @@ function _mixTo(hex, target, ratio) {   // mélange chaque canal vers target (0 
   const [r, g, b] = _rgbOf(hex).map(c => Math.round(c + (target - c) * ratio));
   return `rgb(${r},${g},${b})`;
 }
+// Encre d'une carte PLEINE couleur (page finie, cf. .dk-pcard.done) : sombre
+// ou blanche selon la luminance relative (WCAG) de la couleur de rubrique —
+// un lime ou un pastel prend une encre sombre, une teinte profonde une encre
+// blanche. Seuil 0,33, volontairement au-dessus du point d'égalité des
+// contrastes (0,18) : en gras, le blanc sur une teinte moyenne lit mieux.
+function _lumOf(hex) {
+  const [r, g, b] = _rgbOf(hex).map(c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function _inkVars(hex) {
+  return _lumOf(hex) > 0.33
+    ? '--dk-rub-ink:#12141b;--dk-rub-ink2:rgba(0,0,0,.66);--dk-rub-ink-bg:rgba(0,0,0,.12)'
+    : '--dk-rub-ink:#fff;--dk-rub-ink2:rgba(255,255,255,.8);--dk-rub-ink-bg:rgba(255,255,255,.22)';
+}
 function _rubVars(rub, alpha = 0.3) {
   if (!rub) return '';
-  return ` style="--dk-rub:${rub.color};--dk-rub-tint:${_rgba(rub.color, alpha)};--dk-rub-lite:${_mixTo(rub.color, 255, 0.55)};--dk-rub-deep:${_mixTo(rub.color, 0, 0.4)}"`;
+  return ` style="--dk-rub:${rub.color};--dk-rub-tint:${_rgba(rub.color, alpha)};--dk-rub-lite:${_mixTo(rub.color, 255, 0.55)};--dk-rub-deep:${_mixTo(rub.color, 0, 0.4)};${_inkVars(rub.color)}"`;
 }
 function _slotsOf(p) { return (_D.slots || []).filter(s => s.page_id === p.id).sort((a, b) => a.position - b.position); }
 function _pageByN(n) { return (_D.pages || []).find(p => p.n === n) || null; }
@@ -547,6 +561,9 @@ function _bancOf(s) { try { const b = JSON.parse(s.banc || '[]'); return Array.i
 const _isDone = a => ['maquette', 'publie'].includes(a.status);
 
 // Marge d'une CARTE = min des marges de ses articles non terminés (§2.4).
+// allDone = plus rien n'y attend (abandonnés compris) → « prêt » ;
+// done = la page est vraiment FINIE : tout est maquetté ou publié, au moins
+// un article l'est — c'est elle qui remplit la carte de sa couleur.
 function _computeCard(p) {
   const arts = _slotsOf(p).map(s => _artById(s.art_id)).filter(Boolean);
   let marge = null, allDone = arts.length > 0;
@@ -556,7 +573,7 @@ function _computeCard(p) {
     const m = _computeArt(a).marge;
     if (m !== null && (marge === null || m < marge)) marge = m;
   }
-  return { arts, marge, allDone };
+  return { arts, marge, allDone, done: allDone && arts.some(_isDone) };
 }
 function _computeJalons() {
   let minB = Infinity, minM = Infinity;
@@ -1178,13 +1195,17 @@ function _cardHTML(p, prevP) {
   if (slots.length > 1) badges.push(`<span class="dk-pc-badge">${icon('copy', 9)}${slots.length}</span>`);
   if (bancTotal) badges.push(`<span class="dk-pc-badge">${icon('users', 9)}${bancTotal}</span>`);
   if (fileBadge) badges.push(fileBadge);
-  return `<div class="dk-pcard ${cls}${msel}${rub ? ' rubbed' : ''}${isNew ? ' dk-new' : ''}" data-n="${p.n}" data-art="${a.id}"${_rubVars(rub)}>
+  // Page finie + rubrique : la carte se remplit de la couleur du bandeau
+  // (classe done, rendu dans desk.css) ; le point de statut passe à l'encre,
+  // un point vert sur une carte verte ne se verrait plus.
+  const done = card.done && !!rub;
+  return `<div class="dk-pcard ${cls}${msel}${rub ? ' rubbed' : ''}${done ? ' done' : ''}${isNew ? ' dk-new' : ''}" data-n="${p.n}" data-art="${a.id}"${_rubVars(rub)}>
     ${newDot}
     <div class="dk-pc-rub"><span>${_esc(rub ? rub.name : 'Sans rubrique')}${suite ? ' · suite' : ''}</span></div>
     <div class="dk-pc-title">${_esc(a.title)}</div>
     ${a.contrib ? `<div class="dk-pc-contrib">${_esc(a.contrib)}${slots.length > 1 ? ' +' + (slots.length - 1) : ''}</div>` : ''}
     <div class="dk-pc-foot">
-      <div class="dk-pc-status"><span class="dk-pc-status-dot" style="background:${st.dot}"></span><span>${st.label}</span></div>
+      <div class="dk-pc-status"><span class="dk-pc-status-dot" style="background:${done ? 'var(--dk-rub-ink)' : st.dot}"></span><span>${st.label}</span></div>
       <div class="dk-pc-marge">${card.allDone ? 'prêt' : _margeTxt(card.marge)}</div>
     </div>
     ${badges.length ? `<div class="dk-pc-badges">${badges.join('')}</div>` : ''}

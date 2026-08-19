@@ -290,6 +290,23 @@ html.light-mode .dk-pcard.rubbed { background: linear-gradient(var(--dk-rub-tint
 html.light-mode .dk-pcard.rubbed .dk-pc-rub { color: var(--dk-rub-deep); }
 html.light-mode .dk-pcard.rubbed .dk-pc-contrib, html.light-mode .dk-pcard.rubbed .dk-pc-status,
 html.light-mode .dk-pcard.rubbed .dk-pc-marge, html.light-mode .dk-pcard.rubbed.vide { color: rgba(0, 0, 0, .62); }
+/* Page FINIE (tous ses articles maquettés ou publiés — design Stéphane
+   2026-08-19) : la couleur du bandeau descend sur TOUTE la carte, un bloc
+   plein qui se repère de loin — même au cran mini, où le libellé de statut
+   disparaît et où le point vert ne distinguait pas « relu » de « maquetté ».
+   L'encre (--dk-rub-ink, -ink2, -ink-bg) est choisie par luminance dans
+   desk.js : sombre sur un lime ou un pastel, blanche sur une teinte
+   profonde. Même rendu dans les deux thèmes — la carte porte sa couleur ;
+   les sélecteurs light-mode sont repris pour garder la main sur les règles
+   de thème clair ci-dessus, plus spécifiques. */
+.dk-pcard.rubbed.done, html.light-mode .dk-pcard.rubbed.done {
+  background: var(--dk-rub); color: var(--dk-rub-ink);
+}
+.dk-pcard.rubbed.done .dk-pc-rub, html.light-mode .dk-pcard.rubbed.done .dk-pc-rub,
+.dk-pcard.rubbed.done .dk-pc-contrib, html.light-mode .dk-pcard.rubbed.done .dk-pc-contrib,
+.dk-pcard.rubbed.done .dk-pc-status, html.light-mode .dk-pcard.rubbed.done .dk-pc-status,
+.dk-pcard.rubbed.done .dk-pc-marge, html.light-mode .dk-pcard.rubbed.done .dk-pc-marge { color: var(--dk-rub-ink2); }
+.dk-pcard.rubbed.done .dk-pc-badge { background: var(--dk-rub-ink-bg); color: var(--dk-rub-ink); }
 .dk-pcard.sel { border-color: var(--dk-gold); box-shadow: 0 0 0 1px var(--dk-gold); }
 .dk-pcard.ambre { border-color: rgba(230, 162, 60, .55); }
 .dk-pcard.rouge { border-color: rgba(229, 72, 77, .7); }

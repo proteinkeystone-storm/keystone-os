@@ -522,6 +522,16 @@ function apiDesk(method, path, body) {
     return [200, { ok: true }];
   }
 
+  // Recolorer / renommer / déplacer une rubrique (Réglages → Rubriques) —
+  // calqué sur PATCH /rubrique/:id du worker. Le parcours 13 s'en sert pour
+  // passer une rubrique d'une teinte profonde à un lime et voir l'encre changer.
+  if ((m = path.match(/^\/rubrique\/([^/]+)$/)) && method === 'PATCH') {
+    const r = DB.rubriques.find(x => x.id === m[1]);
+    if (!r) return [404, { error: 'Rubrique introuvable' }];
+    for (const k of ['name', 'color', 'position']) if (k in body) r[k] = body[k];
+    return [200, { ok: true, rubrique: { ...r } }];
+  }
+
   if ((m = path.match(/^\/publication\/([^/]+)\/team$/)) && method === 'GET') {
     return [200, { ok: true, members: [{ sub: 'ui-owner', name: 'Stéphane', email: 'ui@test.dk' }], invites: [] }];
   }
@@ -1716,12 +1726,120 @@ await parcours('Parcours 12 — Kora ouverte, entête desK intacte', async () =>
 });
 
 /* ─────────────────────────────────────────────────────────────────
+   PARCOURS 13 · Page finie = carte PLEINE couleur (19 août 2026)
+
+   Demandé par Stéphane : « une fois qu'une page est traitée et
+   maquettée, j'aimerais qu'elle soit plus différenciée en appliquant
+   sa couleur d'entête sur l'intégralité de sa carte ». Le besoin
+   venait du cran mini du curseur : le libellé de statut y disparaît,
+   et le point vert ne distingue pas « relu » de « maquetté ».
+
+   On mesure des PIXELS (couleur de fond calculée, couleur d'encre) —
+   c'est pour ça que le banc est un navigateur, pas jsdom.
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 13 — page finie, carte pleine couleur', async () => {
+  await page.setViewport({ width: 1280, height: 640 });   // le parcours 12 finit sur iPhone
+  await ouvrirLePad(page, BASE);
+  const CARTE = '.dk-frise .dk-pcard[data-n="3"]';          // « Le mot du président », relu, Vie des unités #2980b9
+  const style = (sel, prop) => page.evaluate((s, pr) => {
+    const el = document.querySelector(s);
+    return el ? getComputedStyle(el)[pr] : null;
+  }, sel, prop);
+  // Preuve à l'œil (même clé que le parcours 12 : DK_SHOTS=/un/dossier).
+  const SHOTS = process.env.DK_SHOTS || '';
+  const capturer = async (nom) => {
+    if (!SHOTS) return;
+    try { fs.mkdirSync(SHOTS, { recursive: true }); } catch (_) {}
+    const el = await page.$('.dk-frise');
+    await (el || page).screenshot({ path: `${SHOTS}/${nom}.png` });
+  };
+
+  // ── Avant : relu = point vert, mais la carte n'est PAS pleine.
+  check('avant : la carte d\'un article relu n\'est pas « finie »',
+    await page.evaluate(s => { const c = document.querySelector(s); return !!c && c.classList.contains('rubbed') && !c.classList.contains('done'); }, CARTE));
+  const avant = await style(CARTE, 'backgroundColor');
+  check('avant : son fond n\'est pas la couleur de rubrique (teinte sur base sombre)',
+    avant !== 'rgb(41, 128, 185)', 'fond mesuré : ' + avant);
+  check('avant : le point de statut est le vert « relu » — le même que « maquetté », d\'où la demande',
+    (await style(CARTE + ' .dk-pc-status-dot', 'backgroundColor')) === 'rgb(76, 195, 138)',
+    await style(CARTE + ' .dk-pc-status-dot', 'backgroundColor'));
+
+  // ── On maquette depuis la fiche (un tap sur l'étape suivante).
+  await cliquer(page, CARTE);
+  await attendSel(page, '.dk-insp .dk-step.next[data-step="maquette"]', 'l\'étape « maquetté » cliquable');
+  await cliquer(page, '.dk-insp .dk-step.next[data-step="maquette"]');
+  await attendCote(() => DB.articles.find(a => a.id === 'art-place').status === 'maquette', 5000);
+  check('l\'article est passé « maquetté » côté serveur',
+    DB.articles.find(a => a.id === 'art-place').status === 'maquette');
+  await attend(page, s => document.querySelector(s)?.classList.contains('done'), CARTE, 'la carte repeinte en page finie');
+
+  // ── Après : la couleur du bandeau remplit toute la carte, encre lisible.
+  check('après : la carte porte la classe « done »',
+    await page.evaluate(s => document.querySelector(s).classList.contains('done'), CARTE));
+  check('après : son fond EST la couleur de rubrique (#2980b9 → rgb(41, 128, 185))',
+    (await style(CARTE, 'backgroundColor')) === 'rgb(41, 128, 185)', 'fond mesuré : ' + await style(CARTE, 'backgroundColor'));
+  check('après : le titre passe à l\'encre blanche (teinte profonde)',
+    (await style(CARTE + ' .dk-pc-title', 'color')) === 'rgb(255, 255, 255)', await style(CARTE + ' .dk-pc-title', 'color'));
+  check('après : le point de statut aussi — pas de point vert noyé dans la couleur',
+    (await style(CARTE + ' .dk-pc-status-dot', 'backgroundColor')) === 'rgb(255, 255, 255)',
+    await style(CARTE + ' .dk-pc-status-dot', 'backgroundColor'));
+  check('après : la carte dit toujours « maquetté » et « prêt »',
+    /maquetté/.test(await texte(page, CARTE + ' .dk-pc-status')) && /prêt/.test(await texte(page, CARTE + ' .dk-pc-marge')),
+    (await texte(page, CARTE + ' .dk-pc-foot')).trim());
+  await cliquer(page, '.dk-insp .dk-insp-close');
+  await attendre(250);
+  await capturer('13-page-finie-sombre');
+  await page.evaluate(() => document.documentElement.classList.add('light-mode'));
+  await attendre(120);
+  check('thème clair : la carte finie garde sa pleine couleur (elle porte la sienne)',
+    (await style(CARTE, 'backgroundColor')) === 'rgb(41, 128, 185)', 'fond mesuré : ' + await style(CARTE, 'backgroundColor'));
+  await capturer('13-page-finie-clair');
+  await page.evaluate(() => document.documentElement.classList.remove('light-mode'));
+
+  // ── Au cran mini (celui de la demande) : la carte reste un bloc de couleur.
+  await page.evaluate(() => {
+    const s = document.querySelector('[data-k="size"]');
+    s.value = '0'; s.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await attendre(200);
+  check('au cran mini, la carte finie reste pleine couleur (le point seul ne suffisait pas)',
+    (await style(CARTE, 'backgroundColor')) === 'rgb(41, 128, 185)'
+      && (await style(CARTE + ' .dk-pc-status span:not(.dk-pc-status-dot)', 'display')) === 'none',
+    'fond : ' + await style(CARTE, 'backgroundColor'));
+
+  // ── Une rubrique claire prend une encre SOMBRE : on recolore « Vie des
+  //    unités » en lime depuis les Réglages (code hexadécimal de la charte).
+  await cliquer(page, '[data-act="settings"]');
+  await attendSel(page, '[data-rubhex="rub-unites"]', 'le réglage des rubriques');
+  await saisir(page, '[data-rubhex="rub-unites"]', '#a8d867');
+  await page.evaluate(() => document.querySelector('[data-rubhex="rub-unites"]').dispatchEvent(new Event('change', { bubbles: true })));
+  await attendCote(() => DB.rubriques.find(r => r.id === 'rub-unites').color === '#a8d867', 5000);
+  check('la rubrique est recolorée côté serveur',
+    DB.rubriques.find(r => r.id === 'rub-unites').color === '#a8d867');
+  await attend(page, s => getComputedStyle(document.querySelector(s)).backgroundColor === 'rgb(168, 216, 103)', CARTE,
+    'la carte repeinte en lime');
+  check('la carte finie suit la nouvelle couleur (lime)',
+    (await style(CARTE, 'backgroundColor')) === 'rgb(168, 216, 103)');
+  check('et son encre devient SOMBRE — lisible sur un lime',
+    (await style(CARTE + ' .dk-pc-title', 'color')) === 'rgb(18, 20, 27)', await style(CARTE + ' .dk-pc-title', 'color'));
+  check('le point de statut aussi',
+    (await style(CARTE + ' .dk-pc-status-dot', 'backgroundColor')) === 'rgb(18, 20, 27)',
+    await style(CARTE + ' .dk-pc-status-dot', 'backgroundColor'));
+  await page.evaluate(() => {
+    const s = document.querySelector('[data-k="size"]');
+    s.value = '2'; s.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await attendre(200);
+  await capturer('13-page-finie-lime');
+});
+
+/* ─────────────────────────────────────────────────────────────────
    Hygiène : aucune erreur JS n'a été avalée en chemin.
    ───────────────────────────────────────────────────────────────── */
 console.log('\n\x1b[1m▶ Hygiène\x1b[0m');
 {
   const graves = erreursPage.filter(e => !/favicon|LOGOS|ERR_/.test(e));
-  check('aucune erreur JavaScript pendant les onze parcours', graves.length === 0,
+  check('aucune erreur JavaScript pendant les treize parcours', graves.length === 0,
     graves.slice(0, 4).join(' | '));
 }
 
