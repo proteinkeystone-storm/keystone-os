@@ -2015,8 +2015,17 @@ async function _gscExchangeCode(env, code, redirectUri) {
     }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error_description || data.error || `token ${res.status}`);
+  if (!res.ok) throw _gscOauthError(data, `token ${res.status}`, res.status);
   return data;
+}
+// Erreur du point de jeton Google : garder le CODE (data.error, ex.
+// invalid_grant) — pour un refresh token périmé Google met « Bad Request »
+// dans error_description ; ne lire qu'elle faisait rater la branche
+// « accès expiré » en aval (vécu 2026-08-19, app en mode test → 7 jours).
+function _gscOauthError(data, fallback, httpStatus) {
+  const e = new Error([data.error, data.error_description].filter(Boolean).join(' — ') || fallback);
+  e.httpStatus = httpStatus; e.oauthCode = data.error || '';
+  return e;
 }
 // OAuth : refresh_token → access_token frais (à chaque relevé).
 async function _gscAccessToken(env, refreshToken) {
@@ -2028,7 +2037,7 @@ async function _gscAccessToken(env, refreshToken) {
     }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error_description || data.error || `refresh ${res.status}`);
+  if (!res.ok) throw _gscOauthError(data, `refresh ${res.status}`, res.status);
   return data.access_token;
 }
 async function _gscUserEmail(accessToken) {
@@ -2199,9 +2208,9 @@ export async function handleSiteGscRun(request, env, id) {
     return json({ gsc: { connected: true, property: row.property, score: out.score, results: out.results, run_at: new Date().toISOString() } }, 200, origin);
   } catch (e) {
     const m = String(e.message || '');
-    if (e.httpStatus === 401 || e.httpStatus === 403 || /invalid_grant|unauthorized/i.test(m)) {
+    if (e.oauthCode === 'invalid_grant' || e.httpStatus === 401 || e.httpStatus === 403 || /invalid_grant|unauthorized|expired|revoked/i.test(m)) {
       await env.DB.prepare("UPDATE sentinel_gsc SET status='error', updated_at=datetime('now') WHERE site_id = ? AND tenant_id = ?").bind(id, g.tenant).run();
-      return err("L'accès Google a expiré ou a été révoqué. Reconnecte Search Console.", 401, origin);
+      return err("Votre accès Google a expiré ou a été révoqué — cliquez « Connecter Search Console » pour le rétablir (30 secondes).", 401, origin);
     }
     return err(`Lecture Search Console impossible (${m || 'service indisponible'}).`, 502, origin);
   }

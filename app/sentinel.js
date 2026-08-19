@@ -1102,6 +1102,10 @@ async function _gscRun() {
     _panel.gsc = Object.assign({}, _panel.gsc, d.gsc, { available: true, connected: true });
     _renderCockpit();
   } catch (e) {
+    // Accès Google expiré/révoqué : le worker vient de marquer la connexion
+    // morte — la carte doit tout de suite retendre « Connecter », pas rester
+    // sur un état « connectée » qui ne dit plus la vérité (vécu 2026-08-19).
+    if (/expiré|révoqué/i.test(e.message || '')) _panel.gsc = Object.assign({}, _panel.gsc, { connected: false, score: null, results: null });
     _renderCockpit();
     alert(e.message || 'Lecture impossible.');
   }

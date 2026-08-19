@@ -36,6 +36,7 @@
     "test:kora-livinglayer": "node scripts/test-kora-livinglayer.mjs",
     "test:kora-network": "node scripts/test-kora-network.mjs",
     "test:geo-manual": "node scripts/test-sentinel-geo-manual.mjs",
+    "test:sentinel-gsc": "node workers/test/test-sentinel-gsc-expiry.mjs",
     "test:webpush": "node scripts/test-webpush.mjs",
     "test:keyring": "node scripts/test-keyring.mjs",
     "test:templates": "node scripts/test-templates.mjs",
