@@ -1834,12 +1834,138 @@ await parcours('Parcours 13 — page finie, carte pleine couleur', async () => {
 });
 
 /* ─────────────────────────────────────────────────────────────────
+   PARCOURS 14 · La fiche de page — retouches du 19 août 2026
+
+   Trois demandes de Stéphane sur la fiche qui s'ouvre depuis une carte :
+   1. le stepper se DÉCOCHE (on s'est trompé d'un cran) et une étape
+      passée y ramène — avancer reste d'un cran à la fois ;
+   2. le casier, « la zone la plus importante », se voit d'un coup
+      d'œil : cerclage doré, titre doré, bouton télécharger plein or —
+      et il remonte juste sous l'état de l'article ;
+   3. « Étaler sur les pages suivantes » et « Ajouter un article ici »
+      sont de vrais boutons, plus des liens fantômes.
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 14 — la fiche de page : décocher, casier en évidence, vrais boutons', async () => {
+  await page.setViewport({ width: 1280, height: 640 });
+  await ouvrirLePad(page, BASE);
+  const style = (sel, prop) => page.evaluate((s, pr) => {
+    const el = document.querySelector(s);
+    return el ? getComputedStyle(el)[pr] : null;
+  }, sel, prop);
+  const statut = () => DB.articles.find(a => a.id === 'art-place').status;
+  const OR = 'rgb(201, 162, 39)';
+  const SHOTS = process.env.DK_SHOTS || '';
+  // Capture de la fiche ENTIÈRE : on grandit la fenêtre le temps du cliché
+  // (les mesures du parcours, elles, ne dépendent pas de la hauteur).
+  const capturer = async (nom) => {
+    if (!SHOTS) return;
+    try { fs.mkdirSync(SHOTS, { recursive: true }); } catch (_) {}
+    await page.setViewport({ width: 1280, height: 1240 });
+    await attendre(150);
+    const el = await page.$('.dk-insp');
+    await (el || page).screenshot({ path: `${SHOTS}/${nom}.png` });
+    await page.setViewport({ width: 1280, height: 640 });
+    await attendre(150);
+  };
+
+  await cliquer(page, '.dk-frise .dk-pcard[data-n="3"]');   // « Le mot du président », relu
+  await attendSel(page, '.dk-insp.on .dk-steps', 'la fiche de page et son stepper');
+
+  // ── 1 · Le stepper : avancer d'un cran, revenir, décocher.
+  check('relu : l\'étape suivante « maquetté » reste cliquable (avancer)',
+    await existe(page, '.dk-insp .dk-step.next[data-step="maquette"]'));
+  check('relu : l\'étape courante se DÉCOCHE (sa cible est « remis »)',
+    await existe(page, '.dk-insp .dk-step.on[data-step="remis"]'));
+  check('relu : une étape passée y ramène (« attendu » cliquable, cible « attendu »)',
+    await existe(page, '.dk-insp .dk-step.done[data-step="attendu"]'));
+  check('les étapes cliquables ont un curseur de bouton',
+    (await style('.dk-insp .dk-step.done[data-step="attendu"]', 'cursor')) === 'pointer');
+
+  await cliquer(page, '.dk-insp .dk-step.next[data-step="maquette"]');
+  await attendCote(() => statut() === 'maquette', 5000);
+  check('avancer : l\'article passe « maquetté »', statut() === 'maquette');
+  await attend(page, () => document.querySelector('.dk-frise .dk-pcard[data-n="3"]')?.classList.contains('done'), null, 'la carte pleine couleur');
+  await attendSel(page, '.dk-insp .dk-step.on[data-step="relu"]', 'le stepper re-rendu sur « maquetté »');
+
+  await capturer('14-fiche-maquettee');
+  await cliquer(page, '.dk-insp .dk-step.on[data-step="relu"]');        // on s'est trompé : on décoche
+  await attendCote(() => statut() === 'relu', 5000);
+  check('décocher « maquetté » ramène l\'article à « relu »', statut() === 'relu');
+  await attend(page, () => !document.querySelector('.dk-frise .dk-pcard[data-n="3"]')?.classList.contains('done'), null, 'la carte redevenue ordinaire');
+  check('et la carte du chemin de fer perd sa pleine couleur dans la foulée',
+    !(await page.evaluate(() => document.querySelector('.dk-frise .dk-pcard[data-n="3"]').classList.contains('done'))));
+  check('le message dit ce qui s\'est passé',
+    /décoché/.test(await texte(page, '[data-slot="toast"]')), (await texte(page, '[data-slot="toast"]')).trim());
+  check('le retour est bien ÉCRIT (PATCH status = relu), pas seulement affiché',
+    appels('PATCH', /^\/article\/art-place$/).some(x => x.body && x.body.status === 'relu'),
+    JSON.stringify(appels('PATCH', /^\/article\/art-place$/).map(x => x.body)));
+
+  await attendSel(page, '.dk-insp .dk-step.done[data-step="attendu"]', 'le stepper re-rendu sur « relu »');
+  await cliquer(page, '.dk-insp .dk-step.done[data-step="attendu"]');  // deux crans en arrière d'un coup
+  await attendCote(() => statut() === 'attendu', 5000);
+  check('revenir à une étape passée (« attendu ») depuis « relu »', statut() === 'attendu');
+  await attendSel(page, '.dk-insp .dk-step.on[data-step="propose"]', 'le stepper re-rendu sur « attendu »');
+  check('attendu : on n\'avance toujours que d\'un cran — « relu » et « maquetté » ne sont pas cliquables',
+    (await compter(page, '.dk-insp .dk-step[data-step]')) === 3
+      && !(await existe(page, '.dk-insp .dk-step[data-step="relu"]'))
+      && !(await existe(page, '.dk-insp .dk-step[data-step="maquette"]')),
+    'cliquables : ' + await compter(page, '.dk-insp .dk-step[data-step]'));
+  await cliquer(page, '.dk-insp .dk-step.on[data-step="propose"]');
+  await attendCote(() => statut() === 'propose', 5000);
+  await attendSel(page, '.dk-insp .dk-step.on:not([data-step])', 'le stepper re-rendu sur « proposé »');
+  check('proposé : la première étape n\'a rien derrière elle — elle ne se décoche pas',
+    await existe(page, '.dk-insp .dk-step.on:disabled') && !(await existe(page, '.dk-insp .dk-step.on[data-step]')));
+
+  // ── 2 · Le casier en évidence : cerclage doré, titre doré, remonté sous l'état.
+  check('la fiche de page porte un casier en évidence (.dk-sec-casier)',
+    await existe(page, '.dk-insp .dk-sec.dk-sec-casier'));
+  check('son cerclage est doré', (await style('.dk-insp .dk-sec-casier', 'borderTopColor')) === OR,
+    await style('.dk-insp .dk-sec-casier', 'borderTopColor'));
+  check('son titre aussi', (await style('.dk-insp .dk-sec-casier h4', 'color')) === OR,
+    await style('.dk-insp .dk-sec-casier h4', 'color'));
+  check('il remonte juste sous l\'état de l\'article, AVANT le banc des remplaçants',
+    await page.evaluate(() => {
+      const secs = [...document.querySelectorAll('.dk-insp .dk-sec')];
+      const iEtat = secs.findIndex(s => s.classList.contains('dk-sec-state'));
+      const iCas  = secs.findIndex(s => s.classList.contains('dk-sec-casier'));
+      const iBanc = secs.findIndex(s => /Banc des rempla/.test(s.querySelector('h4')?.textContent || ''));
+      return iEtat >= 0 && iCas === iEtat + 1 && iBanc > iCas;
+    }));
+
+  // ── 3 · « Étaler » et « Ajouter un article ici » : de vrais boutons.
+  for (const [act, nom] of [['spread', 'Étaler sur les pages suivantes'], ['addslot', 'Ajouter un article ici']]) {
+    const sel = `.dk-insp [data-act="${act}"]`;
+    check(`« ${nom} » n'est plus un lien fantôme`, await existe(page, sel) && !(await page.evaluate(s => document.querySelector(s).classList.contains('ghost'), sel)));
+    check(`« ${nom} » a la bordure et le fond d'un bouton (comme « Modifier la fiche »)`,
+      (await style(sel, 'borderTopColor')) === (await style('.dk-insp [data-act="editart"]', 'borderTopColor'))
+        && (await style(sel, 'backgroundColor')) === (await style('.dk-insp [data-act="editart"]', 'backgroundColor')),
+      `${await style(sel, 'borderTopColor')} / ${await style(sel, 'backgroundColor')}`);
+  }
+  await capturer('14-fiche-casier-actions');
+
+  // ── 2b · Le bouton « télécharger » est plein or (fiche marbre, 8 pièces).
+  await cliquer(page, '[data-slot="view"] [data-v="marbre"]');
+  await attendSel(page, '.dk-mrow[data-a="art-copie"]', 'le marbre');
+  await cliquer(page, '.dk-mrow[data-a="art-copie"]');
+  await attendSel(page, '.dk-insp .dk-sec-casier [data-dlf]', 'la fiche marbre et ses pièces');
+  check('fiche marbre : les pièces jointes sont aussi en évidence',
+    (await style('.dk-insp .dk-sec-casier', 'borderTopColor')) === OR);
+  check('chaque pièce a son bouton « télécharger » plein or',
+    (await compter(page, '.dk-insp .dk-sec-casier .dk-iconbtn.primary[data-dlf]')) === 8
+      && (await style('.dk-insp .dk-sec-casier .dk-iconbtn.primary[data-dlf]', 'backgroundColor')) === OR,
+    `${await compter(page, '.dk-insp .dk-sec-casier .dk-iconbtn.primary[data-dlf]')} · ${await style('.dk-insp .dk-sec-casier .dk-iconbtn.primary[data-dlf]', 'backgroundColor')}`);
+  check('la croix de suppression, elle, reste discrète',
+    (await style('.dk-insp .dk-sec-casier .dk-iconbtn[data-delf]', 'backgroundColor')) !== OR);
+  await capturer('14-fiche-marbre-pieces');
+});
+
+/* ─────────────────────────────────────────────────────────────────
    Hygiène : aucune erreur JS n'a été avalée en chemin.
    ───────────────────────────────────────────────────────────────── */
 console.log('\n\x1b[1m▶ Hygiène\x1b[0m');
 {
   const graves = erreursPage.filter(e => !/favicon|LOGOS|ERR_/.test(e));
-  check('aucune erreur JavaScript pendant les treize parcours', graves.length === 0,
+  check('aucune erreur JavaScript pendant les quatorze parcours', graves.length === 0,
     graves.slice(0, 4).join(' | '));
 }
 

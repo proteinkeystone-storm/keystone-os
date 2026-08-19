@@ -827,14 +827,14 @@ function _casierSectionHTML(p) {
   if (!_D || _D.casier === 'off') return '';
   const files = _filesOf(p);
   const q = _D.quota || { used: 0, max: 1 };
-  return `<div class="dk-sec"><h4>Casier — pièces (${files.filter(f => f.status === 'ok').length})</h4>
+  return `<div class="dk-sec dk-sec-casier"><h4>Casier — pièces (${files.filter(f => f.status === 'ok').length})</h4>
     ${files.map(f => `<div class="dk-file">
       <span class="dk-file-ico">${icon('paperclip', 13)}</span>
       <div class="dk-file-info">
         <div class="dk-file-name">${_esc(f.name)}</div>
         <div class="dk-file-meta">${_fmtSize(f.size)}${f.uploaded_by ? ' · ' + _esc(f.uploaded_by) : ''} · ${_relTime(f.created_at)}${f.status !== 'ok' ? ' · <em>envoi en cours…</em>' : ''}</div>
       </div>
-      ${f.status === 'ok' ? `<button class="dk-iconbtn" data-dlf="${f.id}" title="Télécharger" aria-label="Télécharger">${icon('download', 14)}</button>` : ''}
+      ${f.status === 'ok' ? `<button class="dk-iconbtn primary" data-dlf="${f.id}" title="Télécharger" aria-label="Télécharger">${icon('download', 14)}</button>` : ''}
       <button class="dk-iconbtn" data-delf="${f.id}" title="Supprimer la pièce" aria-label="Supprimer">${icon('x', 14)}</button>
     </div>`).join('') || `<p class="dk-empty-line">Aucune pièce — glissez PDF, photos ou textes sur la carte, ou déposez-les ci-dessous.</p>`}
     <div class="dk-btn-row" style="margin-top:8px">
@@ -915,14 +915,14 @@ function _artCasierSectionHTML(a) {
   if (!_D || _D.casier === 'off') return '';
   const files = (_D.files || []).filter(f => f.art_id === a.id);
   const q = _D.quota || { used: 0, max: 1 };
-  return `<div class="dk-sec"><h4>Pièces jointes (${files.filter(f => f.status === 'ok').length})</h4>
+  return `<div class="dk-sec dk-sec-casier"><h4>Pièces jointes (${files.filter(f => f.status === 'ok').length})</h4>
     ${files.map(f => `<div class="dk-file">
       <span class="dk-file-ico">${icon('paperclip', 13)}</span>
       <div class="dk-file-info">
         <div class="dk-file-name">${_esc(f.name)}</div>
         <div class="dk-file-meta">${_fmtSize(f.size)}${f.uploaded_by ? ' · ' + _esc(f.uploaded_by) : ''}${f.page_id === '' ? ' · au marbre avec l’article' : ''}${f.status !== 'ok' ? ' · <em>envoi en cours…</em>' : ''}</div>
       </div>
-      ${f.status === 'ok' ? `<button class="dk-iconbtn" data-dlf="${f.id}" title="Télécharger" aria-label="Télécharger">${icon('download', 14)}</button>` : ''}
+      ${f.status === 'ok' ? `<button class="dk-iconbtn primary" data-dlf="${f.id}" title="Télécharger" aria-label="Télécharger">${icon('download', 14)}</button>` : ''}
       <button class="dk-iconbtn" data-delf="${f.id}" title="Supprimer la pièce" aria-label="Supprimer">${icon('x', 14)}</button>
     </div>`).join('') || `<p class="dk-empty-line">Aucune pièce — photo, PDF ou document. Déposez-les ci-dessous : elles suivent l’article, même avant sa mise en page.</p>`}
     <div class="dk-btn-row" style="margin-top:8px">
@@ -1967,13 +1967,34 @@ function _vitalsHTML(a, c) {
     </div>` : ''}
     ${(!dead && !done) ? `<p class="dk-vitals-sub">Page prête le ${_fmtD(new Date(c.pageReady))}</p>` : ''}`;
 }
+// Cible d'un tap sur une étape (demande Stéphane 2026-08-19 : « pouvoir
+// décocher si on s'est trompé ») : l'étape SUIVANTE avance d'un cran (comme
+// avant — jamais de saut, le pointage « remis » garde son sens) ; une étape
+// PASSÉE y ramène l'article ; l'étape COURANTE se décoche (retour d'un cran).
+// « publié » (rituel de bouclage) reste verrouillé ; « proposé » n'a rien
+// derrière lui. Rend null si l'étape n'est pas cliquable.
+function _stepTarget(a, i) {
+  if (a.status === 'publie') return null;
+  const idx = PIPE.indexOf(a.status), k = PIPE[i];
+  if (i === idx + 1) return { to: k, title: `Passer à « ${STATUS[k].label} »` };
+  if (i < idx)       return { to: k, title: `Revenir à « ${STATUS[k].label} »` };
+  if (i === idx && i > 0) return { to: PIPE[i - 1], title: `Décocher — revenir à « ${STATUS[PIPE[i - 1]].label} »` };
+  return null;
+}
+function _stepMsg(from, to) {
+  const f = PIPE.indexOf(from), t = PIPE.indexOf(to);
+  if (t > f) return STEP_MSG[to] || 'Statut mis à jour.';
+  if (t === f - 1) return `« ${STATUS[from].label} » décoché — revenu à « ${STATUS[to].label} ».`;
+  return `Revenu à « ${STATUS[to].label} ».`;
+}
 function _stepsHTML(a) {
   if (a.status === 'abandonne') return `<div class="dk-step-flag">abandonné — l'historique est conservé</div>`;
   const idx = a.status === 'publie' ? PIPE.length : PIPE.indexOf(a.status);
   return `<div class="dk-steps">
     ${PIPE.map((k, i) => {
       const state = i < idx ? 'done' : (i === idx ? 'on' : (i === idx + 1 ? 'next' : ''));
-      return `<button class="dk-step ${state}"${state === 'next' ? ` data-step="${k}" title="Passer à « ${STATUS[k].label} »"` : ' disabled'}>
+      const tg = _stepTarget(a, i);
+      return `<button class="dk-step ${state}"${tg ? ` data-step="${tg.to}" title="${tg.title}"` : ' disabled'}>
         <span class="dk-step-dot">${i < idx ? icon('check', 9) : ''}</span><span class="dk-step-lbl">${STATUS[k].label}</span>
       </button>`;
     }).join('')}
@@ -2032,6 +2053,8 @@ function _renderInspArticle(insp, p) {
       <p class="dk-note">Glissez : le rail réagit en direct. Rien n'est écrit tant que vous n'appliquez pas.</p>
     </div>` : ''}
 
+    ${_casierSectionHTML(p)}
+
     <div class="dk-sec"><h4>Banc des remplaçants (${banc.length})</h4>
       ${banc.map((b, i) => `<div class="dk-banc-item">
         <span class="dk-banc-num">${i + 1}</span>
@@ -2046,8 +2069,6 @@ function _renderInspArticle(insp, p) {
       <div data-slot="bancpick"></div>
     </div>
 
-    ${_casierSectionHTML(p)}
-
     ${histo.length ? `<details class="dk-fold"><summary>Historique (${histo.length})</summary>${histo.slice(0, 8).map(h => `<div class="dk-histo">${_esc(h)}</div>`).join('')}</details>` : ''}
 
     ${_passerellesHTML(a)}
@@ -2056,8 +2077,8 @@ function _renderInspArticle(insp, p) {
       <button class="dk-btn primary" data-act="write">${icon('edit-3', 14)} ${_hasCopy(a) ? 'Éditer le texte' : 'Écrire le texte'}</button>
       <button class="dk-btn" data-act="editart">${icon('edit-3', 14)} Modifier la fiche</button>
       <button class="dk-btn" data-act="unreserve">Retirer de la page</button>
-      ${extRun.length ? `<button class="dk-btn ghost" data-act="spread">${icon('copy', 14)} Étaler sur les pages suivantes</button>` : ''}
-      ${slots.length < 12 ? `<button class="dk-btn ghost" data-act="addslot">${icon('plus', 14)} Ajouter un article ici</button>` : ''}
+      ${extRun.length ? `<button class="dk-btn" data-act="spread">${icon('copy', 14)} Étaler sur les pages suivantes</button>` : ''}
+      ${slots.length < 12 ? `<button class="dk-btn" data-act="addslot">${icon('plus', 14)} Ajouter un article ici</button>` : ''}
     </div><div data-slot="spreadpick"></div><div data-slot="slotpick"></div></div>
     ${p.updated_by ? `<p class="dk-modified">Carte modifiée par ${_esc(p.updated_by)} ${_relTime(p.updated_at)}</p>` : ''}`);
   _bindClose(insp);
@@ -2077,10 +2098,10 @@ function _renderInspArticle(insp, p) {
       _writeCache(); _renderFrise(); _renderRail(); _openInsp(p.n, true);
     } catch (e) { _toast(e.message, true); }
   };
-  // Stepper : un tap sur l'étape SUIVANTE avance l'article (une seule étape
-  // cliquable — le retour arrière passe par « Modifier », choix assumé).
+  // Stepper : l'étape suivante avance, une étape passée ramène, l'étape
+  // courante se décoche (cf. _stepTarget) — le message dit ce qui s'est passé.
   insp.querySelectorAll('.dk-step[data-step]').forEach(b =>
-    b.addEventListener('click', () => patchArt({ status: b.dataset.step }, STEP_MSG[b.dataset.step] || 'Statut mis à jour.')));
+    b.addEventListener('click', () => patchArt({ status: b.dataset.step }, _stepMsg(a.status, b.dataset.step))));
   // Changer la rubrique SANS quitter la fiche : c'est la couleur de la carte
   // dans le chemin de fer, on la corrige d'un geste (la POSITION, elle, se
   // change en glissant la carte — chacun son geste, aucun formulaire).

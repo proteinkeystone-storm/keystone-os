@@ -4,7 +4,7 @@
   "key_points": [
     "Démarrer : créez votre publication (la revue et son équipe), puis un numéro — indiquez le nombre de pages et les quatre jalons (bouclage, fin de maquette, envoi imprimeur, parution). Le chemin de fer se génère, couverture et 4ᵉ de couv posées d'office.",
     "Lire la grille : les planches (doubles-pages soudées) reviennent à la ligne et défilent verticalement, le rail des jalons reste en haut — c'est la ligne de vie du numéro. Le curseur règle la taille des cartes : tout à gauche, le numéro entier d'un coup d'œil ; tout à droite, les cartes complètes.",
-    "La carte-page : rubrique, titre, contributeur, statut et marge. Une page peut porter PLUSIEURS articles (brèves, papier + encadré) : badge « n » sur la carte, et la marge affichée est la plus serrée de ses articles. Cliquez pour ouvrir l'inspecteur : chaque emplacement a son banc de remplaçants, son historique, ses actions.",
+    "La carte-page : rubrique, titre, contributeur, statut et marge. Une page peut porter PLUSIEURS articles (brèves, papier + encadré) : badge « n » sur la carte, et la marge affichée est la plus serrée de ses articles. Cliquez pour ouvrir la fiche : son casier d'abord — encadré d'or, c'est là que vivent les pièces de la page (texte, photos, PDF), le bouton or télécharge —, puis le banc de remplaçants, l'historique, les actions. Une page dont tout est maquetté se remplit entièrement de la couleur de sa rubrique dans le chemin de fer.",
     "Les gestes : glissez une carte SUR une autre pour échanger ; glissez-la ENTRE deux planches pour l'insérer — tout le contenu coule, sauf les pages figées qui restent ancrées (une pub vendue « page 30 » reste page 30). Maj+clic sélectionne une plage de pages, Cmd/Ctrl+clic ajoute : la barre du bas applique rubrique, contributeur, un dossier étalé sur plusieurs pages ou le figeage, en un geste.",
     "Le marbre : la vue de votre stock d'articles, transversale aux numéros — filtrez par rubrique, fraîcheur ou statut, réservez un article sur une page en un clic. Chaque article a sa fraîcheur : intemporel, ou daté avec péremption — le marbre signale ce qui doit être publié maintenant ou jamais. Au passage du numéro en « imprimé », le rituel de bouclage marque les publiés et reverse les remplaçants non utilisés au marbre : un report est un événement banal, pas une anomalie.",
     "Les couleurs ne crient jamais pour rien : le rouge est réservé à la marge brûlée. Un simple retard n'allume rien tant que la marge tient — quand ça s'allume, c'est qu'une décision est requise. Le simulateur de report montre l'impact d'un retard EN DIRECT, sans rien écrire tant que vous n'appliquez pas."
@@ -21,6 +21,10 @@
     {
       "q": "Comment monter un dossier de 10 pages sans le faire page par page ?",
       "a": "Sélectionnez les pages d'un trait (clic sur la première, Maj+clic sur la dernière), puis « Étaler un article » dans la barre du bas : l'article devient titulaire de toutes les pages, marquées « suite » à partir de la deuxième. La même barre applique une rubrique, un contributeur ou fige des pages, en un seul geste."
+    },
+    {
+      "q": "Je me suis trompé d'étape (marqué « maquetté » trop tôt) : comment revenir ?",
+      "a": "Dans la fiche de la page, touchez l'étape en cours pour la décocher — l'article recule d'un cran — ou touchez une étape passée pour y revenir directement. Avancer se fait toujours d'un cran à la fois. Le chemin de fer suit aussitôt : une page qui n'est plus maquettée reperd sa pleine couleur. Tout reste tracé dans l'historique de l'article."
     },
     {
       "q": "Pourquoi certaines pages ne bougent-elles pas quand je repagine ?",

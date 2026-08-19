@@ -605,6 +605,20 @@ html.light-mode .dk-field input, html.light-mode .dk-field select { color-scheme
   background: none; color: var(--dk-tx2); cursor: pointer;
 }
 .dk-iconbtn:hover { border-color: var(--dk-gold); color: inherit; }
+.dk-iconbtn.primary { background: var(--dk-gold); border-color: var(--dk-gold); color: #17130a; }
+.dk-iconbtn.primary:hover { color: #17130a; filter: brightness(1.07); }
+/* Le casier est LA zone de la fiche (retour Stéphane 2026-08-19 : « la plus
+   importante ») : cerclage doré, fond à peine teinté, titre doré — et le
+   bouton « télécharger » plein or, le geste qu'on vient y chercher. La
+   section remonte aussi juste sous l'état de l'article (desk.js). */
+.dk-sec.dk-sec-casier {
+  border-color: var(--dk-gold);
+  box-shadow: 0 0 0 1px rgba(201, 162, 39, .35), 0 4px 18px rgba(201, 162, 39, .10);
+  background: rgba(201, 162, 39, .06);
+}
+.dk-sec-casier h4 { color: var(--dk-gold); }
+html.light-mode .dk-sec-casier h4 { color: #8f7214; }   /* or plus profond : lisible sur fond clair */
+.dk-sec-casier .dk-file { border-color: rgba(201, 162, 39, .3); }
 /* Confirmation inline de suppression d'une pièce (remplace l'« armé 2 clics »). */
 .dk-file-confirm {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%;
@@ -818,10 +832,15 @@ html.light-mode .dk-mailbadge { box-shadow: 0 0 0 2px #fff; }
 }
 .dk-step.done .dk-step-dot { background: var(--dk-gold); border-color: var(--dk-gold); }
 .dk-step.on .dk-step-dot { border-color: var(--dk-gold); box-shadow: 0 0 0 3px rgba(201, 162, 39, .22); }
-.dk-step.next { cursor: pointer; }
+/* Cliquable = la suivante (avancer), une passée (y revenir), la courante
+   (se décocher) — cf. _stepTarget dans desk.js. Le survol ANNONCE le geste :
+   la suivante se remplit, une passée s'éclaire, la courante se creuse. */
+.dk-step[data-step] { cursor: pointer; }
 .dk-step.next .dk-step-dot { border-style: dashed; border-color: var(--dk-gold); }
 .dk-step.next:hover .dk-step-dot { background: rgba(201, 162, 39, .25); }
-.dk-step.next:hover .dk-step-lbl { color: var(--dk-gold); }
+.dk-step[data-step]:hover .dk-step-lbl { color: var(--dk-gold); }
+.dk-step.done[data-step]:hover .dk-step-dot { box-shadow: 0 0 0 3px rgba(201, 162, 39, .22); }
+.dk-step.on[data-step]:hover .dk-step-dot { border-style: dashed; box-shadow: none; }
 .dk-step-lbl { font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .dk-step.on .dk-step-lbl { color: var(--dk-tx1, #fff); font-weight: 800; }
 .dk-step.done .dk-step-lbl { color: var(--dk-tx2); }
