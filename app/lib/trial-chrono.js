@@ -86,18 +86,22 @@ function _stateClass(daysLeft) {
 function _daysText(daysLeft) {
     return daysLeft > 0 ? `${daysLeft} j` : 'terminé';
 }
-function _title(daysLeft, expiresAt) {
+function _title(daysLeft, expiresAt, clickable = false) {
     const fin = trialEndLabel(expiresAt);
-    if (daysLeft <= 0) return 'Période d\'essai terminée';
+    const suite = clickable ? ' · cliquer pour s\'abonner' : '';
+    if (daysLeft <= 0) return `Période d'essai terminée${suite}`;
     const reste = `il reste ${daysLeft} jour${daysLeft > 1 ? 's' : ''}`;
-    return `Période d'essai · ${reste}${fin ? ` — jusqu'au ${fin}` : ''}`;
+    return `Période d'essai · ${reste}${fin ? ` — jusqu'au ${fin}` : ''}${suite}`;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// renderTrialChrono({ expiresAt }) → HTML, ou '' s'il n'y a rien à
-// décompter (pas de date / date illisible).
+// renderTrialChrono({ expiresAt, clickable }) → HTML, ou '' s'il n'y a
+// rien à décompter (pas de date / date illisible).
+// `clickable` : la pill devient un bouton (curseur, focus clavier) — c'est
+// l'appelant qui branche le clic (vers Réglages → Ma Licence, où vit le
+// bouton « S'abonner »).
 // ═══════════════════════════════════════════════════════════════
-export function renderTrialChrono({ expiresAt } = {}) {
+export function renderTrialChrono({ expiresAt, clickable = false } = {}) {
     const daysLeft = daysLeftUntil(expiresAt);
     if (daysLeft === null) return '';
 
@@ -106,15 +110,16 @@ export function renderTrialChrono({ expiresAt } = {}) {
     // Segments éteints = jours écoulés sur un cadran de 7 (un essai plus
     // long reste « plein » jusqu'à entrer dans sa dernière semaine).
     const elapsed = Math.max(0, SEGMENT_COUNT - Math.min(SEGMENT_COUNT, daysLeft));
+    const title   = _title(daysLeft, expiresAt, clickable);
 
     return `
     <div class="ks-trial-chrono ${_stateClass(daysLeft)}"
          data-days-left="${daysLeft}"
          data-elapsed-count="${elapsed}"
+         ${clickable ? 'data-clickable="true" tabindex="0" role="button"' : 'role="img"'}
          style="color:${_colorFor(daysLeft)}"
-         title="${_title(daysLeft, expiresAt)}"
-         role="img"
-         aria-label="${_title(daysLeft, expiresAt)}">
+         title="${title}"
+         aria-label="${title}">
       <svg class="ks-trial-chrono-svg" viewBox="0 0 ${VIEW_BOX_SIZE} ${VIEW_BOX_SIZE}" width="14" height="14" fill="none" aria-hidden="true">
         <circle cx="${CENTER}" cy="${CENTER}" r="${RADIUS}" stroke="currentColor" stroke-opacity="0.12" stroke-width="1" fill="none" />
         <circle cx="${CENTER}" cy="${CENTER}" r="0.8" fill="currentColor" opacity="0.55" />
@@ -139,7 +144,7 @@ export function refreshTrialChrono(rootEl, { expiresAt } = {}) {
     rootEl.style.color = _colorFor(daysLeft);
     rootEl.classList.remove('ks-trial-chrono--zen', 'ks-trial-chrono--urgent', 'ks-trial-chrono--expired');
     rootEl.classList.add(_stateClass(daysLeft));
-    rootEl.title = _title(daysLeft, expiresAt);
+    rootEl.title = _title(daysLeft, expiresAt, rootEl.dataset.clickable === 'true');
     rootEl.setAttribute('aria-label', rootEl.title);
     const daysEl = rootEl.querySelector('.ks-trial-chrono-days');
     if (daysEl) daysEl.textContent = _daysText(daysLeft);
@@ -198,6 +203,10 @@ ${_elapsedRules}
   50%      { box-shadow: 0 0 0 4px transparent; opacity: 0.78; }
 }
 .ks-trial-chrono--expired .ks-trial-chrono-days { text-decoration: line-through; opacity: 0.8; }
+/* Cliquable (mène au bouton « S'abonner » des Réglages) */
+.ks-trial-chrono[data-clickable="true"] { cursor: pointer; }
+.ks-trial-chrono[data-clickable="true"]:hover,
+.ks-trial-chrono[data-clickable="true"]:focus-visible { background: color-mix(in srgb, currentColor 16%, transparent); outline: none; }
 @media (prefers-reduced-motion: reduce) {
   .ks-trial-chrono--urgent, .ks-trial-chrono--expired { animation: none; }
 }

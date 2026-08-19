@@ -37,7 +37,7 @@ import { lock, unlock, isLocked }              from './lockscreen.js';
 // Onboarding entièrement délégué à la landing page (index.html).
 import { scheduleAutoSave } from './vault.js';
 import { activateLicence, getLicenceStatus, revokeLicence, getLicenceExpiry } from './licence.js';
-import { renderTrialChrono, refreshTrialChrono, TRIAL_CHRONO_CSS, trialEndLabel } from './lib/trial-chrono.js';
+import { renderTrialChrono, refreshTrialChrono, TRIAL_CHRONO_CSS, trialEndLabel, daysLeftUntil } from './lib/trial-chrono.js';
 // Identité de session + reconnexion propre (incident 2026-06-14).
 import { ksWhoami, ksCleanLogout }                                     from './lib/session-guard.js';
 import { exportArtifactPDF }                                           from './pdf-export.js';
@@ -398,6 +398,7 @@ function _renderTrialChronoInHero() {
     if (!heroMeta) return;
     const existing  = heroMeta.querySelector('.ks-trial-chrono');
     const expiresAt = getLicenceStatus().active ? getLicenceExpiry() : null;
+    _syncSettingsWithTrial(expiresAt);
     if (!expiresAt) { if (existing) existing.remove(); return; }
 
     if (!_trialCssInjected) {
@@ -410,9 +411,32 @@ function _renderTrialChronoInHero() {
     if (existing) {
         refreshTrialChrono(existing, { expiresAt });
     } else {
-        const html = renderTrialChrono({ expiresAt });
-        if (html) heroMeta.insertAdjacentHTML('afterbegin', html);
+        // Cliquable : la pill mène là où l'on s'abonne (Réglages → Ma
+        // Licence), au lieu de seulement compter les jours.
+        const html = renderTrialChrono({ expiresAt, clickable: true });
+        if (!html) return;
+        heroMeta.insertAdjacentHTML('afterbegin', html);
+        const pill = heroMeta.querySelector('.ks-trial-chrono');
+        const go = () => openSettingsTo('acc-licence');
+        pill?.addEventListener('click', go);
+        pill?.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
     }
+}
+
+// Le panneau Réglages est rendu UNE fois (initSettings), souvent AVANT que
+// le serveur ait dit si la licence porte une échéance (la resync tourne en
+// arrière-plan au démarrage). Quand l'état d'essai change — date apprise,
+// ou effacée parce que l'essai est devenu un abonnement — on re-rend le
+// corps des Réglages pour que « Ma Licence » (badge, bouton S'abonner,
+// portail) dise la vérité. Jamais pendant que le panneau est ouvert : on ne
+// retire pas un formulaire sous les doigts de quelqu'un.
+let _settingsTrialKey = null;   // échéance vue au dernier rendu des Réglages
+function _syncSettingsWithTrial(expiresAt) {
+    const key = expiresAt || '';
+    if (_settingsTrialKey === null || _settingsTrialKey === key) return;
+    if (document.getElementById('settings-panel')?.classList.contains('open')) return;
+    if (!document.getElementById('sp-body')) return;
+    _renderSettingsBody();
 }
 
 // Descriptions courtes des artefacts pour les pads du Dashboard
@@ -4798,6 +4822,8 @@ function _refreshEngineSection() {
 function _renderSettingsBody() {
     const body = document.getElementById('sp-body');
     if (!body) return;
+    // Mémorise l'état d'essai représenté par CE rendu (cf. _syncSettingsWithTrial).
+    _settingsTrialKey = (getLicenceStatus().active ? getLicenceExpiry() : null) || '';
 
     const apiRows = API_PROVIDERS.map(p => {
         const saved = loadKey(p.id);
@@ -5016,6 +5042,36 @@ function _renderSettingsBody() {
                 const toolBadge = lic.active
                     ? `<span class="sp-badge-gold">${lic.toolCount} outil${lic.toolCount !== 1 ? 's' : ''}</span>`
                     : `<span class="sp-badge-dim">—</span>`;
+                // Bloc « S'abonner » pendant l'essai : une ligne qui dit où on en
+                // est, puis UN bouton par application payante du sac (pour un
+                // essai desK : un seul). Le paiement part avec l'identifiant de
+                // SA licence (openCheckout → client_reference_id) : même clé,
+                // mêmes données, l'abonnement prend le relais de l'essai et le
+                // webhook efface la date. Les gratuites n'ont rien à acheter.
+                const _trialApps = (_trialEnd && Array.isArray(lic.ownedAssets))
+                    ? lic.ownedAssets
+                        .map(id => ({ id, title: getPad(id)?.title || getCatalogEntry(id)?.title || id, price: priceForApp(id) }))
+                        .filter(a => a.price !== null && a.price > 0)
+                    : [];
+                const _trialDays = _trialEnd ? daysLeftUntil(lic.expiresAt) : null;
+                const _trialLine = _trialDays === null ? ''
+                    : _trialDays > 0
+                        ? `Il reste ${_trialDays} jour${_trialDays > 1 ? 's' : ''} — jusqu'au ${_trialEnd}.`
+                        : `Votre période d'essai est terminée.`;
+                const trialBlock = _trialEnd ? `
+                    <div id="trial-block" style="margin-top:12px;padding:12px 14px;border:1px solid var(--bd);border-radius:12px">
+                        <div class="sp-row-key">Période d'essai</div>
+                        <div class="sp-row-val" id="trial-remaining" style="margin-top:4px">${_trialLine}</div>
+                        ${_trialApps.map(a => `
+                        <button class="api-key-save-btn trial-subscribe-btn" data-app="${a.id}" style="width:100%;margin-top:10px">
+                            S'abonner à ${a.title} · ${a.price} €/mois
+                        </button>`).join('')}
+                        <p class="sp-user-hint" id="trial-subscribe-feedback" style="margin-top:6px;font-size:11px;line-height:1.4;min-height:16px">
+                            ${_trialApps.length
+                                ? 'Votre clé et vos données restent les mêmes : l\'abonnement prend simplement le relais de l\'essai. Paiement sécurisé par Stripe, résiliable à tout moment.'
+                                : 'Pour continuer après l\'essai, contactez-nous : contact@protein-keystone.com.'}
+                        </p>
+                    </div>` : '';
                 return `<div class="sp-user-form">
                     <div class="sp-row">
                         <div class="sp-row-left">
@@ -5029,6 +5085,7 @@ function _renderSettingsBody() {
                         </div>
                         <span id="lic-tools-badge">${toolBadge}</span>
                     </div>
+                    ${trialBlock}
                     ${lic.owner ? `<div class="sp-row"><div class="sp-row-left"><div class="sp-row-key">Titulaire</div><div class="sp-row-val" id="lic-owner">${lic.owner}</div></div></div>` : ''}
                     ${_who && (_who.owner || _who.email) ? `<div class="sp-row"><div class="sp-row-left"><div class="sp-row-key">Compte connecté</div><div class="sp-row-val" id="lic-account">${_who.owner || _who.email}</div></div></div>` : ''}
                     <div class="sp-row"><div class="sp-row-left"><div class="sp-row-key">Éditeur</div><div class="sp-row-val">Protein Studio · Ollioules</div></div></div>
@@ -5385,6 +5442,27 @@ function _renderSettingsBody() {
     body.querySelector('#licence-clean-relogin')?.addEventListener('click', async () => {
         if (!confirm('Reconnexion propre ?\n\nCela réinitialise CE navigateur : clé, préférences, brouillons locaux, cache et coffre hors-ligne sont effacés, puis l\'app repart sur une connexion neuve.\n\nÀ utiliser si l\'app reste vide ou bloquée. Ton compte, ta licence et tes données serveur ne sont pas affectés.')) return;
         await ksCleanLogout({ reason: 'settings-clean-relogin' });
+    });
+
+    // « S'abonner à <app> » pendant l'essai — même porte que le K-Store
+    // (openCheckout → POST /api/stripe/checkout, avec le JWT → la commande
+    // porte l'identifiant de la licence, le webhook enrichit CETTE licence
+    // et efface l'échéance). En cas de succès la page part chez Stripe ;
+    // sinon le message serveur s'affiche tel quel sous le bouton.
+    body.querySelectorAll('.trial-subscribe-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const b  = e.currentTarget;
+            const fb = body.querySelector('#trial-subscribe-feedback');
+            const original = b.textContent;
+            b.disabled = true; b.textContent = 'Ouverture du paiement…';
+            if (fb) { fb.style.color = ''; }
+            try {
+                await openCheckout(b.dataset.app);
+            } catch (err) {
+                b.disabled = false; b.textContent = original;
+                if (fb) { fb.textContent = err.message || 'Paiement momentanément indisponible.'; fb.style.color = '#f26a4b'; }
+            }
+        });
     });
 
     // « Gérer mon abonnement » — ouvre le portail de facturation Stripe.
