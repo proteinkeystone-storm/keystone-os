@@ -151,6 +151,10 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
 /* Nœud : tout est ancré à la LIGNE (absolu) — un nom sur 2 lignes (jalons
    fusionnés) ne décale jamais le point. */
 .dk-tl-node { position: absolute; top: 0; height: 100%; width: 150px; transform: translateX(-50%); text-align: center; }
+/* Jalons FUSIONNÉS (deux noms empilés) : le libellé et la date débordent
+   volontairement du nœud, centrés. La largeur vit ICI et non en style en
+   ligne — sinon aucun @media ne pourrait la reprendre sur téléphone. */
+.dk-tl-node.large .dk-tl-name, .dk-tl-node.large .dk-tl-meta { width: 210px; }
 .dk-tl-name {
   position: absolute; left: 50%; bottom: 54px; transform: translateX(-50%);
   width: 100%; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em;
@@ -814,6 +818,7 @@ html.light-mode .dk-mailbadge { box-shadow: 0 0 0 2px #fff; }
   /* plus de largeur FIGÉE : le bouton prend ce qui reste (le slot est
      élastique) et s'arrête à 190. C'est l'ellipse du titre qui encaisse. */
   .dk-pub-btn { max-width: 190px; padding: 6px 9px; gap: 6px; }
+
 }
 
 /* ── DK-6 · Pré-impression (contrôle du PDF final) ── */
@@ -1008,4 +1013,28 @@ html.light-mode .dk-mailbadge { box-shadow: 0 0 0 2px #fff; }
   .dk-wr-body { font-size: 16px; }
   .dk-wr-bar { gap: 10px; padding: 9px 12px; }
   .dk-wr-close span { display: none; }
+}
+
+/* ── Le rail des jalons TIENT sur l'écran (retour Stéphane 20/08 : « le graph
+   linéaire du haut n'est pas optimisé sur smartphone »). Il était large de
+   644 px pour 390 px d'écran : il défilait, mais un axe du temps coupé au
+   milieu d'un mot (« MAQUETTE · IMPRIM ») se lit comme un défaut, pas comme un
+   geste. On lève la largeur PLANCHER — l'axe prend ce qu'il y a — et on
+   resserre les nœuds. La fusion des jalons trop proches se recalcule toute
+   seule sur la largeur RÉELLE (desk.js) : à 390 px, deux jalons voisins
+   s'empilent en un seul point au lieu de se marcher dessus. Les marges
+   latérales gardent leur rôle : un nœud est centré sur sa date
+   (translateX(-50%)), le premier et le dernier débordent donc de la moitié de
+   leur largeur.
+   ⚠ Ce bloc DOIT rester après le @media 820 ci-dessus : même spécificité,
+   c'est l'ordre du fichier qui tranche (piège payé une fois — desk.css porte
+   TROIS blocs 820, le rail est réglé dans le dernier). */
+@media (max-width: 600px) {
+  .dk-tl { min-width: 0; margin: 0 58px; height: 92px; }
+  .dk-tl-node { width: 92px; }
+  .dk-tl-node.large .dk-tl-name, .dk-tl-node.large .dk-tl-meta { width: 112px; }
+  .dk-tl-name { font-size: 9.5px; bottom: 52px; }
+  .dk-tl-days { font-size: 15px; }
+  .dk-tl-meta { font-size: 10px; }
+  .dk-tl-nowlbl { font-size: 9px; }
 }

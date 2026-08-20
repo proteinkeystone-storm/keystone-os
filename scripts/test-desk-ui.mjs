@@ -2340,12 +2340,85 @@ await parcours('Parcours 17 — la fiche pousse le chemin de fer au lieu de le r
 });
 
 /* ─────────────────────────────────────────────────────────────────
+   PARCOURS 18 · Le rail des jalons TIENT sur un téléphone (20 août 2026)
+
+   Capture de Stéphane (iPhone) : « le graph linéaire du haut n'est pas
+   optimisé sur smartphone » — l'axe du temps était large de 644 px pour
+   390 px d'écran. Il défilait (overflow-x), mais coupé au milieu d'un mot
+   (« MAQUETTE · IMPRIM ») il se lit comme un défaut. On mesure donc ce
+   qui compte : rien ne déborde, aucun nœud n'est rogné, aucun ne marche
+   sur son voisin — et l'information essentielle (le J−n) reste là.
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 18 — le rail des jalons tient sur un téléphone', async () => {
+  const railInfo = () => page.evaluate(() => {
+    const rail = document.querySelector('.dk-rail');
+    const r = rail.getBoundingClientRect();
+    const noeuds = [...rail.querySelectorAll('.dk-tl-node')].map(n => {
+      const b = n.getBoundingClientRect();
+      const nom = n.querySelector('.dk-tl-name');
+      const meta = n.querySelector('.dk-tl-meta');
+      // Le libellé et la date d'un nœud fusionné débordent volontairement
+      // du nœud : c'est LEUR boîte qu'il faut mesurer, pas celle du point.
+      const boites = [b, nom.getBoundingClientRect(), meta.getBoundingClientRect()];
+      return {
+        nom: nom.textContent.trim(),
+        jour: (n.querySelector('.dk-tl-days') || {}).textContent || '',
+        gauche: Math.min(...boites.map(x => x.left)),
+        droite: Math.max(...boites.map(x => x.right)),
+        coupeNom: nom.scrollWidth > nom.clientWidth + 1,
+      };
+    }).sort((a, b) => a.gauche - b.gauche);
+    return {
+      deborde: rail.scrollWidth - rail.clientWidth,
+      railGauche: r.left, railDroite: r.right,
+      hors: noeuds.filter(n => n.gauche < r.left - 0.5 || n.droite > r.right + 0.5).length,
+      chevauchement: Math.max(0, ...noeuds.slice(1).map((n, i) => noeuds[i].droite - n.gauche)),
+      noeuds,
+    };
+  });
+
+  // ── iPhone 390 px : tout doit tenir.
+  await page.setViewport({ width: 390, height: 844 });
+  await ouvrirLePad(page, BASE);
+  await attendre(300);
+  const tel = await railInfo();
+  const detail = tel.noeuds.map(n => `${n.nom.replace(/\s+/g, ' ')} ${n.jour} [${Math.round(n.gauche)}→${Math.round(n.droite)}]`).join(' | ');
+  check('390 px · le rail ne déborde plus de l\'écran (il était large de 644 px)',
+    tel.deborde <= 1, 'débordement : ' + tel.deborde + ' px');
+  check('390 px · aucun jalon n\'est rogné par un bord', tel.hors === 0, detail);
+  check('390 px · aucun jalon ne marche sur son voisin',
+    tel.chevauchement <= 1, 'chevauchement : ' + Math.round(tel.chevauchement) + ' px — ' + detail);
+  check('390 px · les jalons trop serrés se sont fusionnés (moins de nœuds que de jalons)',
+    tel.noeuds.length > 0 && tel.noeuds.length < 4, tel.noeuds.length + ' nœuds pour 4 jalons — ' + detail);
+  check('390 px · chaque nœud garde son échéance en clair (J−n) et son nom',
+    tel.noeuds.every(n => /^J[−+]\d+$/.test(n.jour.trim()) && n.nom.length > 2), detail);
+  check('390 px · aucun libellé n\'est tronqué dans sa boîte',
+    tel.noeuds.every(n => !n.coupeNom), detail);
+  if (process.env.DK_SHOTS) {
+    try { fs.mkdirSync(process.env.DK_SHOTS, { recursive: true }); } catch (_) {}
+    const el = await page.$('.dk-rail');
+    await (el || page).screenshot({ path: `${process.env.DK_SHOTS}/18-rail-iphone.png` });
+  }
+
+  // ── Non-régression : sur grand écran le rail garde ses quatre jalons.
+  await page.setViewport({ width: 1280, height: 640 });
+  await ouvrirLePad(page, BASE);
+  await attendre(300);
+  const bureau = await railInfo();
+  check('1280 px · les quatre jalons restent distincts (pas de sur-fusion)',
+    bureau.noeuds.length === 4, bureau.noeuds.length + ' nœuds');
+  check('1280 px · et rien ne déborde ni ne se chevauche',
+    bureau.deborde <= 1 && bureau.hors === 0 && bureau.chevauchement <= 1,
+    `déb=${bureau.deborde} hors=${bureau.hors} chev=${Math.round(bureau.chevauchement)}`);
+});
+
+/* ─────────────────────────────────────────────────────────────────
    Hygiène : aucune erreur JS n'a été avalée en chemin.
    ───────────────────────────────────────────────────────────────── */
 console.log('\n\x1b[1m▶ Hygiène\x1b[0m');
 {
   const graves = erreursPage.filter(e => !/favicon|LOGOS|ERR_/.test(e));
-  check('aucune erreur JavaScript pendant les dix-sept parcours', graves.length === 0,
+  check('aucune erreur JavaScript pendant les dix-huit parcours', graves.length === 0,
     graves.slice(0, 4).join(' | '));
 }
 

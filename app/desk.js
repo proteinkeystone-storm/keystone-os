@@ -1109,7 +1109,10 @@ function _renderRail() {
   const tl = rail.querySelector('.dk-tl');
 
   // Fusion des jalons trop proches à l'écran (seuil en px, mesuré).
-  const W = Math.max(tl.clientWidth || 0, 320);
+  // Plancher bas : il ne sert qu'à éviter une division dégénérée avant mise en
+  // page. Trop haut (320), il MENTAIT sur un téléphone — 274 px réels comptés
+  // comme 320 → des jalons restaient séparés là où ils ne tenaient pas.
+  const W = Math.max(tl.clientWidth || 0, 260);
   const minGap = (96 / W) * 100;
   const clusters = [];
   for (const it of items) {
@@ -1125,12 +1128,12 @@ function _renderRail() {
     const jmin = Math.round((Math.min(...c.items.map(i => i.time)) - t) / DAY);
     const dates = [...new Set(c.items.map(i => _fmtD(i.time)))].join(' – ');
     const alert = (c.items.find(i => i.alert) || {}).alert || '';
-    const wide = c.items.length > 1 ? ' style="width:210px"' : '';
-    return `<div class="dk-tl-node ${cls}${passed ? ' passed' : ''}" style="left:${c.x.toFixed(2)}%" title="${c.items.map(i => i.full + ' — ' + _fmtD(i.time)).join(' · ')}">
-      <span class="dk-tl-name"${wide}>${c.items.map(i => `<span class="${i.cls}">${i.name}</span>`).join(' · ')}</span>
+    const wide = c.items.length > 1 ? ' large' : '';   // largeur en CSS (cf. .dk-tl-node.large)
+    return `<div class="dk-tl-node ${cls}${passed ? ' passed' : ''}${wide}" style="left:${c.x.toFixed(2)}%" title="${c.items.map(i => i.full + ' — ' + _fmtD(i.time)).join(' · ')}">
+      <span class="dk-tl-name">${c.items.map(i => `<span class="${i.cls}">${i.name}</span>`).join(' · ')}</span>
       <span class="dk-tl-dot"></span>
       <span class="dk-tl-days">${jmin >= 0 ? 'J−' + jmin : 'J+' + (-jmin)}</span>
-      <span class="dk-tl-meta"${wide}>${dates}${alert ? ' · ' + alert : ''}</span>
+      <span class="dk-tl-meta">${dates}${alert ? ' · ' + alert : ''}</span>
     </div>`;
   }).join(''));
 
