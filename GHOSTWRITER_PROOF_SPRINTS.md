@@ -308,6 +308,45 @@ toujours **zéro vraie faute masquée**. La règle des composés en éteint 4, l
 dico de base 1 (`Lcl`) — le corpus ne contient qu'un grade abrégé, mais une
 revue militaire en est pleine.
 
+#### L'onglet « Vocabulaire » — 2026-08-21
+
+Manque relevé par Stéphane : *« c'est dommage de ne pas avoir pensé à imaginer
+les dico comme un fichier à importer ou exporter afin de le transmettre à un
+collaborateur ou client »*. Il a raison, et c'est plus qu'un confort — le
+dictionnaire était prisonnier de la licence : impossible de le donner à un
+client dont on monte l'installation, impossible de le reprendre en partant.
+**Un outil qui met la souveraineté en avant doit laisser sortir ce qui
+appartient à l'utilisateur.**
+
+- Un **troisième onglet, discret**, à droite du filet (Texte · PDF · *Vocabulaire*).
+  Il liste les mots appris, les retire un par un, et porte **Exporter** /
+  **Importer**. Accepté comme entrée directe (`openGhostwriterProof('dico')`)
+  mais **jamais mémorisé** : rouvrir l'outil retombe sur son travail.
+- **Format : un fichier texte, un mot par ligne**, lignes `#` en commentaire.
+  Lisible, modifiable dans n'importe quel éditeur, transmissible par courriel —
+  et surtout pas du JSON (contrainte posée le 2026-08-20).
+- **L'import COMPLÈTE, il ne remplace jamais.** Reprendre la liste d'un
+  confrère n'efface pas la sienne.
+- La règle d'admission vit dans le moteur (`normalizeDicoWord`) et le banc
+  **prouve qu'elle est identique à celle du serveur** — deux copies d'une règle
+  finissent toujours par diverger, et un mot accepté à l'écran mais refusé en
+  base disparaîtrait sans un mot dire.
+- Défaut corrigé au passage : au-delà de 500 mots, le reste était perdu en
+  silence à la synchronisation. L'envoi se fait maintenant par tranches
+  jusqu'au bout — un import de 900 mots n'en perd plus 400.
+
+**⚠ Et une promesse d'écran qui était devenue fausse.** Le bas de la fenêtre
+affichait « exécutée localement dans votre navigateur — **rien n'est envoyé en
+ligne** ». Vrai jusqu'à GP-5, faux dès que le tri assisté est actif. Elle suit
+désormais l'état réel du réglage, dans les deux sens. C'est exactement le
+précédent du §9 (DK-9 avait déjà fait corriger une promesse affichée fausse) —
+il a fallu une capture d'écran pour le voir, pas un test.
+
+**Le filet** — `scripts/test-proof-ui.mjs`, 22 vérifications dans `npm test` :
+la promesse dans ses deux états, l'onglet, et un **vrai fichier déposé** dans le
+champ d'import (mots valides entrés, invalides écartés, liste existante
+préservée). Vu rouge en cassant la promesse et en faisant remplacer l'import.
+
 #### Couche 2 — LIVRÉE le 2026-08-20 · worker DÉPLOYÉ
 
 **Pas de semis** : décision de Stéphane, « le dico se remplira seul » — au fil

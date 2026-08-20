@@ -37,6 +37,9 @@ const WORKER_URL = '/app/lib/proof-grammalecte.worker.js';
 // ne partage rien. Le dictionnaire de la MAISON (couche 2, par licence) vient
 // par-dessus, via setProofFilters({ ignoreWords }).
 const _DICO_BASE_SET = new Set(DICO_BASE);
+// Exposée pour que l'écran puisse dire à l'utilisateur ce qu'il reçoit sans
+// l'avoir appris — sans lui faire lire une liste de 50 abréviations.
+export const DICO_BASE_TAILLE = DICO_BASE.length;
 
 let _worker   = null;
 let _seq      = 0;
@@ -268,6 +271,19 @@ export function isProperNounSpelling(word, text, offset, suggestions) {
     }
   }
   return true;
+}
+
+// ── GP-2 · ce qui a le droit d'entrer dans le dictionnaire ───────
+// Mêmes règles que le serveur (workers/src/routes/proof-dico.js), qui valide
+// de son côté — un client ne dicte jamais ce qui entre en base. Ici, c'est
+// pour pouvoir DIRE à l'utilisateur ce qui a été écarté d'un fichier importé,
+// au lieu de le laisser disparaître en silence.
+// Rend le mot normalisé (minuscules, sans espaces autour), ou null.
+const _RE_MOT_DICO = /^[a-zà-öø-ÿ]([a-zà-öø-ÿ'’-]*[a-zà-öø-ÿ])?$/;
+export function normalizeDicoWord(mot) {
+  const w = String(mot == null ? '' : mot).trim().toLowerCase();
+  if (w.length < 3 || w.length > 60) return null;   // sous 3 signes, minLetters l'écarte déjà
+  return _RE_MOT_DICO.test(w) ? w : null;
 }
 
 // ── GP-5 · ce que le juge IA a le DROIT de regarder ──────────────

@@ -21,6 +21,10 @@ import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }         from './lib/topbar-burger.js';
 import { icon }                            from './lib/ui-icons.js';
 import { CF_API }                          from './pads-loader.js';   // GP-2 : dico de la maison
+// Liste statique de ~1 Ko, sans dépendance : importée franchement, pour que
+// l'onglet Vocabulaire sache dire ce qui est livré AVANT que le moteur (9 Mo,
+// paresseux) n'ait fini de charger.
+import { DICO_BASE }                       from './lib/proof-dico-base.js';
 import { symbolsButtonHTML, openSymbolsPanel, closeSymbolsPanel } from './lib/symbols-panel.js';
 import {
   rewriteText, friendlyGhostwriterError, getGhostwriterQuotaMessage,
@@ -107,7 +111,10 @@ export function openGhostwriterProof(initialMode) {
   _loadDraft();
   _loadPrefs();
   // un mode explicite l'emporte sur le mode mémorisé dans le brouillon
-  if (initialMode === 'pdf' || initialMode === 'texte') _mode = initialMode;
+  // 'dico' est accepté comme entrée directe (un lien depuis les réglages, par
+  // exemple) mais n'est JAMAIS mémorisé : _loadDraft ne restaure que texte/pdf,
+  // pour qu'en rouvrant l'outil on retombe sur son travail, pas sur une liste.
+  if (initialMode === 'pdf' || initialMode === 'texte' || initialMode === 'dico') _mode = initialMode;
   _buildShell();
   _renderMain();
   document.body.style.overflow = 'hidden';
@@ -328,8 +335,16 @@ async function _pousserDico() {
   const add    = Array.from(local).filter((w) => !_dicoServeur.has(w));
   const remove = Array.from(_dicoServeur).filter((w) => !local.has(w));
   if (!add.length && !remove.length) return;
-  const apres = await _dicoAppel('POST', { add: add.slice(0, 500), remove: remove.slice(0, 500) });
-  if (apres && Array.isArray(apres.words)) _dicoServeur = new Set(apres.words);
+  // Le serveur plafonne à 500 mots par envoi. On découpe jusqu'au bout : une
+  // liste importée de 900 mots ne doit pas en perdre 400 en silence.
+  const LOT = 500;
+  for (let i = 0; i < Math.max(add.length, remove.length); i += LOT) {
+    const apres = await _dicoAppel('POST', {
+      add: add.slice(i, i + LOT), remove: remove.slice(i, i + LOT),
+    });
+    if (apres && Array.isArray(apres.words)) _dicoServeur = new Set(apres.words);
+    else break;                                  // hors ligne : on garde le miroir
+  }
 }
 function _saveGrammarOnly() {
   try { localStorage.setItem(GRAMMAR_ONLY_KEY, _grammarOnly ? '1' : '0'); } catch (_) {}
@@ -425,7 +440,7 @@ function _renderMain(scrollTop) {
     <div class="ws-main-inner pf-wrap">
       ${_renderHero()}
       ${_renderFilterBar()}
-      ${_mode === 'texte' ? _renderTexte() : _renderPdf()}
+      ${_mode === 'texte' ? _renderTexte() : _mode === 'pdf' ? _renderPdf() : _renderDico()}
       ${_renderCredit()}
     </div>
   `;
@@ -455,10 +470,17 @@ function _renderHero() {
         ${tab('texte', 'Texte', 'file-text')}
         ${tab('pdf', 'PDF', 'file')}
         <span class="pf-tabs-line" aria-hidden="true"></span>
+        <button class="pf-tab pf-tab-discret${_mode === 'dico' ? ' is-active' : ''}" type="button"
+                role="tab" aria-selected="${_mode === 'dico'}" data-act="switch-mode" data-mode="dico"
+                title="Les mots que le correcteur a appris — les emporter, en reprendre d'ailleurs">
+          <span class="pf-tab-icon">${icon('book', 15)}</span><span>Vocabulaire</span>
+        </button>
       </nav>
       <p class="pf-hero-sub">${_mode === 'texte'
         ? 'Collez un texte : orthographe, grammaire, accords et conjugaison vérifiés instantanément.'
-        : 'Chargez un PDF : les fautes sont surlignées directement sur les pages.'}</p>
+        : _mode === 'pdf'
+        ? 'Chargez un PDF : les fautes sont surlignées directement sur les pages.'
+        : 'Les mots que vous avez appris au correcteur — à emporter, ou à reprendre de quelqu\'un d\'autre.'}</p>
     </div>`;
 }
 
@@ -1142,9 +1164,16 @@ function _buildMarkedHTML(text, issues) {
 }
 
 function _renderCredit() {
+  // ⚠ Cette ligne est une PROMESSE, et elle doit rester exacte. Elle disait
+  // « rien n'est envoyé en ligne » — vrai jusqu'à GP-5, faux dès que le tri
+  // assisté est actif. Le brief §9 rappelle le précédent : une mesure a déjà
+  // fait corriger une promesse affichée qui était devenue fausse. Elle suit
+  // donc l'état réel du réglage.
   return `
     <footer class="pf-credit">
-      Correction propulsée par Grammalecte (GPL v3), exécutée localement dans votre navigateur — rien n'est envoyé en ligne. <a href="${GRAMMALECTE_SRC}" target="_blank" rel="noopener noreferrer">grammalecte.net</a>
+      Correction propulsée par Grammalecte (GPL v3), exécutée localement dans votre navigateur${_iaArbitrage
+        ? ' : votre texte ne sort jamais. Seuls les mots signalés et la phrase qui les porte sont vérifiés en ligne pour écarter les fausses alertes — « Tri des alertes » pour tout garder sur l\'appareil.'
+        : ' — rien n\'est envoyé en ligne.'} <a href="${GRAMMALECTE_SRC}" target="_blank" rel="noopener noreferrer">grammalecte.net</a>
     </footer>`;
 }
 
@@ -1202,6 +1231,11 @@ function _onClick(e) {
     case 'symbols':        openSymbolsPanel({ getTarget: () => _root && _root.querySelector('.pf-source') }); return;
     case 'back-to-rewrite':_backToRewrite(); return;
     case 'switch-mode':    _switchMode(btn.dataset.mode); return;
+    case 'dico-export':   _exporterDico(); return;
+    case 'dico-import':   _importerDico(() => { if (_mode === 'dico') _renderMain(); }); return;
+    case 'dico-retirer':  _ignoreWords.delete(btn.dataset.w); _saveIgnore(); _pushFilters(); _renderMain(); return;
+    case 'dico-vider':    _ignoreWords.clear(); _saveIgnore(); _pushFilters(); _renderMain();
+                          _toast('Vocabulaire vidé'); return;
     case 'filter-all':     if (_grammarOnly)  { _grammarOnly = false; _saveGrammarOnly(); _afterFilterToggle(); } return;
     case 'filter-gram':    if (!_grammarOnly) { _grammarOnly = true;  _saveGrammarOnly(); _afterFilterToggle(); } return;
     // GP-5 · l'interrupteur du §4.4 : revenir au tout-local en un clic. On
@@ -1300,7 +1334,7 @@ function _handleKeyDown(e) {
 }
 
 function _switchMode(mode) {
-  if (mode === _mode || (mode !== 'texte' && mode !== 'pdf')) return;
+  if (mode === _mode || (mode !== 'texte' && mode !== 'pdf' && mode !== 'dico')) return;
   _mode = mode; _saveDraft(); _closePopover(); _renderMain(true);
 }
 
@@ -1585,6 +1619,16 @@ function _openIgnoreManager(anchorEl) {
       _ignoreWords.delete(b.dataset.w); _saveIgnore(); _configDirty = true;
       pop.innerHTML = _ignoreMgrInner(); _positionPopover(pop, anchorEl); return;
     }
+    if (b.dataset.pop === 'dico-export') { _exporterDico(); return; }
+    if (b.dataset.pop === 'dico-import') {
+      // La liste se redessine quand le fichier a été lu — si le panneau est
+      // encore là (choisir un fichier peut l'avoir fermé entre-temps).
+      _importerDico(() => {
+        if (!pop.isConnected) return;
+        pop.innerHTML = _ignoreMgrInner(); _positionPopover(pop, anchorEl);
+      });
+      return;
+    }
     if (b.dataset.pop === 'unignore-all') {
       _ignoreWords.clear(); _saveIgnore(); _configDirty = true;
       pop.innerHTML = _ignoreMgrInner(); _positionPopover(pop, anchorEl); return;
@@ -1655,7 +1699,130 @@ function _ignoreMgrInner() {
         ? words.map(w => `<span class="pf-ignore-tag">${_esc(w)}<button data-pop="unignore" data-w="${_esc(w)}" aria-label="Ne plus ignorer « ${_esc(w)} »">${icon('x', 11)}</button></span>`).join('')
         : '<span class="pf-pop-nosugg">Aucun mot ignoré pour l\'instant. Cliquez « Toujours ignorer » sur une alerte d\'orthographe.</span>'}
     </div>
-    ${words.length ? `<div class="pf-pop-foot"><button class="pf-pop-ignore" data-pop="unignore-all">Tout réinitialiser</button></div>` : ''}`;
+    <div class="pf-pop-foot" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      ${words.length ? `<button class="pf-pop-ignore" data-pop="dico-export"
+        title="Enregistrer ce vocabulaire dans un fichier texte, pour l'archiver ou le transmettre">Exporter…</button>` : ''}
+      <button class="pf-pop-ignore" data-pop="dico-import"
+        title="Ajouter les mots d'un fichier texte (un mot par ligne). Rien n'est remplacé : les listes se complètent.">Importer…</button>
+      ${words.length ? `<button class="pf-pop-ignore" data-pop="unignore-all">Tout réinitialiser</button>` : ''}
+    </div>`;
+}
+
+// ── L'onglet « Vocabulaire » ─────────────────────────────────────
+// Le dictionnaire vivait dans une bulle, ouverte depuis une pastille qui
+// n'apparaissait qu'une fois un mot appris : introuvable tant qu'on n'avait
+// rien appris, et sans endroit où le prendre en main. Il a désormais sa page.
+function _renderDico() {
+  const mots = Array.from(_ignoreWords).sort((a, b) => a.localeCompare(b, 'fr'));
+  const nBase = DICO_BASE.length;
+  return `
+    <section class="pf-dico">
+      <div class="pf-dico-head">
+        <div>
+          <h3 class="pf-dico-title">Le vocabulaire de la maison</h3>
+          <p class="pf-dico-sub">${mots.length
+            ? `${mots.length} mot${mots.length > 1 ? 's' : ''} appris — partagé${mots.length > 1 ? 's' : ''} par toutes les personnes de votre abonnement.`
+            : 'Aucun mot appris pour l\'instant. Sur une alerte d\'orthographe, « Toujours ignorer » range le mot ici — pour vous et pour votre équipe.'}</p>
+        </div>
+        <div class="pf-dico-actions">
+          ${mots.length ? `<button class="pf-dico-btn" type="button" data-act="dico-export"
+            title="Enregistrer ce vocabulaire dans un fichier texte">${icon('download', 14)}<span>Exporter</span></button>` : ''}
+          <button class="pf-dico-btn" type="button" data-act="dico-import"
+            title="Ajouter les mots d'un fichier texte. Rien n'est remplacé : les listes se complètent.">${icon('upload-cloud', 14)}<span>Importer</span></button>
+        </div>
+      </div>
+
+      ${mots.length ? `<div class="pf-dico-list">
+        ${mots.map((w) => `<span class="pf-ignore-tag">${_esc(w)}<button data-act="dico-retirer" data-w="${_esc(w)}"
+          aria-label="Retirer « ${_esc(w)} » du vocabulaire">${icon('x', 11)}</button></span>`).join('')}
+      </div>
+      <div class="pf-dico-foot">
+        <button class="pf-dico-btn is-danger" type="button" data-act="dico-vider">Tout retirer</button>
+      </div>` : ''}
+
+      <p class="pf-dico-note">
+        ${icon('info', 13)}
+        Un fichier texte, un mot par ligne : ouvrez-le dans n'importe quel éditeur,
+        transmettez-le à un collaborateur ou à un client, reprenez le sien.
+        L'import <strong>complète</strong> votre liste, il ne la remplace jamais.
+        ${nBase ? `<br>${icon('check-circle', 13)} ${nBase} mots de vocabulaire courant (grades, civilités, renvois) sont déjà livrés avec l'outil — ils n'apparaissent pas dans cette liste et n'ont pas besoin d'être appris.` : ''}
+      </p>
+    </section>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Emporter son vocabulaire, ou reprendre celui d'un autre
+//
+// Le dictionnaire est partagé par la LICENCE — ce qui laisse deux besoins
+// sans réponse : donner son vocabulaire à quelqu'un qui n'est pas sur la
+// même licence (un client dont on monte l'installation, un confrère), et
+// le récupérer si l'on s'en va. Un outil qui promet la souveraineté doit
+// laisser sortir ce qui appartient à l'utilisateur.
+//
+// Le format est un fichier TEXTE, un mot par ligne : lisible, modifiable
+// dans n'importe quel éditeur, transmissible par courriel. Les lignes qui
+// commencent par « # » sont des commentaires et sont ignorées à la relecture.
+// ══════════════════════════════════════════════════════════════════
+
+// La règle d'admission vit dans le MOTEUR (`normalizeDicoWord`) : l'écran, le
+// banc et le serveur appliquent ainsi la même, sans copie qui dérive.
+function _motDicoValide(mot) {
+  return _engine && _engine.normalizeDicoWord ? _engine.normalizeDicoWord(mot) : null;
+}
+
+function _exporterDico() {
+  const mots = Array.from(_ignoreWords).sort((a, b) => a.localeCompare(b, 'fr'));
+  const jour = new Date().toLocaleDateString('fr-FR');
+  const lignes = [
+    '# Vocabulaire du correcteur — Keystone',
+    '# ' + mots.length + ' mot' + (mots.length > 1 ? 's' : '') + ' · exporté le ' + jour,
+    '#',
+    '# Un mot par ligne. Les lignes commençant par # sont ignorées.',
+    '# Pour le transmettre : « Importer… » dans la fenêtre des mots ignorés.',
+    '',
+  ].concat(mots);
+  _download(new Blob([lignes.join('\n')], { type: 'text/plain;charset=utf-8' }),
+    'vocabulaire-keystone-' + new Date().toISOString().slice(0, 10) + '.txt');
+  _toast(mots.length + ' mot' + (mots.length > 1 ? 's' : '') + ' exporté' + (mots.length > 1 ? 's' : ''));
+}
+
+function _importerDico(onFini) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.txt,text/plain';
+  inp.style.display = 'none';
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0];
+    inp.remove();
+    if (!f) return;
+    let brut = '';
+    try { brut = await f.text(); }
+    catch (_) { _toast('Fichier illisible', true); return; }
+    const lignes = brut.split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith('#'));
+    const bons = [], mauvais = [];
+    for (const l of lignes) {
+      const w = _motDicoValide(l);
+      if (w) bons.push(w); else mauvais.push(l.trim().slice(0, 20));
+    }
+    const nouveaux = bons.filter((w) => !_ignoreWords.has(w));
+    if (!bons.length) {
+      _toast('Aucun mot exploitable dans ce fichier', true);
+      return;
+    }
+    // On COMPLÈTE, on ne remplace jamais : importer la liste d'un confrère ne
+    // doit pas effacer la sienne.
+    for (const w of nouveaux) _ignoreWords.add(w);
+    _saveIgnore();
+    _pushFilters();
+    _toast(nouveaux.length
+      ? nouveaux.length + ' mot' + (nouveaux.length > 1 ? 's' : '') + ' ajouté'
+        + (nouveaux.length > 1 ? 's' : '') + (mauvais.length ? ' · ' + mauvais.length + ' ligne(s) écartée(s)' : '')
+      : 'Ces mots étaient déjà connus');
+    _configDirty = true;
+    if (typeof onFini === 'function') onFini();
+  };
+  document.body.appendChild(inp);
+  inp.click();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1698,6 +1865,47 @@ html.light-mode .pf-family-switch { background:rgba(0,0,0,.04); border-color:rgb
 html.light-mode .pf-fam:hover:not(.is-active){ color:#334155; background:rgba(0,0,0,.04); }
 .pf-tabs { display:flex; align-items:center; gap:6px; }
 .pf-tabs-line { flex:1; height:1px; background:rgba(255,255,255,.09); margin-left:12px; border-radius:1px; }
+
+/* ── L'onglet « Vocabulaire » : discret, à droite du filet ────────
+   Il ne dispute pas la place à Texte et PDF, qui sont le travail ;
+   il se tient à côté, plus petit et en retrait, jusqu'à ce qu'on le
+   touche. */
+.pf-tab-discret { opacity:.55; font-size:12.5px; padding-left:10px; padding-right:10px; }
+.pf-tab-discret:hover { opacity:.85; }
+.pf-tab-discret.is-active { opacity:1; }
+
+.pf-dico { display:flex; flex-direction:column; gap:16px; }
+.pf-dico-head { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; justify-content:space-between; }
+.pf-dico-title { margin:0 0 4px; font-size:16px; font-weight:800; letter-spacing:-.02em; }
+.pf-dico-sub { margin:0; font-size:13px; color:var(--tx2, rgba(248,250,252,.55)); max-width:56ch; line-height:1.55; }
+.pf-dico-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.pf-dico-btn {
+  display:inline-flex; align-items:center; gap:7px; padding:8px 13px; border-radius:10px;
+  border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.04);
+  color:inherit; font:inherit; font-size:13px; font-weight:600; cursor:pointer;
+  transition:background .15s, border-color .15s;
+}
+.pf-dico-btn:hover { background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.18); }
+.pf-dico-btn.is-danger:hover { border-color:rgba(224,92,92,.5); color:#e05c5c; }
+html.light-mode .pf-dico-btn { border-color:rgba(0,0,0,.12); background:rgba(0,0,0,.03); }
+html.light-mode .pf-dico-btn:hover { background:rgba(0,0,0,.06); }
+.pf-dico-list {
+  display:flex; flex-wrap:wrap; gap:7px; max-height:44vh; overflow:auto;
+  padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,.07);
+  background:rgba(255,255,255,.02);
+}
+html.light-mode .pf-dico-list { border-color:rgba(0,0,0,.08); background:rgba(0,0,0,.02); }
+.pf-dico-foot { display:flex; justify-content:flex-end; }
+.pf-dico-note {
+  margin:0; font-size:12.5px; line-height:1.65; color:var(--tx3, rgba(248,250,252,.4));
+  max-width:70ch;
+}
+.pf-dico-note svg { vertical-align:-2px; margin-right:4px; }
+@media (max-width:640px) {
+  .pf-dico-head { flex-direction:column; }
+  .pf-dico-actions { width:100%; }
+  .pf-dico-btn { flex:1; justify-content:center; }
+}
 html.light-mode .pf-tabs-line { background:rgba(0,0,0,.1); }
 .pf-tab { display:flex; align-items:center; gap:8px; padding:10px 18px; border-radius:100px;
   background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); color:var(--text-muted,#aaa);

@@ -87,6 +87,9 @@ function titre(t) { console.log(`\n${gras('▶ ' + t)}`); }
 
 const moteur   = await import(pathToFileURL(join(ROOT, 'app/lib/proof-engine.js')).href);
 const dicoBase = await import(pathToFileURL(join(ROOT, 'app/lib/proof-dico-base.js')).href);
+// Le module du SERVEUR, importé tel quel : c'est la seule façon de prouver que
+// sa règle d'admission et celle de l'écran ne divergent pas.
+const dicoWorker = await import(pathToFileURL(join(ROOT, 'workers/src/routes/proof-dico.js')).href);
 
 titre('A · Les fonctions pures du moteur (aucun test jusqu\'ici)');
 
@@ -249,6 +252,23 @@ titre('A bis · La règle des noms propres (GP-1)');
     cas('Fin de phrase. ', 'Degrima') === false);
   check('deux lettres avant le point ≠ initiale (« Cf. Degrima »)',
     cas('Cf. ', 'Degrima') === false);
+
+  // — GP-2 · l'écran et le serveur doivent admettre EXACTEMENT les mêmes mots —
+  // Deux copies d'une règle finissent toujours par diverger. Ici, un mot
+  // accepté à l'import mais refusé en base disparaîtrait sans un mot dire.
+  {
+    const cas = ['Lefebvre', '  DEGRIMA  ', 'al-Mansouri', 'O’Brien', 'Saint-Maixent',
+                 'ab', 'a', '', '   ', 'VT4', 'deux mots', '-x', 'x-', 'a'.repeat(61),
+                 'Élan', 'coésion', 'l’Épaulette', 'e.mail@x.fr', '42'];
+    const desaccords = cas.filter((c) => moteur.normalizeDicoWord(c) !== dicoWorker._normaliserMot(c));
+    check('la règle d\'admission du dictionnaire est la MÊME à l\'écran et au serveur',
+      desaccords.length === 0,
+      desaccords.map((c) => `${JSON.stringify(c)} : écran ${JSON.stringify(moteur.normalizeDicoWord(c))} ≠ serveur ${JSON.stringify(dicoWorker._normaliserMot(c))}`).join(' | '));
+    check('un fichier importé ne peut pas faire entrer un mot à chiffres',
+      moteur.normalizeDicoWord('VT4') === null && moteur.normalizeDicoWord('Km2') === null);
+    check('un mot importé est normalisé en minuscules, sans espaces autour',
+      moteur.normalizeDicoWord('  DEGRIMA  ') === 'degrima');
+  }
 
   // — GP-2 couche 1 : le dictionnaire de BASE livré avec l'outil —
   check('le dico de base tait une abréviation de grade (Lcl)', moteur.isNoiseSpelling('Lcl') === true);
