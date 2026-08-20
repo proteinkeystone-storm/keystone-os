@@ -44,9 +44,17 @@ const MAX_PAR_REQUETE  = 500;
 const MOT_MIN = 3;
 const MOT_MAX = 60;
 
-// Lettres (accents compris), trait d'union, apostrophe. Doit commencer et
-// finir par une lettre — « -mot » ou « mot- » sont des fragments.
-const RE_MOT = /^[a-zà-öø-ÿ]([a-zà-öø-ÿ'’-]*[a-zà-öø-ÿ])?$/;
+// Lettres, trait d'union, apostrophe. Doit COMMENCER par une lettre —
+// « -mot » est un fragment.
+// ⚠ \p{L} et non [a-zà-ÿ] : une revue qui parle du monde entier écrit
+// « Đặng », « Kraśnik », « Þórsdóttir ». Les translittérations sortent de
+// l'alphabet latin de base, et un patronyme refusé au dictionnaire, c'est
+// une alerte qui revient à chaque numéro. Ce qui reste interdit : les
+// chiffres, les espaces, la ponctuation.
+// Doit rester STRICTEMENT identique à `normalizeDicoWord` (proof-engine.js) :
+// un mot accepté à l'écran mais refusé ici disparaîtrait sans un mot dire.
+// Le banc `scripts/mesure-proof.mjs` compare les deux à chaque exécution.
+const RE_MOT = /^\p{L}[\p{L}\p{M}'’-]*[\p{L}\p{M}]$/u;
 
 let _schemaReady = false;
 async function ensureSchema(env) {

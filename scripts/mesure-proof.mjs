@@ -258,8 +258,11 @@ titre('A bis · La règle des noms propres (GP-1)');
   // accepté à l'import mais refusé en base disparaîtrait sans un mot dire.
   {
     const cas = ['Lefebvre', '  DEGRIMA  ', 'al-Mansouri', 'O’Brien', 'Saint-Maixent',
-                 'ab', 'a', '', '   ', 'VT4', 'deux mots', '-x', 'x-', 'a'.repeat(61),
-                 'Élan', 'coésion', 'l’Épaulette', 'e.mail@x.fr', '42'];
+                 'ab', 'a', '', '   ', 'VT4', 'deux mots', '-x', 'abc-', 'a'.repeat(61),
+                 'Élan', 'coésion', 'l’Épaulette', 'e.mail@x.fr', '42',
+                 // Translittérations : une revue qui parle du monde entier en est
+                 // pleine, et un patronyme refusé, c'est une alerte à chaque numéro.
+                 'Þórsdóttir', 'Đặng', 'Kraśnik', 'Örebro', 'Reykjavík'];
     const desaccords = cas.filter((c) => moteur.normalizeDicoWord(c) !== dicoWorker._normaliserMot(c));
     check('la règle d\'admission du dictionnaire est la MÊME à l\'écran et au serveur',
       desaccords.length === 0,
@@ -268,6 +271,11 @@ titre('A bis · La règle des noms propres (GP-1)');
       moteur.normalizeDicoWord('VT4') === null && moteur.normalizeDicoWord('Km2') === null);
     check('un mot importé est normalisé en minuscules, sans espaces autour',
       moteur.normalizeDicoWord('  DEGRIMA  ') === 'degrima');
+    check('un patronyme translittéré est accepté (macron, diacritiques rares)',
+      moteur.normalizeDicoWord('Þórsdóttir') === 'þórsdóttir'
+      && moteur.normalizeDicoWord('Đặng') === 'đặng');
+    check('un fragment à trait d\'union en tête ou en queue reste refusé',
+      moteur.normalizeDicoWord('-abc') === null && moteur.normalizeDicoWord('abc-') === null);
   }
 
   // — GP-2 couche 1 : le dictionnaire de BASE livré avec l'outil —

@@ -1732,7 +1732,7 @@ function _renderDico() {
         </div>
       </div>
 
-      ${mots.length ? `<div class="pf-dico-list">
+      ${mots.length ? `<div class="pf-dico-list" data-liste="maison">
         ${mots.map((w) => `<span class="pf-ignore-tag">${_esc(w)}<button data-act="dico-retirer" data-w="${_esc(w)}"
           aria-label="Retirer « ${_esc(w)} » du vocabulaire">${icon('x', 11)}</button></span>`).join('')}
       </div>
@@ -1745,8 +1745,15 @@ function _renderDico() {
         Un fichier texte, un mot par ligne : ouvrez-le dans n'importe quel éditeur,
         transmettez-le à un collaborateur ou à un client, reprenez le sien.
         L'import <strong>complète</strong> votre liste, il ne la remplace jamais.
-        ${nBase ? `<br>${icon('check-circle', 13)} ${nBase} mots de vocabulaire courant (grades, civilités, renvois) sont déjà livrés avec l'outil — ils n'apparaissent pas dans cette liste et n'ont pas besoin d'être appris.` : ''}
       </p>
+      ${nBase ? `<details class="pf-dico-base">
+        <summary>${icon('check-circle', 13)} ${nBase} mots sont déjà livrés avec l'outil — grades, civilités, renvois</summary>
+        <p class="pf-dico-sub" style="margin:10px 0 12px">Vocabulaire courant, commun à tout le monde : il n'a pas besoin d'être appris et n'entre pas dans votre liste. Le voici, pour que vous sachiez ce que le correcteur laisse déjà passer.</p>
+        <div class="pf-dico-list" data-liste="livree" style="max-height:26vh">
+          ${DICO_BASE.slice().sort((a, b) => a.localeCompare(b, 'fr'))
+            .map((w) => `<span class="pf-ignore-tag is-fige">${_esc(w)}</span>`).join('')}
+        </div>
+      </details>` : ''}
     </section>`;
 }
 
@@ -1901,6 +1908,14 @@ html.light-mode .pf-dico-list { border-color:rgba(0,0,0,.08); background:rgba(0,
   max-width:70ch;
 }
 .pf-dico-note svg { vertical-align:-2px; margin-right:4px; }
+.pf-dico-base > summary {
+  cursor:pointer; font-size:12.5px; color:var(--tx2, rgba(248,250,252,.55));
+  padding:8px 0; list-style:none; user-select:none;
+}
+.pf-dico-base > summary::-webkit-details-marker { display:none; }
+.pf-dico-base > summary:hover { color:inherit; }
+.pf-dico-base > summary svg { vertical-align:-2px; margin-right:5px; }
+.pf-ignore-tag.is-fige { opacity:.6; padding-right:11px; }
 @media (max-width:640px) {
   .pf-dico-head { flex-direction:column; }
   .pf-dico-actions { width:100%; }

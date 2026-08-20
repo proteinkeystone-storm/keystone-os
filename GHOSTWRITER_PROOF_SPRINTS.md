@@ -342,7 +342,18 @@ désormais l'état réel du réglage, dans les deux sens. C'est exactement le
 précédent du §9 (DK-9 avait déjà fait corriger une promesse affichée fausse) —
 il a fallu une capture d'écran pour le voir, pas un test.
 
-**Le filet** — `scripts/test-proof-ui.mjs`, 22 vérifications dans `npm test` :
+**Deux retouches du 2026-08-21**, après avoir regardé l'onglet en vrai :
+- **Le vocabulaire livré est CONSULTABLE**, plus seulement annoncé — un volet
+  dépliable montre les 50 mots. Un utilisateur à qui l'on dit « 50 mots sont
+  déjà là » doit pouvoir les regarder.
+- **L'alphabet admis s'élargit à `\p{L}`.** `[a-zà-öø-ÿ]` refusait les
+  translittérations (`Đặng`, `Kraśnik`, `Þórsdóttir`) : pour une revue qui
+  parle du monde entier, un patronyme refusé au dictionnaire, c'est une alerte
+  qui revient à chaque numéro. Chiffres, espaces et ponctuation restent
+  interdits, et le mot doit toujours commencer ET finir par une lettre. Le banc
+  compare les deux règles (écran et serveur) à chaque exécution.
+
+**Le filet** — `scripts/test-proof-ui.mjs`, 24 vérifications dans `npm test` :
 la promesse dans ses deux états, l'onglet, et un **vrai fichier déposé** dans le
 champ d'import (mots valides entrés, invalides écartés, liste existante
 préservée). Vu rouge en cassant la promesse et en faisant remplacer l'import.

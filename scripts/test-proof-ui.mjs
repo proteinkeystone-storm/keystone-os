@@ -141,13 +141,17 @@ const pg = await ouvrir('/assiste.html');
       return !!t && getComputedStyle(t).opacity !== '' && t.textContent.includes('Vocabulaire');
     }));
   check('le vocabulaire déjà appris est listé',
-    (await pg.evaluate(() => document.querySelectorAll('.pf-dico-list .pf-ignore-tag').length)) === DEJA.length);
+    (await pg.evaluate(() => document.querySelectorAll('[data-liste="maison"] .pf-ignore-tag').length)) === DEJA.length);
   const boutons = await pg.evaluate(() => [...document.querySelectorAll('.pf-dico-btn')].map((b) => b.textContent.trim()));
   check('« Exporter » et « Importer » sont là', boutons.includes('Exporter') && boutons.includes('Importer'), boutons.join(', '));
   check('la note dit que l\'import COMPLÈTE et ne remplace pas',
     /compl[eè]te/i.test(await texteDe(pg, '.pf-dico-note')));
-  check('la note annonce le vocabulaire livré avec l\'outil',
-    /\d+ mots de vocabulaire courant/.test(await texteDe(pg, '.pf-dico-note')));
+  check('le vocabulaire livré avec l\'outil est annoncé…',
+    /\d+ mots sont déjà livrés/.test(await texteDe(pg, '.pf-dico-base summary')));
+  check('…et il est CONSULTABLE, pas seulement annoncé',
+    (await pg.evaluate(() => document.querySelectorAll('[data-liste="livree"] .pf-ignore-tag').length)) >= 40);
+  check('les mots livrés ne se mélangent pas à ceux de la maison',
+    (await pg.evaluate(() => document.querySelectorAll('[data-liste="maison"] .pf-ignore-tag').length)) === DEJA.length);
 }
 
 /* ─────────────────────────────────────────────────────────────── */
@@ -178,7 +182,7 @@ titre('Reprendre le vocabulaire de quelqu\'un d\'autre');
   await new Promise((r) => setTimeout(r, 600));
 
   const apres = await pg.evaluate(() => ({
-    mots: [...document.querySelectorAll('.pf-dico-list .pf-ignore-tag')].map((s) => s.textContent.replace(/\s+/g, '')),
+    mots: [...document.querySelectorAll('[data-liste="maison"] .pf-ignore-tag')].map((s) => s.textContent.replace(/\s+/g, '')),
     stock: JSON.parse(localStorage.getItem('ks_proof_ignore_words') || '[]'),
   }));
   const set = new Set(apres.stock);

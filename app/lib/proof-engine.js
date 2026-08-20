@@ -279,7 +279,12 @@ export function isProperNounSpelling(word, text, offset, suggestions) {
 // pour pouvoir DIRE à l'utilisateur ce qui a été écarté d'un fichier importé,
 // au lieu de le laisser disparaître en silence.
 // Rend le mot normalisé (minuscules, sans espaces autour), ou null.
-const _RE_MOT_DICO = /^[a-zà-öø-ÿ]([a-zà-öø-ÿ'’-]*[a-zà-öø-ÿ])?$/;
+// ⚠ \p{L} et non [a-zà-ÿ] : une revue qui parle du monde entier écrit
+// « Đặng », « Kraśnik », « Þórsdóttir ». Les translittérations sortent de
+// l'alphabet latin de base, et un patronyme refusé au dictionnaire, c'est
+// une alerte qui revient à chaque numéro. Ce qui reste interdit : les
+// chiffres, les espaces, la ponctuation.
+const _RE_MOT_DICO = /^\p{L}[\p{L}\p{M}'’-]*[\p{L}\p{M}]$/u;
 export function normalizeDicoWord(mot) {
   const w = String(mot == null ? '' : mot).trim().toLowerCase();
   if (w.length < 3 || w.length > 60) return null;   // sous 3 signes, minLetters l'écarte déjà
