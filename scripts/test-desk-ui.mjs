@@ -2203,12 +2203,149 @@ await parcours('Parcours 16 — importer un article au marbre, avec sa pièce', 
 });
 
 /* ─────────────────────────────────────────────────────────────────
+   PARCOURS 17 · La fiche PREND sa place, elle ne recouvre plus (20 août)
+
+   Retour de Stéphane : « quand une modale s'ouvre de la droite, elle
+   passe au-dessus du chemin de fer et je trouve cela gênant ; on ne
+   pourrait pas pousser les cartes vers la gauche ? » Sur grand écran le
+   contenu se rétrécit désormais de la largeur du panneau et les planches
+   se réarrangent (flex-wrap) ; sur petit écran l'inspecteur est une
+   feuille du bas, il n'y a rien à pousser.
+
+   On mesure des PIXELS (recouvrement, largeur, rangées) — c'est pour ça
+   que ce banc est un vrai navigateur.
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 17 — la fiche pousse le chemin de fer au lieu de le recouvrir', async () => {
+  await page.setViewport({ width: 1440, height: 820 });
+  await ouvrirLePad(page, BASE);
+  const SHOTS = process.env.DK_SHOTS || '';
+  const capturer = async (nom) => {
+    if (!SHOTS) return;
+    try { fs.mkdirSync(SHOTS, { recursive: true }); } catch (_) {}
+    await page.screenshot({ path: `${SHOTS}/${nom}.png` });
+  };
+  const mesure = () => page.evaluate(() => {
+    const insp = document.querySelector('.dk-insp').getBoundingClientRect();
+    const wrap = document.querySelector('.dk-frise-wrap').getBoundingClientRect();
+    const planches = [...document.querySelectorAll('.dk-frise .dk-planche')].map(p => Math.round(p.getBoundingClientRect().top));
+    const haut = Math.min(...planches);
+    const cartes = [...document.querySelectorAll('.dk-frise .dk-pcard')].map(c => c.getBoundingClientRect());
+    const sel = document.querySelector('.dk-frise .dk-pcard.sel');
+    const r = sel && sel.getBoundingClientRect();
+    return {
+      padding: getComputedStyle(document.querySelector('.dk-main')).paddingRight,
+      friseW: Math.round(wrap.width),
+      inspOn: document.querySelector('.dk-insp').classList.contains('on'),
+      inspLeft: Math.round(insp.left),
+      // Cartes qui passeraient SOUS le panneau — c'est la gêne décrite.
+      recouvertes: cartes.filter(c => c.width > 0 && c.right > insp.left + 1).length,
+      premiereRangee: planches.filter(t => t === haut).length,
+      selVisible: !!r && r.top >= wrap.top - 1 && r.bottom <= wrap.bottom + 1,
+    };
+  });
+
+  const avant = await mesure();
+  check('au départ, rien ne pousse le chemin de fer', avant.padding === '0px' && !avant.inspOn,
+    `padding=${avant.padding} fiche=${avant.inspOn}`);
+  check('la frise occupe toute la largeur', avant.friseW >= 1400, 'largeur : ' + avant.friseW);
+
+  // ── Ouvrir une fiche : le contenu s'écarte, les planches se repaquent.
+  await cliquer(page, '.dk-frise .dk-pcard[data-n="3"]');
+  await attendSel(page, '.dk-insp.on', 'la fiche ouverte');
+  await attendre(750);                                    // glissade (280 ms) + remise en vue (320 ms)
+  const apres = await mesure();
+  await capturer('17-fiche-pousse-le-chemin-de-fer');
+  check('le contenu s\'écarte exactement de la largeur du panneau',
+    apres.padding === '400px', 'padding-right : ' + apres.padding);
+  check('la frise a rétréci d\'autant', apres.friseW === avant.friseW - 400,
+    `${avant.friseW} → ${apres.friseW}`);
+  check('PLUS AUCUNE carte ne passe sous la fiche (c\'était la gêne)',
+    apres.recouvertes === 0, apres.recouvertes + ' carte(s) encore dessous');
+  check('les planches se sont réarrangées (moins par rangée qu\'avant)',
+    apres.premiereRangee < avant.premiereRangee,
+    `${avant.premiereRangee} → ${apres.premiereRangee} planches sur la 1re rangée`);
+  check('… et elle est ATTEIGNABLE, rien ne flotte dessus',
+    await page.evaluate(() => {
+      const el = document.querySelector('.dk-frise .dk-pcard.sel');
+      const r = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return !!hit && (hit === el || el.contains(hit));
+    }));
+
+  // ── Le réarrangement fait DESCENDRE les cartes : celle qu'on vient
+  //    d'ouvrir ne doit pas passer sous le pli. On en choisit une en bas
+  //    du champ de vision — sur une carte déjà en haut, l'assertion
+  //    passerait toute seule et ne prouverait rien.
+  await page.keyboard.press('Escape');
+  await attend(page, () => !document.querySelector('.dk-insp').classList.contains('on'), null, 'la fiche fermée');
+  await attendre(400);
+  await page.evaluate(() => {
+    const s = document.querySelector('[data-k="size"]');
+    s.value = '3'; s.dispatchEvent(new Event('input', { bubbles: true }));   // grosses cartes = frise plus haute
+  });
+  await attendre(250);
+  const basse = await page.evaluate(() => {
+    const f = document.querySelector('.dk-frise');
+    f.scrollTop = Math.round((f.scrollHeight - f.clientHeight) / 2);         // au milieu du chemin de fer
+    const wrap = f.getBoundingClientRect();
+    const vus = [...f.querySelectorAll('.dk-pcard')]
+      .filter(c => { const r = c.getBoundingClientRect(); return r.top >= wrap.top && r.bottom <= wrap.bottom; });
+    return vus.length ? vus[vus.length - 1].dataset.n : null;
+  });
+  check('une carte est bien visible en bas du chemin de fer (sinon le test suivant ne prouverait rien)',
+    !!basse, 'carte visée : ' + basse);
+  await cliquer(page, `.dk-frise .dk-pcard[data-n="${basse}"]`);
+  await attendSel(page, '.dk-insp.on', 'la fiche de la carte basse');
+  await attendre(800);
+  check('la carte ouverte est ramenée dans le champ de vision malgré le réarrangement',
+    await page.evaluate(() => {
+      const el = document.querySelector('.dk-frise .dk-pcard.sel');
+      if (!el) return false;
+      const r = el.getBoundingClientRect(), w = document.querySelector('.dk-frise').getBoundingClientRect();
+      return r.top >= w.top - 1 && r.bottom <= w.bottom + 1;
+    }),
+    await page.evaluate(() => {
+      const el = document.querySelector('.dk-frise .dk-pcard.sel');
+      const r = el && el.getBoundingClientRect(), w = document.querySelector('.dk-frise').getBoundingClientRect();
+      return el ? `carte ${Math.round(r.top)}→${Math.round(r.bottom)} / champ ${Math.round(w.top)}→${Math.round(w.bottom)}` : 'aucune carte sélectionnée';
+    }));
+
+  // ── Refermer : le chemin de fer reprend toute la place.
+  await page.keyboard.press('Escape');
+  await attend(page, () => !document.querySelector('.dk-insp').classList.contains('on'), null, 'la fiche fermée');
+  await attendre(450);
+  const ferme = await mesure();   // largeur : indépendante du cran des cartes
+  check('à la fermeture, le chemin de fer reprend toute la largeur',
+    ferme.padding === '0px' && ferme.friseW === avant.friseW,
+    `padding=${ferme.padding} largeur=${ferme.friseW}`);
+
+  // ── Petit écran : l'inspecteur est une feuille du bas, on ne pousse RIEN.
+  await page.setViewport({ width: 780, height: 900 });
+  await ouvrirLePad(page, BASE);
+  await cliquer(page, '.dk-frise .dk-pcard[data-n="3"]');
+  await attendSel(page, '.dk-insp.on', 'la feuille ouverte');
+  await attendre(500);
+  const petit = await page.evaluate(() => {
+    const insp = document.querySelector('.dk-insp').getBoundingClientRect();
+    return {
+      padding: getComputedStyle(document.querySelector('.dk-main')).paddingRight,
+      friseW: Math.round(document.querySelector('.dk-frise-wrap').getBoundingClientRect().width),
+      feuille: Math.round(insp.width) >= 770 && Math.round(insp.bottom) >= 890,
+    };
+  });
+  check('sous 820 px, l\'inspecteur est bien la feuille du bas', petit.feuille);
+  check('… et le chemin de fer garde toute sa largeur (rien à pousser)',
+    petit.padding === '0px' && petit.friseW >= 770, `padding=${petit.padding} largeur=${petit.friseW}`);
+  await page.setViewport({ width: 1280, height: 640 });
+});
+
+/* ─────────────────────────────────────────────────────────────────
    Hygiène : aucune erreur JS n'a été avalée en chemin.
    ───────────────────────────────────────────────────────────────── */
 console.log('\n\x1b[1m▶ Hygiène\x1b[0m');
 {
   const graves = erreursPage.filter(e => !/favicon|LOGOS|ERR_/.test(e));
-  check('aucune erreur JavaScript pendant les seize parcours', graves.length === 0,
+  check('aucune erreur JavaScript pendant les dix-sept parcours', graves.length === 0,
     graves.slice(0, 4).join(' | '));
 }
 

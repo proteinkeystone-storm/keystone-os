@@ -9,6 +9,7 @@
 .dk-app {
   --dk-gold: #C9A227; --dk-ambre: #e6a23c; --dk-rouge: #e5484d; --dk-vert: #4cc38a;
   --dk-line: rgba(127, 127, 127, .16);
+  --dk-insp-w: 400px;            /* largeur du panneau latéral ET de la poussée */
   --dk-tx2: rgba(127, 127, 127, .95);
   --dk-tx3: rgba(127, 127, 127, .6);
   --dk-card-w: 148px; --dk-card-h: 190px;
@@ -456,7 +457,7 @@ html.light-mode .dk-pcard.rubbed .dk-pc-marge, html.light-mode .dk-pcard.rubbed.
 
 /* ── Inspecteur (latéral desktop / feuille du bas mobile) ─────── */
 .dk-insp {
-  position: fixed; top: 0; right: 0; bottom: 0; width: 400px; max-width: 92vw;
+  position: fixed; top: 0; right: 0; bottom: 0; width: var(--dk-insp-w); max-width: 92vw;
   background: var(--ws-surface, #1c2234); border-left: 1px solid var(--dk-line);
   transform: translateX(102%); transition: transform .28s cubic-bezier(.22, 1, .36, 1);
   z-index: 10005; display: flex; flex-direction: column;
@@ -479,6 +480,33 @@ html.light-mode .dk-pcard.rubbed .dk-pc-marge, html.light-mode .dk-pcard.rubbed.
   transform: translateX(0);
   visibility: visible;
   transition: transform .28s cubic-bezier(.22, 1, .36, 1), visibility 0s 0s;
+}
+/* ── La fiche PREND SA PLACE, elle ne recouvre plus (retour Stéphane
+   2026-08-20 : « quand une modale s'ouvre de la droite elle passe au-dessus
+   du chemin de fer ; on ne pourrait pas pousser les cartes vers la gauche ? »)
+   Au-dessus de 820 px l'inspecteur est un panneau LATÉRAL : le contenu de
+   desK se rétrécit d'autant et les planches se réarrangent toutes seules —
+   la frise est un flex-wrap, aucune largeur n'est calculée en JS (1er
+   anti-pattern responsive du dépôt). En dessous, l'inspecteur est une
+   feuille du bas : elle ne mange pas la largeur, rien à pousser.
+
+   Deux choix qui évitent une bagarre :
+   · on pousse par un `padding-right` sur le CONTENU, pas par une marge sur
+     .ws-body — la fenêtre Kora pousse déjà `.ws-app > *` d'un `margin-right`
+     (kora.css) : deux propriétés différentes s'ADDITIONNENT, la même se
+     disputerait à coups de spécificité ;
+   · `:has()` plutôt qu'une classe posée par le JS : l'inspecteur est dressé
+     depuis une douzaine d'endroits (fiche, marbre, formulaire, bannette,
+     réglages…). Une liste blanche de déclencheurs a déjà coûté trois
+     régressions côté galet Kora — on lit l'état, on ne le recopie pas.
+   La topbar, elle, reste PLEINE LARGEUR : même convention que Kora dans tout
+   l'OS, et le galet doit rester au bord droit de l'écran. */
+@media (min-width: 821px) {
+  .dk-main { transition: padding-right .28s cubic-bezier(.22, 1, .36, 1); }
+  .dk-app:has(> .dk-insp.on) .dk-main { padding-right: var(--dk-insp-w); }
+  /* Les surfaces flottantes se recentrent sur ce qui reste visible. */
+  .dk-app:has(> .dk-insp.on) .dk-mselbar,
+  .dk-app:has(> .dk-insp.on) .dk-toast { left: calc(50% - var(--dk-insp-w) / 2); }
 }
 .dk-insp-hd { display: flex; align-items: flex-start; gap: 10px; padding: 16px 18px 10px; flex: 0 0 auto; }
 .dk-insp-hd-main { flex: 1; min-width: 0; }

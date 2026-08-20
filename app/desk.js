@@ -252,7 +252,7 @@ function _veilleConfirmations(insp) {
 
 export function closeDesk() {
   if (!_root) return;
-  clearInterval(_pollTimer); clearTimeout(_toastTimer);
+  clearInterval(_pollTimer); clearTimeout(_toastTimer); clearTimeout(_vueTimer);
   if (_writer) { clearTimeout(_writer.timer); _writer = null; }
   document.removeEventListener('keydown', _onKey);
   document.removeEventListener('visibilitychange', _onVisibility);
@@ -1937,6 +1937,26 @@ function _openInsp(n, silent) {
   _inspScrollSet('page:' + n, _sy);
   insp.classList.add('on');
   _root.querySelector('[data-slot="veil"]').classList.add('on');
+  if (!silent) _garderCarteEnVue(n);
+}
+
+/* La frise se RÉARRANGE quand la fiche lui prend sa place (desk.css, poussée
+   au-dessus de 820 px) : les planches se repaquent, et la carte qu'on vient
+   d'ouvrir peut passer sous le pli. On la ramène une fois la glissade finie.
+   Deux garde-fous : seulement à l'OUVERTURE (jamais sur un re-rendu
+   silencieux — un rafraîchissement d'équipe ramènerait le défilement là où
+   on ne l'a pas laissé), et `block:'nearest'`, qui ne fait rien tant que la
+   carte est visible. */
+let _vueTimer = null;
+function _garderCarteEnVue(n) {
+  if (typeof matchMedia !== 'function' || !matchMedia('(min-width: 821px)').matches) return;
+  clearTimeout(_vueTimer);
+  _vueTimer = setTimeout(() => {
+    const el = _root && _root.querySelector(`[data-slot="frise"] .dk-pcard[data-n="${n}"]`);
+    if (!el) return;
+    try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+    catch (_) { el.scrollIntoView(false); }
+  }, 320);
 }
 function _closeInsp() {
   _root.querySelector('[data-slot="insp"]').classList.remove('on');
