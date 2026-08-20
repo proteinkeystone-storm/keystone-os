@@ -70,3 +70,7 @@ _design-lab/notice-sa-src/NOTICE_SMART_AGENT.pdf
 # Le dépôt est PUBLIC : le papier d'un contributeur de L'Épaulette n'y monte
 # jamais. Le banc, lui, est versionné (scripts/mesure-relecture.mjs).
 _design-lab/relecture-dk9/
+
+# Corpus de mesure de la relecture (textes réels de la revue) — dépôt PUBLIC,
+# ne JAMAIS committer. Cf. GHOSTWRITER_PROOF_SPRINTS.md §GP-0.
+_corpus-proof/
