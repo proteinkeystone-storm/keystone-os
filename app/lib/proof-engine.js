@@ -28,7 +28,15 @@
    dehors. cf. BRIEF_GHOST_WRITER_V2.md §2-3.
    ═══════════════════════════════════════════════════════════════ */
 
+import { DICO_BASE } from './proof-dico-base.js';
+
 const WORKER_URL = '/app/lib/proof-grammalecte.worker.js';
+
+// La couche de BASE du dictionnaire (GP-2) : un vocabulaire générique livré
+// avec l'outil — grades, civilités, renvois. Tout le monde en profite, personne
+// ne partage rien. Le dictionnaire de la MAISON (couche 2, par licence) vient
+// par-dessus, via setProofFilters({ ignoreWords }).
+const _DICO_BASE_SET = new Set(DICO_BASE);
 
 let _worker   = null;
 let _seq      = 0;
@@ -100,9 +108,25 @@ export function canonicalizeText(text) {
 const _filters = {
   ignore: new Set(),     // dico perso (mots en minuscules) — « toujours ignorer »
   skipAllCaps: true,     // sigles TOUT-EN-CAPITALES : MINARM, IHEDN, GMHM…
-  skipWithDigits: true,  // tokens contenant un chiffre : A400M, COVID19, page42…
+  // ⚠ DÉFAUT À false depuis le 2026-08-20 (GP-1), et c'est une MESURE, pas un
+  // avis. Sonde sur le vrai moteur : les références que ce filtre prétendait
+  // écarter (A400M, VT4, Rafale F3, P4, 1er) ne sont JAMAIS signalées par
+  // Grammalecte — elles sont en capitales, il les ignore lui-même. Ce que le
+  // filtre écartait en pratique, ce sont des mots COLLÉS à un nombre (Km2,
+  // page42, covid19, Airbus350), c'est-à-dire de vraies fautes de typographie,
+  // avec la bonne correction en face. Il masquait donc des fautes sans rien
+  // protéger. Reste à true pour la relecture de PDF (cf. proof-pdf.js) : là, le
+  // collage vient de l'extraction, pas de l'auteur.
+  skipWithDigits: false, // mots collés à un nombre : Km2 → « Km ² », page42 → « page 42 »
   skipUrlEmail: true,    // fragments d'URL / email
-  minLetters: 3,         // mots de moins de 3 lettres (bruit d'extraction PDF)
+  // Fragments trop courts pour être un mot (bruit d'extraction PDF : « th »,
+  // « rn »…). On compte les lettres ET les chiffres : « Km2 » fait trois
+  // signes, ce n'est pas un fragment — ne compter que les lettres le faisait
+  // taire alors que c'est « km² » mal écrit (mesuré le 2026-08-20).
+  minLetters: 3,         // longueur minimale d'un token signalable
+  skipProperNouns: true, // GP-1 : majuscule hors début de phrase = nom propre
+  grammarDenylist: null, // null = GRAMMAR_DENYLIST_TEXTE ; proof-pdf passe la liste PDF
+  useBaseDico: true,     // GP-2 couche 1 : le vocabulaire livré avec l'outil
 };
 
 // Configure les filtres d'orthographe. Appelé par le consommateur (ex. l'UI
@@ -115,10 +139,11 @@ export function setProofFilters(cfg) {
     const list = Array.isArray(cfg.ignoreWords) ? cfg.ignoreWords : Array.from(cfg.ignoreWords);
     _filters.ignore = new Set(list.map((w) => String(w).toLowerCase()));
   }
-  for (const k of ['skipAllCaps', 'skipWithDigits', 'skipUrlEmail']) {
+  for (const k of ['skipAllCaps', 'skipWithDigits', 'skipUrlEmail', 'skipProperNouns', 'useBaseDico']) {
     if (typeof cfg[k] === 'boolean') _filters[k] = cfg[k];
   }
   if (Number.isFinite(cfg.minLetters)) _filters.minLetters = cfg.minLetters;
+  if (cfg.grammarDenylist === null || Array.isArray(cfg.grammarDenylist)) _filters.grammarDenylist = cfg.grammarDenylist;
 }
 
 export function getProofFilters() {
@@ -128,6 +153,9 @@ export function getProofFilters() {
     skipWithDigits: _filters.skipWithDigits,
     skipUrlEmail: _filters.skipUrlEmail,
     minLetters: _filters.minLetters,
+    skipProperNouns: _filters.skipProperNouns,
+    grammarDenylist: _filters.grammarDenylist,
+    useBaseDico: _filters.useBaseDico,
   };
 }
 
@@ -148,47 +176,163 @@ export function isNoiseSpelling(word, filters) {
   const f = filters || _filters;
   const w = String(word == null ? '' : word).trim();
   if (!w) return false;                                   // pas de mot → ne pas masquer à l'aveugle
-  if (_inIgnore(f.ignore, w.toLowerCase())) return true;
-  const letters = (w.match(_RE_LETTER_G) || []).length;
-  if ((f.minLetters || 0) > 0 && letters < f.minLetters) return true;
+  const wl = w.toLowerCase();
+  if (_inIgnore(f.ignore, wl)) return true;              // dico de la MAISON
+  if (f.useBaseDico !== false && _DICO_BASE_SET.has(wl)) return true;   // dico de BASE
+  const signes = (w.match(_RE_SIGNE_G) || []).length;
+  if ((f.minLetters || 0) > 0 && signes < f.minLetters) return true;
   if (f.skipWithDigits && _RE_DIGIT.test(w)) return true;
   if (f.skipUrlEmail && _RE_URLISH.test(w)) return true;
   if (f.skipAllCaps && _RE_LETTER.test(w) && w === w.toUpperCase() && w !== w.toLowerCase()) return true;
   return false;
 }
-const _RE_LETTER_G = /[A-Za-zÀ-ÖØ-öø-ÿ]/g;
+const _RE_SIGNE_G  = /[A-Za-zÀ-ÖØ-öø-ÿ0-9]/g;   // lettres ET chiffres (cf. minLetters)
 
-// Règles de grammaire DÉSACTIVÉES (denylist par préfixe d'identifiant). Sur un
-// audit réel (livre MICE + L'Épaulette, 2026-06-06), ces règles génèrent
-// l'essentiel des faux positifs RÉSIDUELS : ce sont des règles « au conditionnel »
-// (Grammalecte dit lui-même « s'il s'agit… », « si X est le sujet… ») ou trop
-// zélées. La grammaire FIABLE (accords sûrs, accents À/a, traits d'union,
-// confusions nettes, « quelque »…) reste 100 % active.
-const _GRAMMAR_DENYLIST = [
-  'gv1__imp_verbe_groupe3',          // « S'il s'agit d'un impératif, ajoutez un s »
-  'gv1__imp_verbe_groupe2_groupe3',  // idem (autre groupe)
-  'gv1__conj_nous2',                 // « conjugaison probablement erronée si nous… »
-  'gv2__conj_det_nom_sing_virgule',  // « Si X est le sujet de… »
-  'g2__conf_ça_çà_sa',               // « sa » (possessif) pris pour « ça »
-  'g0__virg_virgules_manquantes',    // virgule hésitante « si car/mais est conjonction »
+// ── GP-1 · L'impasse sur les noms propres ────────────────────────
+// Grammalecte n'a PAS les noms propres dans son dictionnaire : sur un texte de
+// presse, patronymes, toponymes et noms d'unités constituent l'essentiel des
+// alertes d'orthographe restantes. Mesure du 2026-08-20 (3 articles réels de
+// L'Épaulette) : 63 faux positifs affichés pour 13 vraies fautes.
+//
+// La règle : un mot inconnu qui commence par une MAJUSCULE et qui n'est PAS en
+// position où une majuscule est grammaticale est un nom propre — on se tait.
+// Positions où la majuscule est ATTENDUE (donc on continue de vérifier) :
+// début du texte, début de ligne, après . ? ! … : ; après un guillemet ouvrant,
+// après un tiret de dialogue.
+const _RE_BLANC_AVANT  = /[\s'’(\[]/;             // traversés (\s couvre l'insécable)
+const _RE_OUVRE_PHRASE = /[.?!…:;\n—–«"-]/;       // la majuscule qui suit est normale
+const _RE_COMPOSE_MAJ  = /-[A-ZÀ-ÖØ-Þ]/;          // « El-Bakri », « Roche-Ferrand » : nom composé
+
+// Les lettres d'un mot, accents ôtés et remises en ordre. Sert au GARDE
+// ci-dessous : deux mots qui ont les mêmes lettres ne sont pas deux noms
+// différents, c'est une coquille (Lybie/Libye) ou un accent oublié
+// (Egypte/Égypte). Sans ce garde, la règle masquerait 6 vraies fautes du corpus.
+function _lettresTriees(s) {
+  let t = String(s == null ? '' : s).toLowerCase();
+  try { t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (_) {}
+  return t.split('').sort().join('');
+}
+
+// Un point précédé d'UNE SEULE lettre majuscule isolée est une initiale, pas la
+// fin d'une phrase. Sans ça, « le président déchu B. El-Bakri » fait passer
+// « El-Bakri » pour un début de phrase et l'alerte reste.
+function _estInitiale(text, iPoint) {
+  const c = text.charAt(iPoint - 1);
+  if (!c || !_RE_LETTER.test(c) || c !== c.toUpperCase() || c === c.toLowerCase()) return false;
+  const avant = text.charAt(iPoint - 2);
+  return avant === '' || /[\s'’(\[«"]/.test(avant);   // la lettre est bien isolée
+}
+
+// Prédicat PUR (testable hors navigateur) : ce mot signalé est-il un NOM PROPRE
+// qu'il faut taire ? Reçoit le mot, le texte canonique, la position du mot, et
+// les suggestions de Grammalecte (pour le garde). Sans texte ni position, rend
+// false : on ne masque JAMAIS sans contexte.
+export function isProperNounSpelling(word, text, offset, suggestions) {
+  const w = String(word == null ? '' : word);
+  if (!w) return false;
+  if (w === w.toUpperCase()) return false;                       // sigle : affaire de skipAllCaps
+  const c0 = w.charAt(0);
+  const majInitiale = _RE_LETTER.test(c0) && c0 === c0.toUpperCase() && c0 !== c0.toLowerCase();
+  if (!majInitiale && !_RE_COMPOSE_MAJ.test(w)) return false;    // ni majuscule, ni nom composé
+  if (_RE_DIGIT.test(w)) return false;                           // « Km2 », « A400M » : une référence,
+                                                                 // pas un nom — affaire de skipWithDigits
+
+  // 0 · NOM COMPOSÉ : un segment après trait d'union porte une majuscule
+  // (« El-Bakri », « al-Mansouri », « Roche-Ferrand »). Ces mots-là sont des noms
+  // OÙ QU'ILS TOMBENT — la position ne dit rien d'eux, et ils échouent souvent
+  // au test de la majuscule initiale (« al- » commence en minuscule). Un
+  // composé commun garde ses segments en minuscules (« aéro-maritimes ») : il
+  // n'est pas concerné, et reste vérifié.
+  const compose = _RE_COMPOSE_MAJ.test(w);
+
+  if (!compose) {
+    if (typeof text !== 'string' || !Number.isFinite(offset)) return false;
+
+    // 1 · la majuscule est-elle grammaticale à cet endroit ?
+    let i = offset - 1;
+    while (i >= 0 && _RE_BLANC_AVANT.test(text.charAt(i))) i--;
+    if (i < 0) return false;                                     // début du texte
+    if (_RE_OUVRE_PHRASE.test(text.charAt(i))) {
+      // …sauf si ce point clôt une INITIALE (« B. El-Bakri », « J. Dupont ») :
+      // ce n'est pas une fin de phrase, et le mot qui suit est bien un patronyme.
+      if (text.charAt(i) !== '.' || !_estInitiale(text, i)) return false;
+    }
+  }
+
+  // 2 · le garde : mêmes lettres qu'une suggestion → coquille, pas un nom.
+  if (Array.isArray(suggestions) && suggestions.length) {
+    const base = _lettresTriees(w);
+    for (let k = 0; k < suggestions.length; k++) {
+      const sg = suggestions[k];
+      if (sg && sg !== w && _lettresTriees(sg) === base) return false;
+    }
+  }
+  return true;
+}
+
+// ── Règles de grammaire DÉSACTIVÉES (denylist par préfixe d'identifiant) ──
+// Chaque entrée est JUSTIFIÉE PAR UNE MESURE (GP-3, 2026-08-20) : la règle a
+// été passée à une batterie de phrases correctes ET fautives de sa forme, dans
+// un vrai navigateur. On ne coupe une règle que si elle se trompe sur du texte
+// correct SANS attraper de vraie faute. « Une règle qui attrape ne serait-ce
+// qu'une vraie faute ne doit pas être désactivée » (brief §GP-3).
+export const GRAMMAR_DENYLIST_TEXTE = [
+  // « Si "car"/"mais" est la conjonction de coordination, une virgule… » — la
+  // règle le dit elle-même au conditionnel, et la virgule y est facultative :
+  // 3 faux positifs sur 10 phrases correctes. Aucune vraie faute perdue.
+  'g0__virg_virgules_manquantes',
+  // « Conjugaison probablement erronée si nous… » et « Si X est le sujet de… » :
+  // deux règles au conditionnel, jamais déclenchées sur les batteries ni sur le
+  // corpus — rien à gagner à les rallumer, l'audit du 2026-06-06 les incrimine.
+  'gv1__conj_nous2',
+  'gv2__conj_det_nom_sing_virgule',
 ];
-function _isDenylistedGrammar(it) {
+
+// La relecture de PDF coupe DEUX RÈGLES DE PLUS. Mesure du 2026-08-20 : sur du
+// texte reconstruit depuis un PDF, une ligne coupée par la maquette commence
+// souvent par un verbe (« Suit la phase… », « comprend trois échelons »), et
+// les règles d'impératif s'y déclenchent 4 fois sur 10 — c'est précisément ce
+// que l'audit du 2026-06-06 (livre MICE) avait constaté. Sur du texte SAISI,
+// les mêmes règles ne se trompent jamais (0 sur 14) et attrapent de vraies
+// fautes (« Prend garde » → « Prends », « Finit ton rapport » → « Finis »).
+export const GRAMMAR_DENYLIST_PDF = GRAMMAR_DENYLIST_TEXTE.concat([
+  'gv1__imp_verbe_groupe3',
+  'gv1__imp_verbe_groupe2_groupe3',
+]);
+
+// RENDUES au correcteur le 2026-08-20 : `g2__conf_ça_çà_sa` attrape deux vraies
+// confusions (« Sa ne se fait pas » → « Ça », « ça veste » → « sa ») sans se
+// tromper une seule fois sur 17 phrases correctes, textes et PDF confondus.
+
+function _isDenylistedGrammar(it, liste) {
   if (!it || it.type !== 'grammar') return false;
+  const l = Array.isArray(liste) ? liste : GRAMMAR_DENYLIST_TEXTE;
   const r = it.ruleId || '';
-  for (let i = 0; i < _GRAMMAR_DENYLIST.length; i++) if (r.indexOf(_GRAMMAR_DENYLIST[i]) === 0) return true;
+  for (let i = 0; i < l.length; i++) if (r.indexOf(l[i]) === 0) return true;
   return false;
 }
 
 // Applique les filtres : bruit d'ORTHOGRAPHE (dico perso, sigles…) + règles de
 // GRAMMAIRE désactivées (denylist). Une issue d'ortho sans `word` est conservée
 // (on ne masque pas à l'aveugle).
-export function filterIssues(issues, filters) {
+// `text` = le texte CANONIQUE d'où viennent les offsets. analyze() l'a sous la
+// main et le fait descendre ; les filtres qui ont besoin de la POSITION du mot
+// (GP-1) se branchent donc ici, et les deux consommateurs (UI + proof-pdf) en
+// profitent sans être modifiés. Omis → le filtre de position ne s'applique pas
+// (on ne masque pas sans contexte).
+export function filterIssues(issues, filters, text) {
   if (!Array.isArray(issues)) return [];
-  const f = filters || _filters;
+  // `filters` est une SURCHARGE PARTIELLE de la config du module : un
+  // consommateur (proof-pdf) n'énonce que ce qui diffère, et garde le dico
+  // perso et les autres réglages sans avoir à les recopier.
+  const f = filters ? Object.assign({}, _filters, filters) : _filters;
   return issues.filter((it) => {
     if (!it) return false;
-    if (it.type === 'grammar') return !_isDenylistedGrammar(it);
-    return it.type !== 'spelling' || !it.word || !isNoiseSpelling(it.word, f);
+    if (it.type === 'grammar') return !_isDenylistedGrammar(it, f.grammarDenylist);
+    if (it.type !== 'spelling' || !it.word) return true;
+    if (isNoiseSpelling(it.word, f)) return false;
+    if (f.skipProperNouns && isProperNounSpelling(it.word, text, it.offset, it.suggestions)) return false;
+    return true;
   });
 }
 
@@ -224,7 +368,7 @@ export async function analyze(text, opts = {}) {
   if (!Array.isArray(issues)) issues = [];
   // Filtrage anti-bruit (faux positifs d'orthographe). opts.noFilter → brut,
   // opts.filters → config ad hoc (sinon config module via setProofFilters).
-  if (opts.noFilter !== true) issues = filterIssues(issues, opts.filters);
+  if (opts.noFilter !== true) issues = filterIssues(issues, opts.filters, canonical);
   return { text: canonical, issues };
 }
 

@@ -20,6 +20,7 @@
 import { helpButtonHTML, bindHelpButton } from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }         from './lib/topbar-burger.js';
 import { icon }                            from './lib/ui-icons.js';
+import { CF_API }                          from './pads-loader.js';   // GP-2 : dico de la maison
 import { symbolsButtonHTML, openSymbolsPanel, closeSymbolsPanel } from './lib/symbols-panel.js';
 import {
   rewriteText, friendlyGhostwriterError, getGhostwriterQuotaMessage,
@@ -61,7 +62,14 @@ let _aiResult  = null;           // { text } proposé par la passe IA
 
 // — Chantier 1 : faux positifs —
 let _grammarOnly = false;        // affichage : masquer l'orthographe (sigles, noms propres)
-let _ignoreWords = new Set();    // dico perso persistant (ks_proof_ignore_words)
+let _ignoreWords = new Set();    // dico de la maison (miroir local de ks_proof_ignore_words)
+// GP-2 couche 2 : le dico vit sur le serveur, partagé par la LICENCE. Ce qu'on
+// garde ici est un MIROIR : il fait tourner le correcteur hors ligne et évite
+// d'attendre le réseau au premier mot. `_dicoServeur` retient le dernier état
+// connu du serveur, pour n'envoyer que les DELTAS (deux personnes qui
+// apprennent chacune un mot ne doivent pas s'effacer mutuellement).
+let _dicoServeur = null;         // Set du dernier état serveur connu, ou null (jamais joint)
+let _dicoSync    = false;        // une synchro est-elle en vol ?
 let _typoFamilies = new Set();   // familles typographiques activées (défaut : aucune = tout coupé)
 let _configDirty = false;        // dico perso / familles typo modifiés → ré-analyser à la fermeture
 let _onPopoverClose = null;      // callback one-shot exécuté à la fermeture d'un popover
@@ -140,6 +148,63 @@ function _loadPrefs() {
 }
 function _saveIgnore() {
   try { localStorage.setItem(IGNORE_KEY, JSON.stringify(Array.from(_ignoreWords))); } catch (_) {}
+  _pousserDico();                       // …et on le dit à l'équipe
+}
+
+// ── GP-2 · le dictionnaire de la maison ─────────────────────────
+// Trois principes :
+//   · FAIL-SOUPLE — hors ligne, sans licence, serveur muet : le correcteur
+//     continue sur le miroir local. Un dico est un confort, jamais un mur.
+//   · REPRISE SANS PERTE — au premier contact, ce que CE navigateur avait
+//     appris tout seul monte au serveur au lieu d'être écrasé.
+//   · DELTAS — on n'envoie jamais la liste entière en remplacement.
+const _jwt = () => { try { return localStorage.getItem('ks_jwt'); } catch (_) { return null; } };
+
+async function _dicoAppel(methode, corps) {
+  const jwt = _jwt();
+  if (!jwt) return null;
+  try {
+    const res = await fetch(`${CF_API}/api/proof/dico`, {
+      method: methode,
+      headers: Object.assign({ Authorization: `Bearer ${jwt}` },
+        corps ? { 'Content-Type': 'application/json' } : {}),
+      body: corps ? JSON.stringify(corps) : undefined,
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_) { return null; }         // hors ligne : on garde le miroir
+}
+
+// Premier contact : union des deux côtés, puis on fait monter ce qui n'existait
+// que localement. Rien n'est perdu, ni du navigateur ni de l'équipe.
+async function _rejoindreDico() {
+  if (_dicoSync) return;
+  _dicoSync = true;
+  try {
+    const vu = await _dicoAppel('GET');
+    if (!vu || !Array.isArray(vu.words)) return;          // pas de licence / hors ligne
+    _dicoServeur = new Set(vu.words);
+    const local = Array.from(_ignoreWords).map((w) => String(w).toLowerCase());
+    const aMonter = local.filter((w) => !_dicoServeur.has(w));
+    if (aMonter.length) {
+      const apres = await _dicoAppel('POST', { add: aMonter.slice(0, 500) });
+      if (apres && Array.isArray(apres.words)) _dicoServeur = new Set(apres.words);
+    }
+    _ignoreWords = new Set(_dicoServeur);                 // le serveur fait foi ensuite
+    try { localStorage.setItem(IGNORE_KEY, JSON.stringify(Array.from(_ignoreWords))); } catch (_) {}
+    _pushFilters();
+  } finally { _dicoSync = false; }
+}
+
+// Après chaque ajout/retrait local : n'envoyer QUE l'écart.
+async function _pousserDico() {
+  if (!_dicoServeur) return;                              // jamais joint : rien à comparer
+  const local = new Set(Array.from(_ignoreWords).map((w) => String(w).toLowerCase()));
+  const add    = Array.from(local).filter((w) => !_dicoServeur.has(w));
+  const remove = Array.from(_dicoServeur).filter((w) => !local.has(w));
+  if (!add.length && !remove.length) return;
+  const apres = await _dicoAppel('POST', { add: add.slice(0, 500), remove: remove.slice(0, 500) });
+  if (apres && Array.isArray(apres.words)) _dicoServeur = new Set(apres.words);
 }
 function _saveGrammarOnly() {
   try { localStorage.setItem(GRAMMAR_ONLY_KEY, _grammarOnly ? '1' : '0'); } catch (_) {}
@@ -161,7 +226,7 @@ function _typoOptionMap() {
 // ══════════════════════════════════════════════════════════════════
 async function _ensureEngine() {
   if (_engine) return _engine;
-  try { _engine = await import('./lib/proof-engine.js'); _pushFilters(); }
+  try { _engine = await import('./lib/proof-engine.js'); _pushFilters(); _rejoindreDico(); }
   catch (e) { _engine = null; _toast('Impossible de charger le moteur de correction', true); }
   return _engine;
 }

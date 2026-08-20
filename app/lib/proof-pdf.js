@@ -23,7 +23,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import * as pdfjsLib from '/app/vendor/pdfjs/pdf.min.mjs';
-import { analyze, getProofOptions } from './proof-engine.js';
+import { analyze, getProofOptions, GRAMMAR_DENYLIST_PDF } from './proof-engine.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/app/vendor/pdfjs/pdf.worker.min.mjs';
 
@@ -223,7 +223,12 @@ export async function analyzePage(pdf, pageNum, scale) {
 
   let issues = [];
   if (!isScanned) {
-    const res = await analyze(analysis);
+    // skipWithDigits reste ACTIF ici, à l'inverse de la relecture de texte : sur
+    // un PDF, un mot collé à un nombre vient le plus souvent de l'extraction
+    // (deux fragments recollés), pas de l'auteur. cf. proof-engine.js §_filters.
+    const res = await analyze(analysis, {
+      filters: { skipWithDigits: true, grammarDenylist: GRAMMAR_DENYLIST_PDF },
+    });
     // Sécurité offsets : la canonisation doit être idempotente ici
     // (on a NFC + retiré U+00AD à la construction). Si la longueur a
     // bougé malgré tout, on garde quand même (rare ; léger décalage).

@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="fr"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Relire le correcteur — L'Épaulette</title>
+<!--
+  GP-0 · L'ÉCRAN DE RELECTURE (Ghost Writer, mode relecture)
+
+  Sert à établir la VÉRITÉ TERRAIN du correcteur sans toucher à un fichier :
+  pour chaque alerte, un clic dit si le correcteur a raison ou s'il se trompe.
+
+  Cette page ne contient AUCUN texte de la revue : elle va le chercher au
+  lancement dans `_corpus-proof/` (dossier ignoré par git). Le dépôt est
+  PUBLIC — cf. GHOSTWRITER_PROOF_SPRINTS.md §GP-0.
+
+  Lancée par `npm run relire:proof` (scripts/relire-proof.mjs), qui sert
+  cette page et enregistre dans `_corpus-proof/verite.json`.
+-->
+<style>
+:root{
+  --navy:#131826; --navy2:#1c2234; --navy3:#242d42;
+  --gold:#6366f1; --gold2:#818cf8; --gold3:rgba(99,102,241,.12);
+  --green:#22c55e; --green-soft:rgba(34,197,94,.12);
+  --danger:#e05c5c; --danger-soft:rgba(224,92,92,.12);
+  --warn:#fbbf24; --warn-soft:rgba(251,191,36,.12);
+  --text:#f8fafc; --tx2:rgba(248,250,252,.55); --tx3:rgba(248,250,252,.3);
+  --bd:rgba(255,255,255,.07);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--navy); color:var(--text);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+  letter-spacing:-.02em; display:flex; flex-direction:column; overflow:hidden;
+}
+button{font:inherit; letter-spacing:inherit; cursor:pointer; border:0; background:none; color:inherit}
+
+/* ── Bandeau ───────────────────────────────────────────── */
+.top{
+  flex:0 0 auto; padding:14px 22px 0; border-bottom:1px solid var(--bd);
+  background:var(--navy2);
+}
+.top-h{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap}
+h1{margin:0; font-size:19px; font-weight:900; letter-spacing:-.03em}
+.sub{color:var(--tx2); font-size:13px}
+.save{margin-left:auto; font-size:12px; color:var(--tx3); transition:color .2s}
+.save.on{color:var(--green)}
+.bar{height:5px; border-radius:3px; background:var(--navy3); margin:12px 0 10px; overflow:hidden}
+.bar i{display:block; height:100%; background:var(--gold2); width:0; transition:width .25s}
+.tabs{display:flex; gap:4px}
+.tab{
+  padding:9px 15px; border-radius:9px 9px 0 0; color:var(--tx2); font-size:13.5px;
+  font-weight:600; border:1px solid transparent; border-bottom:0; white-space:nowrap;
+}
+.tab.on{background:var(--navy); color:var(--text); border-color:var(--bd)}
+.tab b{font-weight:800; color:var(--gold2); margin-left:7px; font-size:12px}
+
+/* ── Corps ─────────────────────────────────────────────── */
+.wrap{flex:1 1 auto; display:flex; min-height:0}
+.texte{
+  flex:1 1 auto; overflow:auto; padding:28px 34px 120px; position:relative;
+  font:16px/1.85 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  letter-spacing:0; white-space:pre-wrap; word-wrap:break-word;
+}
+.texte h2{
+  font:800 12px/1 -apple-system,sans-serif; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--tx3); margin:0 0 20px;
+}
+mark{
+  background:none; color:inherit; border-radius:3px; padding:1px 1px;
+  cursor:pointer; transition:background .15s, box-shadow .15s;
+}
+mark.q{ box-shadow:inset 0 -2px 0 var(--warn); }              /* à juger */
+mark.v{ background:var(--danger-soft); box-shadow:inset 0 -2px 0 var(--danger); }
+mark.f{ color:var(--tx3); box-shadow:inset 0 -1px 0 rgba(255,255,255,.12); }
+mark.prop{ opacity:.75; border-top:1px dotted var(--tx3) }     /* proposé, non confirmé */
+mark.cur{ background:var(--gold3); box-shadow:inset 0 -2px 0 var(--gold2), 0 0 0 3px var(--gold3) }
+.manque{ background:var(--warn-soft); box-shadow:inset 0 -2px 0 var(--warn) }
+
+/* ── Panneau ───────────────────────────────────────────── */
+.side{
+  flex:0 0 380px; border-left:1px solid var(--bd); background:var(--navy2);
+  display:flex; flex-direction:column; min-height:0;
+}
+.side-scroll{overflow:auto; padding:20px; flex:1 1 auto}
+.kicker{font-size:11px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--tx3); margin:0 0 8px}
+.mot{font-size:26px; font-weight:900; letter-spacing:-.03em; margin:0 0 4px; word-break:break-word}
+.msg{color:var(--tx2); font-size:13.5px; margin:0 0 14px}
+.phr{
+  background:var(--navy); border:1px solid var(--bd); border-radius:10px; padding:12px 14px;
+  font:15px/1.7 "Iowan Old Style",Georgia,serif; letter-spacing:0; margin:0 0 16px;
+}
+.phr b{color:var(--warn); font-weight:700}
+.sugg{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 18px}
+.sugg span{
+  font-size:12.5px; padding:4px 9px; border-radius:99px;
+  background:var(--navy3); color:var(--tx2);
+}
+.choix{display:grid; gap:9px; margin-bottom:16px}
+.big{
+  display:flex; align-items:center; gap:11px; padding:13px 15px; border-radius:12px;
+  border:1px solid var(--bd); background:var(--navy3); text-align:left; font-weight:600;
+  transition:transform .1s, border-color .15s, background .15s;
+}
+.big:hover{transform:translateY(-1px)}
+.big small{display:block; font-weight:400; font-size:12px; color:var(--tx3); letter-spacing:0}
+.big.v.on{border-color:var(--danger); background:var(--danger-soft)}
+.big.f.on{border-color:var(--green); background:var(--green-soft)}
+.big svg{flex:0 0 auto; opacity:.75}
+.big.v.on svg{color:var(--danger); opacity:1}
+.big.f.on svg{color:var(--green); opacity:1}
+.nav{display:flex; gap:8px; align-items:center; margin-bottom:20px}
+.nav button{
+  padding:8px 13px; border-radius:9px; background:var(--navy3); border:1px solid var(--bd);
+  font-size:13px; font-weight:600; color:var(--tx2);
+}
+.nav button:hover{color:var(--text)}
+.nav .pos{margin-left:auto; font-size:12px; color:var(--tx3)}
+.tip{font-size:12px; color:var(--tx3); margin:0 0 18px}
+.tip kbd{
+  background:var(--navy3); border:1px solid var(--bd); border-radius:5px;
+  padding:1px 6px; font:600 11px/1.5 ui-monospace,Menlo,monospace;
+}
+hr{border:0; border-top:1px solid var(--bd); margin:20px 0}
+
+/* ── Fautes ratées ─────────────────────────────────────── */
+.mq-list{display:grid; gap:8px; margin:0 0 12px}
+.mq{
+  background:var(--navy); border:1px solid var(--bd); border-left:3px solid var(--warn);
+  border-radius:9px; padding:10px 12px; font-size:13px; position:relative;
+}
+.mq b{display:block; font-weight:700}
+.mq i{font-style:normal; color:var(--green)}
+.mq em{display:block; font-style:normal; color:var(--tx3); font-size:12px; margin-top:3px}
+.mq button{position:absolute; top:7px; right:8px; color:var(--tx3); font-size:16px; line-height:1}
+.mq button:hover{color:var(--danger)}
+.mq-form{display:grid; gap:7px}
+.mq-form input{
+  width:100%; padding:9px 11px; border-radius:9px; background:var(--navy);
+  border:1px solid var(--bd); color:var(--text); font:inherit; font-size:13px;
+}
+.mq-form input::placeholder{color:var(--tx3)}
+.mq-form input:focus{outline:0; border-color:var(--gold)}
+.act{
+  padding:10px 14px; border-radius:10px; background:var(--gold); color:#fff;
+  font-weight:700; font-size:13.5px;
+}
+.act:hover{background:var(--gold2)}
+.act.ghost{background:var(--navy3); color:var(--tx2); border:1px solid var(--bd)}
+.act.ghost:hover{color:var(--text)}
+.act[disabled]{opacity:.4; cursor:default}
+.warnbox{
+  background:var(--warn-soft); border:1px solid rgba(251,191,36,.3); border-radius:10px;
+  padding:11px 13px; font-size:12.5px; color:var(--warn); margin-bottom:16px;
+}
+.done{
+  text-align:center; padding:34px 12px; color:var(--tx2); font-size:14px;
+}
+.done b{display:block; font-size:17px; font-weight:800; color:var(--green); margin-bottom:6px; letter-spacing:-.02em}
+
+/* Panne d'enregistrement — barrage plein écran. Le 2026-08-20, une page restée
+   ouverte sur un serveur éteint a laissé faire 78 validations dans le vide :
+   le seul signal était un libellé gris dans un coin. Plus jamais. */
+.panne{
+  position:fixed; inset:0; z-index:99; background:rgba(10,12,20,.86);
+  backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:24px;
+}
+.panne.on{display:flex}
+.panne-box{
+  max-width:520px; background:var(--navy2); border:1px solid var(--danger);
+  border-radius:16px; padding:26px 28px; box-shadow:0 24px 60px rgba(0,0,0,.5);
+}
+.panne-box h3{margin:0 0 10px; font-size:19px; font-weight:900; letter-spacing:-.03em; color:var(--danger)}
+.panne-box p{margin:0 0 14px; color:var(--tx2); font-size:14px}
+.panne-box code{
+  display:block; background:var(--navy); border:1px solid var(--bd); border-radius:9px;
+  padding:10px 12px; margin:0 0 14px; font:600 13px/1.5 ui-monospace,Menlo,monospace; color:var(--gold2);
+  user-select:all;
+}
+.panne-box .act{width:100%}
+@media (max-width:980px){
+  .wrap{flex-direction:column}
+  .side{flex:0 0 auto; border-left:0; border-top:1px solid var(--bd); max-height:52vh}
+  .texte{padding:20px}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="top-h">
+    <h1>Relire le correcteur</h1>
+    <span class="sub" id="sub">chargement…</span>
+    <span class="save" id="save">enregistré</span>
+  </div>
+  <div class="bar"><i id="bar"></i></div>
+  <div class="tabs" id="tabs"></div>
+</div>
+
+<div class="panne" id="panne"><div class="panne-box">
+  <h3>Vos décisions ne s'enregistrent plus</h3>
+  <p>Le serveur qui sert cette page est arrêté. <b>Rien n'est perdu</b> : tout ce que
+     vous avez validé est encore dans cette fenêtre — mais ne la fermez pas.</p>
+  <p>Dans le terminal, relancez le serveur sur le même port :</p>
+  <code id="cmd">npm run relire:proof -- --port=0000</code>
+  <p>Puis revenez ici et cliquez ci-dessous. Tout repartira d'un bloc.</p>
+  <button class="act" id="reessayer">Réessayer d'enregistrer</button>
+</div></div>
+
+<div class="wrap">
+  <div class="texte" id="texte"></div>
+  <aside class="side"><div class="side-scroll" id="side"></div></aside>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   Icônes en trait (jamais d'emoji — charte Keystone).
+   ══════════════════════════════════════════════════════════ */
+const ico = {
+  alerte:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
+  ok:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+};
+
+let D = null;          // { textes:[{nom,texte,alertes,manques,empreinte,empreinteAttendue}] }
+let iT = 0;            // index du texte courant
+let iA = 0;            // index de l'alerte courante
+const $ = s => document.querySelector(s);
+
+/* ── Chargement ─────────────────────────────────────────── */
+fetch('/api/corpus').then(r => r.json()).then(d => {
+  if (d.erreur) { $('#texte').innerHTML = '<div class="done"><b>'+d.erreur+'</b>'+(d.detail||'')+'</div>'; return; }
+  D = d;
+  iA = premiereNonConfirmee(0);
+  tout();
+}).catch(e => { $('#texte').textContent = 'Chargement impossible : ' + e.message; });
+
+const T   = () => D.textes[iT];
+const A   = () => T().alertes[iA];
+const conf = a => a.par === 'stephane';
+
+function premiereNonConfirmee(t) {
+  const l = D.textes[t].alertes;
+  const i = l.findIndex(a => !conf(a));
+  return i < 0 ? 0 : i;
+}
+function totaux() {
+  let n = 0, c = 0;
+  for (const t of D.textes) for (const a of t.alertes) { n++; if (conf(a)) c++; }
+  return { n, c };
+}
+
+/* ── Rendu ──────────────────────────────────────────────── */
+function tout() { bandeau(); texte(); panneau(); }
+
+function bandeau() {
+  const { n, c } = totaux();
+  $('#sub').textContent = D.textes.length + ' articles · ' + n + ' alertes';
+  $('#bar').style.width = (n ? c / n * 100 : 0) + '%';
+  $('#save').textContent = c === n ? 'relecture terminée' : c + ' confirmées sur ' + n;
+  $('#tabs').innerHTML = D.textes.map((t, i) => {
+    const reste = t.alertes.filter(a => !conf(a)).length;
+    return '<button class="tab' + (i === iT ? ' on' : '') + '" data-t="' + i + '">' +
+      t.nom.replace(/^\d+-/, '').replace(/\.txt$/, '') +
+      (reste ? '<b>' + reste + '</b>' : '') + '</button>';
+  }).join('');
+  $('#tabs').querySelectorAll('.tab').forEach(b => b.onclick = () => {
+    iT = +b.dataset.t; iA = premiereNonConfirmee(iT); tout();
+    $('#texte').scrollTop = 0;
+  });
+}
+
+const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+function texte() {
+  const t = T();
+  const al = t.alertes.map((a, i) => ({ ...a, i })).sort((x, y) => x.offset - y.offset);
+  let out = '', pos = 0;
+  for (const a of al) {
+    if (a.offset < pos) continue;                       // chevauchement : on saute
+    out += esc(t.texte.slice(pos, a.offset));
+    const cls = (a.verdict === 'vraie' ? 'v' : a.verdict === 'faux-positif' ? 'f' : 'q') +
+      (conf(a) ? '' : ' prop') + (a.i === iA ? ' cur' : '');
+    out += '<mark class="' + cls + '" data-i="' + a.i + '">' +
+      esc(t.texte.slice(a.offset, a.offset + a.len)) + '</mark>';
+    pos = a.offset + a.len;
+  }
+  out += esc(t.texte.slice(pos));
+  $('#texte').innerHTML = '<h2>' + esc(t.nom) + '</h2>' + out;
+  $('#texte').querySelectorAll('mark').forEach(m => m.onclick = () => { iA = +m.dataset.i; tout(); });
+  const cur = $('#texte .cur');
+  if (cur) requestAnimationFrame(() => {
+    const pane = $('#texte');
+    pane.scrollTop = cur.offsetTop - pane.clientHeight / 2 + cur.offsetHeight / 2;
+  });
+}
+
+function panneau() {
+  const t = T(), a = A();
+  const reste = t.alertes.filter(x => !conf(x)).length;
+  let h = '';
+
+  if (t.empreinteAttendue && t.empreinteAttendue !== t.empreinte) {
+    h += '<div class="warnbox">Le fichier texte a changé depuis la dernière mesure : ' +
+         'les positions ont pu se décaler. Relancez la mesure avant de relire.</div>';
+  }
+
+  if (!a) {
+    h += '<div class="done"><b>Rien à relire ici</b>Cet article n\'a déclenché aucune alerte.</div>';
+  } else {
+    h += '<p class="kicker">' + (a.type === 'grammar' ? 'Grammaire' : 'Orthographe') +
+         ' · ' + (iA + 1) + ' sur ' + t.alertes.length + (conf(a) ? ' · confirmée' : ' · proposition à confirmer') + '</p>';
+    h += '<p class="mot">' + esc(a.mot) + '</p>';
+    h += '<p class="msg">' + esc(a.message || '') + '</p>';
+    h += '<div class="phr">' + esc(a.phrase).replace('⟦', '<b>').replace('⟧', '</b>') + '</div>';
+    if (a.suggestions && a.suggestions.length)
+      h += '<div class="sugg">' + a.suggestions.map(s => '<span>' + esc(s) + '</span>').join('') + '</div>';
+    if (a._pourquoi) h += '<p class="msg" style="color:var(--gold2)">Proposé : ' + esc(a._pourquoi) + '</p>';
+
+    h += '<div class="choix">' +
+      '<button class="big v' + (a.verdict === 'vraie' ? ' on' : '') + '" data-v="vraie">' + ico.alerte +
+        '<span>C\'est une faute<small>le correcteur a raison</small></span></button>' +
+      '<button class="big f' + (a.verdict === 'faux-positif' ? ' on' : '') + '" data-v="faux-positif">' + ico.ok +
+        '<span>Le texte est correct<small>le correcteur se trompe</small></span></button>' +
+      '</div>';
+    h += '<div class="nav"><button data-go="-1">Précédente</button><button data-go="1">Suivante</button>' +
+         '<span class="pos">' + reste + ' à confirmer</span></div>';
+    h += '<p class="tip"><kbd>F</kbd> faute · <kbd>C</kbd> correct · <kbd>←</kbd> <kbd>→</kbd> naviguer. ' +
+         'Le choix enregistre et passe à la suivante.</p>';
+    if (reste) h += '<button class="act ghost" data-all="1" style="width:100%">Confirmer d\'un coup les ' +
+      reste + ' propositions de cet article</button>';
+  }
+
+  /* ── Fautes ratées ── */
+  h += '<hr><p class="kicker">Fautes que le correcteur a ratées</p>';
+  h += '<div class="mq-list">' + (t.manques.length
+    ? t.manques.map((m, i) => '<div class="mq"><button data-mq="' + i + '" title="retirer">×</button>' +
+        '<b>' + esc(m.extrait) + '</b><i>' + esc(m.attendu || '') + '</i>' +
+        (m.pourquoi ? '<em>' + esc(m.pourquoi) + '</em>' : '') + '</div>').join('')
+    : '<p class="msg" style="margin:0">Aucune pour l\'instant.</p>') + '</div>';
+  h += '<div class="mq-form">' +
+    '<input id="mq1" placeholder="Le passage fautif (ou sélectionnez-le dans le texte)">' +
+    '<input id="mq2" placeholder="Ce qu\'il faudrait écrire">' +
+    '<input id="mq3" placeholder="Pourquoi (facultatif)">' +
+    '<button class="act" id="mqadd">Ajouter cette faute ratée</button></div>';
+
+  $('#side').innerHTML = h;
+  $('#side').querySelectorAll('[data-v]').forEach(b => b.onclick = () => juger(b.dataset.v));
+  $('#side').querySelectorAll('[data-go]').forEach(b => b.onclick = () => bouger(+b.dataset.go));
+  const all = $('#side [data-all]'); if (all) all.onclick = confirmerTout;
+  $('#side').querySelectorAll('[data-mq]').forEach(b => b.onclick = () => retirerManque(+b.dataset.mq));
+  $('#mqadd').onclick = ajouterManque;
+  const sel = String(window.getSelection() || '').trim();
+  if (sel && sel.length < 200) $('#mq1').value = sel;
+}
+
+/* ── Actions ────────────────────────────────────────────── */
+function juger(v) {
+  const a = A(); if (!a) return;
+  a.verdict = v; a.par = 'stephane';
+  enregistrer({ fichier: T().nom, cle: a.cle, verdict: v });
+  const suiv = T().alertes.findIndex((x, i) => i > iA && !conf(x));
+  iA = suiv >= 0 ? suiv : Math.min(iA + 1, T().alertes.length - 1);
+  tout();
+}
+function bouger(d) {
+  const n = T().alertes.length;
+  iA = (iA + d + n) % n; tout();
+}
+function confirmerTout() {
+  const t = T(), lot = [];
+  for (const a of t.alertes) if (!conf(a)) { a.par = 'stephane'; lot.push({ fichier: t.nom, cle: a.cle, verdict: a.verdict }); }
+  enregistrer(lot); tout();
+}
+function ajouterManque() {
+  const e = $('#mq1').value.trim(); if (!e) { $('#mq1').focus(); return; }
+  T().manques.push({ extrait: e, attendu: $('#mq2').value.trim(), pourquoi: $('#mq3').value.trim() });
+  enregistrer({ fichier: T().nom, manques: T().manques }); panneau();
+}
+function retirerManque(i) {
+  T().manques.splice(i, 1);
+  enregistrer({ fichier: T().nom, manques: T().manques }); panneau();
+}
+
+let tSave = null, enPanne = false;
+
+// Tout l'état, pas seulement la dernière décision : c'est ce qui permet de
+// tout récupérer après une coupure, sans savoir ce qui était déjà passé.
+function toutLeLot() {
+  const lot = [];
+  for (const t of D.textes) {
+    for (const a of t.alertes) if (a.par === 'stephane') lot.push({ fichier: t.nom, cle: a.cle, verdict: a.verdict });
+    lot.push({ fichier: t.nom, manques: t.manques });
+  }
+  return lot;
+}
+
+function enregistrer(payload) {
+  $('#save').textContent = 'enregistrement…'; $('#save').classList.remove('on');
+  return fetch('/api/verdicts', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Array.isArray(payload) ? payload : [payload]),
+  }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(() => {
+      clearTimeout(tSave);
+      enPanne = false; $('#panne').classList.remove('on');
+      $('#save').textContent = 'enregistré'; $('#save').classList.add('on');
+      tSave = setTimeout(bandeau, 1200);
+    })
+    .catch(() => {
+      enPanne = true;
+      $('#save').textContent = 'NON ENREGISTRÉ';
+      $('#cmd').textContent = 'npm run relire:proof -- --port=' + (location.port || '0000');
+      $('#panne').classList.add('on');
+    });
+}
+
+// Le bouton du barrage : repousse TOUT, pas seulement ce qui a échoué.
+addEventListener('DOMContentLoaded', () => {
+  $('#reessayer').onclick = function () {
+    this.disabled = true; this.textContent = 'envoi…';
+    enregistrer(toutLeLot()).then(() => {
+      this.disabled = false; this.textContent = 'Réessayer d\'enregistrer';
+      if (!enPanne) { tout(); }
+    });
+  };
+});
+
+// Fermer l'onglet en panne, c'est perdre le travail : on prévient.
+addEventListener('beforeunload', (e) => {
+  if (enPanne) { e.preventDefault(); e.returnValue = ''; }
+});
+
+/* ── Clavier ────────────────────────────────────────────── */
+addEventListener('keydown', e => {
+  if (/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+  const k = e.key.toLowerCase();
+  if (k === 'f') { juger('vraie'); e.preventDefault(); }
+  else if (k === 'c') { juger('faux-positif'); e.preventDefault(); }
+  else if (e.key === 'ArrowRight') { bouger(1); e.preventDefault(); }
+  else if (e.key === 'ArrowLeft') { bouger(-1); e.preventDefault(); }
+});
+</script>
+</body></html>

@@ -45,6 +45,7 @@ import { handleGetAppMode, handleSetAppMode }                          from './r
 import { handleDataDispatch }                                           from './routes/data.js';
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
 import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './routes/ghostwriter.js';
+import { handleProofDicoGet, handleProofDicoPost }                      from './routes/proof-dico.js';
 import { handleKoraChat, handleKoraStt }                                from './routes/kora.js';
 import { handleAiCreditsQuota }                                         from './routes/ai-credits.js';
 import {
@@ -760,6 +761,17 @@ export default {
       // PRO=10 / MAX=50 / ADMIN=∞). Lecture seule, pas de bump.
       if (path === '/api/ghostwriter/quota' && method === 'GET') {
         return handleGhostwriterQuota(request, env);
+      }
+
+      // ── Dictionnaire de la maison (GP-2) ──────────────────────
+      // Ce que la rédaction apprend au correcteur, partagé par la
+      // LICENCE (claims.sub = lookup_hmac). Aucun appel IA, aucun
+      // crédit : du stockage. cf. routes/proof-dico.js
+      if (path === '/api/proof/dico' && method === 'GET') {
+        return handleProofDicoGet(request, env);
+      }
+      if (path === '/api/proof/dico' && method === 'POST') {
+        return handleProofDicoPost(request, env);
       }
 
       // ── Crédits IA unifiés (Chantier B — Sprint 1) ────────────
