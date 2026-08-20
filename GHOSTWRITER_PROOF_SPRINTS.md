@@ -301,7 +301,7 @@ trait d'union porte une majuscule est un **nom composé**, où qu'il tombe dans 
 phrase — `El-Bakri`, `al-Mansouri`, `Roche-Ferrand`. Ces mots-là échappaient à GP-1
 parce qu'ils tombaient en tête de phrase, ou parce qu'ils commencent en
 minuscule. Un composé commun garde ses segments en minuscules
-(`aéro-maritimes`) : il reste vérifié.
+(`socio-économiques`) : il reste vérifié.
 
 **Résultat mesuré** : alertes affichées **32 → 28**, faux positifs **18 → 14**,
 toujours **zéro vraie faute masquée**. La règle des composés en éteint 4, le
@@ -463,18 +463,70 @@ Si le critère n'est pas atteint, restreindre les catégories que l'IA a le droi
 de toucher (les noms propres oui ; les accords seulement si la mesure le prouve),
 et re-mesurer.
 
+#### LIVRÉ le 2026-08-20 — après avoir été mesuré, refusé, restreint, re-mesuré
+
+**Stéphane a demandé GP-5 malgré la recommandation inverse**, et pour une raison
+qui tient : *« afin de capter ce que nous n'avons ou ne pouvons anticiper »*.
+Aucune règle ne couvre ce qu'on n'a pas vu ; un juge, si.
+
+**Premier passage : le critère N'ÉTAIT PAS atteint.** Soumis à toutes les
+alertes d'orthographe affichées, le modèle a effacé 10 faux positifs — et
+**6 vraies fautes**, toutes de la même famille : un toponyme mal orthographié et
+des capitales sans accent. Il y voit des noms propres et ne remarque pas la
+coquille. C'est exactement la famille que le garde « mêmes lettres » de GP-1
+traite déjà, localement et gratuitement.
+
+**La restriction** (`isArbitrable`, dans `proof-engine.js`) : le juge ne voit
+pas une alerte dont une suggestion a **les mêmes lettres** (coquille
+déterministe), ni un mot **contenant un chiffre** (une référence n'est pas un
+nom), ni **aucune alerte de grammaire**. Le déterministe garde la main là où il
+est bon ; le modèle ne sert que là où aucune règle ne sait trancher. L'écran et
+la mesure interrogent **la même fonction** — ils ne peuvent pas diverger.
+
+**Second passage : critère ATTEINT.**
+
+| | |
+|---|---|
+| passages soumis | 9 (sur 20 avant restriction) |
+| faux positifs effacés | **7 sur 8** |
+| vraies fautes effacées | **0** |
+
+**Effet projeté sur le tableau de bord** : alertes affichées **28 → 21**, faux
+positifs **14 → 7**. Depuis le départ : **76 → 21 affichées, 63 → 7 faux
+positifs**, et toujours zéro vraie faute masquée.
+
+#### Comment les contraintes du §5 sont tenues
+
+| contrainte | où |
+|---|---|
+| jamais le document, seulement les passages | `proof-verdict.js` ne lit que `items[]` ; le banc envoie un faux article et vérifie qu'il n'atteint pas le modèle |
+| juge, pas correcteur | la consigne système l'interdit ; la réponse n'accepte que deux verdicts |
+| masquer seulement | l'interface **filtre** la liste d'alertes ; elle ne peut structurellement pas en ajouter |
+| un appel groupé, plafonné | 25 passages maximum, un seul `AI.run` |
+| cache | serveur, par empreinte de (mot + phrase), 30 jours + cache de session côté écran |
+| métrage | `budgetGuard`, `consumeCredits`, `refundCredits`, `recordUsage` — remboursé si rien n'est jugé |
+| fail-open | quota, panne, binding absent, réponse illisible, hors ligne → **l'alerte reste** (9 assertions) |
+| objet OU chaîne | `texteIA()` traite les deux, assertion dédiée |
+| transparence §4.4 | chip **« Tri des alertes · assisté / sur l'appareil »** au-dessus du texte + deux entrées de documentation |
+| apprentissage §4.6 | un nom jugé légitime rejoint le dictionnaire de la maison → **plus jamais envoyé** |
+
+**Le filet** — `workers/test/test-proof-verdict.mjs`, 34 vérifications, dans
+`npm test` (modèle doublé, zéro appel réel). La mesure de mise en service, elle,
+est **hors** `npm test` : elle facture de vrais appels
+(`npm run mesure:verdict`, worker de préversion requis).
+
 ---
 
 ## 6. Le tableau de bord (à remplir par GP-0, puis à chaque re-mesure)
 
 | Mesure | Départ | Après GP-1 | Après GP-3 | Après GP-2 (base) | Après GP-5 |
 |---|---|---|---|---|---|
-| Alertes brutes | **78** | 78 | 78 | 78 | |
-| Alertes affichées | **76** | **32** | 32 | **28** | |
-| dont faux positifs | **63** (83 %) | **18** (56 %) | 18 | **14** (50 %) | |
-| Fautes réelles ratées | **19** | 19 | 19 | 19 | |
-| Fautes réelles **masquées à tort** | **1** | **0** | 0 | **0** | |
-| Vraies fautes affichées | 13 | **14** | 14 | **14** | |
+| Alertes brutes | **78** | 78 | 78 | 78 | 78 |
+| Alertes affichées | **76** | **32** | 32 | **28** | **21** |
+| dont faux positifs | **63** (83 %) | **18** (56 %) | 18 | **14** (50 %) | **7** (33 %) |
+| Fautes réelles ratées | **19** | 19 | 19 | 19 | 19 |
+| Fautes réelles **masquées à tort** | **1** | **0** | 0 | **0** | **0** |
+| Vraies fautes affichées | 13 | **14** | 14 | **14** | **14** |
 
 > **GP-3 ne bouge pas ces chiffres, et c'est normal** : aucune des règles
 > concernées ne se déclenche sur ce corpus. Son gain se mesure sur des
@@ -554,6 +606,13 @@ pas du corpus) :
 - **Un banc n'est fini que quand on l'a vu attraper** : réintroduire chaque
   défaut un par un, vérifier que le banc devient rouge **avec l'assertion
   nommée**, restaurer, et le prouver par `git diff`.
+- **Un modèle est mauvais là où une règle est bonne, et l'inverse.** Soumis à
+  tout, le juge de GP-5 effaçait six vraies fautes — toutes d'une famille que
+  trois lignes de code local traitent parfaitement (accent sur une capitale,
+  lettres interverties). La leçon n'est pas « le modèle est mauvais » : c'est
+  qu'il ne faut **pas lui soumettre ce qu'une règle tranche déjà**. Mesurer
+  d'abord, restreindre ensuite, re-mesurer — et faire lire la restriction par
+  la MÊME fonction à l'écran et au banc, sinon les deux divergent en silence.
 - **Un banc qui ne voit pas un `DELETE` non filtré est un banc qui ment.** Sur
   le dico de la maison, la fuite en LECTURE était couverte ; la fuite en
   ÉCRITURE ne l'était pas. Un `DELETE ... WHERE word = ?` sans `lookup_hmac`

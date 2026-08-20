@@ -271,8 +271,8 @@ titre('A bis · La règle des noms propres (GP-1)');
     check('nom composé commençant en minuscule → tu (al-Mansouri)',
       f('al-Mansouri', t, t.indexOf('al-Mansouri'), []) === true);
     check('nom composé accentué → tu (Roche-Ferrand)', f('Roche-Ferrand', t, t.indexOf('Roche-Ferrand'), []) === true);
-    check('composé COMMUN (segments en minuscules) → toujours vérifié (aéro-maritimes)',
-      f('aéro-maritimes', 'les forces aéro-maritimes', 10, []) === false);
+    check('composé COMMUN (segments en minuscules) → toujours vérifié (socio-économiques)',
+      f('socio-économiques', 'les forces socio-économiques', 10, []) === false);
     check('un composé mal orthographié en minuscules reste vérifié (saint-etienne)',
       f('saint-etienne', 'il vit à saint-etienne depuis', 9, []) === false);
   }

@@ -241,7 +241,7 @@ export function isProperNounSpelling(word, text, offset, suggestions) {
   // (« El-Bakri », « al-Mansouri », « Roche-Ferrand »). Ces mots-là sont des noms
   // OÙ QU'ILS TOMBENT — la position ne dit rien d'eux, et ils échouent souvent
   // au test de la majuscule initiale (« al- » commence en minuscule). Un
-  // composé commun garde ses segments en minuscules (« aéro-maritimes ») : il
+  // composé commun garde ses segments en minuscules (« socio-économiques ») : il
   // n'est pas concerné, et reste vérifié.
   const compose = _RE_COMPOSE_MAJ.test(w);
 
@@ -264,6 +264,34 @@ export function isProperNounSpelling(word, text, offset, suggestions) {
     const base = _lettresTriees(w);
     for (let k = 0; k < suggestions.length; k++) {
       const sg = suggestions[k];
+      if (sg && sg !== w && _lettresTriees(sg) === base) return false;
+    }
+  }
+  return true;
+}
+
+// ── GP-5 · ce que le juge IA a le DROIT de regarder ──────────────
+// Mesuré le 2026-08-20 sur le corpus, avec de vrais appels : soumis à tout,
+// le modèle efface 10 faux positifs — mais aussi 6 VRAIES fautes, toutes de
+// la même famille (« Lybie », « Egypte », « Ethiopie », « Emiratis », « Km2 »).
+// Il y voit des noms propres et ne remarque pas la coquille.
+//
+// Or cette famille-là, une règle LOCALE la traite déjà mieux que lui (le garde
+// « mêmes lettres » de GP-1). On ne la lui soumet donc pas. C'est la
+// restriction prévue au brief §5/GP-5 : « restreindre les catégories que l'IA
+// a le droit de toucher ». Le déterministe garde la main là où il est bon ;
+// le modèle ne sert que là où aucune règle ne sait trancher.
+export function isArbitrable(issue) {
+  if (!issue || issue.type !== 'spelling') return false;   // les accords lui sont interdits
+  const w = String((issue && issue.word) || '');
+  if (!w) return false;
+  if (_RE_DIGIT.test(w)) return false;          // « Km2 » : une référence, pas un nom
+  // Quasi-homographe d'une suggestion = coquille déterministe. La règle locale
+  // tranche mieux, et elle ne coûte rien.
+  if (Array.isArray(issue.suggestions)) {
+    const base = _lettresTriees(w);
+    for (let i = 0; i < issue.suggestions.length; i++) {
+      const sg = issue.suggestions[i];
       if (sg && sg !== w && _lettresTriees(sg) === base) return false;
     }
   }

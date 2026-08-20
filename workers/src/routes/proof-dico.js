@@ -51,19 +51,22 @@ const RE_MOT = /^[a-zà-öø-ÿ]([a-zà-öø-ÿ'’-]*[a-zà-öø-ÿ])?$/;
 let _schemaReady = false;
 async function ensureSchema(env) {
   if (_schemaReady) return;
-  await env.DB.prepare(`
-    CREATE TABLE IF NOT EXISTS proof_dico (
-      lookup_hmac TEXT NOT NULL,
-      word        TEXT NOT NULL,
-      added_at    TEXT NOT NULL DEFAULT (datetime('now')),
-      added_by    TEXT,
-      PRIMARY KEY (lookup_hmac, word)
-    )
-  `).run().catch(() => {});
-  await env.DB.prepare(
-    'CREATE INDEX IF NOT EXISTS idx_proof_dico_licence ON proof_dico(lookup_hmac)',
-  ).run().catch(() => {});
-  _schemaReady = true;
+  // Drapeau levé seulement si la table existe vraiment (cf. proof-verdict.js).
+  try {
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS proof_dico (
+        lookup_hmac TEXT NOT NULL,
+        word        TEXT NOT NULL,
+        added_at    TEXT NOT NULL DEFAULT (datetime('now')),
+        added_by    TEXT,
+        PRIMARY KEY (lookup_hmac, word)
+      )
+    `).run();
+    await env.DB.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_proof_dico_licence ON proof_dico(lookup_hmac)',
+    ).run().catch(() => {});
+    _schemaReady = true;
+  } catch (_) { /* on retentera au prochain appel */ }
 }
 
 // Normalise et valide. Rend null si le mot n'a pas sa place dans le dico.

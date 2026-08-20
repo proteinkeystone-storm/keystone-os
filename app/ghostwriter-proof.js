@@ -31,6 +31,11 @@ const APP_ID    = 'A-COM-005';
 const DRAFT_KEY = 'ks_gw_proof_draft';
 const IGNORE_KEY       = 'ks_proof_ignore_words';   // dico perso persistant (chantier 1)
 const GRAMMAR_ONLY_KEY = 'ks_proof_grammar_only';   // préférence d'affichage persistante
+// GP-5 · l'arbitrage invisible. ACTIF par défaut (le brief §4.1 interdit un
+// bouton : Grammalecte souligne, les alertes injustifiées s'effacent seules).
+// Valeur EXPLICITE, jamais removeItem : une clé absente doit vouloir dire
+// « jamais choisi », pas « coupé ». cf. ks_gw_natural, même piège payé.
+const IA_ARBITRAGE_KEY = 'ks_proof_ia_arbitrage';
 const TYPO_KEY         = 'ks_proof_typo_families';  // familles typographiques activées (défaut : aucune)
 const GRAMMALECTE_SRC = 'https://grammalecte.net/';
 
@@ -70,6 +75,11 @@ let _ignoreWords = new Set();    // dico de la maison (miroir local de ks_proof_
 // apprennent chacune un mot ne doivent pas s'effacer mutuellement).
 let _dicoServeur = null;         // Set du dernier état serveur connu, ou null (jamais joint)
 let _dicoSync    = false;        // une synchro est-elle en vol ?
+let _iaArbitrage = true;         // GP-5 : l'arbitrage invisible est-il actif ?
+// Cache de SESSION, en plus du cache serveur : l'analyse se relance à chaque
+// frappe ou presque, et un aller-retour réseau par frappe serait absurde même
+// gratuit. Clé = mot + phrase, comme côté serveur.
+const _verdictsVus = new Map();
 let _typoFamilies = new Set();   // familles typographiques activées (défaut : aucune = tout coupé)
 let _configDirty = false;        // dico perso / familles typo modifiés → ré-analyser à la fermeture
 let _onPopoverClose = null;      // callback one-shot exécuté à la fermeture d'un popover
@@ -141,6 +151,7 @@ function _loadPrefs() {
     if (raw) { const a = JSON.parse(raw); if (Array.isArray(a)) _ignoreWords = new Set(a.map(String)); }
   } catch (_) {}
   try { _grammarOnly = localStorage.getItem(GRAMMAR_ONLY_KEY) === '1'; } catch (_) {}
+  try { _iaArbitrage = localStorage.getItem(IA_ARBITRAGE_KEY) !== '0'; } catch (_) {}
   try {
     const raw = localStorage.getItem(TYPO_KEY);
     if (raw) { const a = JSON.parse(raw); if (Array.isArray(a)) _typoFamilies = new Set(a.filter(k => TYPO_FAMILIES.some(f => f.key === k))); }
@@ -149,6 +160,120 @@ function _loadPrefs() {
 function _saveIgnore() {
   try { localStorage.setItem(IGNORE_KEY, JSON.stringify(Array.from(_ignoreWords))); } catch (_) {}
   _pousserDico();                       // …et on le dit à l'équipe
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GP-5 · L'ARBITRAGE INVISIBLE
+//
+// Grammalecte a déjà souligné : l'utilisateur voit son texte annoté, tout
+// de suite, comme avant. En arrière-plan, on demande à un juge si les mots
+// signalés méritent leur alerte, et celles qui ne la méritent pas
+// s'effacent. Aucun bouton, aucune attente, aucune alerte AJOUTÉE.
+//
+// Le seul vrai danger est d'effacer une VRAIE faute (brief §4.3). Toutes
+// les sorties de ce bloc vont donc dans le même sens : au moindre doute —
+// réglage coupé, pas de licence, hors ligne, réponse illisible — on ne
+// touche à rien et Grammalecte reste tel quel.
+// ══════════════════════════════════════════════════════════════════
+
+// La phrase qui porte le mot. C'est TOUT ce qui part avec lui : jamais le
+// paragraphe, jamais l'article. Bornée court, et recentrée sur le mot.
+function _phraseDe(texte, offset, len) {
+  const OUVRE = /[.?!…\n]/;
+  let d = offset;
+  while (d > 0 && !OUVRE.test(texte.charAt(d - 1))) d--;
+  let f = offset + len;
+  while (f < texte.length && !OUVRE.test(texte.charAt(f))) f++;
+  if (f < texte.length) f++;
+  let avant = texte.slice(d, offset).replace(/\s+/g, ' ');
+  let apres = texte.slice(offset + len, f).replace(/\s+/g, ' ');
+  if (avant.length > 120) avant = '…' + avant.slice(-120);
+  if (apres.length > 120) apres = apres.slice(0, 120) + '…';
+  return (avant + texte.slice(offset, offset + len) + apres).trim();
+}
+
+const _cleVerdict = (mot, phrase) => mot + ' | ' + phrase;
+
+// Rend la liste d'alertes DÉBARRASSÉE de celles que le juge a désavouées.
+// Ne rend jamais plus d'alertes qu'elle n'en reçoit — c'est structurel :
+// on filtre, on n'ajoute pas.
+async function _arbitrer(texte, issues) {
+  if (!_iaArbitrage || !Array.isArray(issues) || !issues.length) return issues;
+  if (!_jwt()) return issues;                         // pas de licence : tout-local
+
+  // Ce que le juge a le droit de regarder est décidé par le MOTEUR
+  // (`isArbitrable`), pas ici : la mesure de mise en service interroge la
+  // même fonction, donc l'écran et le banc ne peuvent pas diverger.
+  const eng = _engine;
+  if (!eng || typeof eng.isArbitrable !== 'function') return issues;
+  const candidats = issues.filter((it) => eng.isArbitrable(it));
+  if (!candidats.length) return issues;
+
+  const aDemander = [];
+  const parCle    = new Map();
+  for (const it of candidats) {
+    const phrase = _phraseDe(texte, it.offset, it.len);
+    const cle    = _cleVerdict(it.word, phrase);
+    parCle.set(it, cle);
+    if (_verdictsVus.has(cle)) continue;              // déjà jugé dans cette session
+    if (aDemander.length >= 25) continue;             // un seul appel, plafonné
+    aDemander.push({ id: 'i' + aDemander.length, mot: it.word, phrase, cle });
+  }
+
+  if (aDemander.length) {
+    try {
+      const res = await fetch(`${CF_API}/api/ghostwriter/proof-verdict`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${_jwt()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: aDemander.map((x) => ({ id: x.id, mot: x.mot, phrase: x.phrase })) }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        const v = (d && d.verdicts) || {};
+        const apprendre = [];
+        for (const x of aDemander) {
+          const verdict = v[x.id];
+          if (verdict !== 'vraie' && verdict !== 'faux-positif') continue;   // non jugé : on n'inscrit rien
+          _verdictsVus.set(x.cle, verdict);
+          // §4.6 — un nom jugé légitime rejoint le dictionnaire de la maison :
+          // il ne sera PLUS JAMAIS envoyé, ni pour lui, ni pour l'équipe.
+          // C'est ce qui rend une assistance invisible économiquement tenable.
+          if (verdict === 'faux-positif') apprendre.push(String(x.mot).toLowerCase());
+        }
+        if (apprendre.length) {
+          for (const w of apprendre) _ignoreWords.add(w);
+          _saveIgnore();                              // écrit en local ET côté licence
+          _pushFilters();
+        }
+      }
+    } catch (_) { /* hors ligne : Grammalecte tel quel */ }
+  }
+
+  // On n'enlève QUE ce qui a été explicitement désavoué.
+  return issues.filter((it) => {
+    const cle = parCle.get(it);
+    return !cle || _verdictsVus.get(cle) !== 'faux-positif';
+  });
+}
+
+// L'arbitrage revient une seconde plus tard, quand l'utilisateur regarde déjà
+// son texte. Repeindre à ce moment-là peut lui arracher son curseur — c'est
+// exactement le défaut « la modale se réinitialise toute seule » payé sur desK
+// le 19/08. Donc : on met le résultat à jour TOUJOURS, et on ne repeint QUE si
+// personne n'a la main dans la zone. Sinon le prochain rendu naturel s'en
+// chargera, sans rien souffler.
+async function _arbitrerEnFond(res) {
+  let gardees;
+  try { gardees = await _arbitrer(res.text, res.issues); }
+  catch (_) { return; }                                  // au moindre souci : rien ne bouge
+  if (_result !== res) return;                           // une analyse plus récente a pris la main
+  if (!Array.isArray(gardees) || gardees.length >= res.issues.length) return;   // rien effacé
+  _result = { text: res.text, issues: gardees };
+  const main = _root && _root.querySelector('[data-slot="main"]');
+  const actif = document.activeElement;
+  const occupe = main && actif && main.contains(actif)
+    && /^(TEXTAREA|INPUT)$/.test(actif.tagName || '');
+  if (!_analyzing && !occupe) _renderMain();
 }
 
 // ── GP-2 · le dictionnaire de la maison ─────────────────────────
@@ -358,6 +483,11 @@ function _renderFilterBar() {
               title="Choisir les familles de typographie à vérifier (apostrophes, majuscules, tirets, espaces, nombres). Par défaut coupées — du bruit sur un PDF déjà mis en page.">${icon('sliders', 13)}<span>Typographie · ${nTypo ? nTypo + '/' + TYPO_FAMILIES.length : 'off'}</span></button>
       ${n ? `<button class="pf-ignored-chip" type="button" data-act="ignore-manage"
               title="Voir et gérer les mots que vous avez choisi d'ignorer">${icon('eye-off', 13)}<span>${n} mot${n > 1 ? 's' : ''} ignoré${n > 1 ? 's' : ''}</span></button>` : ''}
+      <button class="pf-typo-chip${_iaArbitrage ? ' is-active' : ''}" type="button" data-act="ia-arbitrage"
+              aria-pressed="${_iaArbitrage}"
+              title="${_iaArbitrage
+                ? 'Un assistant écarte en silence les alertes injustifiées. Pour cela, les mots signalés et leur phrase — jamais votre document — sont vérifiés en ligne. Cliquez pour tout garder sur votre appareil.'
+                : 'Tout se passe sur votre appareil : rien n\'est envoyé. Cliquez pour laisser un assistant écarter les alertes injustifiées.'}">${icon(_iaArbitrage ? 'sparkles' : 'shield', 13)}<span>Tri des alertes · ${_iaArbitrage ? 'assisté' : 'sur l\'appareil'}</span></button>
       <span class="pf-filter-hint">${_grammarOnly
         ? 'Orthographe et typographie masquées — accords, conjugaison, confusions'
         : 'Sigles, mots avec chiffres et URL déjà écartés automatiquement'}</span>
@@ -1074,6 +1204,19 @@ function _onClick(e) {
     case 'switch-mode':    _switchMode(btn.dataset.mode); return;
     case 'filter-all':     if (_grammarOnly)  { _grammarOnly = false; _saveGrammarOnly(); _afterFilterToggle(); } return;
     case 'filter-gram':    if (!_grammarOnly) { _grammarOnly = true;  _saveGrammarOnly(); _afterFilterToggle(); } return;
+    // GP-5 · l'interrupteur du §4.4 : revenir au tout-local en un clic. On
+    // écrit une valeur EXPLICITE ('0' ou '1'), jamais removeItem — une clé
+    // absente doit vouloir dire « jamais choisi », pas « coupé ».
+    case 'ia-arbitrage': {
+      _iaArbitrage = !_iaArbitrage;
+      try { localStorage.setItem(IA_ARBITRAGE_KEY, _iaArbitrage ? '1' : '0'); } catch (_) {}
+      _verdictsVus.clear();
+      _toast(_iaArbitrage
+        ? 'Tri assisté activé — les alertes injustifiées s\'effacent seules'
+        : 'Tout reste sur votre appareil — plus rien n\'est envoyé');
+      _renderMain();
+      return;
+    }
     case 'ignore-manage':  _openIgnoreManager(btn); return;
     case 'typo-manage':    _openTypoManager(btn); return;
     case 'analyze':        _handleAnalyze(); return;
@@ -1198,6 +1341,10 @@ async function _handleAnalyze() {
     _saveDraft();
     const s = _statsOf(res.issues);
     _toast(s.total ? `${s.total} faute${s.total > 1 ? 's' : ''} détectée${s.total > 1 ? 's' : ''}` : 'Aucune faute 👌');
+    // GP-5 · l'arbitrage part APRÈS l'affichage, en arrière-plan : le texte
+    // est déjà annoté à l'écran, personne n'attend. On ne l'attend pas non
+    // plus ici — d'où l'absence de `await`.
+    _arbitrerEnFond(res);
   } catch (err) {
     _result = null;
     _toast('Erreur d\'analyse : ' + ((err && err.message) || err), true);

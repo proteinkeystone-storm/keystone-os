@@ -46,6 +46,7 @@ import { handleDataDispatch }                                           from './
 import { handleProxyLLM }                                               from './routes/proxy-llm.js';
 import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './routes/ghostwriter.js';
 import { handleProofDicoGet, handleProofDicoPost }                      from './routes/proof-dico.js';
+import { handleProofVerdict }                                           from './routes/proof-verdict.js';
 import { handleKoraChat, handleKoraStt }                                from './routes/kora.js';
 import { handleAiCreditsQuota }                                         from './routes/ai-credits.js';
 import {
@@ -772,6 +773,15 @@ export default {
       }
       if (path === '/api/proof/dico' && method === 'POST') {
         return handleProofDicoPost(request, env);
+      }
+
+      // ── GP-5 · l'arbitrage invisible ──────────────────────────
+      // Un juge, pas un correcteur : il reçoit UNIQUEMENT les mots
+      // déjà signalés et leur phrase — jamais le document — et il ne
+      // peut qu'EFFACER du bruit. Fail-open partout : quota, panne ou
+      // réponse illisible → l'alerte reste. cf. routes/proof-verdict.js
+      if (path === '/api/ghostwriter/proof-verdict' && method === 'POST') {
+        return handleProofVerdict(request, env);
       }
 
       // ── Crédits IA unifiés (Chantier B — Sprint 1) ────────────
