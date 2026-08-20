@@ -2074,12 +2074,141 @@ await parcours('Parcours 15 — la saisie survit au rafraîchissement d\'équipe
 });
 
 /* ─────────────────────────────────────────────────────────────────
+   PARCOURS 16 · Importer un article au marbre, avec sa pièce (20 août 2026)
+
+   Demande de Stéphane : « dans l'onglet Marbre, j'aimerais importer
+   manuellement un article avec pièce jointe — pour le moment ce n'est
+   possible qu'en passant par l'adresse e-mail dédiée. » Le marbre ne
+   disait nulle part qu'on pouvait y faire entrer un article : la seule
+   porte visible était le courrier. Désormais une bande d'import, et le
+   dépôt d'un document VAUT import (titre proposé, pièce déjà jointe).
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 16 — importer un article au marbre, avec sa pièce', async () => {
+  await page.setViewport({ width: 1280, height: 640 });
+  await ouvrirLePad(page, BASE);
+  await cliquer(page, '[data-slot="view"] [data-v="marbre"]');
+  await attendSel(page, '.dk-marbre-list', 'le marbre');
+  const SHOTS = process.env.DK_SHOTS || '';
+  // Le panneau est plus haut que la fenêtre du banc : on l'agrandit le temps
+  // du cliché (les mesures du parcours, elles, ne dépendent pas de la hauteur).
+  const capturer = async (nom, sel, haut = 0) => {
+    if (!SHOTS) return;
+    try { fs.mkdirSync(SHOTS, { recursive: true }); } catch (_) {}
+    if (haut) { await page.setViewport({ width: 1280, height: haut }); await attendre(200); }
+    const el = await page.$(sel);
+    await (el || page).screenshot({ path: `${SHOTS}/${nom}.png` });
+    if (haut) { await page.setViewport({ width: 1280, height: 640 }); await attendre(200); }
+  };
+
+  // ── 1 · Le marbre DIT qu'on peut y importer (c'était tout le manque).
+  check('le marbre porte une bande « Importer un article »',
+    await existe(page, '.dk-marbre-wrap .dk-marbre-import'));
+  check('elle propose le document ET la fiche vide',
+    await existe(page, '.dk-marbre-import [data-act="import-file"]')
+      && await existe(page, '.dk-marbre-import [data-act="import-blank"]'));
+  check('elle est rendue au-dessus de la liste, pas cachée en bas',
+    await page.evaluate(() => {
+      const b = document.querySelector('.dk-marbre-import').getBoundingClientRect();
+      const l = document.querySelector('.dk-marbre-list').getBoundingClientRect();
+      return b.height > 0 && b.top < l.top && b.top >= 0 && b.bottom <= innerHeight;
+    }));
+
+  // ── 2 · « Fiche vide » : le formulaire ordinaire, rien de pré-rempli.
+  await capturer('16-marbre-bande-import', '.dk-marbre-wrap');
+  await cliquer(page, '.dk-marbre-import [data-act="import-blank"]');
+  await attendSel(page, '.dk-insp [data-k="title"]', 'le formulaire d\'article');
+  check('« Fiche vide » ouvre un formulaire vierge, titré « Nouvel article »',
+    (await valeur(page, '.dk-insp [data-k="title"]')) === ''
+      && /Nouvel article/.test(await texte(page, '.dk-insp .dk-insp-title')),
+    await texte(page, '.dk-insp .dk-insp-title'));
+  await cliquer(page, '.dk-insp [data-act="cancelart"]');
+  await attendSel(page, '.dk-marbre-import', 'retour au marbre');
+
+  // ── 3 · Déposer le document reçu = importer.
+  const NOM = "Tr_E234 - Billet d'humeur.docx";
+  // Le survol doit ANNONCER un fichier (dataTransfer.types contient 'Files') —
+  // c'est ce que le code exige, et ce que fait un vrai glisser depuis le Finder.
+  // Un DataTransfer vide ne prouverait rien : il ne ressemble à aucun geste réel.
+  const survol = await page.evaluate((nom) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File(['copie'], nom, { type: 'application/octet-stream' }));
+    const wrap = document.querySelector('.dk-marbre-wrap');
+    wrap.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    return {
+      allume: document.querySelector('.dk-marbre-import').classList.contains('dropfile'),
+      annonce: [...dt.types].includes('Files'),
+    };
+  }, NOM);
+  check('le glisser simulé annonce bien un fichier (sinon le survol ne prouverait rien)', survol.annonce);
+  check('survoler l\'onglet avec un fichier allume la zone de dépôt', survol.allume);
+
+  await page.evaluate((nom) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File(['copie du contributeur'], nom,
+      { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+    document.querySelector('.dk-marbre-wrap')
+      .dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  }, NOM);
+  await attendSel(page, '.dk-insp [data-k="title"]', 'le formulaire d\'import');
+  check('déposer un document ouvre l\'import (panneau « Importer un article »)',
+    /Importer un article/.test(await texte(page, '.dk-insp .dk-insp-title')),
+    await texte(page, '.dk-insp .dk-insp-title'));
+  check('le titre est proposé d\'après le nom du document',
+    (await valeur(page, '.dk-insp [data-k="title"]')) === "Tr E234 Billet d'humeur",
+    JSON.stringify(await valeur(page, '.dk-insp [data-k="title"]')));
+  check('le document attend déjà en pièce jointe, nommé',
+    (await compter(page, '.dk-insp [data-slot="stagelist"] .dk-file')) === 1
+      && (await texte(page, '.dk-insp [data-slot="stagelist"] .dk-file-name')).trim() === NOM,
+    await texte(page, '.dk-insp [data-slot="stagelist"]'));
+  check('le titre proposé est sélectionné — on retape par-dessus d\'un geste',
+    await page.evaluate(() => {
+      const t = document.querySelector('.dk-insp [data-k="title"]');
+      return document.activeElement === t && t.selectionStart === 0 && t.selectionEnd === t.value.length;
+    }));
+
+  await capturer('16-import-prerempli', '.dk-insp', 1180);
+
+  // ── 4 · Créer : l'article entre au marbre AVEC sa pièce.
+  await choisir(page, '.dk-insp [data-k="rub"]', 'rub-actu');
+  await saisir(page, '.dk-insp [data-k="contrib"]', 'Cne A. Perrin');
+  await cliquer(page, '.dk-insp [data-act="saveart"]');
+  await attendCote(() => DB.articles.some(a => a.title === "Tr E234 Billet d'humeur"), 6000);
+  const art = DB.articles.find(a => a.title === "Tr E234 Billet d'humeur");
+  check('l\'article est créé côté serveur, avec sa rubrique et son contributeur',
+    !!art && art.rub_id === 'rub-actu' && art.contrib === 'Cne A. Perrin',
+    JSON.stringify(art && { rub: art.rub_id, contrib: art.contrib }));
+  check('il attend AU MARBRE (aucune page ne le porte)',
+    !!art && !DB.slots.some(s => s.art_id === art.id));
+  await attendCote(() => DB.files.some(f => art && f.art_id === art.id && f.status === 'ok'), 6000);
+  const piece = DB.files.find(f => art && f.art_id === art.id);
+  check('le document est bien monté et rattaché À CET article',
+    !!piece && piece.name === NOM && piece.status === 'ok',
+    JSON.stringify(piece && { name: piece.name, status: piece.status }));
+  check('la pièce reste « au marbre avec l\'article » (aucune page)',
+    !!piece && piece.page_id === '', JSON.stringify(piece && piece.page_id));
+
+  await attend(page, () => [...document.querySelectorAll('.dk-mrow-title')]
+    .some(e => /Billet d.humeur/.test(e.textContent)), null, 'la ligne dans le marbre');
+  check('et il apparaît dans la liste du marbre, sans recharger',
+    (await textesDe(page, '.dk-mrow-title')).some(t => /Billet d.humeur/.test(t)),
+    (await textesDe(page, '.dk-mrow-title')).slice(0, 4).join(' | '));
+
+  // ── 5 · Sa fiche montre la pièce, téléchargeable.
+  await cliquer(page, `.dk-mrow[data-a="${art.id}"]`);
+  await attendSel(page, '.dk-insp .dk-sec-casier', 'la fiche de l\'article importé');
+  check('la fiche de l\'article importé montre la pièce, prête à télécharger',
+    (await compter(page, '.dk-insp .dk-sec-casier .dk-iconbtn.primary[data-dlf]')) === 1
+      && /Billet d.humeur/.test(await texte(page, '.dk-insp .dk-sec-casier .dk-file-name')),
+    await texte(page, '.dk-insp .dk-sec-casier .dk-file-name'));
+});
+
+/* ─────────────────────────────────────────────────────────────────
    Hygiène : aucune erreur JS n'a été avalée en chemin.
    ───────────────────────────────────────────────────────────────── */
 console.log('\n\x1b[1m▶ Hygiène\x1b[0m');
 {
   const graves = erreursPage.filter(e => !/favicon|LOGOS|ERR_/.test(e));
-  check('aucune erreur JavaScript pendant les quinze parcours', graves.length === 0,
+  check('aucune erreur JavaScript pendant les seize parcours', graves.length === 0,
     graves.slice(0, 4).join(' | '));
 }
 

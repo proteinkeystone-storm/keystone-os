@@ -413,6 +413,26 @@ html.light-mode .dk-pcard.rubbed .dk-pc-marge, html.light-mode .dk-pcard.rubbed.
   margin: 0 18px 8px; padding: 8px 13px; border: 1px solid rgba(201, 162, 39, .4);
   background: rgba(201, 162, 39, .07); border-radius: 11px; font-size: 12.5px;
 }
+/* Bande « Importer un article » (2026-08-20) : le marbre doit dire lui-même
+   qu'on peut y faire entrer un article à la main, avec sa pièce — jusque-là
+   ce n'était possible que par l'adresse e-mail de dépôt, ou via un bouton de
+   la barre du haut que personne ne reliait au marbre. Le survol de dépôt
+   (.dropfile) reprend l'or des cartes de la frise : même geste, même signe. */
+.dk-marbre-import {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 0 18px 10px; padding: 10px 14px;
+  border: 1px dashed rgba(127, 127, 127, .38); border-radius: 12px;
+}
+.dk-marbre-import .dk-mi-ico { flex: 0 0 auto; color: var(--dk-tx3); display: inline-flex; }
+.dk-mi-txt { flex: 1; min-width: 180px; }
+.dk-mi-t { font-size: 13px; font-weight: 800; letter-spacing: -0.02em; }
+.dk-mi-d { font-size: 11.5px; color: var(--dk-tx2); line-height: 1.4; }
+.dk-marbre-import.dropfile {
+  border-style: solid; border-color: var(--dk-gold);
+  background: rgba(201, 162, 39, .1);
+  box-shadow: 0 0 0 2px rgba(201, 162, 39, .35);
+}
+.dk-marbre-import.dropfile .dk-mi-ico { color: var(--dk-gold); }
 .dk-marbre-list { flex: 1; overflow-y: auto; padding: 0 18px 24px; }
 .dk-mrow {
   display: flex; align-items: center; gap: 11px; padding: 10px 12px;

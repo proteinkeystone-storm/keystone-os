@@ -1698,6 +1698,7 @@ function _renderMarbre() {
         ${Object.keys(STATUS).map(s => `<option value="${s}" ${_mf.statut === s ? 'selected' : ''}>${STATUS[s].label}</option>`).join('')}
       </select>
     </div>
+    ${_marbreImportHTML()}
     ${reports.length ? `<div class="dk-marbre-report">${reports.length > 1 ? reports.length + ' articles reportés attendent' : '1 article reporté attend'} au marbre — réservez-les ou tranchez leur fraîcheur.</div>` : ''}
     <div class="dk-marbre-list">
       ${arts.length ? arts.map(a => {
@@ -1717,7 +1718,7 @@ function _renderMarbre() {
           </div>
           <div class="dk-mrow-chips">${chips.join('')}</div>
         </div>`;
-      }).join('') : `<p class="dk-empty-line" style="padding:18px">Aucun article ne correspond — le marbre est ${(_D.articles || []).length ? 'filtré' : 'vide : créez un article avec le bouton ci-dessus'}.</p>`}
+      }).join('') : `<p class="dk-empty-line" style="padding:18px">Aucun article ne correspond — le marbre est ${(_D.articles || []).length ? 'filtré' : 'vide : importez un premier article ci-dessus'}.</p>`}
     </div>`;
   const list = wrap.querySelector('.dk-marbre-list');
   if (list) list.scrollTop = _marbreY;
@@ -1730,6 +1731,70 @@ function _renderMarbre() {
     });
   });
   wrap.querySelectorAll('.dk-mrow').forEach(row => row.addEventListener('click', () => _openInspMarbre(row.dataset.a)));
+  _bindMarbreImport(wrap);
+}
+
+/* ─── Importer un article À LA MAIN, avec sa pièce (2026-08-20) ──────
+   Jusqu'ici, un article accompagné de son document n'entrait que par
+   l'adresse e-mail de dépôt : quand la rédaction reçoit un .docx par un
+   autre canal (remis en main propre, WeTransfer, SMS), il fallait créer
+   la fiche puis rouvrir le casier. La bande ci-dessous fait les deux en
+   un geste — et le dépôt du document vaut import : le titre est proposé
+   depuis le nom du fichier, la pièce part avec la création. */
+function _marbreImportHTML() {
+  const casier = _D && _D.casier !== 'off';
+  return `<div class="dk-marbre-import" data-slot="import">
+    <span class="dk-mi-ico">${icon('upload-cloud', 20)}</span>
+    <div class="dk-mi-txt">
+      <div class="dk-mi-t">Importer un article</div>
+      <div class="dk-mi-d">${casier
+        ? 'Glissez ici le document reçu (Word, PDF, photo) : la fiche s\'ouvre avec la pièce déjà jointe.'
+        : 'Créez la fiche d\'un article reçu hors e-mail — il attendra au marbre.'}</div>
+    </div>
+    ${casier ? `<button class="dk-btn cta small" data-act="import-file">${icon('paperclip', 14)} Choisir un document</button>` : ''}
+    <button class="dk-btn small" data-act="import-blank">${icon('plus', 14)} Fiche vide</button>
+    <input type="file" data-k="importinput" multiple style="display:none">
+  </div>`;
+}
+// Nom de fichier → titre PROPOSÉ (le document porte presque toujours le titre :
+// « Tr E234 - Billet d'humeur.docx » → « Tr E234 Billet d'humeur »). Le champ
+// reste modifiable : on propose, on n'impose pas.
+function _titreDepuisFichier(name) {
+  return String(name || '').replace(/\.[a-z0-9]{1,8}$/i, '')
+    .replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240);
+}
+function _openMarbreImport(fileList) {
+  const files = [...(fileList || [])];
+  if (_offline) { _toast('Hors ligne — impossible d\'importer pour l\'instant.', true); return; }
+  if (files.length && _D && _D.casier === 'off') {
+    _toast('Le casier n\'est pas configuré sur ce serveur : la fiche s\'ouvre sans la pièce.', true);
+    _openArtForm(null, null, null, null, null); return;
+  }
+  _openArtForm(null, null, null, null, files.length ? { files, title: _titreDepuisFichier(files[0].name) } : null);
+}
+function _bindMarbreImport(wrap) {
+  const band = wrap.querySelector('[data-slot="import"]');
+  if (!band) return;
+  const input = band.querySelector('[data-k="importinput"]');
+  band.querySelector('[data-act="import-blank"]').onclick = () => _openMarbreImport(null);
+  band.querySelector('[data-act="import-file"]')?.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => { const f = input.files; input.value = ''; _openMarbreImport(f); });
+  // Déposer le document N'IMPORTE OÙ sur l'onglet (même patron que la frise :
+  // on ne demande pas de viser une petite zone quand on glisse un fichier).
+  if (_D && _D.casier === 'off') return;
+  wrap.addEventListener('dragover', e => {
+    if (!e.dataTransfer || ![...e.dataTransfer.types].includes('Files') || _offline) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    band.classList.add('dropfile');
+  });
+  wrap.addEventListener('dragleave', e => { if (!wrap.contains(e.relatedTarget)) band.classList.remove('dropfile'); });
+  wrap.addEventListener('drop', e => {
+    if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+    e.preventDefault();
+    band.classList.remove('dropfile');
+    _openMarbreImport(e.dataTransfer.files);
+  });
 }
 
 // Inspecteur du marbre : fiche article transversale aux numéros.
@@ -2851,13 +2916,15 @@ function _openRelanceForm(a, backFn) {
 // ── Formulaire article (création / édition) ─────────────────────
 // page     : créer + réserver comme emplacement de cette page ;
 // bancSlot : créer + poser au banc de cet emplacement (remplaçant neuf).
-function _openArtForm(page, existing, onDone, bancSlot) {
+// `seed` = amorce d'import ({ files, title }) : le document déposé au marbre
+// arrive déjà en pièce jointe, son nom propose le titre (cf. _openMarbreImport).
+function _openArtForm(page, existing, onDone, bancSlot, seed) {
   const insp = _root.querySelector('[data-slot="insp"]');
   const rubs = _D.rubriques || [];
   const a = existing || null;
   // Pièces jointes dès la création : le casier exige un art_id, donc les
   // fichiers attendent ici puis partent juste après la création (§DK-3).
-  const staged = [];
+  const staged = (!a && seed && seed.files) ? [...seed.files] : [];
   const stageOn = !a && _D && _D.casier !== 'off';
   // L'adresse déjà connue du contributeur (satellite dk_contribs) — c'est elle
   // qui déclenche le rapprochement automatique, elle doit se saisir ICI, au
@@ -2866,9 +2933,10 @@ function _openArtForm(page, existing, onDone, bancSlot) {
   // Une page du chemin de fer porte déjà sa rubrique (pré-assignation DK-2) :
   // la redemander était un travail en double, et une occasion de se tromper.
   const rubSeed = a ? (a.rub_id || '') : ((page && page.rub_id) || '');
-  insp.innerHTML = _inspShell(a ? 'Modifier l\'article' : 'Nouvel article', null,
+  insp.innerHTML = _inspShell(a ? 'Modifier l\'article' : (staged.length ? 'Importer un article' : 'Nouvel article'), null,
     `<div class="dk-sec">
-      <label class="dk-field"><span>Titre</span><input type="text" data-k="title" maxlength="240" value="${_esc(a ? a.title : '')}" placeholder="Titre de l'article"></label>
+      ${staged.length ? `<p class="dk-note" style="margin:0 0 10px">Titre proposé d'après le nom du document — corrigez-le si besoin. ${staged.length > 1 ? staged.length + ' pièces suivront' : 'La pièce suivra'} l'article dès sa création.</p>` : ''}
+      <label class="dk-field"><span>Titre</span><input type="text" data-k="title" maxlength="240" value="${_esc(a ? a.title : ((seed && seed.title) || ''))}" placeholder="Titre de l'article"></label>
       <label class="dk-field"><span>Rubrique</span><select data-k="rub">
         <option value="">Sans rubrique</option>
         ${rubs.map(r => `<option value="${r.id}" ${rubSeed === r.id ? 'selected' : ''}>${_esc(r.name)}</option>`).join('')}
@@ -2917,6 +2985,10 @@ function _openArtForm(page, existing, onDone, bancSlot) {
       if (!autofill) return;
       mailIn.value = _contribByName(nameIn.value.trim())?.email || '';
     });
+  }
+  if (staged.length) {
+    const t = insp.querySelector('[data-k="title"]');
+    t.focus(); t.setSelectionRange(0, t.value.length);
   }
   if (stageOn) {
     const stageInput = insp.querySelector('[data-k="stageinput"]');
