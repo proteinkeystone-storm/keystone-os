@@ -336,10 +336,21 @@ html.light-mode .dk-pcard.rubbed .dk-pc-marge, html.light-mode .dk-pcard.rubbed.
 .dk-pc-foot { margin-top: auto; display: flex; flex-direction: column; gap: 3px; }
 .dk-pc-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dk-tx2); }
 .dk-pc-status-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
-.dk-pc-marge { font-size: 11px; color: var(--dk-tx3); font-variant-numeric: tabular-nums; }
+.dk-pc-marge { font-size: 11px; color: var(--dk-tx3); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dk-pcard.ambre .dk-pc-marge { color: var(--dk-ambre); font-weight: 700; }
 .dk-pcard.rouge .dk-pc-marge { color: var(--dk-rouge); font-weight: 700; }
-.dk-pc-badges { position: absolute; top: 8px; right: 9px; display: flex; gap: 5px; }
+/* Ligne basse de la carte : la marge à gauche, les voyants (copies, banc,
+   pièces jointes) au coin bas droit. Ils vivaient en haut à droite, où ils
+   se posaient SUR le titre et la rubrique ; ici ils sont dans le flux —
+   plus aucun recouvrement possible, quel que soit leur nombre.
+   Si les voyants ne tiennent pas à côté de la marge (article étalé + banc
+   + pièces), ils passent à la ligne SOUS elle, toujours calés à droite :
+   personne ne se tronque. */
+.dk-pc-botline { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 3px 6px; min-width: 0; }
+.dk-pc-botline .dk-pc-status { min-width: 0; }
+.dk-pc-badges { display: flex; gap: 5px; flex: 0 0 auto; margin-left: auto; }
+/* Carte vide : aucun pied où se ranger, le voyant se pose au coin. */
+.dk-pc-badges.float { position: absolute; bottom: 8px; right: 9px; }
 .dk-pc-badge {
   display: inline-flex; align-items: center; gap: 3px; font-size: 9.5px; color: var(--dk-tx2);
   background: rgba(127, 127, 127, .14); border-radius: 6px; padding: 1.5px 5px;

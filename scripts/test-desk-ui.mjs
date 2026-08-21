@@ -2413,12 +2413,140 @@ await parcours('Parcours 18 — le rail des jalons tient sur un téléphone', as
 });
 
 /* ─────────────────────────────────────────────────────────────────
+   PARCOURS 19 · Les voyants de la carte se rangent en bas à droite
+
+   Le défaut (21 août 2026, signalé sur capture) : les voyants — pièces
+   jointes, copies, banc — étaient posés en ABSOLU en haut à droite de la
+   carte. Ils s'asseyaient donc sur le nom de rubrique et sur le titre :
+   « Des Plumes & des Idées » disparaissait sous le trombone. Illisible
+   des deux côtés — le titre caché, le voyant noyé dans le texte.
+
+   Ce parcours mesure des RECTANGLES, pas des classes : chaque voyant est
+   comparé à la boîte du titre, à celle de la rubrique et à celle de la
+   carte. Avec l'ancien CSS, les deux premières assertions tombent.
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 19 — les voyants ne s\'asseyent plus sur le titre', async () => {
+  await page.setViewport({ width: 1280, height: 640 });
+  await ouvrirLePad(page, BASE);                      // monde neuf…
+  // …puis on charge la page 3 de TOUT ce qui fait un voyant : deux pièces
+  // au casier, un banc de relecture, et l'article étalé sur une 2e page
+  // (trois voyants d'un coup — le pire cas de la carte).
+  DB.files.push(
+    { id: 'fi-pg3-a', issue_id: 'iss-1', page_id: 'pg-3', art_id: '', name: 'biblio.pdf',
+      mime: 'application/pdf', size: 120000, status: 'ok', uploaded_by: 'Stéphane', created_at: SQL_NOW(-20) },
+    { id: 'fi-pg3-b', issue_id: 'iss-1', page_id: 'pg-3', art_id: '', name: 'photo.jpg',
+      mime: 'image/jpeg', size: 220000, status: 'ok', uploaded_by: 'Stéphane', created_at: SQL_NOW(-19) },
+  );
+  DB.slots.find(sl => sl.id === 'sl-1').banc = JSON.stringify([
+    { name: 'Mme L. Bérard', role: 'relecture' }, { name: 'Cne A. Perrin', role: 'relecture' },
+  ]);
+  DB.slots.push({ id: 'sl-1b', page_id: 'pg-3', position: 1, art_id: 'art-copie', banc: '[]', created_at: SQL_NOW(-10) });
+  // On recharge SANS repasser par ouvrirLePad (qui remettrait un monde neuf).
+  await page.goto(BASE + '/__dk7-harnais.html', { waitUntil: 'domcontentloaded' });
+  await attendSel(page, '.dk-frise .dk-pcard', 'le chemin de fer affiché');
+  await attendre(150);
+
+  const CARTE = '.dk-frise .dk-pcard[data-n="3"]';
+  // Relevé géométrique : la carte, ses textes, et chaque voyant.
+  const releve = (sel) => page.evaluate(s => {
+    const carte = document.querySelector(s);
+    if (!carte) return null;
+    const r = el => { const b = el.getBoundingClientRect(); return { t: b.top, b: b.bottom, l: b.left, r: b.right, w: b.width, h: b.height }; };
+    const boite = r(carte);
+    const txt = el => (el ? el.textContent.trim() : '');
+    const marge = carte.querySelector('.dk-pc-marge');
+    return {
+      carte: boite,
+      titre: carte.querySelector('.dk-pc-title') ? r(carte.querySelector('.dk-pc-title')) : null,
+      rub:   carte.querySelector('.dk-pc-rub')   ? r(carte.querySelector('.dk-pc-rub'))   : null,
+      pied:  carte.querySelector('.dk-pc-foot')  ? r(carte.querySelector('.dk-pc-foot'))  : null,
+      voyants: [...carte.querySelectorAll('.dk-pc-badge')].map(b => ({ ...r(b), txt: txt(b) })),
+      marge: marge ? { ...r(marge), txt: txt(marge), coupe: marge.scrollWidth > marge.clientWidth + 1 } : null,
+    };
+  }, sel);
+
+  const v = await releve(CARTE);
+  const chevauche = (a, b) => a && b && a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t;
+  const detail = v ? v.voyants.map(x => `«${x.txt}» ${Math.round(x.l)},${Math.round(x.t)}`).join(' | ') : 'carte absente';
+
+  check('la carte porte bien ses trois voyants (copies, banc, pièces jointes)',
+    !!v && v.voyants.length === 3, detail);
+  check('AUCUN voyant ne se pose sur le titre (c\'était la gêne)',
+    !!v && v.voyants.every(b => !chevauche(b, v.titre)), detail);
+  check('aucun voyant ne se pose sur le nom de rubrique',
+    !!v && v.voyants.every(b => !chevauche(b, v.rub)), detail);
+  check('les voyants sont dans la MOITIÉ BASSE de la carte',
+    !!v && v.voyants.every(b => b.t > v.carte.t + v.carte.h / 2), detail);
+  check('… et le groupe est calé sur le bord droit, sans déborder',
+    !!v && v.voyants.every(b => b.r <= v.carte.r - 4 && b.l >= v.carte.l)
+      && Math.max(...v.voyants.map(b => b.r)) >= v.carte.r - 16, detail);
+  check('la marge reste lisible — elle n\'est ni recouverte ni tronquée',
+    !!v && v.marge && v.marge.txt.length > 2 && !v.marge.coupe
+      && v.voyants.every(b => !chevauche(b, v.marge)),
+    v && v.marge ? `«${v.marge.txt}» coupée=${v.marge.coupe}` : 'marge absente');
+  check('rien ne déborde de la carte : le pied tient dans sa hauteur',
+    !!v && v.pied && v.pied.b <= v.carte.b + 1,
+    v && v.pied ? `pied ${Math.round(v.pied.b)} / carte ${Math.round(v.carte.b)}` : '');
+  if (process.env.DK_SHOTS) {
+    try { fs.mkdirSync(process.env.DK_SHOTS, { recursive: true }); } catch (_) {}
+    const fr = await page.$('.dk-frise');
+    await (fr || page).screenshot({ path: `${process.env.DK_SHOTS}/19-voyants-bas-droite.png` });
+  }
+
+  // Une carte VIDE n'a pas de pied : son voyant se pose au coin bas droit.
+  DB.files.push({ id: 'fi-pg5', issue_id: 'iss-1', page_id: 'pg-5', art_id: '', name: 'note.pdf',
+    mime: 'application/pdf', size: 9000, status: 'ok', uploaded_by: 'Stéphane', created_at: SQL_NOW(-5) });
+  await page.goto(BASE + '/__dk7-harnais.html', { waitUntil: 'domcontentloaded' });
+  await attendSel(page, '.dk-frise .dk-pcard', 'le chemin de fer affiché');
+  await attendre(150);
+  const vv = await releve('.dk-frise .dk-pcard[data-n="5"]');
+  check('page vide : son voyant se range aussi au coin bas droit',
+    !!vv && vv.voyants.length === 1
+      && vv.voyants[0].t > vv.carte.t + vv.carte.h / 2
+      && vv.voyants[0].r <= vv.carte.r - 4,
+    vv ? vv.voyants.map(x => `«${x.txt}» ${Math.round(x.l)},${Math.round(x.t)}`).join(' | ') : 'carte absente');
+
+  // Sur un petit écran, la carte rétrécit (128 px) : le pire cas de largeur.
+  await page.setViewport({ width: 700, height: 640 });
+  await attendre(250);
+  const p700 = await releve(CARTE);
+  check('700 px · les voyants tiennent encore, sans marcher sur le titre',
+    !!p700 && p700.voyants.length === 3
+      && p700.voyants.every(b => !chevauche(b, p700.titre) && !chevauche(b, p700.rub))
+      && p700.pied.b <= p700.carte.b + 1,
+    p700 ? `carte ${Math.round(p700.carte.w)}px · pied ${Math.round(p700.pied.b)}/${Math.round(p700.carte.b)}` : '');
+
+  // ── Le cas courant (celui de la capture du 21 août) : UN seul voyant.
+  //    Il doit partager la ligne de la marge, à droite — pas s'exiler.
+  await page.setViewport({ width: 1280, height: 640 });
+  DB.slots.find(sl => sl.id === 'sl-1').banc = '[]';
+  DB.slots = DB.slots.filter(sl => sl.id !== 'sl-1b');
+  await page.goto(BASE + '/__dk7-harnais.html', { waitUntil: 'domcontentloaded' });
+  await attendSel(page, '.dk-frise .dk-pcard', 'le chemin de fer affiché');
+  await attendre(150);
+  const un = await releve(CARTE);
+  const memeLigne = un && un.marge
+    && Math.abs((un.voyants[0].t + un.voyants[0].b) / 2 - (un.marge.t + un.marge.b) / 2) < 4;
+  check('un seul voyant : il se pose SUR la ligne de la marge, à sa droite',
+    !!un && un.voyants.length === 1 && memeLigne
+      && un.voyants[0].l > un.marge.r
+      && un.voyants[0].r <= un.carte.r - 4,
+    un ? `voyant ${Math.round(un.voyants[0].l)}–${Math.round(un.voyants[0].r)} · marge finit ${Math.round(un.marge.r)} · carte finit ${Math.round(un.carte.r)}` : '');
+  if (process.env.DK_SHOTS) {
+    try { fs.mkdirSync(process.env.DK_SHOTS, { recursive: true }); } catch (_) {}
+    const c = await page.$(CARTE);
+    if (c) await c.screenshot({ path: `${process.env.DK_SHOTS}/19-voyant-seul.png` });
+  }
+
+});
+
+/* ─────────────────────────────────────────────────────────────────
    Hygiène : aucune erreur JS n'a été avalée en chemin.
    ───────────────────────────────────────────────────────────────── */
 console.log('\n\x1b[1m▶ Hygiène\x1b[0m');
 {
   const graves = erreursPage.filter(e => !/favicon|LOGOS|ERR_/.test(e));
-  check('aucune erreur JavaScript pendant les dix-huit parcours', graves.length === 0,
+  check('aucune erreur JavaScript pendant les dix-neuf parcours', graves.length === 0,
     graves.slice(0, 4).join(' | '));
 }
 

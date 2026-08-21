@@ -1239,8 +1239,7 @@ function _cardHTML(p, prevP) {
     return `<div class="dk-pcard fixe locked${msel}" data-n="${p.n}">
       <span class="dk-pc-fixe-tag">${_esc(p.fixe_tag || 'Figée')}</span>
       ${p.fixe_title ? `<div class="dk-pc-title">${_esc(p.fixe_title)}</div>` : ''}
-      <div class="dk-pc-foot"><div class="dk-pc-status"><span class="dk-pc-status-dot" style="background:#4cc38a"></span><span>figée</span></div></div>
-      ${fileBadge ? `<div class="dk-pc-badges">${fileBadge}</div>` : ''}
+      <div class="dk-pc-foot"><div class="dk-pc-botline"><div class="dk-pc-status"><span class="dk-pc-status-dot" style="background:#4cc38a"></span><span>figée</span></div>${fileBadge ? `<div class="dk-pc-badges">${fileBadge}</div>` : ''}</div></div>
     </div>`;
   }
   const slots = _slotsOf(p);
@@ -1251,7 +1250,7 @@ function _cardHTML(p, prevP) {
       ${rub ? `<div class="dk-pc-rub dk-pc-rub-vide"><span>${_esc(rub.name)}</span></div>` : ''}
       <span class="dk-pc-vide-ico">${icon('plus', 20)}</span>
       <span class="dk-pc-vide-txt">réserver<br>un article</span>
-      ${fileBadge ? `<div class="dk-pc-badges">${fileBadge}</div>` : ''}
+      ${fileBadge ? `<div class="dk-pc-badges float">${fileBadge}</div>` : ''}
     </div>`;
   }
   const st = STATUS[a.status] || STATUS.propose;
@@ -1276,9 +1275,11 @@ function _cardHTML(p, prevP) {
     ${a.contrib ? `<div class="dk-pc-contrib">${_esc(a.contrib)}${slots.length > 1 ? ' +' + (slots.length - 1) : ''}</div>` : ''}
     <div class="dk-pc-foot">
       <div class="dk-pc-status"><span class="dk-pc-status-dot" style="background:${done ? 'var(--dk-rub-ink)' : st.dot}"></span><span>${st.label}</span></div>
-      <div class="dk-pc-marge">${card.allDone ? 'prêt' : _margeTxt(card.marge)}</div>
+      <div class="dk-pc-botline">
+        <div class="dk-pc-marge">${card.allDone ? 'prêt' : _margeTxt(card.marge)}</div>
+        ${badges.length ? `<div class="dk-pc-badges">${badges.join('')}</div>` : ''}
+      </div>
     </div>
-    ${badges.length ? `<div class="dk-pc-badges">${badges.join('')}</div>` : ''}
   </div>`;
 }
 
