@@ -2541,12 +2541,102 @@ await parcours('Parcours 19 — les voyants ne s\'asseyent plus sur le titre', a
 });
 
 /* ─────────────────────────────────────────────────────────────────
+   PARCOURS 20 · « + Article » centré à l'ŒIL, pas au calcul
+
+   Le défaut (21 août 2026, signalé sur capture) : le bouton violet
+   paraissait décalé. Il l'était : le tracé du picto « plus » n'occupe que
+   58 % de sa boîte (14 unités sur 24), et ces ~3 px de vide s'ajoutaient
+   au padding gauche. Boîtes parfaitement centrées, ENCRE décentrée —
+   c'est l'encre que l'œil voit.
+
+   Ce parcours mesure donc l'encre RÉELLE : la boîte du <path> du picto
+   (getBoundingClientRect sur un path SVG inclut le tracé, pas la boîte
+   vide autour) contre la fin du texte. Avec l'ancien padding symétrique,
+   la première assertion tombe.
+
+   Second défaut, même signalement : la bande n'avait pas de padding-bas
+   (8px 18px 0). Son plus haut occupant — ce même bouton, 35 px contre
+   32,6 pour les boutons fantômes — s'asseyait donc sur le bord inférieur :
+   8 px d'air au-dessus, 0 en dessous. On mesure ici l'air des DEUX côtés,
+   pour le bouton et pour le plus serré des occupants.
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 20 — « + Article » centré dans sa pilule ET dans sa bande', async () => {
+  await page.setViewport({ width: 1280, height: 640 });
+  await ouvrirLePad(page, BASE);
+  const m = await page.evaluate(() => {
+    const b = document.querySelector('.dk-btn.cta[data-act="newart"]');
+    if (!b) return null;
+    const bo = b.getBoundingClientRect();
+    const trace = b.querySelector('svg path');          // l'encre du « + », pas sa boîte
+    const txt = b.querySelector('.dk-btn-txt');
+    const rg = document.createRange(); rg.selectNodeContents(txt);
+    const tr = rg.getBoundingClientRect(), pr = trace.getBoundingClientRect();
+    return {
+      gauche: pr.left - bo.left, droite: bo.right - tr.right,
+      haut: Math.min(pr.top, tr.top) - bo.top, bas: bo.bottom - Math.max(pr.bottom, tr.bottom),
+      ecartIcoTxt: tr.left - pr.right, largeur: bo.width, hauteur: bo.height,
+      libelle: txt.textContent,
+      // …et le bouton DANS sa bande : c'est là qu'il s'asseyait sur le bord.
+      bande: (() => {
+        const bar = b.closest('.dk-ferbar'); if (!bar) return null;
+        const br = bar.getBoundingClientRect();
+        const hauts = [...bar.children].map(el => el.getBoundingClientRect());
+        return {
+          air: { haut: bo.top - br.top, bas: br.bottom - bo.bottom },
+          h: br.height,
+          // le plus haut occupant, quel qu'il soit, doit respirer des deux côtés
+          pireHaut: Math.min(...hauts.map(r => r.top - br.top)),
+          pireBas: Math.min(...hauts.map(r => br.bottom - r.bottom)),
+        };
+      })(),
+    };
+  });
+  const d = m ? `G=${m.gauche.toFixed(1)} D=${m.droite.toFixed(1)} · H=${m.haut.toFixed(1)} B=${m.bas.toFixed(1)} · ${Math.round(m.largeur)}×${Math.round(m.hauteur)}` : 'bouton absent';
+
+  check('l\'encre est à égale distance des deux bords (c\'était la gêne)',
+    !!m && Math.abs(m.gauche - m.droite) <= 1.5, d);
+  check('… et à égale distance du haut et du bas',
+    !!m && Math.abs(m.haut - m.bas) <= 1.5, d);
+  check('le picto et le mot ne se décollent pas (écart proche du gap de 7 px)',
+    !!m && m.ecartIcoTxt >= 6 && m.ecartIcoTxt <= 11, m ? `écart ${m.ecartIcoTxt.toFixed(1)} px` : d);
+  check('le libellé n\'a plus d\'espace parasite en tête',
+    !!m && m.libelle === m.libelle.trim(), m ? `«${m.libelle}»` : d);
+
+  // Le CTA garde son libellé quand la barre rétrécit — sans quoi la
+  // compensation de gauche décentrerait un picto resté seul.
+  await page.setViewport({ width: 700, height: 640 });
+  await attendre(250);
+  const p700 = await page.evaluate(() => {
+    const b = document.querySelector('.dk-btn.cta[data-act="newart"]');
+    const t = b && b.querySelector('.dk-btn-txt');
+    return t ? { vu: getComputedStyle(t).display !== 'none', txt: t.textContent } : null;
+  });
+  const ba = m && m.bande;
+  check('le bouton respire autant en haut qu\'en bas de sa bande (c\'était la gêne)',
+    !!ba && Math.abs(ba.air.haut - ba.air.bas) <= 1 && ba.air.bas >= 4,
+    ba ? `air haut=${ba.air.haut.toFixed(1)} bas=${ba.air.bas.toFixed(1)} · bande ${ba.h.toFixed(1)} px` : d);
+  check('… et aucun autre occupant de la bande ne touche ses bords',
+    !!ba && ba.pireHaut >= 4 && ba.pireBas >= 4,
+    ba ? `au plus près : haut=${ba.pireHaut.toFixed(1)} bas=${ba.pireBas.toFixed(1)}` : d);
+
+  check('700 px · le bouton garde « Article » à côté du picto',
+    !!p700 && p700.vu && /Article/.test(p700.txt), JSON.stringify(p700));
+  await page.setViewport({ width: 1280, height: 640 });
+
+  if (process.env.DK_SHOTS) {
+    try { fs.mkdirSync(process.env.DK_SHOTS, { recursive: true }); } catch (_) {}
+    const el = await page.$('.dk-btn.cta[data-act="newart"]');
+    if (el) await el.screenshot({ path: `${process.env.DK_SHOTS}/20-bouton-article.png` });
+  }
+});
+
+/* ─────────────────────────────────────────────────────────────────
    Hygiène : aucune erreur JS n'a été avalée en chemin.
    ───────────────────────────────────────────────────────────────── */
 console.log('\n\x1b[1m▶ Hygiène\x1b[0m');
 {
   const graves = erreursPage.filter(e => !/favicon|LOGOS|ERR_/.test(e));
-  check('aucune erreur JavaScript pendant les dix-neuf parcours', graves.length === 0,
+  check('aucune erreur JavaScript pendant les vingt parcours', graves.length === 0,
     graves.slice(0, 4).join(' | '));
 }
 

@@ -89,6 +89,11 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
 }
 .dk-btn.cta:hover { background: #818cf8; border-color: #818cf8; color: #fff; }
 .dk-btn.cta.small { padding: 7px 14px; font-size: 12.5px; }
+/* « + Article » : le tracé du picto plus n'occupe que 58 % de sa boîte — il
+   reste 3 px de vide à sa gauche, et le bouton PARAISSAIT décalé vers la
+   droite (18 px d'encre à gauche contre 15 à droite, mesurés au banc). Le
+   padding rend ces 3 px : le bouton se centre à l'œil, pas au calcul. */
+.dk-btn.cta.small.dk-newart { padding-left: 12px; padding-right: 15px; }
 .dk-btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* ── Sélecteur de publication (topbar) ─────────────────────────── */
@@ -183,7 +188,10 @@ html.light-mode .dk-form-grid input { color-scheme: light; }
 .dk-tl-node.rouge .dk-tl-days, .dk-tl-node.rouge .dk-tl-meta { color: var(--dk-rouge); font-weight: 700; }
 
 /* ── Barre au-dessus de la frise ───────────────────────────────── */
-.dk-ferbar { display: flex; align-items: center; gap: 12px; padding: 8px 18px 0; flex: 0 0 auto; }
+/* padding-bas ÉGAL au padding-haut : sans lui la bande n'avait aucun fond,
+   et son plus haut occupant — le bouton « + Article », 35 px — s'asseyait
+   sur son bord (8 px d'air au-dessus, 0 en dessous, mesurés au banc). */
+.dk-ferbar { display: flex; align-items: center; gap: 12px; padding: 8px 18px; flex: 0 0 auto; }
 /* min-width:0 : sans lui l'ellipsis ne sert à rien dans une rangée flex
    (min-width:auto = le texte impose sa largeur) et « n° 234 · 68 pages »
    sortait de l'écran sur iPhone. */
@@ -787,7 +795,7 @@ html.light-mode .dk-mailbadge { box-shadow: 0 0 0 2px #fff; }
 @media (max-width: 820px) {
   .dk-pub-btn { max-width: 170px; }
   .dk-rail { padding: 8px 0 5px; }
-  .dk-ferbar { padding: 8px 12px 0; flex-wrap: wrap; }
+  .dk-ferbar { padding: 8px 12px; flex-wrap: wrap; }
   .dk-btn-txt { display: none; }
   .dk-btn.cta .dk-btn-txt { display: inline; }
   .dk-frise { gap: 14px 10px; padding: 12px 14px 22px; }

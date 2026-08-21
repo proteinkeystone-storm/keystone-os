@@ -1029,7 +1029,7 @@ function _renderFer() {
       ${_relancesDues().length ? `<button class="dk-btn ghost small dk-relbtn" data-act="relances" title="Copies en attente à relancer">${icon('bell', 14)}<span class="dk-btn-txt"> Relances (${_relancesDues().length})</span></button>` : ''}
       <button class="dk-btn ghost small dk-mailbtn" data-act="bannette" title="${nonLus ? nonLus + ' courrier' + (nonLus > 1 ? 's' : '') + ' jamais ouvert' + (nonLus > 1 ? 's' : '') + ' — ' : ''}Tout le courrier reçu par e-mail, rien n'en sort jamais">${icon('mail', 14)}<span class="dk-btn-txt"> Courrier</span>${nonLus ? `<span class="dk-mailbadge">${nonLus > 99 ? '99+' : nonLus}</span>` : ''}</button>
       <button class="dk-btn ghost small" data-act="prepress" title="Contrôle du PDF final & édition numérique booK">${icon('printer', 14)}<span class="dk-btn-txt"> Pré-impression</span></button>
-      <button class="dk-btn cta small" data-act="newart">${icon('plus', 14)}<span class="dk-btn-txt"> Article</span></button>
+      <button class="dk-btn cta small dk-newart" data-act="newart">${icon('plus', 14)}<span class="dk-btn-txt">Article</span></button>
     </div>
     ${(_D.inbox || []).length ? `<button class="dk-bacstrip" data-act="bac">${icon('mail', 15)}<span>${_D.inbox.length} contribution${_D.inbox.length > 1 ? 's' : ''} à rattacher</span><span class="dk-bacstrip-go">trier ${icon('chevron-right', 13)}</span></button>` : ''}
     ${newTotal ? `<div class="dk-newstrip"><span class="dk-newstrip-dot"></span><span class="dk-newstrip-txt">${_newLabel(newCards, newMarbre)}</span><button class="dk-newstrip-clear" data-act="markseen">Tout marquer comme vu</button></div>` : ''}
