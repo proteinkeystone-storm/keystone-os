@@ -19,8 +19,10 @@
 
    Usage : node scripts/test-sdqr-design-ui.mjs        · Exit 0 si OK.
    Voir le banc ATTRAPER (version d'avant le correctif) :
-     git show HEAD:app/sdqr.js > /tmp/sdqr-avant.js
-     SDQR_JS=/tmp/sdqr-avant.js node scripts/test-sdqr-design-ui.mjs
+     git show HEAD:app/sdqr.js   > /tmp/sdqr-avant.js
+     git show HEAD:app/style.css > /tmp/style-avant.css
+     SDQR_JS=/tmp/sdqr-avant.js SDQR_CSS=/tmp/style-avant.css \\
+       node scripts/test-sdqr-design-ui.mjs
    ═══════════════════════════════════════════════════════════════ */
 
 import http               from 'node:http';
@@ -31,7 +33,8 @@ import puppeteer          from 'puppeteer';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT      = join(__dirname, '..');
-const SDQR_JS   = process.env.SDQR_JS || '';   // sert un autre sdqr.js (banc du banc)
+const SDQR_JS   = process.env.SDQR_JS  || '';  // sert un autre sdqr.js  (banc du banc)
+const SDQR_CSS  = process.env.SDQR_CSS || '';  // sert un autre style.css (banc du banc)
 
 let passed = 0, failed = 0;
 const echecs = [];
@@ -80,8 +83,11 @@ function serveur() {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(HARNAIS);
     }
-    const cible = (SDQR_JS && p === '/app/sdqr.js') ? SDQR_JS : normalize(join(ROOT, p));
-    if (!SDQR_JS && !cible.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
+    let cible = normalize(join(ROOT, p));
+    let horsRoot = false;
+    if (SDQR_JS  && p === '/app/sdqr.js')  { cible = SDQR_JS;  horsRoot = true; }
+    if (SDQR_CSS && p === '/app/style.css') { cible = SDQR_CSS; horsRoot = true; }
+    if (!horsRoot && !cible.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
     fs.readFile(cible, (e, data) => {
       if (e) { res.writeHead(404); return res.end('introuvable'); }
       res.writeHead(200, { 'Content-Type': MIME[extname(cible).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-store' });
@@ -281,8 +287,65 @@ async function cliqueEtAttendReconstruction(page, sel) {
     console.log('  \x1b[2m(rien à faire défiler dans ce viewport — vérification sautée)\x1b[0m');
   }
 
-  /* 7 · La FICHE d'un QR existant — même panneau, autre hôte ------------- */
-  console.log('\n\x1b[1m7 · Fiche d\'un QR existant\x1b[0m');
+  /* 7 · Ce qui est masqué l'est VRAIMENT, et les yeux se peignent -------- */
+  console.log('\n\x1b[1m7 · Couleur des yeux — anneau & pupille\x1b[0m');
+  await ouvreOnglet(page, 'couleurs');
+
+  // Le défaut du 25 août 2026 : .sdqr-eye-2tone porte display:flex, qui bat
+  // l'attribut [hidden]. La rangée ANNEAU/PUPILLE restait donc à l'écran en
+  // mode « Comme modules » — où ces couleurs n'ont AUCUN effet sur le QR.
+  // On lit la hauteur réelle, pas l'attribut : « masqué » doit vouloir dire
+  // « invisible », pas « marqué masqué ».
+  const rangeeVisible = () => page.evaluate(() => {
+    const r = document.querySelector('.sdqr-eye-2tone');
+    return !!r && r.offsetHeight > 0;
+  });
+  // Les 3 groupes du SVG : modules, anneaux, pupilles.
+  const fills = () => page.evaluate(() => {
+    const svg = document.querySelector('#sdqr-svg-wrap svg');
+    return svg ? [...svg.querySelectorAll('g')].map(g => g.getAttribute('fill')) : [];
+  });
+  const tapeHex = async (id, val) => {
+    await page.evaluate((i, v) => {
+      const h = document.querySelector('#' + i + '-hex');
+      h.value = v;
+      h.dispatchEvent(new Event('input', { bubbles: true }));
+    }, id, val);
+    await page.waitForFunction(
+      `document.querySelector('#sdqr-svg-wrap svg')?.innerHTML.includes('${val}')`,
+      { timeout: 3000 },
+    ).catch(() => {});
+  };
+
+  check('« Comme modules » : la rangée ANNEAU/PUPILLE est bien cachée',
+        (await rangeeVisible()) === false);
+
+  await page.click('[data-eye-mode] [data-eye="distinct"]');
+  check('« Couleur dédiée » : la rangée apparaît', (await rangeeVisible()) === true);
+
+  await tapeHex('sdqr-eye-color', '#76c1db');
+  await tapeHex('sdqr-eye-inner', '#268aab');
+  const f = await fills();
+  check('l\'anneau prend la couleur saisie', f[1] === '#76c1db', JSON.stringify(f));
+  check('la pupille prend SA couleur (2 tons)', f[2] === '#268aab', JSON.stringify(f));
+  check('les modules gardent la leur', f[0] !== '#76c1db' && f[0] !== '#268aab', JSON.stringify(f));
+
+  await page.click('[data-eye-mode] [data-eye="inherit"]');
+  const f2 = await fills();
+  check('retour « Comme modules » : les yeux reprennent la couleur des modules',
+        f2[0] === f2[1] && f2[1] === f2[2], JSON.stringify(f2));
+  check('… et la rangée se recache', (await rangeeVisible()) === false);
+
+  // Même piège sur « Fond transparent » : les champs Fond doivent partir.
+  await page.evaluate(() => document.querySelector('#sdqr-bg-transparent')?.click());
+  const fondVisible = await page.evaluate(() =>
+    [...document.querySelectorAll('.sdqr-color-field')].filter(el => el.hidden)
+      .some(el => el.offsetHeight > 0));
+  check('« Fond transparent » : les champs Fond disparaissent vraiment', fondVisible === false);
+  await page.evaluate(() => document.querySelector('#sdqr-bg-transparent')?.click());
+
+  /* 8 · La FICHE d'un QR existant — même panneau, autre hôte ------------- */
+  console.log('\n\x1b[1m8 · Fiche d\'un QR existant\x1b[0m');
   await page.goto(`${base}/__banc.html?mode=fiche`, { waitUntil: 'networkidle0' });
   await page.waitForSelector('#sdqr-design-panel #sdqr-dtabs .sdqr-dtab', { timeout: 15000 });
   const eF0 = await etat(page);

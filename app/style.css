@@ -9107,6 +9107,13 @@ html.light-mode .sdqr-type-badge--smart { color: #4338ca; }
 .sdqr-dtab.is-active { color: #1b2a4a; border-bottom-color: var(--gold, #6c6cf5); }
 .sdqr-dtab-panel { display: none; flex-direction: column; gap: 12px; }
 .sdqr-dtab-panel.is-active { display: flex; }
+/* L'attribut [hidden] doit gagner sur les display:flex du panneau Design.
+   Piège déjà rencontré deux fois (.sdqr-design-row et .sdqr-color-grid portent
+   chacun leur garde) : une règle de portée panneau évite d'oublier le prochain
+   bloc masqué. Symptôme du 25 août 2026 — la rangée ANNEAU/PUPILLE restait
+   affichée en mode « Comme modules », où ses couleurs n'ont aucun effet sur
+   le QR ; et « Fond transparent » laissait le champ Fond à l'écran. */
+.sdqr-design-panel [hidden] { display: none !important; }
 
 .sdqr-design-row {
   display: flex; align-items: center; gap: 12px;
