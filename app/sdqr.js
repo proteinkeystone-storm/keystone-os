@@ -5642,6 +5642,17 @@ function _designHasUnsavedChanges(editing, saved) {
   return JSON.stringify(editing) !== JSON.stringify(mergeDesign(saved));
 }
 
+// Active un onglet du panneau Design (Modules/Yeux/Logo/Couleurs/Cadre).
+// Partage entre le clic utilisateur et la RESTAURATION apres reconstruction
+// du panneau (_refreshDesignPanelDom) : le gabarit repart toujours sur
+// « Modules », donc sans restauration chaque clic sur une palette / un logo
+// renvoyait l'utilisateur au premier onglet.
+function _setDesignTab(panel, id) {
+  if (!panel || !id) return;
+  panel.querySelectorAll('#sdqr-dtabs .sdqr-dtab').forEach(b => b.classList.toggle('is-active', b.dataset.dtab === id));
+  panel.querySelectorAll('[data-dtab-panel]').forEach(p => p.classList.toggle('is-active', p.dataset.dtabPanel === id));
+}
+
 function _wireDesignPanel(root, qr, encodedForQr, opts = {}) {
   const panel = root.querySelector('#sdqr-design-panel');
   if (!panel) return;
@@ -5655,11 +5666,7 @@ function _wireDesignPanel(root, qr, encodedForQr, opts = {}) {
   // Tous les panneaux restent dans le DOM (le câblage querySelectorAll les
   // trouve même masqués) ; on ne fait qu'afficher l'onglet actif.
   panel.querySelectorAll('#sdqr-dtabs .sdqr-dtab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      const t = tab.dataset.dtab;
-      panel.querySelectorAll('#sdqr-dtabs .sdqr-dtab').forEach(b => b.classList.toggle('is-active', b === tab));
-      panel.querySelectorAll('[data-dtab-panel]').forEach(p => p.classList.toggle('is-active', p.dataset.dtabPanel === t));
-    });
+    tab.addEventListener('click', () => _setDesignTab(panel, tab.dataset.dtab));
   });
   // Si _editingDesign existe deja (cas refresh DOM apres upload/retrait
   // logo), on le PRESERVE. Sinon (1ere ouverture du detail), on init.
@@ -6050,6 +6057,10 @@ function _refreshDesignPanelDom(root, qr, encodedForQr) {
   const panel = root.querySelector('#sdqr-design-panel');
   if (!panel) return;
   const wasOpen = panel.open;
+  // Onglet ouvert AVANT la reconstruction : le gabarit HTML repart toujours
+  // sur « Modules ». Sans ce relevé, chaque clic sur une palette, un logo ou
+  // un cadre ramenait l'utilisateur au premier onglet.
+  const activeTab = panel.querySelector('#sdqr-dtabs .sdqr-dtab.is-active')?.dataset.dtab || '';
   // On stocke le design en cours sur l'entité temporairement, puis re-render.
   // On PRÉSERVE le mode création (_designCreate) à travers le refresh.
   const merged = { ..._editingDesign };
@@ -6057,6 +6068,7 @@ function _refreshDesignPanelDom(root, qr, encodedForQr) {
   _wireDesignPanel(root, qr, encodedForQr, { create: _designCreate });
   const newPanel = root.querySelector('#sdqr-design-panel');
   if (newPanel && wasOpen) newPanel.open = true;
+  if (newPanel) _setDesignTab(newPanel, activeTab);
 }
 
 // Évalue le contraste réel d'un design. CLÉ : en dégradé, les DEUX bornes
