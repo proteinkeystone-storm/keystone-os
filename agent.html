@@ -571,6 +571,14 @@
     function t(k) { return (I18N[_lang] && I18N[_lang][k] != null) ? I18N[_lang][k] : (I18N.fr[k] || ''); }
     function resolveLang(metaLang) {
       try { const s = sessionStorage.getItem('sa_lang_' + _slug); if (SA_LANGS.includes(s)) { _langChosen = true; return s; } } catch (_) {}
+      // SA-13.5 — ?lang= : langue de la PAGE HOTE quand l'agent est embarque
+      // (ex. micearchives.com/en/). Prioritaire sur navigator.language, sinon un
+      // visiteur au navigateur francais lisant un site anglais obtient un agent
+      // francais. Volontairement SANS _langChosen : cela fixe l'interface et la
+      // phrase d'accueil, mais laisse les REPONSES en mode auto — l'agent
+      // continue de repondre dans la langue de la question posee.
+      const host = (new URLSearchParams(location.search).get('lang') || '').slice(0, 2).toLowerCase();
+      if (SA_LANGS.includes(host)) return host;
       const nav = (navigator.language || '').slice(0, 2).toLowerCase();
       if (SA_LANGS.includes(nav)) return nav;
       if (SA_LANGS.includes(metaLang)) return metaLang;
