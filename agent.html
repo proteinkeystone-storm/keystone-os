@@ -609,6 +609,12 @@
       return (c.title_i18n && c.title_i18n[_lang]) || c.title || '';
     }
     function hasAnyTitle(c) { return !!(c && (c.title || (c.title_i18n && Object.keys(c.title_i18n).length))); }
+    // SA-13.6 — question de carte dans la langue active (repli sur la native).
+    function cardQuestion(c) {
+      if (!c) return '';
+      if (_meta && _lang === _meta.lang) return c.question || '';
+      return (c.question_i18n && c.question_i18n[_lang]) || c.question || '';
+    }
     // Réapplique les libellés UI après un changement de langue, sans re-render.
     function applyI18n() {
       const input = document.getElementById('sa-input');
@@ -1237,7 +1243,7 @@
     // Siwis lit dès la 1ʳᵉ phrase (1er son après ~1 phrase, plus toute la
     // réponse). Le `done` porte le texte canonique (anti-radotage). Repli JSON
     // si le flux n'est pas disponible — le visiteur n'est jamais sans réponse.
-    async function sendMessage(message) {
+    async function sendMessage(message, forceLang) {
       if (_busy) return;
       if (IS_PREVIEW) { previewReply(message); return; }   // démo : réponse simulée, pas d'appel worker
       _busy = true;
@@ -1256,7 +1262,7 @@
         const res = await fetch(`${API_BASE}/api/smart-agent/p/${_slug}/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message, session_id: _sessionId, stream: true, lang: chatLang() }),
+          body: JSON.stringify({ message, session_id: _sessionId, stream: true, lang: forceLang || chatLang() }),
           signal: ctrl.signal,
         });
         if (!res.ok) {
@@ -1268,7 +1274,7 @@
         }
         if (!res.body) {                       // navigateur sans ReadableStream → JSON
           hideTyping();
-          if (!await sendMessageJSON(message)) addRetryBubble(message);
+          if (!await sendMessageJSON(message, forceLang)) addRetryBubble(message);
           return;
         }
 
@@ -1343,7 +1349,7 @@
           addBubble('agent', t('err'), true);              // erreur serveur (message localisé, pas de boucle)
         } else {
           hideTyping();
-          if (!await sendMessageJSON(message)) addRetryBubble(message);   // réseau/SSE KO → repli JSON
+          if (!await sendMessageJSON(message, forceLang)) addRetryBubble(message);   // réseau/SSE KO → repli JSON
         }
         if (_vmOn && _vmState === 'thinking') { vmSub(t('err')); vmSet('idle'); }   // l'orbe ne reste jamais bloqué
       } finally {
@@ -1357,12 +1363,12 @@
 
     // Repli non-streaming (worker sans SSE ou flux indisponible). Renvoie true
     // si une réponse a été affichée. Réutilise l'ancien chemin JSON.
-    async function sendMessageJSON(message) {
+    async function sendMessageJSON(message, forceLang) {
       try {
         const res = await fetch(`${API_BASE}/api/smart-agent/p/${_slug}/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message, session_id: _sessionId, lang: chatLang() }),
+          body: JSON.stringify({ message, session_id: _sessionId, lang: forceLang || chatLang() }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { addBubble('agent', data.error || t('err'), true); return true; }
@@ -1526,7 +1532,7 @@
 
       if (cards.length) {
         document.querySelectorAll('.sav2-card').forEach(btn => {
-          btn.addEventListener('click', () => { const c = cards[+btn.dataset.i]; if (c && c.question) askCard(c.question); });
+          btn.addEventListener('click', () => { const c = cards[+btn.dataset.i]; if (c && c.question) askCard(c); });
         });
         mountCardsNav();
       }
@@ -1659,7 +1665,18 @@
       el.appendChild(btn);
     }
     // Carte cliquée : on pose sa question CACHÉE (jamais affichée) dans le flux normal.
-    function askCard(q) { if (_busy || !q) return; sendMessage(q); }
+    function askCard(c) {
+      if (_busy || !c) return;
+      const q = cardQuestion(c);
+      if (!q) return;
+      // SA-13.6 — si la question part dans sa langue NATIVE alors que le visiteur
+      // lit une autre langue (traduction absente), la detection auto du worker
+      // repondrait dans la langue de la QUESTION — donc en francais sur une page
+      // anglaise. On impose alors la langue de lecture pour cette reponse.
+      const natif = !(c.question_i18n && c.question_i18n[_lang]);
+      const force = (_meta && _lang !== _meta.lang && natif) ? _lang : undefined;
+      sendMessage(q, force);
+    }
 
     /* Démo (?preview=1) — design v2 sans worker : meta + réponses simulées. */
     function demoImg(col) { return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="90"><rect width="120" height="90" fill="' + col + '"/></svg>'); }
@@ -1669,9 +1686,9 @@
       opening_i18n: { en: 'Welcome!\nI am your guide,\nhow may I help you today?', es: '¡Bienvenido!\nSoy su guía,\n¿en qué puedo ayudarle?', de: 'Willkommen!\nIch bin Ihr Berater,\nwie kann ich helfen?' },
       url: 'www.musee-copte.eg', phone: '+20 2 2362 8766',
       cards: [
-        { image: demoImg('#a87b3a'), question: 'Parlez-moi de cet objet',          answer: 'Cet encensoir en argent ciselé date du XVIIIᵉ siècle ; la fumée de l\'encens y symbolise les prières qui montent vers le ciel.', title: 'L\'encensoir', title_i18n: { en: 'The censer', es: 'El incensario', de: 'Das Räuchergefäß' } },
-        { image: demoImg('#5d6b86'), question: 'Qu\'est-ce que cette fontaine ?',    answer: 'Une fontaine d\'ablutions du XIᵉ siècle, en marbre incrusté, qui ornait la cour d\'une maison copte.', title: 'La fontaine', title_i18n: { en: 'The fountain', es: 'La fuente', de: 'Der Brunnen' } },
-        { image: demoImg('#9a7a3a'), question: 'Racontez-moi cette icône',          answer: 'Une icône de la Fuite en Égypte : la Sainte Famille accueillie sur la terre d\'Égypte, épisode cher aux coptes.', title: 'L\'icône', title_i18n: { en: 'The icon', es: 'El icono', de: 'Die Ikone' } }
+        { image: demoImg('#a87b3a'), question: 'Parlez-moi de cet objet', question_i18n: { en: 'Tell me about this object', es: 'Hábleme de este objeto', de: 'Erzählen Sie mir von diesem Objekt' }, answer: 'Cet encensoir en argent ciselé date du XVIIIᵉ siècle ; la fumée de l\'encens y symbolise les prières qui montent vers le ciel.', title: 'L\'encensoir', title_i18n: { en: 'The censer', es: 'El incensario', de: 'Das Räuchergefäß' } },
+        { image: demoImg('#5d6b86'), question: 'Qu\'est-ce que cette fontaine ?', question_i18n: { en: 'What is this fountain?', es: '¿Qué es esta fuente?', de: 'Was ist dieser Brunnen?' }, answer: 'Une fontaine d\'ablutions du XIᵉ siècle, en marbre incrusté, qui ornait la cour d\'une maison copte.', title: 'La fontaine', title_i18n: { en: 'The fountain', es: 'La fuente', de: 'Der Brunnen' } },
+        { image: demoImg('#9a7a3a'), question: 'Racontez-moi cette icône', question_i18n: { en: 'Tell me about this icon', es: 'Cuénteme sobre este icono', de: 'Erzählen Sie mir von dieser Ikone' }, answer: 'Une icône de la Fuite en Égypte : la Sainte Famille accueillie sur la terre d\'Égypte, épisode cher aux coptes.', title: 'L\'icône', title_i18n: { en: 'The icon', es: 'El icono', de: 'Die Ikone' } }
       ]
     };
     const DEMO_DEFAULT = 'Le Musée Copte est ouvert du lundi au samedi de 9h00 à 12h00 et de 14h00 à 18h00. Il est fermé le dimanche. Avez-vous besoin d\'autres informations pour préparer votre visite ?';
@@ -1680,7 +1697,10 @@
       const send = document.getElementById('sa-send'); if (send) send.disabled = true;
       showTyping();
       if (_voiceOn || _vmOn) _warmPiper();
-      const card = (DEMO_META.cards || []).find(c => c.question === message);
+      // SA-13.6 — la question peut partir TRADUITE : on rapproche aussi sur les
+      // variantes, sinon la demo retombe sur la reponse par defaut.
+      const card = (DEMO_META.cards || []).find(c => c.question === message
+        || (c.question_i18n && Object.values(c.question_i18n).includes(message)));
       const reply = card ? card.answer : DEMO_DEFAULT;
       setTimeout(() => {
         hideTyping(); addBubble('agent', reply);

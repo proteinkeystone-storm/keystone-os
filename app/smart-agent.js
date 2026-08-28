@@ -917,7 +917,7 @@ function _openForm(agent) {
         themeWmOpacity: (typeof agent?.config?.theme?.watermark_opacity === 'number') ? agent.config.theme.watermark_opacity : 0.15,
         // Lot 3 — cartes-photos cliquables (copie éditable).
         cards: Array.isArray(agent?.config?.cards)
-            ? agent.config.cards.map(c => ({ img: c.img || '', q: c.q || '', alt: c.alt || '', title: c.title || '', title_i18n: (c.title_i18n && typeof c.title_i18n === 'object') ? { ...c.title_i18n } : {} })) : [],
+            ? agent.config.cards.map(c => ({ img: c.img || '', q: c.q || '', alt: c.alt || '', title: c.title || '', title_i18n: (c.title_i18n && typeof c.title_i18n === 'object') ? { ...c.title_i18n } : {}, question_i18n: (c.question_i18n && typeof c.question_i18n === 'object') ? { ...c.question_i18n } : {} })) : [],
         fallback: agent?.config?.scope?.fallback_text || 'Je ne dispose pas de cette information.',
         fallbackVariants: Array.isArray(agent?.config?.scope?.fallback_variants)
             ? agent.config.scope.fallback_variants.slice(0, 4) : [],
@@ -973,6 +973,7 @@ function _agentFormHTML() {
               <input class="sa-input sa-cardcfg-title" data-card-title="${i}" value="${_escAttr(c.title || '')}" maxlength="60" placeholder="Titre affiché en pill au bas de la carte (optionnel)">
               <div class="sa-tr-row">${[['en', 'EN'], ['es', 'ES'], ['de', 'DE']].map(([lg, lbl]) => `<input class="sa-input sa-tr-in" data-card-title-i18n="${i}:${lg}" value="${_escAttr((c.title_i18n && c.title_i18n[lg]) || '')}" maxlength="60" placeholder="Titre ${lbl}">`).join('')}</div>
               <input class="sa-input sa-cardcfg-q" data-card-q="${i}" value="${_escAttr(c.q)}" maxlength="200" placeholder="Question posée au clic (ex. : Parlez-moi de cet objet)">
+              <div class="sa-tr-row">${[['en', 'EN'], ['es', 'ES'], ['de', 'DE']].map(([lg, lbl]) => `<input class="sa-input sa-tr-in" data-card-q-i18n="${i}:${lg}" value="${_escAttr((c.question_i18n && c.question_i18n[lg]) || '')}" maxlength="200" placeholder="Question ${lbl}">`).join('')}</div>
             </div>
             <div class="sa-cardcfg-ops">
               <button class="sa-cardcfg-op" type="button" data-act="form-card-up" data-i="${i}" title="Monter"${i === 0 ? ' disabled' : ''}>${icon('chevron-up', 15)}</button>
@@ -1358,6 +1359,15 @@ function _readAgentForm() {
       const v = inp.value.trim();
       if (v) card.title_i18n[lg] = v; else delete card.title_i18n[lg];
     });
+    // SA-13.6 — traductions de la question de carte (data-card-q-i18n="i:lang").
+    main.querySelectorAll('[data-card-q-i18n]').forEach(inp => {
+      const [i, lg] = (inp.dataset.cardQI18n || '').split(':');
+      const card = d.cards && d.cards[+i];
+      if (!card) return;
+      card.question_i18n = card.question_i18n || {};
+      const v = inp.value.trim();
+      if (v) card.question_i18n[lg] = v; else delete card.question_i18n[lg];
+    });
     // SA-8.0 — variantes de repli (inputs indexés)
     const fbvs = main.querySelectorAll('[data-field="fbv"]');
     if (fbvs.length) d.fallbackVariants = Array.from(fbvs).map(i => i.value.trim()).filter(Boolean);
@@ -1471,7 +1481,7 @@ function _agentPayload() {
                         fallback_variants: (d.fallbackVariants || []).filter(v => v && v.trim()) },
             contact:  { website_url: d.websiteUrl || '', website_label: d.websiteLabel || '', phone: d.phone || '' },
             theme:    { bg_bottom: d.themeBgBottom || '', ui_color: d.themeUiColor || '', watermark_key: d.themeWmKey || '', watermark_opacity: (typeof d.themeWmOpacity === 'number' ? d.themeWmOpacity : 0.15) },
-            cards:    (d.cards || []).filter(c => c.img && c.q).map(c => ({ img: c.img, q: c.q, alt: c.alt || '', title: c.title || '', title_i18n: (c.title_i18n && Object.keys(c.title_i18n).length) ? c.title_i18n : {} })),
+            cards:    (d.cards || []).filter(c => c.img && c.q).map(c => ({ img: c.img, q: c.q, alt: c.alt || '', title: c.title || '', title_i18n: (c.title_i18n && Object.keys(c.title_i18n).length) ? c.title_i18n : {}, question_i18n: (c.question_i18n && Object.keys(c.question_i18n).length) ? c.question_i18n : {} })),
         },
     };
 }

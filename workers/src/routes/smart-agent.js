@@ -2667,6 +2667,12 @@ export function validateCards(raw) {
       // SA-11.3 — traductions optionnelles du titre (pill visible). Repli natif.
       const ti = sanitizeI18nMap(c.title_i18n, 60);
       if (Object.keys(ti).length) card.title_i18n = ti;
+      // SA-13.6 — traductions optionnelles de la QUESTION posee au clic. Sans
+      // elles, un visiteur anglais qui touche une carte envoie la question
+      // francaise et recoit donc une reponse en francais (le worker detecte la
+      // langue du message). Meme borne que `q`.
+      const qi = sanitizeI18nMap(c.question_i18n, 200);
+      if (Object.keys(qi).length) card.question_i18n = qi;
       return card;
     })
     .filter(c => c.img && c.q)
@@ -2753,7 +2759,7 @@ export function publicAgentMeta(agent, apiOrigin = '') {
     // Lot 3 — cartes : image (URL absolue servie par le worker) + question cachée + alt.
     cards: cds
       .filter(c => c && typeof c.img === 'string' && c.img && typeof c.q === 'string' && c.q)
-      .map(c => ({ image: apiOrigin + '/api/smart-agent/card-img/' + c.img, question: c.q, alt: (typeof c.alt === 'string') ? c.alt : '', title: (typeof c.title === 'string') ? c.title : '', title_i18n: (c.title_i18n && typeof c.title_i18n === 'object') ? c.title_i18n : {} })),
+      .map(c => ({ image: apiOrigin + '/api/smart-agent/card-img/' + c.img, question: c.q, alt: (typeof c.alt === 'string') ? c.alt : '', title: (typeof c.title === 'string') ? c.title : '', title_i18n: (c.title_i18n && typeof c.title_i18n === 'object') ? c.title_i18n : {}, question_i18n: (c.question_i18n && typeof c.question_i18n === 'object') ? c.question_i18n : {} })),
   };
 }
 

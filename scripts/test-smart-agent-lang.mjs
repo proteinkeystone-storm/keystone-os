@@ -123,6 +123,32 @@ console.log('\n\x1b[1m▶ Suite 6 — Contenu propriétaire multilingue (SA-11.3
   }, 'https://x');
   check('meta expose opening_i18n', meta.opening_i18n && meta.opening_i18n.en === 'Hello' && meta.opening_i18n.de === 'Hallo');
   check('meta carte expose title_i18n', meta.cards[0].title_i18n && meta.cards[0].title_i18n.en === 'Item');
+
+  // ── SA-13.6 — question_i18n : la QUESTION posée au clic est traduisible.
+  // Sans elle, un visiteur anglais qui touche une carte envoie la question
+  // française et reçoit une réponse française (le worker suit la langue du
+  // message). Même contrat que title_i18n, borne alignée sur `q` (200).
+  const cq = validateCards([{ img: key, q: 'Résume-moi Gouzenko',
+    question_i18n: { en: 'Sum up the Gouzenko affair', es: '  ', de: 'Fasse Gouzenko zusammen' } }]);
+  check('carte : question_i18n nettoyé conservé',
+    cq[0].question_i18n && cq[0].question_i18n.en === 'Sum up the Gouzenko affair'
+    && cq[0].question_i18n.de === 'Fasse Gouzenko zusammen' && !('es' in cq[0].question_i18n));
+  check('carte sans traduction : pas de question_i18n', !('question_i18n' in cv2[0]));
+  check('question_i18n : le français n\'est jamais stocké',
+    !('fr' in validateCards([{ img: key, q: 'Q', question_i18n: { fr: 'Français', en: 'English' } }])[0].question_i18n));
+  const long = 'x'.repeat(260);
+  check('question_i18n : borne à 200 caractères',
+    validateCards([{ img: key, q: 'Q', question_i18n: { en: long } }])[0].question_i18n.en.length === 200);
+
+  const meta2 = publicAgentMeta({
+    name: 'A', config: { identity: {},
+      cards: [{ img: key, q: 'Résume-moi Gouzenko', question_i18n: { en: 'Sum up Gouzenko' } },
+              { img: key, q: 'Et Farewell ?' }] },
+  }, 'https://x');
+  check('meta carte expose question_i18n', meta2.cards[0].question_i18n && meta2.cards[0].question_i18n.en === 'Sum up Gouzenko');
+  check('meta carte sans traduction : question_i18n = {}',
+    meta2.cards[1].question_i18n && Object.keys(meta2.cards[1].question_i18n).length === 0);
+  check('question native toujours servie', meta2.cards[0].question === 'Résume-moi Gouzenko');
 }
 
 // ════════════════════════════════════════════════════════════════
