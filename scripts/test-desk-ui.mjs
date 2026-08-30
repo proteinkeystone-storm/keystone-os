@@ -100,6 +100,7 @@ function mondeNeuf() {
       kind: n === 1 || n === 16 ? 'fixe' : 'vide',
       fixe_tag: n === 1 ? 'Couverture' : (n === 16 ? '4e de couv' : null),
       fixe_title: null, rub_id: null,
+      folio_mode: null, folio_start: null,
       updated_at: SQL_NOW(-600), updated_by: null,
     });
   }
@@ -414,6 +415,19 @@ function apiDesk(method, path, body) {
     if (!page) return [404, { error: 'Page introuvable' }];
     if ('rub_id' in body) page.rub_id = body.rub_id || null;
     if (body.kind) { page.kind = body.kind; page.fixe_tag = body.fixe_tag || page.fixe_tag; }
+    return [200, { ok: true }];
+  }
+
+  // Numérotation par page (août 2026) — miroir de handlePageFolio : auto
+  // efface (NULL/NULL), hors/ancre s'écrivent. La validation fine et le gate
+  // owner du worker sont prouvés par test-desk-folio.mjs ; ici, le GESTE.
+  if ((m = path.match(/^\/page\/([^/]+)\/folio$/)) && method === 'POST') {
+    const page = pageById(m[1]);
+    if (!page) return [404, { error: 'Page introuvable' }];
+    const mode = String((body || {}).mode || '');
+    if (!['auto', 'hors', 'ancre'].includes(mode)) return [400, { error: 'Mode de numérotation inconnu' }];
+    page.folio_mode = mode === 'auto' ? null : mode;
+    page.folio_start = mode === 'ancre' ? (parseInt(body.start, 10) || 0) : null;
     return [200, { ok: true }];
   }
 
@@ -2631,12 +2645,93 @@ await parcours('Parcours 20 — « + Article » centré dans sa pilule ET dans s
 });
 
 /* ─────────────────────────────────────────────────────────────────
+   PARCOURS 21 · La numérotation se règle page par page (août 2026).
+   Une revue = DEUX maquettes InDesign : le cahier de couverture (C1-C4)
+   s'enroule autour de l'intérieur — la 4ᵉ de couv héritait d'un folio
+   d'intérieur et « ça ne tombait jamais bien ». Depuis la fiche d'une
+   page : hors numérotation, ou numéro imposé qui fait recouler la suite.
+   ───────────────────────────────────────────────────────────────── */
+await parcours('Parcours 21 — la numérotation se règle page par page', async () => {
+  await page.setViewport({ width: 1280, height: 640 });
+  await ouvrirLePad(page, BASE);
+  const plancheDe = n => page.evaluate(k => {
+    const c = document.querySelector(`.dk-frise .dk-pcard[data-n="${k}"]`);
+    return c ? c.closest('.dk-planche').querySelector('.dk-planche-num').textContent.trim() : null;
+  }, n);
+
+  // L'état de départ DIT le problème : la 4ᵉ de couv porte un folio d'intérieur.
+  check('départ : la 4ᵉ de couv (16ᵉ physique) porte le folio 14 — le problème à régler',
+    (await plancheDe(16)) === '14', await plancheDe(16));
+
+  // 1 · La sortir de la numérotation, depuis sa fiche.
+  await cliquer(page, '.dk-frise .dk-pcard[data-n="16"]');
+  await attendSel(page, '.dk-insp.on [data-slot="foliosec"]', 'la section « Numérotation » de la fiche');
+  await choisir(page, '.dk-insp [data-k="foliomode"]', 'hors');
+  check('l\'aperçu vivant annonce « 4ᵉ de couv. » avant d\'écrire quoi que ce soit',
+    /4ᵉ de couv/.test(await texte(page, '.dk-insp [data-slot="foliopreview"]')),
+    (await texte(page, '.dk-insp [data-slot="foliopreview"]')).trim());
+  check('rien n\'est écrit tant qu\'on n\'applique pas', appels('POST', /\/folio$/).length === 0);
+  await cliquer(page, '.dk-insp [data-act="savefolio"]');
+  await attend(page, () => {
+    const c = document.querySelector('.dk-frise .dk-pcard[data-n="16"]');
+    return c && /4e de couv/.test(c.closest('.dk-planche').querySelector('.dk-planche-num').textContent);
+  }, null, 'la planche de la 4ᵉ de couv re-étiquetée');
+  check('le réglage est ÉCRIT (POST /page/pg-16/folio, mode « hors »)',
+    appels('POST', /^\/page\/pg-16\/folio$/).some(x => x.body && x.body.mode === 'hors'),
+    JSON.stringify(appels('POST', /\/folio$/).map(x => x.body)));
+  check('la planche affiche l\'étiquette de la page, le folio 14 a disparu',
+    (await plancheDe(16)) === '4e de couv', await plancheDe(16));
+
+  // 2 · Imposer un numéro au milieu : toute la suite recoule.
+  await cliquer(page, '.dk-frise .dk-pcard[data-n="10"]');
+  await attendSel(page, '.dk-insp.on [data-slot="foliosec"]');
+  await choisir(page, '.dk-insp [data-k="foliomode"]', 'ancre');
+  await attend(page, () => {
+    const r = document.querySelector('.dk-insp [data-slot="foliostart"]');
+    return r && r.style.display !== 'none';
+  }, null, 'le champ du numéro imposé');
+  await saisir(page, '.dk-insp [data-k="foliostart"]', '40');
+  check('l\'aperçu recoule en direct (40 · 41 · 42)',
+    /40 · 41 · 42/.test(await texte(page, '.dk-insp [data-slot="foliopreview"]')),
+    (await texte(page, '.dk-insp [data-slot="foliopreview"]')).trim());
+  await cliquer(page, '.dk-insp [data-act="savefolio"]');
+  await attend(page, () => {
+    const c = document.querySelector('.dk-frise .dk-pcard[data-n="10"]');
+    return c && /40/.test(c.closest('.dk-planche').querySelector('.dk-planche-num').textContent);
+  }, null, 'la planche recalée sur 40');
+  check('le réglage est ÉCRIT (POST /page/pg-10/folio {ancre, 40})',
+    appels('POST', /^\/page\/pg-10\/folio$/).some(x => x.body && x.body.mode === 'ancre' && x.body.start === 40),
+    JSON.stringify(appels('POST', /\/folio$/).map(x => x.body)));
+  check('la planche 10-11 lit « 40–41 »', (await plancheDe(10)) === '40–41', await plancheDe(10));
+  check('la suite recoule (planche 12-13 : « 42–43 »)', (await plancheDe(12)) === '42–43', await plancheDe(12));
+  check('la fiche parle le nouveau folio (« page 40 » en tête)',
+    /page 40/.test(await texte(page, '.dk-insp .dk-insp-hd')), (await texte(page, '.dk-insp .dk-insp-hd')).trim());
+
+  if (process.env.DK_SHOTS) {
+    try { fs.mkdirSync(process.env.DK_SHOTS, { recursive: true }); } catch (_) {}
+    const el = await page.$('.dk-insp [data-slot="foliosec"]');
+    if (el) await el.screenshot({ path: `${process.env.DK_SHOTS}/21-numerotation.png` });
+  }
+
+  // 3 · Non-propriétaire : pas de section — décision d'impression du
+  //     maquettiste (le worker refuse aussi, prouvé par test-desk-folio.mjs).
+  DB.pub.owner = false;
+  await page.goto(BASE + '/__dk7-harnais.html', { waitUntil: 'domcontentloaded' });
+  await attendSel(page, '.dk-frise .dk-pcard', 'le chemin de fer rechargé (non-owner)');
+  await cliquer(page, '.dk-frise .dk-pcard[data-n="10"]');
+  await attendSel(page, '.dk-insp.on .dk-sec', 'la fiche (non-owner)');
+  check('un membre non propriétaire ne voit PAS la section Numérotation',
+    !(await existe(page, '.dk-insp [data-slot="foliosec"]')));
+  DB.pub.owner = true;
+});
+
+/* ─────────────────────────────────────────────────────────────────
    Hygiène : aucune erreur JS n'a été avalée en chemin.
    ───────────────────────────────────────────────────────────────── */
 console.log('\n\x1b[1m▶ Hygiène\x1b[0m');
 {
   const graves = erreursPage.filter(e => !/favicon|LOGOS|ERR_/.test(e));
-  check('aucune erreur JavaScript pendant les vingt parcours', graves.length === 0,
+  check('aucune erreur JavaScript pendant les vingt-et-un parcours', graves.length === 0,
     graves.slice(0, 4).join(' | '));
 }
 

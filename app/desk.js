@@ -47,7 +47,7 @@ import { openGhostwriterChained }             from './ghostwriter.js';   // DK-5
 // K-9 : règles métier PURES partagées avec Kora (relances, folio, statuts).
 // Une seule implémentation — Kora lit « qui relancer » comme desK l'affiche.
 import {
-  DK_STATUS_LABEL, dkNeedsCopy, dkNumOpt, dkFolio, dkPn,
+  DK_STATUS_LABEL, dkNeedsCopy, dkNumOpt, dkFolio, dkFolioMap, dkPn, dkHorsNumLabel, dkHorsNumShort,
   dkContribByName, dkRelancesOf, dkRelanceInfo, dkRelancesDues,
 } from './lib/desk-rules.js';
 
@@ -540,26 +540,109 @@ function _computeArt(a, simDue) {
 function _stateOf(marge) { return marge === null ? '' : (marge < 0 ? 'rouge' : (marge <= AMBRE_SEUIL ? 'ambre' : '')); }
 function _margeTxt(m) { return m === null ? '' : (m < 0 ? 'marge brûlée (' + m + ' j)' : 'marge ' + m + ' j'); }
 
-/* ═══ Numérotation d'affichage (option par publication) ═══
+/* ═══ Numérotation d'affichage (folio) ═══
    L'ordre PHYSIQUE des pages (p.n) ne bouge JAMAIS — il pilote le drag, le
    move, la confrontation au PDF. Ces helpers ne changent QUE le folio AFFICHÉ.
-   Demande L'Épaulette : la couverture est hors numérotation (« Couverture »),
-   la page qui suit démarre à 0, donc le sommaire (3ᵉ page physique) porte le 1. */
-// Calcul partagé avec Kora (lib/desk-rules.js) : ces wrappers ne font que
-// lui fournir la publication courante.
+   Deux étages (calcul partagé avec Kora : lib/desk-rules.js) :
+   · Réglages → Numérotation (publication) = le socle (couverture, départ) ;
+   · fiche d'une page → Numérotation (par page) = hors numérotation (2ᵉ/3ᵉ/4ᵉ
+     de couv…) ou numéro imposé, la suite recoule. Août 2026 : une revue =
+     DEUX maquettes InDesign, le cahier de couverture s'enroule autour de
+     l'intérieur — le réglage global seul ne tombait jamais juste. */
 function _curPub() { return _pubs.find(p => p.id === _pubId) || {}; }
 function _numOpt() { return dkNumOpt(_curPub()); }
-function _dispN(n) { return dkFolio(n, _curPub()); }   // folio affiché ; null = couverture non numérotée
-function _pn(n) { return dkPn(n, _curPub()); }         // pour « p. X », toasts…
+// La carte n → folio n'est recalculée que quand les pages changent
+// (_loadIssue remplace _D.pages = nouvelle référence) ou quand un réglage
+// mute en place (_folioDirty() : réglages publication, folio d'une fiche).
+let _fmCache = { pages: null, rev: -1, map: new Map() };
+let _folioRev = 0;
+function _folioDirty() { _folioRev++; }
+function _folioMap() {
+  const pages = (_D && _D.pages) || [];
+  if (_fmCache.pages !== pages || _fmCache.rev !== _folioRev)
+    _fmCache = { pages, rev: _folioRev, map: dkFolioMap(pages, _curPub()) };
+  return _fmCache.map;
+}
+function _pTotal() { return ((_D && _D.pages) || []).length; }
+function _dispN(n) {                     // folio affiché ; null = hors numérotation
+  const m = _folioMap();
+  return m.has(n) ? m.get(n) : dkFolio(n, _curPub());
+}
+function _pn(n) {                        // pour « p. X », toasts…
+  const d = _dispN(n);
+  return d === null ? dkHorsNumShort(n, _pTotal()) : String(d);
+}
 function _pageLabel(p) {                 // en-tête de fiche : « page 3 » ou « Couverture »
   const d = _dispN(p.n);
-  return d === null ? (p.fixe_tag || p.fixe_title || 'Couverture') : 'page ' + d;
+  return d === null ? (p.fixe_tag || p.fixe_title || dkHorsNumLabel(p.n, _pTotal())) : 'page ' + d;
 }
 function _plancheLabel(pl) {             // libellé sous une planche de la frise
-  const o = _numOpt();
-  if (o.cover && pl.length === 1 && pl[0].n === 1)
-    return _esc(pl[0].fixe_tag || pl[0].fixe_title || 'Couverture');
-  return pl.length === 2 ? _pn(pl[0].n) + '–' + _pn(pl[1].n) : _pn(pl[0].n);
+  return pl.map(p => {
+    const d = _dispN(p.n);
+    return d === null ? _esc(p.fixe_tag || p.fixe_title || dkHorsNumShort(p.n, _pTotal())) : String(d);
+  }).join('–');
+}
+
+/* ── Numérotation PAR PAGE (fiche, owner) ──
+   La demande d'août 2026 : « pouvoir changer les numéros de pages, même
+   après avoir créé un chemin de fer ». Trois modes : automatique / hors
+   numérotation / numéro imposé (la suite recoule). Décision d'impression
+   du maquettiste → owner seul, comme le réglage de publication. */
+function _folioSectionHTML(p) {
+  if (!_curPub().owner) return '';
+  const mode = p.folio_mode || 'auto';
+  const d = _dispN(p.n);
+  const startVal = Number.isFinite(p.folio_start) ? p.folio_start : (d === null ? 0 : d);
+  return `<div class="dk-sec" data-slot="foliosec"><h4>Numérotation</h4>
+    <label class="dk-field dk-field-row"><span>Cette page</span><select data-k="foliomode">
+      <option value="auto" ${mode === 'auto' ? 'selected' : ''}>Automatique</option>
+      <option value="hors" ${mode === 'hors' ? 'selected' : ''}>Hors numérotation</option>
+      <option value="ancre" ${mode === 'ancre' ? 'selected' : ''}>Numéro imposé</option>
+    </select></label>
+    <label class="dk-field dk-field-row" data-slot="foliostart" style="${mode === 'ancre' ? '' : 'display:none'}"><span>Elle porte le n°</span>
+      <input type="number" data-k="foliostart" min="0" max="2000" step="1" value="${startVal}"></label>
+    <div class="dk-btn-row"><button class="dk-btn small primary" data-act="savefolio">Appliquer</button>
+      <span class="dk-note" data-slot="foliopreview" style="align-self:center"></span></div>
+    <p class="dk-note">« Hors numérotation » = couvertures, pub pleine page… « Numéro imposé » recale toute la suite à partir d'ici. L'ordre réel des pages ne change pas.</p>
+  </div>`;
+}
+function _bindFolio(insp, p) {
+  const sec = insp.querySelector('[data-slot="foliosec"]');
+  if (!sec) return;
+  const sel = sec.querySelector('[data-k="foliomode"]');
+  const row = sec.querySelector('[data-slot="foliostart"]');
+  const inp = sec.querySelector('[data-k="foliostart"]');
+  const prev = sec.querySelector('[data-slot="foliopreview"]');
+  const paint = () => {
+    row.style.display = sel.value === 'ancre' ? '' : 'none';
+    // Aperçu vivant : la carte recalculée avec le réglage choisi — rien
+    // n'est écrit tant qu'on n'applique pas (même esprit que la simulation).
+    const essai = ((_D && _D.pages) || []).map(q => q.n === p.n
+      ? { ...q, folio_mode: sel.value === 'auto' ? null : sel.value, folio_start: sel.value === 'ancre' ? (parseInt(inp.value, 10) || 0) : null }
+      : q);
+    const m = dkFolioMap(essai, _curPub());
+    const lbl = n => { const v = m.get(n); return v === null ? dkHorsNumShort(n, essai.length) : String(v); };
+    const bits = [lbl(p.n)];
+    if (p.n + 1 <= essai.length) bits.push(lbl(p.n + 1));
+    if (p.n + 2 <= essai.length) bits.push(lbl(p.n + 2));
+    prev.textContent = 'Aperçu : ' + bits.join(' · ') + (p.n + 2 < essai.length ? ' …' : '');
+  };
+  paint();
+  sel.addEventListener('change', paint);
+  inp?.addEventListener('input', paint);
+  sec.querySelector('[data-act="savefolio"]').onclick = async () => {
+    const mode = sel.value;
+    const body = { mode };
+    if (mode === 'ancre') body.start = parseInt(inp.value, 10) || 0;
+    try {
+      await _api('/page/' + p.id + '/folio', { method: 'POST', body });
+      _toast(mode === 'hors' ? 'Page sortie de la numérotation — la suite recoule.'
+        : mode === 'ancre' ? `Cette page porte le n° ${body.start} — la suite recoule.`
+        : 'Numérotation automatique rétablie.');
+      _folioDirty();
+      await _loadIssue(true); _openInsp(p.n, true);
+    } catch (e) { _toast(e.message, true); }
+  };
 }
 function _artById(id) { return (_D.articles || []).find(a => a.id === id) || null; }
 function _rubById(id) { return (_D.rubriques || []).find(r => r.id === id) || null; }
@@ -2010,9 +2093,11 @@ function _renderInspFixe(insp, p) {
       <p class="dk-note">Une page figée ne bouge pas quand le contenu coule autour (repagination) — une pub vendue « page ${_pn(p.n)} » reste page ${_pn(p.n)}.</p>
     </div>
     ${_casierSectionHTML(p)}
+    ${_folioSectionHTML(p)}
     ${p.updated_by ? `<p class="dk-modified">Modifié par ${_esc(p.updated_by)} ${_relTime(p.updated_at)}</p>` : ''}`, 'fiche');
   _bindClose(insp);
   _bindCasier(insp, p, () => _openInsp(p.n, true));
+  _bindFolio(insp, p);
   insp.querySelector('[data-act="savefixe"]').onclick = async () => {
     try {
       await _api('/page/' + p.id, { method: 'PATCH', body: { fixe_title: insp.querySelector('[data-k="fixe_title"]').value } });
@@ -2059,9 +2144,11 @@ function _renderInspVide(insp, p) {
     </div>
     <div class="dk-sec"><div class="dk-btn-row"><button class="dk-btn primary" data-act="newarthere">${icon('plus', 14)} Nouvel article sur cette page</button></div></div>
     ${_casierSectionHTML(p)}
+    ${_folioSectionHTML(p)}
     ${p.updated_by ? `<p class="dk-modified">Modifié par ${_esc(p.updated_by)} ${_relTime(p.updated_at)}</p>` : ''}`, 'fiche');
   _bindClose(insp);
   _bindCasier(insp, p, () => _openInsp(p.n, true));
+  _bindFolio(insp, p);
   insp.querySelectorAll('[data-act="reserve"]').forEach(b => b.onclick = async () => {
     const span = Math.max(1, Math.min(run.length, parseInt(insp.querySelector('[data-k="span"]')?.value, 10) || 1));
     const cible = run.slice(0, span);
@@ -2241,11 +2328,13 @@ function _renderInspArticle(insp, p) {
       ${extRun.length ? `<button class="dk-btn" data-act="spread">${icon('copy', 14)} Étaler sur les pages suivantes</button>` : ''}
       ${slots.length < 12 ? `<button class="dk-btn" data-act="addslot">${icon('plus', 14)} Ajouter un article ici</button>` : ''}
     </div><div data-slot="spreadpick"></div><div data-slot="slotpick"></div></div>
+    ${_folioSectionHTML(p)}
     ${p.updated_by ? `<p class="dk-modified">Carte modifiée par ${_esc(p.updated_by)} ${_relTime(p.updated_at)}</p>` : ''}`, 'fiche');
   _bindClose(insp);
 
   insp.querySelectorAll('[data-slotidx]').forEach(b => b.onclick = () => { _selSlot = parseInt(b.dataset.slotidx, 10); _openInsp(p.n, true); });
   _bindCasier(insp, p, () => _openInsp(p.n, true));
+  _bindFolio(insp, p);
   _bindPasserelles(insp, a);
   insp.querySelector('[data-act="write"]')?.addEventListener('click', () => _openWriter(a.id, () => _openInsp(p.n, true)));
   insp.querySelector('[data-act="relance"]')?.addEventListener('click', () => _openRelanceForm(a, () => _openInsp(p.n, true)));
@@ -3299,6 +3388,7 @@ async function _openSettings() {
         <div class="dk-btn-row"><button class="dk-btn small primary" data-act="savenum">Enregistrer</button>
           <span class="dk-note" data-slot="numpreview" style="align-self:center"></span></div>
         <p class="dk-note">La couverture s'affiche « Couverture » sans folio ; la numérotation reprend au numéro choisi (0 pour L'Épaulette, le sommaire devient alors « 1 »). L'ordre réel des pages ne change pas — seul le folio affiché change.</p>
+        <p class="dk-note">Cas particulier (2ᵉ/3ᵉ/4ᵉ de couverture, numéro à recaler en cours de route) : ouvrez la fiche de la page concernée → section « Numérotation ».</p>
       </div>`;
     })() : ''}
 
@@ -3466,6 +3556,7 @@ async function _openSettings() {
       try {
         await _api('/publication/' + _pubId, { method: 'PATCH', body });
         if (pub) { pub.cover_unnumbered = cover; pub.first_folio = body.first_folio; }
+        _folioDirty();                  // pub muté en place — le cache folio doit le voir
         _toast('Numérotation mise à jour.');
         _renderFer();               // frise + rail reprennent le nouveau folio
         _openSettings();

@@ -45,23 +45,75 @@ export function dkNeedsCopy(status) {
    le folio AFFICHÉ est transformé. L'Épaulette : couverture hors
    numérotation, la page suivante démarre à 0 → le sommaire (3ᵉ page
    physique) porte le « 1 ».
-   ⚠ Kora DOIT passer par là : le worker ne renvoie que le physique,
-   dire « page 3 » quand la rédactrice lit « page 1 » est un bug de
-   conversation (décalage de 2 sur la vraie publication en prod). */
+   Deux étages depuis août 2026 (une revue = DEUX maquettes InDesign :
+   le cahier de couverture C1-C4 s'ENROULE autour de l'intérieur — la
+   3ᵉ/4ᵉ de couv sont les DERNIÈRES pages physiques, le réglage de
+   publication seul ne tombait jamais juste) :
+   · publication (cover_unnumbered / first_folio) = le socle ;
+   · par page (dk_pages.folio_mode / folio_start), par-dessus :
+     'hors'  = la page sort de la numérotation (2ᵉ/3ᵉ/4ᵉ de couv…) ;
+               elle ne CONSOMME pas de numéro, comme la couverture ;
+     'ancre' = la page porte folio_start et la SUITE recoule d'elle.
+   ⚠ Kora DOIT passer par là — et fournir `pages` quand il les a : le
+   worker ne renvoie que le physique, dire « page 3 » quand la
+   rédactrice lit « page 1 » est un bug de conversation. */
 export function dkNumOpt(pub) {
   return {
     cover: !!(pub && pub.cover_unnumbered),
     first: (pub && Number.isFinite(pub.first_folio)) ? pub.first_folio : 1,
   };
 }
-export function dkFolio(n, pub) {          // folio affiché ; null = couverture non numérotée
+/* Carte n (physique) → folio affiché (entier) ou null (hors numérotation).
+   `pages` = TOUTES les pages du numéro ({n, folio_mode, folio_start}) —
+   un sous-ensemble fausserait le comptage. Une ancre sur la page 1 gagne
+   sur cover_unnumbered (le réglage explicite bat le défaut). */
+export function dkFolioMap(pages, pub) {
+  const o = dkNumOpt(pub);
+  const rows = (pages || [])
+    .map(p => ({ n: p.n, mode: p.folio_mode || 'auto', start: p.folio_start }))
+    .sort((a, b) => a.n - b.n);
+  const map = new Map();
+  let counter = o.first;
+  for (const p of rows) {
+    if (p.mode === 'hors' || (p.mode === 'auto' && o.cover && p.n === 1)) { map.set(p.n, null); continue; }
+    // ⚠ Number(null) vaut 0 : une ancre sans numéro recalerait tout à zéro.
+    // Données sales (mode 'ancre', start null) → on dégrade en automatique.
+    const st = (p.mode === 'ancre' && p.start != null) ? Number(p.start) : NaN;
+    if (Number.isFinite(st)) counter = st;
+    map.set(p.n, counter); counter++;
+  }
+  return map;
+}
+/* Étiquette d'une page hors numérotation, déduite de sa POSITION physique
+   (total = nombre de pages du numéro). Version longue pour les fiches… */
+export function dkHorsNumLabel(n, total) {
+  if (n === 1) return 'Couverture';
+  if (total >= 2 && n === total) return '4ᵉ de couverture';
+  if (n === 2) return '2ᵉ de couverture';
+  if (total >= 3 && n === total - 1) return '3ᵉ de couverture';
+  return 'Hors numérotation';
+}
+/* …et courte pour les planches et les phrases (« p. X ») de Kora. */
+export function dkHorsNumShort(n, total) {
+  if (n === 1) return 'couv.';
+  if (total >= 2 && n === total) return '4ᵉ de couv.';
+  if (n === 2) return '2ᵉ de couv.';
+  if (total >= 3 && n === total - 1) return '3ᵉ de couv.';
+  return 'hors num.';
+}
+export function dkFolio(n, pub, pages) {   // folio affiché ; null = hors numérotation
+  if (pages && pages.length) {
+    const map = dkFolioMap(pages, pub);
+    if (map.has(n)) return map.get(n);
+  }
   const o = dkNumOpt(pub);
   if (o.cover && n === 1) return null;
   return o.first + (n - (o.cover ? 2 : 1));
 }
-export function dkPn(n, pub) {             // pour « p. X », toasts, phrases de Kora…
-  const d = dkFolio(n, pub);
-  return d === null ? 'couv.' : String(d);
+export function dkPn(n, pub, pages) {      // pour « p. X », toasts, phrases de Kora…
+  const d = dkFolio(n, pub, pages);
+  if (d !== null) return String(d);
+  return (pages && pages.length) ? dkHorsNumShort(n, pages.length) : 'couv.';
 }
 
 /* ── Relances (§5.4) ──

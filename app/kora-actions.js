@@ -2088,7 +2088,9 @@ function _dkPagesOf(artId, D, pub) {
   for (const s of (D.slots || [])) {
     if (s.art_id === artId && pageById[s.page_id]) ns.push(pageById[s.page_id].n);
   }
-  return [...new Set(ns)].sort((a, b) => a - b).map(n => dkPn(n, pub));
+  // ⚠ passer D.pages : la numérotation PAR PAGE (hors-num, numéro imposé,
+  // août 2026) ne se lit que sur les pages — pub seul dirait l'ancien folio.
+  return [...new Set(ns)].sort((a, b) => a - b).map(n => dkPn(n, pub, D.pages));
 }
 
 /* ── booK (pad O-BOK-001) — lecture directe IndexedDB (K-10) ──

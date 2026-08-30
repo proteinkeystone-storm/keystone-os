@@ -254,6 +254,15 @@ async function _ensureSchema(env) {
   // first_folio = numéro de la page qui suit la couverture (0 pour L'Épaulette).
   try { await env.DB.prepare(`ALTER TABLE dk_publications ADD COLUMN cover_unnumbered INTEGER DEFAULT 0`).run(); } catch (_) {}
   try { await env.DB.prepare(`ALTER TABLE dk_publications ADD COLUMN first_folio INTEGER DEFAULT 1`).run(); } catch (_) {}
+  // Août 2026 : numérotation PAR PAGE, par-dessus le réglage de publication
+  // (les DEUX maquettes d'une revue : le cahier de couverture s'enroule autour
+  // de l'intérieur — 3ᵉ/4ᵉ de couv en FIN de fascicule, injoignables par le
+  // seul réglage global). folio_mode NULL = automatique ; 'hors' = la page
+  // sort de la numérotation ; 'ancre' = elle porte folio_start et la suite
+  // recoule. Accroché à la POSITION physique : move/swap ne le transportent
+  // pas (la structure du fascicule ne suit pas le contenu qui coule).
+  try { await env.DB.prepare(`ALTER TABLE dk_pages ADD COLUMN folio_mode TEXT`).run(); } catch (_) {}
+  try { await env.DB.prepare(`ALTER TABLE dk_pages ADD COLUMN folio_start INTEGER`).run(); } catch (_) {}
   // DK-4b : un mail TRANSFÉRÉ (la rédaction fait suivre la copie d'un auteur)
   // a deux expéditeurs — celui qui transfère (from_email, la vérité de
   // l'enveloppe) et l'auteur d'origine, lu dans le bloc « De : » du corps.
@@ -368,7 +377,7 @@ function _byName(u) { return u.name || (u.email ? u.email.split('@')[0] : 'un me
 const PUB_COLS   = 'id, name, owner_sub, slug, cover_unnumbered, first_folio, created_at';
 const RUB_COLS   = 'id, name, color, position';
 const ISSUE_COLS = 'id, pub_id, num, theme, status, jalons, created_at';
-const PAGE_COLS  = 'id, issue_id, n, kind, fixe_tag, fixe_title, rub_id, updated_at, updated_by';
+const PAGE_COLS  = 'id, issue_id, n, kind, fixe_tag, fixe_title, rub_id, folio_mode, folio_start, updated_at, updated_by';
 const SLOT_COLS  = 'id, page_id, position, art_id, banc, created_at';
 const ART_COLS   = 'id, title, rub_id, contrib, status, due, fresh, perime, notes, histo, created_at, updated_at';
 const FILE_COLS  = 'id, issue_id, page_id, art_id, name, mime, size, status, uploaded_by, created_at';
@@ -1059,6 +1068,36 @@ export async function handlePagePatch(request, env, pageId) {
   sets.push("updated_at = datetime('now')", 'updated_by = ?');
   vals.push(_byName(u), pageId);
   await env.DB.prepare(`UPDATE dk_pages SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
+  return json({ ok: true }, 200, origin);
+}
+
+/* POST /api/desk/page/:id/folio {mode, start?} — numérotation PAR PAGE.
+   Comme le réglage de publication (PATCH /publication), c'est une décision
+   d'impression du maquettiste : OWNER seul (le resize, lui, est production
+   → memberGate ; la distinction est volontaire, gravée en juillet 2026).
+   'hors' = la page sort de la numérotation (2ᵉ/3ᵉ/4ᵉ de couv, pub pleine
+   page) ; 'ancre' = elle porte `start`, la suite recoule ; 'auto' = retour
+   au calcul normal. L'ordre PHYSIQUE (dk_pages.n) ne bouge jamais — seul
+   le folio affiché change (calcul partagé : app/lib/desk-rules.js).      */
+export async function handlePageFolio(request, env, pageId) {
+  const origin = getAllowedOrigin(env, request);
+  const pubId = await pubOf(env, 'dk_pages', pageId);
+  const u = await ownerGate(request, env, origin, pubId);
+  if (u.error) return u.error;
+  const page = await env.DB.prepare(`SELECT ${PAGE_COLS} FROM dk_pages WHERE id = ?`).bind(pageId).first();
+  if (!page) return err('Page introuvable', 404, origin);
+  const issue = await env.DB.prepare('SELECT status FROM dk_issues WHERE id = ?').bind(page.issue_id).first();
+  if (issue && issue.status === 'imprime') return err('Numéro imprimé — la numérotation ne bouge plus', 400, origin);
+  const body = await parseBody(request);
+  const mode = String(body.mode || '');
+  if (!['auto', 'hors', 'ancre'].includes(mode)) return err('Mode de numérotation inconnu', 400, origin);
+  let start = null;
+  if (mode === 'ancre') {
+    start = parseInt(body.start, 10);
+    if (!Number.isFinite(start) || start < 0 || start > 2000) return err('Numéro de page invalide (entre 0 et 2000)', 400, origin);
+  }
+  await env.DB.prepare(`UPDATE dk_pages SET folio_mode = ?, folio_start = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?`)
+    .bind(mode === 'auto' ? null : mode, start, _byName(u), pageId).run();
   return json({ ok: true }, 200, origin);
 }
 

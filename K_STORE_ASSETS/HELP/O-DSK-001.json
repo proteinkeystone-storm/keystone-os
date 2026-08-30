@@ -49,14 +49,36 @@
     {
       "q": "Consomme-t-il des conversations ?",
       "a": "Non. Le cœur de desK — grille, marges, marbre, pointage, bascule, équipe — fonctionne sans aucune intelligence artificielle, à volonté."
+    },
+    {
+      "q": "La numérotation ne colle pas à ma maquette (couvertures à part, numéro de départ) ?",
+      "a": "Deux réglages se complètent. Dans Réglages → Numérotation, le style d'ensemble : couverture hors numérotation et numéro de départ de la page suivante. Puis, pour un cas particulier, ouvrez la fiche de la page concernée → section « Numérotation » : « Hors numérotation » sort la page du compte (elle s'affiche 2ᵉ, 3ᵉ ou 4ᵉ de couverture selon sa place — le cas du cahier de couverture qui entoure l'intérieur), « Numéro imposé » lui donne le numéro que vous tapez et toute la suite se recale d'elle-même, même chemin de fer déjà construit. L'ordre réel des pages ne change jamais (glisser-déposer et pré-impression restent fiables) : seul le numéro affiché change, et ce réglage est réservé au propriétaire de la publication."
     }
   ],
   "shortcuts": [
-    { "keys": "Curseur en haut de la grille", "desc": "Taille des cartes (mémorisée)" },
-    { "keys": "Clic sur une carte", "desc": "Ouvrir l'inspecteur" },
-    { "keys": "Maj+clic / Cmd+clic", "desc": "Sélectionner plusieurs pages" },
-    { "keys": "Glisser SUR une carte", "desc": "Échanger deux pages" },
-    { "keys": "Glisser ENTRE deux planches", "desc": "Insérer — le contenu coule" },
-    { "keys": "Échap", "desc": "Fermer l'inspecteur / la sélection" }
+    {
+      "keys": "Curseur en haut de la grille",
+      "desc": "Taille des cartes (mémorisée)"
+    },
+    {
+      "keys": "Clic sur une carte",
+      "desc": "Ouvrir l'inspecteur"
+    },
+    {
+      "keys": "Maj+clic / Cmd+clic",
+      "desc": "Sélectionner plusieurs pages"
+    },
+    {
+      "keys": "Glisser SUR une carte",
+      "desc": "Échanger deux pages"
+    },
+    {
+      "keys": "Glisser ENTRE deux planches",
+      "desc": "Insérer — le contenu coule"
+    },
+    {
+      "keys": "Échap",
+      "desc": "Fermer l'inspecteur / la sélection"
+    }
   ]
 }
