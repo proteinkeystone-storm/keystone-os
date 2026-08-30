@@ -470,6 +470,14 @@ function _transparencyHTML(c) {
   if (naReasons.length) {
     parts.push(`<div class="snt-transp-row">${icon('bar-chart', 13)} <b>Axes non mesurés</b> : ${naReasons.map((r) => `<b>${_esc(r.label)}</b> — ${_esc(r.txt)}`).join(' · ')}</div>`);
   }
+  // S18.2 — la vignette de la liste peut garder le score d'un crawl complet
+  // récent (règle S12.2) pendant que le cockpit montre le dernier audit
+  // express : sans cette ligne, l'écart se lit « ça bug » (constat réel du
+  // 30/08 : 100 au cockpit, carte restée à 83).
+  const vs = c.site || {};
+  if (a.score != null && vs.last_score != null && vs.last_score !== a.score && vs.last_coverage === 'full' && a.coverage !== 'full') {
+    parts.push(`<div class="snt-transp-row">${icon('bar-chart', 13)} <b>Deux scores, deux périmètres</b> : la carte du site affiche <b>${vs.last_score}/100</b> — le score du dernier crawl complet, gardé 7 jours comme référence car son périmètre est plus large que cet audit express (${a.score}/100). <button class="snt-link-btn" data-act="crawl-full">Relancer le crawl complet</button> pour actualiser la référence.</div>`);
+  }
   const cond = a.cwv && a.cwv.conditions;
   if (cond) parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Conditions de mesure vitesse</b> : ${cond === 'mobile-4g-cpu4x' ? 'mobile émulé, réseau 4G lente, CPU ×4 (comparable à PageSpeed)' : 'datacenter non bridé — chiffres plus favorables que le mobile réel'}${a.cwv && a.cwv.runs > 1 ? ` · médiane de ${a.cwv.runs} mesures` : ''}.</div>`);
   // S17 — vitesse lissée : le chiffre qui compte pour le score est la médiane

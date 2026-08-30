@@ -21,7 +21,9 @@
 
    Usage : node workers/test/test-sentinel-s18-surfaces.mjs · Exit 0 si OK.
    ═══════════════════════════════════════════════════════════════ */
-import { _reportEmail, _discoverPages } from '../src/routes/sentinel.js';
+import { _reportEmail, _discoverPages, handleSiteKindSet } from '../src/routes/sentinel.js';
+import { applySiteKind } from '../src/lib/audit-page.js';
+import { signJWT } from '../src/lib/jwt.js';
 
 let pass = 0, fail = 0;
 const ok = (cond, label, extra) => {
@@ -128,6 +130,72 @@ try {
     'ordre final : métier (contact) puis version linguistique, puis divers', mix.urls.join(' '));
 } finally {
   globalThis.fetch = realFetch;
+}
+
+// ═══ 3 · S18.2 — requalification pendant un crawl : le bug du 30/08 ══════
+console.log('\n▶ S18.2 — un audit ne mélange plus deux natures de site');
+
+{
+  // L'agrégat CONTRADICTOIRE réellement stocké en prod (30/08 13:38:46) :
+  // pages auditées moitié « local » (presence 0, findings nap), moitié
+  // « online » (nap_* non applicables) → presence 0 ET nap_* n/a à la fois.
+  const mixte = () => ({
+    scores: { seo: 100, securite: 100, accessibilite: 100, presence: 0 },
+    findings: [
+      { axis: 'presence', sev: 'medium', key: 'nap_localbiz', title: 'Fiche absente' },
+      { axis: 'seo', sev: 'low', key: 'title_long', title: 'Title long' },
+    ],
+    notApplicable: ['nap_phone', 'nap_address'],
+  });
+  const online = applySiteKind(mixte(), 'online');
+  ok(online.scores.presence === null, 'online : presence redevient null (plus jamais 0 + « non applicable » ensemble)');
+  ok(!online.findings.some((f) => f.key === 'nap_localbiz'), 'online : les findings locaux résiduels sont retirés');
+  ok(online.findings.some((f) => f.key === 'title_long'), '…sans toucher aux autres findings');
+  ok(['nap_phone', 'nap_address', 'nap_localbiz', 'nap_hours'].every((k) => online.notApplicable.includes(k)),
+    'online : les 4 clés locales sont non applicables (transparence complète)');
+  const local = applySiteKind(mixte(), 'local');
+  ok(local.notApplicable.length === 0, 'local : plus aucune clé nap_* « non applicable » héritée du mode online');
+  ok(local.scores.presence === 0, 'local : la présence mesurée reste comptée');
+}
+
+{
+  // La route /kind lève la préférence « full » (S12.2) quand la nature
+  // CHANGE : sans ça, la vignette restait verrouillée 7 jours sur un crawl
+  // calculé avec l'ancienne nature (cockpit 100 / carte 83).
+  const captured = [];
+  const db = {
+    prepare(sql) {
+      return { bind(...args) {
+        return {
+          async first() {
+            if (/SELECT id, site_kind FROM sentinel_sites/.test(sql)) return { id: args[0], site_kind: 'local' };
+            return null;
+          },
+          async run() { captured.push({ sql, args }); return { success: true }; },
+          async all() { return { results: [] }; },
+        };
+      },
+      // _ensureSchema appelle .run() sans bind sur les CREATE/ALTER.
+      async run() { return { success: true }; }, async first() { return null; }, async all() { return { results: [] }; } };
+    },
+  };
+  const env = { DB: db, KS_JWT_SECRET: 'banc-s18-secret' };
+  const jwt = await signJWT({ sub: 'tenant-banc', plan: 'MAX' }, env, 600);
+  const req = (body) => new Request('https://x/api/sentinel/sites/site-1/kind', {
+    method: 'POST', headers: { Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+  const r1 = await handleSiteKindSet(req({ kind: 'online' }), env, 'site-1');
+  ok(r1.status === 200, 'route /kind : 200 quand la nature change');
+  const upd1 = captured.find((c) => /UPDATE sentinel_sites SET site_kind/.test(c.sql));
+  ok(upd1 && upd1.sql.includes("last_coverage = 'sample'"),
+    'nature CHANGÉE (local→online) : la préférence full est levée (last_coverage → sample)', upd1 && upd1.sql);
+
+  captured.length = 0;
+  const r2 = await handleSiteKindSet(req({ kind: 'local' }), env, 'site-1');
+  ok(r2.status === 200, 'route /kind : 200 quand la nature est inchangée');
+  const upd2 = captured.find((c) => /UPDATE sentinel_sites SET site_kind/.test(c.sql));
+  ok(upd2 && !upd2.sql.includes('last_coverage'),
+    'nature INCHANGÉE (local→local) : la référence full est conservée', upd2 && upd2.sql);
 }
 
 console.log(`\n${pass + fail} vérifications — ${pass} ok, ${fail} ko`);

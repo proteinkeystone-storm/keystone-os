@@ -43,7 +43,7 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 // S5 — GEO (visibilité IA) : clé du propriétaire via le coffre BYOK si dispo,
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
-import { analyzePage, detectPlatform, smoothCwv, rawCwv, CWV_SMOOTH_N, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, attachScopeNotes, soft404Finding, AXIS_WEIGHTS } from '../lib/audit-page.js';
+import { analyzePage, detectPlatform, smoothCwv, rawCwv, CWV_SMOOTH_N, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, applySiteKind, attachGains, attachScopeNotes, soft404Finding, AXIS_WEIGHTS } from '../lib/audit-page.js';
 // S18/P0 — correctifs clé en main extraits en lib PURE (testable) : le banc
 // garantit qu'aucun « code prêt à coller » ne peut casser un site appliqué
 // littéralement (CSP Report-Only, HSTS gradué, canonical à trous…).
@@ -671,6 +671,11 @@ async function _finalizeCrawl(env, c) {
     return;
   }
   const agg = aggregatePages(pagesAudited);
+  // S18.2 — un crawl s'étale sur plusieurs minutes : si la nature du site a
+  // été requalifiée pendant, les pages mélangent deux périmètres (constaté en
+  // prod le 30/08 : full « presence 0 » ET « nap_* non applicables »). La
+  // nature déclarée AU MOMENT de la finalisation fait foi.
+  applySiteKind(agg, site.site_kind);
   const pages = pagesAudited.map((p) => ({ path: p.path, score: _globalScore({ ...p.scores }) }));
   const cacheAgeMax = Math.max(0, ...pagesAudited.map((p) => p.cacheAge || 0));   // S15.2
   const up = await _uptimeWindow(env, site.id);
@@ -1013,11 +1018,17 @@ export async function handleSiteKindSet(request, env, id) {
   const origin = getAllowedOrigin(env, request);
   const g = await _gate(request, env, origin);
   if (g.error) return g.error;
-  const site = await env.DB.prepare("SELECT id FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  const site = await env.DB.prepare("SELECT id, site_kind FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
   if (!site) return err('Site introuvable.', 404, origin);
   const b = await parseBody(request);
   const kind = (b && b.kind === 'online') ? 'online' : 'local';
-  await env.DB.prepare("UPDATE sentinel_sites SET site_kind = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?")
+  // S18.2 — la nature change ⇒ un crawl complet ANTÉRIEUR n'est plus « le
+  // périmètre le plus vrai » (il a été calculé avec l'autre nature) : la
+  // préférence S12.2 est levée (last_coverage → 'sample') pour que l'audit
+  // relancé par le front écrase la vignette. Sans ça (bug réel du 30/08) :
+  // cockpit 100 / carte 83 verrouillée 7 jours sur l'ancien full.
+  const changed = (site.site_kind || 'local') !== kind;
+  await env.DB.prepare(`UPDATE sentinel_sites SET site_kind = ?${changed ? ", last_coverage = 'sample'" : ''}, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`)
     .bind(kind, id, g.tenant).run();
   return json({ ok: true, site_kind: kind }, 200, origin);
 }
@@ -1293,7 +1304,7 @@ export async function handleSiteCockpit(request, env, id) {
   const origin = getAllowedOrigin(env, request);
   const g = await _gate(request, env, origin);
   if (g.error) return g.error;
-  const site = await env.DB.prepare("SELECT id, url, label, platform, site_kind, last_ok, last_status, last_ms, last_checked_at, next_check_at FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  const site = await env.DB.prepare("SELECT id, url, label, platform, site_kind, last_ok, last_status, last_ms, last_checked_at, next_check_at, last_score, last_coverage FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
   if (!site) return err('Site introuvable.', 404, origin);
 
   // S9/C11-C13 — disponibilité : fenêtre RÉELLE (« sur N j », pas « 30 j »
@@ -1371,7 +1382,8 @@ export async function handleSiteCockpit(request, env, id) {
   }
 
   return json({ cockpit: {
-    site: { id: site.id, url: site.url, label: site.label, platform: site.platform, site_kind: site.site_kind || 'local', last_ok: site.last_ok, last_status: site.last_status, last_ms: site.last_ms, last_checked_at: site.last_checked_at, next_check_at: site.next_check_at },
+    site: { id: site.id, url: site.url, label: site.label, platform: site.platform, site_kind: site.site_kind || 'local', last_ok: site.last_ok, last_status: site.last_status, last_ms: site.last_ms, last_checked_at: site.last_checked_at, next_check_at: site.next_check_at,
+            last_score: site.last_score, last_coverage: site.last_coverage },   // S18.2 — le front explique une vignette qui diverge du dernier audit
     uptime30d, uptimeWindowDays, uptimeTrend, series30d, audit, scoreHistory, scoreTrend, ssl, geo, gsc,
     email_enabled: !!(env && emailConfigured(env)),
   } }, 200, origin);

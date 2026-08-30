@@ -551,6 +551,31 @@ export function attachScopeNotes(findings, { pageCount, pagesTotal }) {
   return findings;
 }
 
+// ═══ S18.2 — harmoniser un agrégat à la NATURE COURANTE du site ═══════════
+// Bug réel (micearchives.com, 30/08 13:38) : la nature du site a été
+// requalifiée PENDANT un crawl complet → pages auditées moitié « local »
+// (presence 0, findings nap_*), moitié « online » (presence null, nap_* non
+// applicables). L'agrégation moyennait les pages numériques → audit FULL
+// contradictoire : presence 0 ET nap_* déclarés non applicables. Règle : au
+// moment où l'audit SORT, la nature déclarée du site fait foi — l'agrégat
+// est ramené à un périmètre unique.
+export const NAP_KEYS = ['nap_phone', 'nap_address', 'nap_localbiz', 'nap_hours'];
+export function applySiteKind(agg, siteKind) {
+  if (!agg) return agg;
+  if (siteKind === 'online') {
+    if (agg.scores) agg.scores.presence = null;
+    agg.findings = (agg.findings || []).filter((f) => !NAP_KEYS.includes(f.key));
+    agg.notApplicable = [...new Set([...(agg.notApplicable || []), ...NAP_KEYS])];
+  } else {
+    // Site (re)devenu local : des clés nap_* « non applicables » héritées de
+    // pages auditées en mode online seraient un contresens — on les retire.
+    // (Les findings locaux éventuellement manqués sur ces pages reviendront
+    // au prochain audit : on n'invente pas de findings à la finalisation.)
+    agg.notApplicable = (agg.notApplicable || []).filter((k) => !NAP_KEYS.includes(k));
+  }
+  return agg;
+}
+
 export function aggregatePages(pagesAudited) {
   const scores = {};
   for (const ax of ['seo', 'securite', 'accessibilite', 'presence']) {
