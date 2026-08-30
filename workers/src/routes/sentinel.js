@@ -2106,8 +2106,18 @@ export async function handleGscCallback(request, env) {
       VALUES (?, ?, ?, ?, ?, ?, 'connected', datetime('now'))
       ON CONFLICT(site_id) DO UPDATE SET property=excluded.property, account_email=excluded.account_email, refresh_ciphertext=excluded.refresh_ciphertext, refresh_iv=excluded.refresh_iv, status='connected', updated_at=datetime('now')
     `).bind(siteId, tenant, property, email, enc.ciphertext, enc.iv).run();
-    try { await _gscExecuteRun(env, { id: siteId, tenant, property, refreshToken: tok.refresh_token }); } catch (_) { /* 1er relevé best-effort */ }
-    return _gscHtml(`✅ <strong>Search Console connectée</strong> : ${_escHtml(property)}${email ? ` (${_escHtml(email)})` : ''}<br><br>Ferme cet onglet et recharge <strong>Sentinel</strong>.`);
+    // S18.3 — le 1er relevé reste best-effort, mais son SORT est dit : un
+    // échec silencieux laissait une carte « connectée » sans aucun score
+    // (last_run_at NULL, constaté en prod le 30/08) sans que personne ne
+    // sache pourquoi ni quoi faire.
+    let runNote = '';
+    try {
+      const out = await _gscExecuteRun(env, { id: siteId, tenant, property, refreshToken: tok.refresh_token });
+      runNote = `<br><br>Premier relevé fait : score Mots-clés <b>${out.score}/100</b>.`;
+    } catch (e) {
+      runNote = `<br><br>⚠ La connexion est bien enregistrée, mais le premier relevé n'a pas abouti (${_escHtml((e && e.message) || 'service indisponible')}). Dans Sentinel, carte « Mots-clés », cliquez « Rafraîchir ».`;
+    }
+    return _gscHtml(`✅ <strong>Search Console connectée</strong> : ${_escHtml(property)}${email ? ` (${_escHtml(email)})` : ''}${runNote}<br><br>Ferme cet onglet et reviens sur <strong>Sentinel</strong> — la carte se met à jour toute seule.`);
   } catch (e) {
     return _gscHtml(`❌ Échec de connexion : ${_escHtml(e.message || 'erreur inconnue')}`);
   }

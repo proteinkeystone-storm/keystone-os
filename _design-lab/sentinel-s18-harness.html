@@ -34,7 +34,10 @@
     try { localStorage.setItem('ks_jwt', 'banc-s18'); } catch (_) {}
 
     // État mutable du doublé : la bascule kind → l'audit suivant change tout.
-    const S = { kind: 'local' };
+    // S18.3 — gscConnected bascule quand l'onglet OAuth est « ouvert » (le
+    // stub /gsc/connect simule une autorisation Google réussie) : le banc
+    // vérifie que la carte Mots-clés se met à jour TOUTE SEULE au refocus.
+    const S = { kind: 'local', gscConnected: false };
 
     const FINDINGS_LOCAL = [
       { axis: 'seo', sev: 'high', key: 'soft_404', title: 'Les pages inexistantes ne renvoient pas d’erreur 404', gain: 0,
@@ -70,9 +73,14 @@
       scoreHistory: [], scoreTrend: null,
       ssl: { https: true, valid: true },
       geo: { enabled: true, configured: false, business_name: 'Site du livre', city: '', activity: '', prompts: ['Quel est le meilleur livre ?'], score: null, results: null, run_at: null },
-      gsc: { available: true, connected: false, property: null, account_email: null, score: null, results: null, run_at: null },
+      gsc: gscState(),
       email_enabled: false,
     } });
+    const gscState = () => S.gscConnected
+      ? { available: true, connected: true, property: 'sc-domain:mon-livre-exemple.fr', account_email: '', score: 40,
+          results: { window: { startDate: '2026-08-01', endDate: '2026-08-28' }, totals: { clicks: 4, impressions: 298, position: 14.2 },
+            queries: [{ query: 'mice archives', clicks: 3, impressions: 120, ctr: 2.5, position: 3.1 }] }, run_at: new Date().toISOString() }
+      : { available: true, connected: false, property: null, account_email: null, score: null, results: null, run_at: null };
 
     const sites = () => ({ sites: [{ id: 'site-book', url: 'https://mon-livre-exemple.fr', label: 'Site du livre', platform: 'custom',
       site_kind: S.kind, last_checked_at: new Date().toISOString(), last_ok: 1, last_status: 200, last_ms: 245, consecutive_fails: 0,
@@ -101,7 +109,10 @@
         if (/\/sites\/[^/]+\/cockpit$/.test(u)) return hit(cockpit());
         if (/\/sites\/[^/]+\/audit$/.test(u) && method === 'POST') return hit({ audit: cockpit().cockpit.audit });
         if (/\/sites\/[^/]+\/crawl$/.test(u) && method === 'GET') return hit({ crawl: null });
-        if (/\/sites\/[^/]+\/(check|history|geo|gsc)/.test(u)) return hit({ ok: true, history: [], geo: cockpit().cockpit.geo, gsc: cockpit().cockpit.gsc });
+        // S18.3 — l'« autorisation Google » réussit dès que l'onglet s'ouvre.
+        if (/\/gsc\/connect$/.test(u)) { setTimeout(() => { S.gscConnected = true; }, 300); return hit({ authUrl: 'about:blank#banc-oauth-google' }); }
+        if (/\/sites\/[^/]+\/gsc$/.test(u)) return hit({ gsc: gscState() });
+        if (/\/sites\/[^/]+\/(check|history|geo|gsc)/.test(u)) return hit({ ok: true, history: [], geo: cockpit().cockpit.geo, gsc: gscState() });
         return hit({ ok: true });
       }
       return _realFetch(input, init);

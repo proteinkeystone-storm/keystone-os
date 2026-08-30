@@ -90,6 +90,11 @@ export function openSentinel(opts = {}) {
   _buildShell();
   document.body.style.overflow = 'hidden';
   document.addEventListener('keydown', _onKey);
+  // S18.3 — au retour de l'onglet OAuth Google, la carte Mots-clés se met à
+  // jour toute seule (les deux événements : visibilitychange couvre l'onglet,
+  // focus couvre le retour de fenêtre).
+  document.addEventListener('visibilitychange', _onRefocus);
+  window.addEventListener('focus', _onRefocus);
   _load();
   _initAlerts();
   _startPoll();
@@ -111,10 +116,36 @@ export function closeSentinel() {
   if (!_root) return;
   _stopPoll(); _closePanel();
   document.removeEventListener('keydown', _onKey);
+  document.removeEventListener('visibilitychange', _onRefocus);
+  window.removeEventListener('focus', _onRefocus);
   _root.remove(); _root = null;
   document.body.style.overflow = '';
 }
 function _onKey(e) { if (e.key === 'Escape') { if (_panel) _closePanel(); else closeSentinel(); } }
+
+// ── S18.3 — resynchronisation au RETOUR de l'onglet OAuth Google ─────────
+// Bug réel (30/08) : « Connecter Search Console » ouvre un onglet Google ;
+// au retour, le panneau affichait l'état d'AVANT la connexion — donc encore
+// « Connecter » — et le toast disait « cliquez Rafraîchir »… bouton qui
+// n'existe que sur la carte CONNECTÉE. Boucle sans issue : l'utilisateur
+// reconnectait (2×) et croyait la connexion perdue, alors qu'elle était
+// saine en base depuis le premier passage. Au refocus, si une connexion
+// vient d'être lancée, on relit /gsc et on met la carte à jour — re-render
+// UNIQUEMENT si l'état a changé (règle « rafraîchissement poli », desK 19/08).
+let _gscAwaitSite = null;
+async function _onRefocus() {
+  if (document.visibilityState !== 'visible') return;
+  if (!_gscAwaitSite || !_panel || _panel.id !== _gscAwaitSite) return;
+  try {
+    const d = await _api(`/sites/${encodeURIComponent(_gscAwaitSite)}/gsc`);
+    if (d && d.gsc && d.gsc.connected && !(_panel.gsc && _panel.gsc.connected)) {
+      _panel.gsc = Object.assign({}, _panel.gsc, d.gsc);
+      _gscAwaitSite = null;
+      _renderCockpit();
+      _sntToast('Search Console connectée — carte Mots-clés à jour');
+    }
+  } catch (_) { /* silencieux : le prochain refocus ou une réouverture fera foi */ }
+}
 function _startPoll() { _stopPoll(); _poll = setInterval(() => { if (document.visibilityState === 'visible' && !_panel) _load(true); }, POLL_MS); }
 function _stopPoll() { if (_poll) { clearInterval(_poll); _poll = null; } }
 
@@ -1154,7 +1185,14 @@ async function _gscConnect() {
   if (!_panel || !_panel.id) return;
   try {
     const d = await _api(`/sites/${encodeURIComponent(_panel.id)}/gsc/connect`);
-    if (d && d.authUrl) { window.open(d.authUrl, '_blank', 'noopener'); _sntToast('Autorise Google dans le nouvel onglet, reviens puis « Rafraîchir ».'); }
+    if (d && d.authUrl) {
+      // S18.3 — armer la resynchronisation du retour (cf _onRefocus). L'ancien
+      // toast disait « cliquez Rafraîchir » : bouton inexistant tant que la
+      // carte périmée affichait « Connecter » — consigne insuivable.
+      _gscAwaitSite = _panel.id;
+      window.open(d.authUrl, '_blank', 'noopener');
+      _sntToast('Autorise Google dans le nouvel onglet puis reviens ici — la carte se mettra à jour toute seule.');
+    }
   } catch (e) { alert(e.message || 'Connexion impossible.'); }
 }
 async function _gscRun() {
