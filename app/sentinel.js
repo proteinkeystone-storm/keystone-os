@@ -656,7 +656,14 @@ function _kpiCardsHTML(c) {
   const upTrend = c.uptimeTrend === 'up' ? '↑ en hausse' : (c.uptimeTrend === 'down' ? '↓ en baisse' : (c.uptimeTrend === 'stable' ? 'stable' : '—'));
   const upWin = (c.uptimeWindowDays && c.uptimeWindowDays < 30) ? `${c.uptimeWindowDays} j` : '30 j';
   const st = c.scoreTrend;
-  const covTxt = (c.audit && c.audit.coverage === 'full') ? 'couverture complète' : (c.audit && c.audit.coverage ? 'échantillon' : '');
+  // S18/P3 — l'étiquette de couverture du KPI dit le plafonnement : un crawl
+  // borné par le plan n'est pas une « couverture complète », et un échantillon
+  // annonce son périmètre (X/N pages).
+  const _aPages = (c.audit && c.audit.pages && c.audit.pages.length) || 0;
+  const _aTotal = (c.audit && c.audit.pagesTotal) || 0;
+  const covTxt = (c.audit && c.audit.coverage === 'full')
+    ? ((_aTotal > _aPages) ? `couverture plafonnée (${_aPages}/${_aTotal} pages)` : 'couverture complète')
+    : (c.audit && c.audit.coverage ? ((_aTotal > _aPages && _aPages) ? `échantillon (${_aPages}/${_aTotal} pages)` : 'échantillon') : '');
   const scoreTrendTxt = ((st == null) ? 'première mesure' : (st > 0 ? `↑ +${st} cette semaine` : (st < 0 ? `↓ ${st} cette semaine` : 'stable'))) + (covTxt ? ` · ${covTxt}` : '');
   const sslSub = c.ssl ? (c.ssl.valid ? 'vérifié à l\'instant' : (c.ssl.https ? 'à vérifier' : 'non sécurisé (HTTP)')) : '—';
   return `<div class="snt-kpis">
@@ -668,10 +675,15 @@ function _kpiCardsHTML(c) {
 }
 
 // Radar SVG — 7 axes qualité vs « Objectif » (85). Disponibilité = KPI, hors radar.
-function _radarSVG(scores, geoScore, gscScore) {
+// S18/P1 — site déclaré sans établissement (presenceNa) : l'axe « Présence
+// locale » SORT du radar (6 axes) au lieu d'être tracé à zéro — un polygone
+// qui plonge au centre se lit « 0/100 », l'exact contresens de « retiré du
+// score » (la transparence et le PDF expliquent le retrait).
+function _radarSVG(scores, geoScore, gscScore, presenceNa) {
   const axes = [
     ['Performance', scores.performance], ['SEO technique', scores.seo], ['Mots-clés', (gscScore != null ? gscScore : null)],
-    ['Visibilité IA', geoScore], ['Présence locale', scores.presence], ['Sécurité en-têtes', scores.securite], ['Accessibilité base', scores.accessibilite],
+    ['Visibilité IA', geoScore], ...(presenceNa ? [] : [['Présence locale', scores.presence]]),
+    ['Sécurité en-têtes', scores.securite], ['Accessibilité base', scores.accessibilite],
   ];
   const N = axes.length, W = 520, H = 380, cx = 260, cy = 188, R = 122, OBJ = 85;
   const ang = (i) => (-Math.PI / 2) + i * (2 * Math.PI / N);
@@ -853,7 +865,8 @@ function _renderCockpit() {
       <div class="snt-ck-grid">
         <div class="snt-ck-panel">
           <div class="snt-ck-panel-h"><span>Profil du site</span><span class="snt-radar-leg"><i class="snt-radar-leg-site"></i> Ton site${a.score != null ? ' · ' + a.score + '/100' : ''} &nbsp; <i class="snt-radar-leg-obj"></i> Objectif</span></div>
-          ${_radarSVG(a.scores || {}, (c.geo && c.geo.score != null) ? c.geo.score : null, (c.gsc && c.gsc.connected && c.gsc.score != null) ? c.gsc.score : null)}
+          ${_radarSVG(a.scores || {}, (c.geo && c.geo.score != null) ? c.geo.score : null, (c.gsc && c.gsc.connected && c.gsc.score != null) ? c.gsc.score : null,
+            (a.notApplicable || []).some((k) => k.indexOf('nap_') === 0))}
         </div>
         <div class="snt-ck-panel">
           <div class="snt-ck-panel-h"><span>Temps de réponse — 30 jours</span>${next}</div>

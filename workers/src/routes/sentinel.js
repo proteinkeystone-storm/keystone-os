@@ -421,7 +421,12 @@ async function _sitemapLocs(smUrl, norm, depth, budget) {
 }
 
 // Découvre jusqu'à `max` pages internes (hors home) : sitemap.xml puis liens de la home.
-async function _discoverPages(url, max) {
+// S18/P2 — `homeHreflangs` (les <link hreflang> relevés sur la home) : les
+// versions linguistiques passent DEVANT le tirage aléatoire. La réciprocité
+// hreflang ne se contrôle qu'entre pages LUES — sans cette priorité, « /en »
+// n'entrait presque jamais dans l'échantillon de 5 pages et le contrôle n°1
+// du multilingue restait lettre morte en audit express.
+export async function _discoverPages(url, max, homeHreflangs) {
   let origin = '', host = '';
   try { const u = new URL(url); origin = u.origin; host = u.hostname.replace(/^www\./, ''); } catch (_) { return []; }
   const ASSET = /\.(pdf|jpe?g|png|gif|svg|webp|ico|zip|mp4|mp3|css|js|json|xml)(\?|$)/i;
@@ -444,17 +449,28 @@ async function _discoverPages(url, max) {
       }
     } catch (_) {}
   }
+  // S18/P2 — alternates linguistiques de la home : ajoutées aux candidates
+  // (norm() écarte déjà les hreflang pointant un AUTRE domaine — cas des
+  // sites .fr/.de séparés) et retenues en priorité juste après les pages
+  // métier, avant le round-robin.
+  const langAlts = new Set();
+  for (const h of (homeHreflangs || [])) {
+    const u2 = norm(h && h.href);
+    if (u2 && !ASSET.test(u2)) { found.add(u2); langAlts.add(u2); }
+  }
   const homeNorm = norm(url);
   // Exclut la home et ses variantes (path « / », ex. www) → pas de doublon.
   const candidates = [...found].filter((u2) => u2 !== homeNorm && _pathOf(u2) !== '/');
   // S9 — sélection PRIORISÉE (l'ancien slice prenait les N premières, ordre
   // arbitraire : sur le Mas, /contact et /nos-offres n'étaient jamais vus) :
   //   1. pages « métier » (contact, offres, à-propos) — le NAP vit sur /contact ;
-  //   2. diversité de gabarits : round-robin sur le 1er segment de chemin,
+  //   2. versions linguistiques (S18/P2) — la réciprocité hreflang en dépend ;
+  //   3. diversité de gabarits : round-robin sur le 1er segment de chemin,
   //      plutôt que N pages du même template.
   const PRIORITY = /\/(contact|nous-contacter|contactez|nos-offres|offres|tarifs|prix|a-propos|apropos|about|qui-sommes-nous)(\/|$)/i;
   const prio = candidates.filter((u2) => PRIORITY.test(u2));
-  const rest = candidates.filter((u2) => !PRIORITY.test(u2));
+  const alts = candidates.filter((u2) => !PRIORITY.test(u2) && langAlts.has(u2));
+  const rest = candidates.filter((u2) => !PRIORITY.test(u2) && !langAlts.has(u2));
   const bySeg = new Map();
   for (const u2 of rest) {
     const seg = (_pathOf(u2).split('/')[1] || '').replace(/-(le|la|les|l)$/, '');
@@ -469,7 +485,7 @@ async function _discoverPages(url, max) {
     if (!took) break;
   }
   // total = pages internes détectées + la home (pour le « X sur N » du rapport)
-  return { urls: [...prio, ...diverse].slice(0, max), total: candidates.length + 1,
+  return { urls: [...prio, ...alts, ...diverse].slice(0, max), total: candidates.length + 1,
            sitemapSet, homeInSitemap: homeNorm ? sitemapSet.has(homeNorm) : false };
 }
 
@@ -485,8 +501,10 @@ async function _auditSite(url, platform, siteKind) {
   const canonHost = _fullHostOf(home.effectiveUrl || url);
   let extraUrls = [], pagesTotal = 1;
   try {
-    const d = await _discoverPages(url, MAX_AUDIT_PAGES - 1);
-    // S18/P2 — provenance sitemap testée AVANT le ré-hébergement (le set est
+    // S18/P2 — les hreflang relevés sur la home guident la sélection : les
+    // versions linguistiques sont auditées en priorité (réciprocité testable).
+    const d = await _discoverPages(url, MAX_AUDIT_PAGES - 1, home.hreflangs);
+    // Provenance sitemap testée AVANT le ré-hébergement (le set est
     // construit sur les URLs normalisées du sitemap).
     extraUrls = d.urls.map((u) => ({ url: _rehost(u, canonHost), inSitemap: d.sitemapSet ? d.sitemapSet.has(u) : null }));
     pagesTotal = d.total;
@@ -848,7 +866,12 @@ function _buildFaq(raw) {
 function _validEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e || '').trim()) && String(e).length <= 254; }
 
 // Construit le rapport e-mail (HTML + texte) depuis l'audit stocké.
-function _reportEmail({ name, url, score, scores, findings, date, platform }) {
+// S18 — l'e-mail est un RAPPORT à part entière (souvent le seul que le
+// webmaster lira) : il porte donc les mêmes honnêtetés que le cockpit et le
+// PDF — périmètre d'audit (étiquette de couverture), axes « n/a » expliqués,
+// pages concernées par finding. Avant, il affichait un « Présence locale :
+// n/a » muet et laissait croire qu'un défaut « 1 page » couvrait le site.
+export function _reportEmail({ name, url, score, scores, findings, date, platform, pages, pagesTotal, coverage, notApplicable }) {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const sevLabel = { high: 'Priorité haute', medium: 'Priorité moyenne', low: 'À optimiser' };
   const axisLabel = { disponibilite: 'Disponibilité', performance: 'Performance', seo: 'SEO technique', securite: 'Sécurité (en-têtes)', accessibilite: 'Accessibilité de base', presence: 'Présence locale', geo: 'Visibilité IA (GEO)' };
@@ -856,19 +879,43 @@ function _reportEmail({ name, url, score, scores, findings, date, platform }) {
   const sorted = [...(findings || [])].sort((a, b) => (order[a.sev] ?? 3) - (order[b.sev] ?? 3));
   const platTxt = PLAT_LABEL[platform] || platform || '';
 
+  // Étiquette de couverture : X pages sur N détectées — échantillon / complet /
+  // plafonné par le plan. Même règle que le cockpit et le PDF.
+  const nPages = Array.isArray(pages) ? pages.length : 0;
+  let scopeTxt = '';
+  if (nPages > 1) {
+    scopeTxt = (coverage === 'full')
+      ? ((pagesTotal && pagesTotal > nPages) ? `Audit réalisé sur ${nPages} pages sur ${pagesTotal} détectées (couverture plafonnée par le plan)` : `Audit réalisé sur ${nPages} pages — couverture complète`)
+      : ((pagesTotal && pagesTotal > nPages) ? `Audit réalisé sur un échantillon de ${nPages} pages sur ${pagesTotal} détectées — le score reflète cet échantillon` : `Audit réalisé sur ${nPages} pages`);
+    const paths = pages.map((p) => p && p.path).filter(Boolean).slice(0, 8).join(', ');
+    if (paths) scopeTxt += ` : ${paths}${nPages > 8 ? '…' : ''}`;
+  }
+
+  // Axes « n/a » expliqués — jamais une case vide muette (règle S18/P3.2).
+  const naNap = (notApplicable || []).filter((k) => String(k).indexOf('nap_') === 0);
+  const naReasons = [];
+  if ((scores || {}).presence == null && naNap.length) naReasons.push('Présence locale — site déclaré sans établissement recevant du public : l\'axe et les conseils locaux sont retirés du score.');
+  if ((scores || {}).performance == null) naReasons.push('Performance — mesure de vitesse indisponible lors de cet audit.');
+  if ((scores || {}).disponibilite == null) naReasons.push('Disponibilité — historique de surveillance encore insuffisant (l\'axe s\'active après quelques heures de relevés).');
+
   const axisRowsHtml = Object.keys(scores || {}).map((k) => {
     const v = scores[k];
     return `<tr><td style="padding:4px 0;color:#475569;font-size:14px">${esc(axisLabel[k] || k)}</td><td style="padding:4px 0;text-align:right;font-weight:600;font-size:14px">${v == null ? 'n/a' : v + ' / 100'}</td></tr>`;
   }).join('');
+  const naHtml = naReasons.length ? `<div style="color:#64748b;font-size:12px;margin-top:8px">Axes « n/a » : ${naReasons.map(esc).join(' · ')}</div>` : '';
+  const scopeHtml = scopeTxt ? `<div style="color:#64748b;font-size:12px;margin-top:6px">${esc(scopeTxt)}.</div>` : '';
 
   const findHtml = sorted.map((f) => {
     const steps = (f.fix && f.fix.steps && f.fix.steps.length)
       ? `<ol style="margin:6px 0;padding-left:20px;color:#334155;font-size:13px">${f.fix.steps.map((st) => `<li style="margin:2px 0">${esc(st)}</li>`).join('')}</ol>` : '';
     const code = (f.fix && f.fix.code)
       ? `<div style="font-size:12px;color:#64748b;margin:6px 0 2px">${esc(f.fix.codeLabel || 'Code à coller')}</div><pre style="background:#f1f5f9;border-radius:8px;padding:10px;font-size:12px;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menlo,monospace;color:#0f172a">${esc(f.fix.code)}</pre>` : '';
+    // S18 — pages concernées (comme cockpit/PDF) : le webmaster sait OÙ agir.
+    const fp = (f.pages && f.pages.length && !(f.pages.length === 1 && f.pages[0] === '/'))
+      ? `<div style="color:#94a3b8;font-size:12px;margin:2px 0">${f.pages.length} page${f.pages.length > 1 ? 's' : ''} : ${esc(f.pages.slice(0, 8).join(', '))}${f.pages.length > 8 ? '…' : ''}</div>` : '';
     return `<div style="border-top:1px solid #e2e8f0;padding:12px 0">
       <div style="font-size:14px;color:#0f172a"><strong>[${esc(sevLabel[f.sev] || '')}]</strong> ${esc(f.title)}</div>
-      ${f.detail ? `<div style="color:#64748b;font-size:13px;margin:3px 0">${esc(f.detail)}</div>` : ''}${steps}${code}</div>`;
+      ${f.detail ? `<div style="color:#64748b;font-size:13px;margin:3px 0">${esc(f.detail)}</div>` : ''}${fp}${steps}${code}</div>`;
   }).join('') || '<p style="color:#16a34a;font-size:14px">Aucun problème détecté sur les axes audités. 👍</p>';
 
   const html = `<!doctype html><html lang="fr"><body style="margin:0;background:#f8fafc;font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;color:#0f172a">
@@ -880,6 +927,7 @@ function _reportEmail({ name, url, score, scores, findings, date, platform }) {
         <div style="font-size:13px;color:#64748b">Score global</div>
         <div style="font-size:40px;font-weight:800;line-height:1.1">${score != null ? score : '—'}<span style="font-size:16px;color:#94a3b8"> / 100</span></div>
         <table style="width:100%;border-collapse:collapse;margin-top:10px">${axisRowsHtml}</table>
+        ${naHtml}${scopeHtml}
       </div>
       <h2 style="font-size:16px;margin:18px 0 4px">À corriger en priorité — solutions clé en main</h2>
       ${findHtml}
@@ -889,10 +937,14 @@ function _reportEmail({ name, url, score, scores, findings, date, platform }) {
   const findText = sorted.map((f) => {
     const steps = (f.fix && f.fix.steps && f.fix.steps.length) ? '\n' + f.fix.steps.map((st, i) => `   ${i + 1}. ${st}`).join('\n') : '';
     const code = (f.fix && f.fix.code) ? `\n   [${f.fix.codeLabel || 'Code'}]\n${f.fix.code.split('\n').map((l) => '   ' + l).join('\n')}` : '';
-    return `• [${sevLabel[f.sev] || ''}] ${f.title}${f.detail ? '\n   ' + f.detail : ''}${steps}${code}`;
+    const fp = (f.pages && f.pages.length && !(f.pages.length === 1 && f.pages[0] === '/'))
+      ? `\n   ${f.pages.length} page${f.pages.length > 1 ? 's' : ''} : ${f.pages.slice(0, 8).join(', ')}${f.pages.length > 8 ? '…' : ''}` : '';
+    return `• [${sevLabel[f.sev] || ''}] ${f.title}${f.detail ? '\n   ' + f.detail : ''}${fp}${steps}${code}`;
   }).join('\n\n') || 'Aucun problème détecté sur les axes audités.';
   const axisText = Object.keys(scores || {}).map((k) => `- ${axisLabel[k] || k} : ${scores[k] == null ? 'n/a' : scores[k] + '/100'}`).join('\n');
-  const text = `KEYSTONE SENTINEL — Rapport d'audit\n${name} (${url})${platTxt ? ' · ' + platTxt : ''}\n\nScore global : ${score != null ? score + '/100' : '—'}\n${axisText}\n\nÀ CORRIGER EN PRIORITÉ — solutions clé en main\n\n${findText}\n\n—\nRapport généré par Keystone Sentinel.`;
+  const naText = naReasons.length ? `\n${naReasons.map((r) => `  (n/a) ${r}`).join('\n')}` : '';
+  const scopeTextLine = scopeTxt ? `\n${scopeTxt}.\n` : '';
+  const text = `KEYSTONE SENTINEL — Rapport d'audit\n${name} (${url})${platTxt ? ' · ' + platTxt : ''}\n\nScore global : ${score != null ? score + '/100' : '—'}\n${axisText}${naText}${scopeTextLine}\nÀ CORRIGER EN PRIORITÉ — solutions clé en main\n\n${findText}\n\n—\nRapport généré par Keystone Sentinel.`;
 
   return { subject: `Audit web de ${name} — score ${score != null ? score + '/100' : 'disponible'}`, html, text };
 }
@@ -1434,9 +1486,15 @@ export async function handleSiteSendReport(request, env, id) {
   }
 
   // Dernier audit stocké (réutilise findings + fixes déjà calculés).
-  const row = await env.DB.prepare("SELECT score, scores, findings, created_at FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 1").bind(id).first();
+  // S18 — l'e-mail porte aussi le périmètre (pages, total, couverture) et les
+  // axes non applicables : mêmes honnêtetés que le cockpit et le PDF.
+  const row = await env.DB.prepare("SELECT score, scores, findings, created_at, pages, pages_total, coverage, not_applicable FROM sentinel_audits WHERE site_id = ? ORDER BY created_at DESC LIMIT 1").bind(id).first();
   if (!row) return err('Aucun audit disponible. Lancez d\'abord un audit du site.', 409, origin);
-  let scores = null, findings = []; try { scores = JSON.parse(row.scores); } catch (_) {} try { findings = JSON.parse(row.findings); } catch (_) {}
+  let scores = null, findings = [], pages = null, notApplicable = [];
+  try { scores = JSON.parse(row.scores); } catch (_) {}
+  try { findings = JSON.parse(row.findings); } catch (_) {}
+  try { pages = row.pages ? JSON.parse(row.pages) : null; } catch (_) {}
+  try { notApplicable = row.not_applicable ? JSON.parse(row.not_applicable) : []; } catch (_) {}
 
   // Rate-limit léger : pre-bump puis revert si dépassement ou échec d'envoi.
   const day = new Date().toISOString().slice(0, 10);
@@ -1448,7 +1506,8 @@ export async function handleSiteSendReport(request, env, id) {
   }
 
   const name = site.label || _hostOf(site.url);
-  const { subject, html, text } = _reportEmail({ name, url: site.url, score: row.score, scores, findings, date: row.created_at, platform: site.platform });
+  const { subject, html, text } = _reportEmail({ name, url: site.url, score: row.score, scores, findings, date: row.created_at, platform: site.platform,
+    pages, pagesTotal: row.pages_total, coverage: row.coverage || 'sample', notApplicable });
   // Expéditeur : on réutilise tel quel l'adresse vérifiée de Keystone (KS_RESEND_FROM,
   // déjà au format « Nom <email> ») ; sinon repli sur une adresse Sentinel.
   const from = env.KS_RESEND_FROM ? String(env.KS_RESEND_FROM)
