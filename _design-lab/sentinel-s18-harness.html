@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banc Sentinel S18 — nature du site, transparence, extrapolation</title>
+<!-- ═══════════════════════════════════════════════════════════════
+  BANC S18 (patron banc-front-pad) : le VRAI app/sentinel.js dans un vrai
+  navigateur, worker doublé en mémoire (fetch intercepté AVANT l'import).
+  Scénario = la confrontation du 29/08 : un site de livre (non local) noté
+  71/100 avec « Présence locale 0 ».
+    1. Cartes : le formulaire d'ajout porte le sélecteur de nature (S18/P1).
+    2. Cockpit du site : suggestion « Ce n'est pas un établissement local ? »
+       (presence 0), axes n/a expliqués (Mots-clés/Visibilité IA/Dispo),
+       findings avec extrapolation d'échantillon dans le détail (S18/P3).
+    3. Clic « Retirer cet axe » → POST /kind + audit relancé (doublés) →
+       score 71 → 85, presence retirée, ligne « site sans établissement ».
+  Lancer :  python3 -m http.server 8137  (racine du dépôt) puis
+            http://localhost:8137/_design-lab/sentinel-s18-harness.html
+  ═══════════════════════════════════════════════════════════════ -->
+<link rel="stylesheet" href="../app/workspace.css">
+<link rel="stylesheet" href="../app/sentinel.css">
+<style>
+  body { margin: 0; background: #0b1020; }
+  #banc-note { position: fixed; left: 10px; bottom: 10px; z-index: 999; font: 12px/1.4 ui-monospace, monospace;
+    color: #a5b4fc; background: #11162a; border: 1px solid #2a3354; border-radius: 10px; padding: 8px 12px; max-width: 420px; }
+</style>
+<script>
+  // ── Worker DOUBLÉ — posé avant l'import du module (script classique bloquant).
+  (function () {
+    // Piège documenté (brief-prod) : un SW localhost d'une autre session capte
+    // les requêtes du banc — on désenregistre tout au boot.
+    try { navigator.serviceWorker && navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())); } catch (_) {}
+    try { localStorage.setItem('ks_jwt', 'banc-s18'); } catch (_) {}
+
+    // État mutable du doublé : la bascule kind → l'audit suivant change tout.
+    const S = { kind: 'local' };
+
+    const FINDINGS_LOCAL = [
+      { axis: 'seo', sev: 'high', key: 'soft_404', title: 'Les pages inexistantes ne renvoient pas d’erreur 404', gain: 0,
+        detail: 'Test réalisé avec une adresse inventée : le site redirige vers une vraie page avec un statut 200 au lieu de répondre « 404 introuvable ». Conséquence : Google peut indexer des adresses fantômes en doublon de vos vraies pages.',
+        fix: { steps: ['Une adresse qui n’existe pas doit répondre avec le STATUT 404.', 'Configurez la page d’erreur de l’hébergeur (404.html) servie avec le statut 404.'] } },
+      { axis: 'seo', sev: 'low', key: 'title_long', title: 'Balise title trop longue', gain: 0, pages: ['/chapitres'],
+        detail: '73 caractères — visez 50-60. — Constaté sur 1 des 5 pages auditées ; le site en compte 40 : comptez probablement ~8 pages concernées. Le crawl complet donne la liste exacte.',
+        fix: { steps: ['Raccourcissez le titre de la page.'] } },
+      { axis: 'presence', sev: 'medium', key: 'nap_localbiz', title: 'Fiche établissement (LocalBusiness) absente', gain: 2.1, pages: ['/', '/chapitres', '/auteur', '/extraits', '/contact'],
+        detail: 'Décrivez votre établissement en Schema.org LocalBusiness : nom, adresse, téléphone, horaires. — Constaté sur les 5 pages auditées ; le site en compte 40 : le défaut touche probablement tout le site.',
+        fix: { steps: ['Tableau de bord : renseignez les infos de l’entreprise.', 'Remplacez CHAQUE valeur d’exemple (nom, téléphone, adresse, horaires) par les vôtres avant de coller.'], codeLabel: 'Fiche établissement (à personnaliser)', code: '{ "@type": "LocalBusiness", "telephone": "+33 X XX XX XX XX" }' } },
+      { axis: 'presence', sev: 'low', key: 'nap_phone', title: 'Téléphone non détecté sur la page', gain: 3.2, pages: ['/', '/chapitres', '/auteur', '/extraits', '/contact'],
+        detail: 'Affichez un numéro cliquable (lien tel:) — clé pour les recherches locales et les IA. — Constaté sur les 5 pages auditées ; le site en compte 40 : le défaut touche probablement tout le site.',
+        fix: { steps: ['Affichez d’abord le numéro sur la page.'] } },
+    ];
+    const FINDINGS_ONLINE = FINDINGS_LOCAL.filter((f) => f.axis !== 'presence');
+
+    const cockpit = () => ({ cockpit: {
+      site: { id: 'site-book', url: 'https://mon-livre-exemple.fr', label: 'Site du livre', platform: 'custom',
+              site_kind: S.kind, last_ok: 1, last_status: 200, last_ms: 245, last_checked_at: new Date().toISOString(), next_check_at: null },
+      uptime30d: null, uptimeWindowDays: 0, uptimeTrend: null, series30d: [],
+      audit: S.kind === 'online'
+        ? { score: 85, scores: { disponibilite: null, performance: 74, seo: 88, securite: 80, accessibilite: 100, presence: null },
+            findings: FINDINGS_ONLINE, cwv: { lcp: 2900, cls: 0.02, fcp: 1400, weightKb: 1600, runs: 3, conditions: 'mobile-4g-cpu4x' },
+            pages: [{ path: '/', score: 88 }, { path: '/chapitres', score: 84 }, { path: '/auteur', score: 85 }, { path: '/extraits', score: 83 }, { path: '/contact', score: 86 }],
+            pagesTotal: 40, indeterminate: [], notApplicable: ['nap_phone', 'nap_address', 'nap_localbiz', 'nap_hours'],
+            engine: 'S18', coverage: 'sample', cacheAgeMax: 0, created_at: new Date().toISOString() }
+        : { score: 71, scores: { disponibilite: null, performance: 74, seo: 88, securite: 80, accessibilite: 100, presence: 0 },
+            findings: FINDINGS_LOCAL, cwv: { lcp: 2900, cls: 0.02, fcp: 1400, weightKb: 1600, runs: 3, conditions: 'mobile-4g-cpu4x' },
+            pages: [{ path: '/', score: 72 }, { path: '/chapitres', score: 70 }, { path: '/auteur', score: 71 }, { path: '/extraits', score: 69 }, { path: '/contact', score: 73 }],
+            pagesTotal: 40, indeterminate: [], notApplicable: [],
+            engine: 'S18', coverage: 'sample', cacheAgeMax: 0, created_at: new Date().toISOString() },
+      scoreHistory: [], scoreTrend: null,
+      ssl: { https: true, valid: true },
+      geo: { enabled: true, configured: false, business_name: 'Site du livre', city: '', activity: '', prompts: ['Quel est le meilleur livre ?'], score: null, results: null, run_at: null },
+      gsc: { available: true, connected: false, property: null, account_email: null, score: null, results: null, run_at: null },
+      email_enabled: false,
+    } });
+
+    const sites = () => ({ sites: [{ id: 'site-book', url: 'https://mon-livre-exemple.fr', label: 'Site du livre', platform: 'custom',
+      site_kind: S.kind, last_checked_at: new Date().toISOString(), last_ok: 1, last_status: 200, last_ms: 245, consecutive_fails: 0,
+      last_score: S.kind === 'online' ? 85 : 71, last_scores: null, last_audit_at: new Date().toISOString(), last_coverage: 'sample',
+      created_at: '2026-08-29', uptime24h: 100, spark: [] }], count: 1, limit: 5, plan: 'BETA', email_enabled: false, geo_enabled: true });
+
+    const _realFetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      const u = String(typeof input === 'string' ? input : (input && input.url) || '');
+      const method = (init && init.method) || 'GET';
+      const hit = (data, status) => Promise.resolve(new Response(JSON.stringify(data), { status: status || 200, headers: { 'Content-Type': 'application/json' } }));
+      if (u.includes('/api/sentinel/')) {
+        window.__bancCalls = window.__bancCalls || [];
+        window.__bancCalls.push(method + ' ' + u.replace(/^.*\/api\/sentinel/, ''));
+        if (u.endsWith('/sites') && method === 'GET') return hit(sites());
+        if (u.endsWith('/sites') && method === 'POST') {
+          const body = JSON.parse(init.body || '{}');
+          window.__bancLastCreate = body;   // le banc vérifie que `kind` part au serveur
+          return hit({ site: { id: 'nouveau', url: body.url, label: body.label, platform: 'custom', site_kind: body.kind } }, 201);
+        }
+        if (/\/sites\/[^/]+\/kind$/.test(u) && method === 'POST') {
+          const body = JSON.parse(init.body || '{}');
+          S.kind = body.kind === 'online' ? 'online' : 'local';
+          return hit({ ok: true, site_kind: S.kind });
+        }
+        if (/\/sites\/[^/]+\/cockpit$/.test(u)) return hit(cockpit());
+        if (/\/sites\/[^/]+\/audit$/.test(u) && method === 'POST') return hit({ audit: cockpit().cockpit.audit });
+        if (/\/sites\/[^/]+\/crawl$/.test(u) && method === 'GET') return hit({ crawl: null });
+        if (/\/sites\/[^/]+\/(check|history|geo|gsc)/.test(u)) return hit({ ok: true, history: [], geo: cockpit().cockpit.geo, gsc: cockpit().cockpit.gsc });
+        return hit({ ok: true });
+      }
+      return _realFetch(input, init);
+    };
+  })();
+</script>
+</head>
+<body>
+<div id="banc-note">
+  <b>Banc S18</b> — 1) sélecteur « nature du site » dans le formulaire d'ajout ·
+  2) ouvrir le cockpit (score 71) : suggestion « pas un établissement local ? », axes n/a expliqués,
+  extrapolation « ~8 des 40 pages » dans les findings ·
+  3) cliquer « Retirer cet axe » → 85/100, presence retirée, ligne « site sans établissement ».
+</div>
+<script type="module">
+  import { openSentinel } from '../app/sentinel.js';
+  openSentinel();
+</script>
+</body>
+</html>

@@ -18,7 +18,10 @@ import { gunzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyzePage, extractJsonLd, LOCALBUSINESS_TYPES, globalScore, perfScore, AXIS_WEIGHTS, sitemapLooksValid, phoneInText, addressInText, entitySplit, dedupeFixCode, smoothCwv, rawCwv } from '../src/lib/audit-page.js';
+import { analyzePage, extractJsonLd, LOCALBUSINESS_TYPES, globalScore, perfScore, AXIS_WEIGHTS, sitemapLooksValid, phoneInText, addressInText, entitySplit, dedupeFixCode, smoothCwv, rawCwv,
+         extractHreflangs, soft404Finding, attachScopeNotes } from '../src/lib/audit-page.js';
+import { fixFor } from '../src/lib/audit-fixes.js';
+// NB : aggregatePages (bloc S11), attachGains (bloc S12.1) sont importés plus bas.
 
 const FIX = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const load = (name) => gunzipSync(readFileSync(join(FIX, `${name}.html.gz`))).toString('utf-8');
@@ -869,4 +872,283 @@ t('S17.2 · le seuil se juge sur le LCP seul — un CLS minuscule ne déclenche 
   assert.equal(s.cls, 0.02, 'le CLS est lissé comme les autres');
 });
 
-console.log(`\n${n} tests OK — moteur S8→S17 conforme à la vérité terrain des fixtures.`);
+// ═══ S18/P1 — présence locale NON APPLICABLE sur un site déclaré « online » ═
+// Vérité terrain (rapport réel du 29/08, site de livre entièrement connu) :
+// 71/100 affiché, 85/100 sans l'axe présence — 15 pts perdus pour n'être pas
+// une boutique, et 4 findings dont les conseils auraient produit des données
+// structurées FAUSSES.
+
+t('S18/P1 · wordpress-org en mode « online » : presence null, ZÉRO finding local', () => {
+  // Cette fixture est le contrôle négatif NAP historique : en mode local elle
+  // porte exactement les 4 findings nap_* et presence 0. En mode online, tout
+  // cela devient non-applicable — et RIEN d'autre ne doit changer.
+  const r = analyzePage(load('wordpress-org'), { sitemap: true, url: 'https://wordpress.org/', siteKind: 'online' });
+  assert.deepEqual(keys(r), []);
+  assert.equal(r.scores.presence, null, 'presence = null (exclu du score), pas 0');
+  assert.equal(r.scores.seo, 100, 'les autres axes ne bougent pas');
+  for (const k of ['nap_phone', 'nap_address', 'nap_localbiz', 'nap_hours'])
+    assert.ok(r.notApplicable.includes(k), `${k} déclaré non applicable (transparence)`);
+});
+
+t('S18/P1 · le gate du brief : score global recalculé SANS l\'axe présence', () => {
+  // globalScore exclut déjà les axes null (S9/C7) : avec presence null, le
+  // poids se renormalise sur les axes restants — plus de -15 automatiques.
+  const avecPresence0 = globalScore({ seo: 100, performance: 80, securite: 60, accessibilite: 100, presence: 0, disponibilite: 100 });
+  const sansPresence = globalScore({ seo: 100, performance: 80, securite: 60, accessibilite: 100, presence: null, disponibilite: 100 });
+  assert.ok(sansPresence - avecPresence0 >= 13, `le site « online » récupère les points perdus (${avecPresence0} → ${sansPresence})`);
+});
+
+t('S18/P1 · un commerce local (défaut) ne change PAS : mêmes findings qu\'avant', () => {
+  // Le 2e gate du brief : un vrai commerce de proximité ne bouge pas.
+  const r = analyzePage(load('wordpress-org'), { sitemap: true, url: 'https://wordpress.org/' });
+  assert.deepEqual(keys(r), ['nap_address', 'nap_hours', 'nap_localbiz', 'nap_phone']);
+  assert.equal(r.scores.presence, 0);
+});
+
+t('S18/P1 · attachGains : les nap_* non-applicables ne gonflent pas la renormalisation sécurité', () => {
+  // Piège réel : naCount comptait TOUT notApplicable ; avec les 4 nap_* d'un
+  // site online, chaque en-tête serait passé à 100/(5-5) → division garde-fou
+  // et gains sécurité délirants. Seuls les sec_* renormalisent la sécurité.
+  const findings = [{ axis: 'securite', sev: 'medium', key: 'sec_HSTS', title: 'x', detail: 'x' }];
+  attachGains(findings, { scores: { securite: 80, seo: 100 }, pageCount: 1,
+    notApplicable: ['nap_phone', 'nap_address', 'nap_localbiz', 'nap_hours', 'sec_CSP'] });
+  // 1 seul sec_* exempté → chaque en-tête vaut 100/(5-1) = 25 pts d'axe.
+  // gain = min(25, 100-80) = 20 pts d'axe × poids sécurité renormalisé.
+  const wsum = AXIS_WEIGHTS.securite + AXIS_WEIGHTS.seo;
+  const attendu = Math.round((20 * AXIS_WEIGHTS.securite / wsum) * 10) / 10;
+  assert.equal(findings[0].gain, attendu, `gain ${findings[0].gain} = ${attendu} (naCount filtré sur sec_)`);
+});
+
+// ═══ S18/P2 — noindex : la faute la plus coûteuse du métier ═══════════════
+
+const PAGE_OK = (extra) => `<!doctype html><html lang="fr"><head><title>Une page de test parfaitement normale</title>
+  <meta name="description" content="Une description de longueur raisonnable pour les tests du moteur, ni trop courte ni trop longue.">
+  <link rel="canonical" href="https://exemple.fr/page">${extra || ''}
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta property="og:title" content="t"><meta property="og:image" content="i.jpg">
+  <script type="application/ld+json">{"@type":"WebSite"}</script>
+  </head><body><h1>Titre</h1></body></html>`;
+
+t('S18/P2 · noindex en meta robots → finding high sur la home, detail « balise »', () => {
+  const r = analyzePage(PAGE_OK('<meta name="robots" content="noindex, nofollow">'), { sitemap: true, url: 'https://exemple.fr/page' });
+  const f = r.findings.find((x) => x.key === 'noindex');
+  assert.ok(f, 'le finding sort');
+  assert.equal(f.sev, 'high', 'home (skipSite absent) → high');
+  assert.ok(/meta robots/.test(f.detail), 'la source est nommée');
+});
+
+t('S18/P2 · noindex via en-tête X-Robots-Tag → détecté, la source est l\'en-tête', () => {
+  const r = analyzePage(PAGE_OK(), { sitemap: true, url: 'https://exemple.fr/page', headers: { 'x-robots-tag': 'noindex' } });
+  const f = r.findings.find((x) => x.key === 'noindex');
+  assert.ok(f, 'le finding sort');
+  assert.ok(/X-Robots-Tag/.test(f.detail), 'la source est nommée');
+});
+
+t('S18/P2 · « index, follow » et « max-image-preview:large » ne déclenchent RIEN (fixtures réelles)', () => {
+  // static-vercel-pks porte <meta name="robots" content="index, follow"> et
+  // wordpress-org 'max-image-preview:large' — zéro faux positif là-dessus.
+  const r1 = analyzePage(PAGE_OK('<meta name="robots" content="index, follow">'), { sitemap: true, url: 'https://exemple.fr/page' });
+  const r2 = analyzePage(PAGE_OK('<meta name="robots" content="max-image-preview:large">'), { sitemap: true, url: 'https://exemple.fr/page' });
+  assert.ok(!r1.findings.some((x) => x.key === 'noindex'));
+  assert.ok(!r2.findings.some((x) => x.key === 'noindex'));
+});
+
+t('S18/P2 · noindex + page DANS le sitemap = high avec la contradiction dite ; hors sitemap (interne) = medium', () => {
+  const dans = analyzePage(PAGE_OK('<meta name="robots" content="noindex">'), { skipSite: true, sitemap: true, url: 'https://exemple.fr/page', inSitemap: true });
+  const fd = dans.findings.find((x) => x.key === 'noindex');
+  assert.equal(fd.sev, 'high');
+  assert.ok(/sitemap/.test(fd.detail), 'la contradiction sitemap+noindex est énoncée');
+  const hors = analyzePage(PAGE_OK('<meta name="robots" content="noindex">'), { skipSite: true, sitemap: true, url: 'https://exemple.fr/page', inSitemap: false });
+  assert.equal(hors.findings.find((x) => x.key === 'noindex').sev, 'medium', 'peut être volontaire → medium');
+});
+
+// ═══ S18/P2 — hreflang : cohérence de ce qui est déclaré ══════════════════
+
+t('S18/P2 · extractHreflangs : link alternate seuls, lang minuscule', () => {
+  const hl = extractHreflangs(`<link rel="alternate" hreflang="FR-FR" href="https://x.fr/">
+    <link rel="stylesheet" href="a.css"><link rel="alternate" type="application/rss+xml" href="/feed">`);
+  assert.deepEqual(hl, [{ lang: 'fr-fr', href: 'https://x.fr/' }]);
+});
+
+t('S18/P2 · auto-référence : racine « site.com » ≡ « site.com/ » — le cas réel Wix Studio (mas-home) ne crie PAS', () => {
+  // Vérité terrain (fixture mas-home, re-vérifiée le 30/08) : canonical
+  // https://www.lemasdesbouteillans.com SANS barre, hreflang fr-fr AVEC.
+  // Pour la RACINE, les deux formes sont la même URL (normalisation RFC) :
+  // aucun finding. Le test fixtures mas-home (keys inchangés) le verrouille
+  // déjà ; celui-ci isole la règle.
+  const html = PAGE_OK('<link rel="alternate" hreflang="fr" href="https://exemple.fr/">'
+    + '<link rel="alternate" hreflang="x-default" href="https://exemple.fr/">')
+    .replace('<link rel="canonical" href="https://exemple.fr/page">', '<link rel="canonical" href="https://exemple.fr">');
+  const r = analyzePage(html, { sitemap: true, url: 'https://exemple.fr/' });
+  assert.ok(!r.findings.some((x) => x.key === 'hreflang_self'), 'racine : pas de faux positif barre finale');
+});
+
+t('S18/P2 · auto-référence : « /fr » vs « /fr/ » sont DEUX pages — finding low avec la barre finale nommée', () => {
+  const html = PAGE_OK('<link rel="alternate" hreflang="fr" href="https://exemple.fr/page/">'
+    + '<link rel="alternate" hreflang="x-default" href="https://exemple.fr/page/">');
+  const r = analyzePage(html, { sitemap: true, url: 'https://exemple.fr/page' });
+  const f = r.findings.find((x) => x.key === 'hreflang_self');
+  assert.ok(f, 'le finding sort');
+  assert.equal(f.sev, 'low', 'près-match : défaut de précision, pas d\'absence');
+  assert.ok(/barre finale/.test(f.title + f.detail), 'le client comprend QUOI corriger');
+});
+
+t('S18/P2 · aucune entrée ne référence la page → medium ; x-default absent → low', () => {
+  const html = PAGE_OK('<link rel="alternate" hreflang="en" href="https://exemple.fr/en/page">');
+  const r = analyzePage(html, { sitemap: true, url: 'https://exemple.fr/page' });
+  assert.equal(r.findings.find((x) => x.key === 'hreflang_self').sev, 'medium');
+  assert.equal(r.findings.find((x) => x.key === 'hreflang_xdefault').sev, 'low');
+});
+
+t('S18/P2 · page SANS hreflang : aucun contrôle hreflang (un monolingue sain ne crie pas)', () => {
+  const r = analyzePage(PAGE_OK(), { sitemap: true, url: 'https://exemple.fr/page' });
+  assert.ok(!r.findings.some((x) => /^hreflang_/.test(x.key)));
+});
+
+t('S18/P2 · réciprocité : A déclare B, B ne répond pas → finding à l\'agrégation ; paire saine → rien', () => {
+  const mk = (path, url, hreflangs, htmlLang) => ({ path, url, hreflangs, htmlLang,
+    scores: { seo: 100, securite: null, accessibilite: 100, presence: 100 }, findings: [], indeterminate: [], notApplicable: [], truncated: false });
+  const casse = aggregatePages([
+    mk('/', 'https://exemple.fr/', [{ lang: 'fr', href: 'https://exemple.fr/' }, { lang: 'en', href: 'https://exemple.fr/en' }], 'fr'),
+    mk('/en', 'https://exemple.fr/en', [{ lang: 'en', href: 'https://exemple.fr/en' }], 'en'),   // ne déclare pas /
+  ]);
+  const f = casse.findings.find((x) => x.key === 'hreflang_reciprocity');
+  assert.ok(f, 'le sens unique est détecté');
+  assert.ok(f.detail.includes('/en'), 'la paire fautive est nommée');
+  const saine = aggregatePages([
+    mk('/', 'https://exemple.fr/', [{ lang: 'fr', href: 'https://exemple.fr/' }, { lang: 'en', href: 'https://exemple.fr/en' }], 'fr'),
+    mk('/en', 'https://exemple.fr/en', [{ lang: 'en', href: 'https://exemple.fr/en' }, { lang: 'fr', href: 'https://exemple.fr/' }], 'en'),
+  ]);
+  assert.ok(!saine.findings.some((x) => x.key === 'hreflang_reciprocity'));
+});
+
+t('S18/P2 · multilingue PROUVÉ (deux <html lang>) sans aucun hreflang → finding ; monolingue → rien', () => {
+  const mk = (path, url, hreflangs, htmlLang) => ({ path, url, hreflangs, htmlLang,
+    scores: { seo: 100, securite: null, accessibilite: 100, presence: 100 }, findings: [], indeterminate: [], notApplicable: [], truncated: false });
+  const multi = aggregatePages([mk('/', 'https://x.fr/', [], 'fr-FR'), mk('/en', 'https://x.fr/en', [], 'en-US')]);
+  assert.ok(multi.findings.some((x) => x.key === 'hreflang_missing'), 'l\'axe SEO n°1 du multilingue');
+  const mono = aggregatePages([mk('/', 'https://x.fr/', [], 'fr-FR'), mk('/contact', 'https://x.fr/contact', [], 'fr')]);
+  assert.ok(!mono.findings.some((x) => x.key === 'hreflang_missing'), 'fr-FR et fr = une seule langue');
+});
+
+// ═══ S18/P2 — soft 404 : verdict pur sur la sonde ═════════════════════════
+
+t('S18/P2 · soft 404 : 200 sur une URL inventée = finding high ; 404/410/403/absence de sonde = rien', () => {
+  const f = soft404Finding({ status: 200, redirected: true });
+  assert.ok(f && f.sev === 'high' && f.key === 'soft_404');
+  assert.ok(/redirige/.test(f.detail), 'le mécanisme observé est décrit');
+  assert.equal(soft404Finding({ status: 404 }), null, 'vrai 404 : rien');
+  assert.equal(soft404Finding({ status: 410 }), null, '410 : rien');
+  assert.equal(soft404Finding({ status: 403 }), null, 'WAF qui bloque la sonde : pas de preuve');
+  assert.equal(soft404Finding({ status: 500 }), null, 'serveur en erreur : pas concluant');
+  assert.equal(soft404Finding(null), null, 'sonde non jouée : rien');
+});
+
+// ═══ S18/P3 — l'échantillon se dit DANS chaque finding ════════════════════
+
+t('S18/P3 · le cas réel du 29/08 : « 1 page » sur un site de 40 devient une extrapolation dite', () => {
+  const findings = [
+    { key: 'title_long', detail: '73 caractères — visez 50-60.', pages: ['/page-a'] },
+    { key: 'meta_length', detail: 'Trop longue.', pages: ['/a', '/b'] },
+    { key: 'sitemap', detail: 'Site-level.', pages: null },
+  ];
+  attachScopeNotes(findings, { pageCount: 5, pagesTotal: 40 });
+  assert.ok(findings[0].detail.includes('1 des 5 pages auditées'), 'le périmètre réel est dit');
+  assert.ok(findings[0].detail.includes('~8 pages'), `extrapolation 1/5 × 40 (« ${findings[0].detail} »)`);
+  assert.ok(findings[1].detail.includes('~16 pages'), 'extrapolation 2/5 × 40 — le chiffre du brief');
+  assert.ok(findings[1].detail.includes('crawl complet'), 'et le chemin vers la liste exacte');
+  assert.ok(!findings[2].detail.includes('auditées'), 'site-level : porte déjà sur tout le site');
+});
+
+t('S18/P3 · défaut sur TOUTES les pages auditées → « probablement tout le site » ; couverture complète → silence', () => {
+  const tout = [{ key: 'x', detail: 'd.', pages: ['/a', '/b', '/c', '/d', '/e'] }];
+  attachScopeNotes(tout, { pageCount: 5, pagesTotal: 40 });
+  assert.ok(tout[0].detail.includes('probablement tout le site'));
+  const complet = [{ key: 'x', detail: 'd.', pages: ['/a'] }];
+  attachScopeNotes(complet, { pageCount: 5, pagesTotal: 5 });
+  assert.equal(complet[0].detail, 'd.', 'rien à extrapoler quand tout a été lu');
+});
+
+// ═══ S18/P0 — GATE : aucun code prêt à coller ne casse un site ════════════
+// Confrontation du 29/08 : la CSP livrée aurait supprimé un agent embarqué et
+// un lecteur de livre sur un site réel entièrement connu. Ces tests
+// verrouillent chaque correctif « à risque » identifié dans le balayage.
+
+t('S18/P0 · CSP : livrée en Report-Only (observe, ne bloque RIEN), jamais en bloquant', () => {
+  for (const platform of ['custom', 'wordpress']) {
+    const fix = fixFor('sec_CSP', { url: 'https://exemple.fr', platform });
+    assert.ok(fix.code.startsWith('Content-Security-Policy-Report-Only:'), `${platform} : Report-Only`);
+    assert.ok(!/^Content-Security-Policy:/m.test(fix.code), 'aucune version bloquante dans le code');
+    assert.ok(fix.steps.some((s) => /Report-Only|observe/i.test(s)), 'la marche à suivre explique le mode observation');
+    assert.ok(fix.steps.some((s) => /renommez|sans « -Report-Only »/i.test(s)), '…et le passage en bloquant');
+  }
+});
+
+t('S18/P0 · HSTS : sans includeSubDomains, montée en puissance dite', () => {
+  const fix = fixFor('sec_HSTS', { url: 'https://exemple.fr', platform: 'custom' });
+  assert.ok(!fix.code.includes('includeSubDomains'), 'includeSubDomains rendait des sous-domaines HTTP inaccessibles 1 an');
+  assert.ok(fix.steps.some((s) => /includeSubDomains/.test(s)), 'mais la montée en puissance est expliquée');
+  assert.ok(fix.steps.some((s) => /UNIQUEMENT si tout votre site/.test(s)), 'et la pré-condition HTTPS est dite');
+});
+
+t('S18/P0 · canonical : le code ne porte PLUS l\'URL de la home (désindexation totale s\'il était collé partout)', () => {
+  const fix = fixFor('canonical', { url: 'https://exemple.fr/', platform: 'custom' });
+  assert.ok(!fix.code.includes('exemple.fr'), 'placeholder à trous, non collable aveuglément');
+  assert.ok(fix.code.includes('[adresse exacte de cette page]'));
+  assert.ok(fix.steps.some((s) => /PAGE PAR PAGE|PROPRE adresse/.test(s)), 'le danger du copier-partout est dit');
+  assert.ok(!fix.steps.some((s) => /Site Wide Header/.test(s)), 'plus d\'injection site-wide pour une balise par-page');
+});
+
+t('S18/P0 · title : plus d\'étapes « Site Wide Header » (le même titre partout = doublons massifs)', () => {
+  const fix = fixFor('title_missing', { url: 'https://exemple.fr/', platform: 'wordpress' });
+  assert.ok(!fix.steps.some((s) => /Site Wide Header/.test(s)));
+  assert.ok(fix.steps.some((s) => /PAGE PAR PAGE/i.test(s)));
+});
+
+t('S18/P0 · LocalBusiness : téléphone d\'exemple NON composable + étape « remplacez chaque valeur »', () => {
+  for (const platform of ['custom', 'wix']) {
+    const fix = fixFor('nap_localbiz', { url: 'https://exemple.fr', platform });
+    assert.ok(!/\+33\s*[1-9](\s*\d\d){4}/.test(fix.code), `${platform} : plus de numéro plausible dans le gabarit`);
+    assert.ok(fix.code.includes('+33 X XX XX XX XX'), 'placeholder visiblement à compléter');
+    assert.ok(fix.steps.some((s) => /Remplacez CHAQUE valeur/.test(s)), 'l\'étape de personnalisation existe');
+  }
+});
+
+t('S18/P0 · BALAYAGE : sur toutes les clés × plateformes, aucun code ne contient de directive destructrice', () => {
+  const KEYS = ['title_missing', 'title_long', 'meta_missing', 'meta_length', 'h1', 'canonical', 'canonical_mismatch', 'canonical_inconsistent',
+    'viewport', 'og_title', 'og_image', 'jsonld', 'sitemap', 'lang', 'img_alt', 'wix_subdomain',
+    'nap_phone', 'nap_address', 'nap_localbiz', 'nap_hours', 'jsonld_url_mismatch', 'jsonld_entity_split',
+    'sec_HSTS', 'sec_CSP', 'sec_X-Frame-Options', 'sec_X-Content-Type-Options', 'sec_Referrer-Policy',
+    'perf_lcp', 'perf_cls', 'perf_weight', 'noindex', 'soft_404', 'hreflang_self', 'hreflang_xdefault', 'hreflang_missing', 'hreflang_reciprocity'];
+  for (const platform of ['custom', 'wordpress', 'wix', 'squarespace']) {
+    for (const key of KEYS) {
+      const fix = fixFor(key, { url: 'https://exemple.fr/', host: 'exemple.fr', platform });
+      if (!fix || !fix.code) continue;
+      const code = fix.code;
+      assert.ok(!/^Content-Security-Policy:/m.test(code), `${platform}/${key} : CSP bloquante interdite`);
+      assert.ok(!code.includes('includeSubDomains'), `${platform}/${key} : includeSubDomains interdit`);
+      assert.ok(!/X-Frame-Options:\s*DENY/i.test(code), `${platform}/${key} : DENY interdit (SAMEORIGIN est le bon défaut)`);
+      assert.ok(!/Disallow:\s*\/\s*$/m.test(code), `${platform}/${key} : jamais un robots.txt qui bloque tout`);
+    }
+  }
+});
+
+t('S18/P0 · les fixes des nouveaux findings existent (le client n\'est jamais laissé sans marche à suivre)', () => {
+  for (const key of ['noindex', 'soft_404', 'hreflang_self', 'hreflang_xdefault', 'hreflang_missing', 'hreflang_reciprocity']) {
+    for (const platform of ['custom', 'wordpress', 'wix']) {
+      const fix = fixFor(key, { url: 'https://exemple.fr/', platform });
+      assert.ok(fix && fix.steps && fix.steps.length >= 2, `${key}/${platform} a des étapes`);
+    }
+  }
+});
+
+t('S18/P1 · gabarits méta/title : la variante « online » ne pousse plus « à [ville] »', () => {
+  const metaLocal = fixFor('meta_missing', { url: 'https://exemple.fr', platform: 'custom' });
+  const metaOnline = fixFor('meta_missing', { url: 'https://exemple.fr', platform: 'custom', siteKind: 'online' });
+  assert.ok(metaLocal.code.includes('à [ville]'), 'un commerce local garde son ancrage géographique');
+  assert.ok(!metaOnline.code.includes('[ville]'), 'un site sans établissement ne reçoit pas de gabarit localisé');
+  const titleOnline = fixFor('title_missing', { url: 'https://exemple.fr', platform: 'custom', siteKind: 'online' });
+  assert.ok(!titleOnline.code.includes('[ville]'));
+});
+
+console.log(`\n${n} tests OK — moteur S8→S18 conforme à la vérité terrain des fixtures.`);

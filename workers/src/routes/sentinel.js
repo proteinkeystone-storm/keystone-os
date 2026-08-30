@@ -43,9 +43,13 @@ import { sentiment as _sentiment, detectCitation as _detectCitation, geoScore as
 // S5 — GEO (visibilité IA) : clé du propriétaire via le coffre BYOK si dispo,
 // sinon clés serveur GEMINI/PERPLEXITY/OPENAI (free tier Gemini = levier coût).
 import { resolveEngineForTenant } from '../lib/llm-router.js';
-import { analyzePage, detectPlatform, dedupeFixCode, smoothCwv, rawCwv, CWV_SMOOTH_N, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, AXIS_WEIGHTS } from '../lib/audit-page.js';
+import { analyzePage, detectPlatform, smoothCwv, rawCwv, CWV_SMOOTH_N, SEC_HEADERS, globalScore as _globalScore, perfScore as _perfScore, sitemapLooksValid, aggregatePages, attachGains, attachScopeNotes, soft404Finding, AXIS_WEIGHTS } from '../lib/audit-page.js';
+// S18/P0 — correctifs clé en main extraits en lib PURE (testable) : le banc
+// garantit qu'aucun « code prêt à coller » ne peut casser un site appliqué
+// littéralement (CSP Report-Only, HSTS gradué, canonical à trous…).
+import { attachFixes as _attachFixes } from '../lib/audit-fixes.js';
 
-const SENTINEL_ENGINE_VERSION = 'S17.2';
+const SENTINEL_ENGINE_VERSION = 'S18';
 // S8 — forme « compatible » conventionnelle (moins de blocages WAF). Mesuré :
 // Wix sert le MÊME HTML (3,3 Mo) aux deux formes ; la version crawler allégée
 // est réservée aux bots vérifiés (Googlebot…) qu'on n'usurpe pas. C'est donc
@@ -178,6 +182,17 @@ async function _ensureSchema(env) {
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sentinel_crawl_pages_status ON sentinel_crawl_pages(status, crawl_id)").run();
   // S14.1 — crédit sitemap propagé aux pages du crawl (comme l'express le fait).
   try { await env.DB.prepare("ALTER TABLE sentinel_crawls ADD COLUMN has_sitemap INTEGER").run(); } catch (_) { /* déjà présent */ }
+  // S18/P1 — nature du site, déclarée par l'utilisateur : NULL/'local' =
+  // établissement recevant du public (comportement historique) ; 'online' =
+  // pas d'établissement → axe « présence locale » non applicable.
+  try { await env.DB.prepare("ALTER TABLE sentinel_sites ADD COLUMN site_kind TEXT").run(); } catch (_) { /* déjà présent */ }
+  // S18/P2 — la page figure-t-elle dans le sitemap ? (aggrave un noindex :
+  // « indexe-la » + « ignore-la » = la contradiction la plus parlante).
+  try { await env.DB.prepare("ALTER TABLE sentinel_crawl_pages ADD COLUMN in_sitemap INTEGER").run(); } catch (_) { /* déjà présent */ }
+  // S18/P3 — pages TOTALES détectées sur le site au lancement du crawl : si le
+  // plafond du plan borne le crawl, le rapport doit le dire (pas de faux
+  // « couverture complète » sur un site plus grand que le plafond).
+  try { await env.DB.prepare("ALTER TABLE sentinel_crawls ADD COLUMN site_total INTEGER").run(); } catch (_) { /* déjà présent */ }
   _schemaReady = true;
 }
 
@@ -335,6 +350,7 @@ async function _audit(url, opts = {}) {
 
   // robots.txt + sitemap (best effort) — contrôle « site-level », fait sur la home.
   let sitemap = false;
+  let notFoundProbe = null;
   if (opts.skipSite) {
     sitemap = !!opts.sitemapKnown;
   } else {
@@ -345,6 +361,17 @@ async function _audit(url, opts = {}) {
       // S10/C20 — un sitemap doit CONTENIR du sitemap (urlset/sitemapindex/loc),
       // pas juste répondre 200 (page d'erreur HTML, soft redirect…).
       if (!sitemap) { const sm = await _exists(`${origin}/sitemap.xml`, true); sitemap = sm.ok && sitemapLooksValid(sm.text); }
+      // S18/P2 — soft 404 (site-level, sur la home) : une URL inventée doit
+      // répondre 404/410. Le suffixe horodaté déjoue les caches ; le verdict
+      // (pur) vit dans lib/audit-page.js (soft404Finding). Best-effort : une
+      // sonde qui échoue en réseau ne produit AUCUN verdict.
+      const probePath = `/sentinel-controle-404-${Date.now().toString(36)}`;
+      const ctrl2 = new AbortController(); const t2 = setTimeout(() => ctrl2.abort(), SUB_TIMEOUT_MS);
+      try {
+        const r2 = await fetch(origin + probePath, { method: 'GET', redirect: 'follow', headers: { 'User-Agent': UA }, signal: ctrl2.signal });
+        try { await r2.body?.cancel?.(); } catch (_) {}
+        notFoundProbe = { status: r2.status, redirected: !(r2.url || '').includes(probePath) };
+      } finally { clearTimeout(t2); }
     } catch (_) {}
   }
 
@@ -356,10 +383,15 @@ async function _audit(url, opts = {}) {
   const platform = detected !== 'custom' ? detected : (opts.platform || 'custom');
 
   // Analyse pure (lib/audit-page.js) — testée sur fixtures réelles (S8).
-  const a = analyzePage(html, { truncated, headers, skipSite: opts.skipSite, sitemap, url, platform });
+  const a = analyzePage(html, { truncated, headers, skipSite: opts.skipSite, sitemap, url, platform,
+                                siteKind: opts.siteKind, inSitemap: opts.inSitemap });
   // S13.2 — coquille SPA : marqueur dédié dans les indéterminés (persiste,
   // le front l'affiche comme « site en rendu client », pas comme un défaut).
   if (a.spaShell && !a.indeterminate.includes('_spa')) a.indeterminate.unshift('_spa');
+  // S18/P2 — verdict soft 404 (pur) rattaché ici : les DEUX chemins (audit
+  // express et crawl complet) passent par _audit pour la home.
+  const s404 = soft404Finding(notFoundProbe);
+  if (s404) a.findings.push(s404);
   // S16.2 — la plateforme est re-déduite du document DÉJÀ téléchargé (aucune
   // requête en plus). L'appelant s'en sert pour corriger la valeur stockée :
   // sans cela, une détection erronée à la création du site restait figée à vie.
@@ -397,7 +429,10 @@ async function _discoverPages(url, max) {
     try { const x = new URL(h, origin); if (x.hostname.replace(/^www\./, '') !== host) return null; if (!/^https?:$/.test(x.protocol)) return null; x.hash = ''; x.search = ''; return x.href.replace(/\/$/, '') || x.href; } catch (_) { return null; }
   };
   const found = new Set();
-  for (const u2 of await _sitemapLocs(`${origin}/sitemap.xml`, norm, 1, max * 3)) { if (!ASSET.test(u2)) found.add(u2); }
+  // S18/P2 — mémoire de PROVENANCE : les URLs venues du sitemap (la page y
+  // figure) aggravent un éventuel noindex (contradiction sitemap + noindex).
+  const sitemapSet = new Set();
+  for (const u2 of await _sitemapLocs(`${origin}/sitemap.xml`, norm, 1, max * 3)) { sitemapSet.add(u2); if (!ASSET.test(u2)) found.add(u2); }
   if (found.size < max) {
     try {
       const r = await _exists(url, true);
@@ -434,14 +469,15 @@ async function _discoverPages(url, max) {
     if (!took) break;
   }
   // total = pages internes détectées + la home (pour le « X sur N » du rapport)
-  return { urls: [...prio, ...diverse].slice(0, max), total: candidates.length + 1 };
+  return { urls: [...prio, ...diverse].slice(0, max), total: candidates.length + 1,
+           sitemapSet, homeInSitemap: homeNorm ? sitemapSet.has(homeNorm) : false };
 }
 
 // Audite la home + N pages internes en parallèle, agrège scores + findings.
 // S11 : l'agrégation vit dans lib/audit-page.js (aggregatePages) — partagée
 // avec la finalisation du crawl complet.
-async function _auditSite(url, platform) {
-  const home = await _audit(url, { platform });
+async function _auditSite(url, platform, siteKind) {
+  const home = await _audit(url, { platform, siteKind });
   // S15.1 — UN SEUL hôte pour tout l'audit : celui où la home vit réellement
   // (redirections suivies). Avant : home sur l'URL enregistrée (apex), pages
   // internes sur celles du sitemap (www) → deux couches de cache CDN
@@ -450,13 +486,15 @@ async function _auditSite(url, platform) {
   let extraUrls = [], pagesTotal = 1;
   try {
     const d = await _discoverPages(url, MAX_AUDIT_PAGES - 1);
-    extraUrls = d.urls.map((u) => _rehost(u, canonHost));
+    // S18/P2 — provenance sitemap testée AVANT le ré-hébergement (le set est
+    // construit sur les URLs normalisées du sitemap).
+    extraUrls = d.urls.map((u) => ({ url: _rehost(u, canonHost), inSitemap: d.sitemapSet ? d.sitemapSet.has(u) : null }));
     pagesTotal = d.total;
   } catch (_) {}
   // S16.2 — les pages internes héritent de la plateforme retenue pour la HOME
   // (signature fraîche), pas de la valeur stockée qui peut être erronée.
-  const extras = (await Promise.all(extraUrls.map((u) =>
-    _audit(u, { skipSite: true, sitemapKnown: home.sitemap, platform: home.platform }).then((r) => ({ url: u, ...r })).catch(() => null)
+  const extras = (await Promise.all(extraUrls.map((x) =>
+    _audit(x.url, { skipSite: true, sitemapKnown: home.sitemap, platform: home.platform, siteKind, inSitemap: x.inSitemap }).then((r) => ({ url: x.url, ...r })).catch(() => null)
   ))).filter((p) => p && p.reachable);
   const pagesAudited = [{ url, ...home }].concat(extras).map((p) => ({ ...p, path: _pathOf(p.url) }));
 
@@ -514,11 +552,17 @@ export async function handleSiteCrawlStart(request, env, id) {
   // « fautives » alors que le correctif était partout à la source).
   const finalHome = await _resolveFinalUrl(site.url);
   const crawlHost = _fullHostOf(finalHome) || _fullHostOf(site.url);
-  let urls = [finalHome];
+  let pagesToCrawl = [{ url: finalHome, inSitemap: null }];
+  let siteTotal = 1;
   try {
     const d = await _discoverAllPages(site.url, Math.max(0, limit - 1));
-    urls = [finalHome, ...d.urls.map((u) => _rehost(u, crawlHost))];
+    // S18/P2-P3 — provenance sitemap par page (avant ré-hébergement) + total
+    // RÉEL du site : si le plafond du plan borne le crawl, le rapport le dira.
+    pagesToCrawl = [{ url: finalHome, inSitemap: d.homeInSitemap ? true : null },
+      ...d.urls.map((u) => ({ url: _rehost(u, crawlHost), inSitemap: d.sitemapSet ? d.sitemapSet.has(u) : null }))];
+    siteTotal = Math.max(d.total || 0, pagesToCrawl.length);
   } catch (_) {}
+  const urls = pagesToCrawl.map((p) => p.url);
   // S14.1 — le contrôle sitemap est SITE-level : fait une fois ici, propagé
   // à chaque page du crawl (sitemapKnown). Sans ça, les pages internes
   // perdaient 10 pts SEO chacune EN SILENCE : le crawl complet du Mas
@@ -532,10 +576,10 @@ export async function handleSiteCrawlStart(request, env, id) {
     if (!hasSitemap) { const sm = await _exists(`${origin2}/sitemap.xml`, true); hasSitemap = (sm.ok && sitemapLooksValid(sm.text)) ? 1 : 0; }
   } catch (_) {}
   const crawlId = generateId();
-  await env.DB.prepare("INSERT INTO sentinel_crawls (id, tenant_id, site_id, status, total, done, has_sitemap) VALUES (?, ?, ?, 'running', ?, 0, ?)")
-    .bind(crawlId, g.tenant, id, urls.length, hasSitemap).run();
+  await env.DB.prepare("INSERT INTO sentinel_crawls (id, tenant_id, site_id, status, total, done, has_sitemap, site_total) VALUES (?, ?, ?, 'running', ?, 0, ?, ?)")
+    .bind(crawlId, g.tenant, id, urls.length, hasSitemap, siteTotal).run();
   // Lot d'INSERT bornés (D1 batch) — la home est la 1re page de la file.
-  const stmts = urls.map((u) => env.DB.prepare("INSERT OR IGNORE INTO sentinel_crawl_pages (crawl_id, tenant_id, url) VALUES (?, ?, ?)").bind(crawlId, g.tenant, u));
+  const stmts = pagesToCrawl.map((p) => env.DB.prepare("INSERT OR IGNORE INTO sentinel_crawl_pages (crawl_id, tenant_id, url, in_sitemap) VALUES (?, ?, ?, ?)").bind(crawlId, g.tenant, p.url, p.inSitemap === true ? 1 : (p.inSitemap === false ? 0 : null)));
   await env.DB.batch(stmts);
   return json({ crawl: { id: crawlId, status: 'running', done: 0, total: urls.length,
     note: `Crawl lancé : ${urls.length} pages (plafond ${limit} sur votre plan). Progression ~${CRAWL_TICK_PAGES} pages/min.` } }, 200, origin);
@@ -558,7 +602,7 @@ export async function handleSiteCrawlStatus(request, env, id) {
 export async function sweepDueCrawls(env) {
   await _ensureSchema(env);
   const due = (await env.DB.prepare(
-    `SELECT p.crawl_id, p.tenant_id, p.url, c.site_id, c.has_sitemap
+    `SELECT p.crawl_id, p.tenant_id, p.url, p.in_sitemap, c.site_id, c.has_sitemap
        FROM sentinel_crawl_pages p JOIN sentinel_crawls c ON c.id = p.crawl_id
       WHERE p.status = 'pending' AND c.status = 'running'
       ORDER BY c.created_at ASC LIMIT ${CRAWL_TICK_PAGES}`
@@ -567,12 +611,14 @@ export async function sweepDueCrawls(env) {
   for (const row of due) {
     let result = null;
     try {
-      const site = await env.DB.prepare("SELECT url, platform FROM sentinel_sites WHERE id = ?").bind(row.site_id).first();
+      const site = await env.DB.prepare("SELECT url, platform, site_kind FROM sentinel_sites WHERE id = ?").bind(row.site_id).first();
       const isHome = site && _pathOf(row.url) === _pathOf(site.url);
-      const r = await _audit(row.url, { skipSite: !isHome, platform: site && site.platform, sitemapKnown: !!row.has_sitemap });   // S14.1
-      result = { path: _pathOf(row.url), reachable: r.reachable, scores: r.scores, findings: r.findings,
+      const r = await _audit(row.url, { skipSite: !isHome, platform: site && site.platform, sitemapKnown: !!row.has_sitemap,   // S14.1
+                                        siteKind: site && site.site_kind, inSitemap: row.in_sitemap == null ? null : row.in_sitemap === 1 });   // S18
+      result = { path: _pathOf(row.url), url: row.url, reachable: r.reachable, scores: r.scores, findings: r.findings,
                  indeterminate: r.indeterminate, notApplicable: r.notApplicable, truncated: r.truncated,
-                 canonicalHrefHost: r.canonicalHrefHost || null, sitemap: r.sitemap, cacheAge: r.cacheAge || 0, geoHints: isHome ? r.geoHints : null };
+                 canonicalHrefHost: r.canonicalHrefHost || null, sitemap: r.sitemap, cacheAge: r.cacheAge || 0, geoHints: isHome ? r.geoHints : null,
+                 hreflangs: r.hreflangs || [], htmlLang: r.htmlLang || '' };   // S18/P2 — réciprocité inter-pages à l'agrégation
     } catch (_) { /* page en échec → 'failed', le crawl continue */ }
     await env.DB.prepare("UPDATE sentinel_crawl_pages SET status = ?, result = ? WHERE crawl_id = ? AND url = ?")
       .bind(result && result.reachable ? 'done' : 'failed', result ? JSON.stringify(result) : null, row.crawl_id, row.url).run();
@@ -582,7 +628,7 @@ export async function sweepDueCrawls(env) {
 
   // Finalisation des crawls sans page en attente.
   const finishable = (await env.DB.prepare(
-    `SELECT c.id, c.tenant_id, c.site_id FROM sentinel_crawls c
+    `SELECT c.id, c.tenant_id, c.site_id, c.site_total FROM sentinel_crawls c
       WHERE c.status = 'running'
         AND NOT EXISTS (SELECT 1 FROM sentinel_crawl_pages p WHERE p.crawl_id = c.id AND p.status = 'pending')`
   ).all()).results || [];
@@ -601,7 +647,7 @@ async function _finalizeCrawl(env, c) {
   const pagesAudited = rows.filter((r) => r.status === 'done' && r.result)
     .map((r) => { try { return JSON.parse(r.result); } catch (_) { return null; } })
     .filter((p) => p && p.reachable);
-  const site = await env.DB.prepare("SELECT id, url, label, platform FROM sentinel_sites WHERE id = ?").bind(c.site_id).first();
+  const site = await env.DB.prepare("SELECT id, url, label, platform, site_kind FROM sentinel_sites WHERE id = ?").bind(c.site_id).first();
   if (!site || !pagesAudited.length) {
     await env.DB.prepare("UPDATE sentinel_crawls SET status = 'failed', finished_at = datetime('now') WHERE id = ?").bind(c.id).run();
     return;
@@ -631,13 +677,18 @@ async function _finalizeCrawl(env, c) {
     if (cwv.weightKb >= 3072) findings.push({ axis: 'performance', sev: 'low', key: 'perf_weight', title: `Page lourde (${_fr1(cwv.weightKb / 1024)} Mo)`, detail: 'Allégez images et scripts pour accélérer le mobile.' });
   }
   _cacheHint(findings, pagesAudited.length);        // S15.3
-  _attachFixes(findings, { url: site.url, host: _hostOf(site.url), platform: site.platform });
+  _attachFixes(findings, { url: site.url, host: _hostOf(site.url), platform: site.platform, siteKind: site.site_kind });
+  // S18/P3 — un crawl borné par le plafond du plan n'est PAS une couverture
+  // totale du site : pages_total = le vrai total détecté au lancement, et
+  // chaque finding extrapole si le site dépasse les pages lues.
+  const pagesTotal = Math.max(c.site_total || 0, pagesAudited.length);
+  attachScopeNotes(findings, { pageCount: pagesAudited.length, pagesTotal });
   const global = _globalScore(scores);
   attachGains(findings, { scores, pageCount: pagesAudited.length, notApplicable: agg.notApplicable });   // S12.1
   await env.DB.prepare("INSERT INTO sentinel_audits (id, tenant_id, site_id, score, scores, findings, cwv, pages, indeterminate, not_applicable, engine, pages_total, coverage, cache_age) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'full', ?)")
     .bind(generateId(), c.tenant_id, site.id, global, JSON.stringify(scores), JSON.stringify(findings),
           cwv ? JSON.stringify(cwv) : null, JSON.stringify(pages), JSON.stringify(agg.indeterminate),
-          JSON.stringify(agg.notApplicable), SENTINEL_ENGINE_VERSION, pagesAudited.length, cacheAgeMax || 0).run();
+          JSON.stringify(agg.notApplicable), SENTINEL_ENGINE_VERSION, pagesTotal, cacheAgeMax || 0).run();
   await env.DB.prepare("UPDATE sentinel_sites SET last_score = ?, last_scores = ?, last_coverage = 'full', last_audit_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
     .bind(global, JSON.stringify(scores), site.id).run();
   await env.DB.prepare("UPDATE sentinel_crawls SET status = 'done', finished_at = datetime('now') WHERE id = ?").bind(c.id).run();
@@ -667,218 +718,9 @@ async function _uptimeWindow(env, siteId) {
 }
 
 // ── Handlers ────────────────────────────────────────────────────
-// ── Générateur de correctifs clé en main (S4, déterministe) ─────
-// Pour chaque finding (par clé), des étapes contextualisées à la plateforme
-// + le code prêt à coller quand c'est pertinent. Zéro IA, zéro coût.
-function _headSteps(platform) {
-  if (platform === 'wordpress') return ['Installez l\'extension gratuite « WPCode » (Extensions › Ajouter, puis Activer).', 'Code Snippets › + Add Snippet › code HTML, emplacement « Site Wide Header ».', 'Collez le code ci-dessous, enregistrez et activez.'];
-  if (platform === 'wix') return ['Dans Wix : Réglages › Code personnalisé (Custom Code) › + Ajouter.', 'Collez le code, placez-le dans le <head>, appliquez à « Toutes les pages ».', 'Enregistrez.'];
-  return ['Collez le code ci-dessous dans la balise <head> de votre page (thème/gabarit).', 'Ou transmettez ce bloc à votre webmaster.'];
-}
-// ── Correctifs NATIFS Wix (V2 · intégration Wix) ────────────────
-// Pour un site Wix, on guide via l'UI Wix réelle (tableau de bord / éditeur)
-// plutôt que par injection de code <head> — c'est là qu'un utilisateur Wix
-// agit vraiment. Renvoie null pour les clés non couvertes (→ switch générique,
-// qui garde des branches Wix pour les en-têtes sécurité).
-function _wixFix(key, ctx) {
-  let origin = ctx.url || ''; try { origin = new URL(ctx.url).origin; } catch (_) {}
-  switch (key) {
-    case 'meta_length':
-    case 'meta_missing': return { steps: [
-      'Tableau de bord Wix › Marketing et SEO › « Outils SEO » (ou, dans l\'éditeur, ouvrez la page et cliquez l\'icône SEO).',
-      'Section « Aperçu sur Google » › champ « Description » : rédigez 50 à 160 caractères qui donnent envie de cliquer.',
-      'Enregistrez, puis Publiez le site.'] };
-    case 'title_missing': case 'title_long': return { steps: [
-      'Dans l\'éditeur Wix : ouvrez la page › panneau SEO de la page › « Titre SEO (balise title) ».',
-      'Visez 50 à 60 caractères, format conseillé : [Activité] à [Ville] | [Nom].',
-      'Enregistrez et publiez.'] };
-    case 'og_title': case 'og_image': return { steps: [
-      'Éditeur Wix › ouvrez la page › panneau SEO › onglet « Partage sur les réseaux sociaux ».',
-      'Définissez le titre et surtout l\'IMAGE de partage (recommandé 1200 × 630 px).',
-      'Enregistrez et publiez.'] };
-    case 'img_alt': return { steps: [
-      'Éditeur Wix : cliquez l\'image › icône « Réglages » › champ « Texte alternatif ».',
-      'Décrivez l\'image en une courte phrase (utile pour Google Images et l\'accessibilité).',
-      'Répétez pour chaque image signalée, puis publiez.'] };
-    case 'lang': return { steps: [
-      'Tableau de bord Wix › Réglages › « Langues du site » : assurez-vous que le français est la langue principale.',
-      'Wix renseigne alors automatiquement lang="fr" ; republiez le site.'] };
-    case 'h1': return { steps: [
-      'Éditeur Wix : sélectionnez le titre principal de la page › dans la barre de texte, choisissez le style « Titre 1 ».',
-      'Gardez UN seul Titre 1 par page ; passez les sous-titres en « Titre 2 / 3 ».',
-      'Publiez.'] };
-    // S16/C24 — Wix génère TOUT SEUL une fiche « Local Business » sur la page
-    // d'accueil dès que « Infos de l'entreprise » contient un nom et une
-    // adresse. Elle n'a pas d'@id : elle reste étrangère au bloc que vous avez
-    // ajouté vous-même. Wix permet de la convertir en balisage personnalisé —
-    // c'est là qu'on pose l'@id commun (ou qu'on l'exclut, si votre bloc est
-    // plus riche : LodgingBusiness bat LocalBusiness pour un hébergement).
-    case 'jsonld_entity_split': return { steps: [
-      'Tableau de bord Wix › Marketing et SEO › « Réglages SEO » › choisissez le type de page « Page d\'accueil » › « Personnaliser les valeurs par défaut ».',
-      'Ouvrez le balisage « Local Business » : « Aperçu du préréglage » puis « Convertir en balisage personnalisé » (c\'est ce qui rend le JSON-LD éditable).',
-      `Dans le code, ajoutez la ligne "@id" avec EXACTEMENT la même valeur que dans votre propre bloc : "@id": "${origin || 'https://votre-domaine.fr'}/#business". Deux fiches qui partagent un @id sont fusionnées en une seule entité.`,
-      'Variante plus radicale, si votre bloc maison est le plus complet : au même endroit, EXCLUEZ le balisage Local Business de la page d\'accueil — vous ne gardez qu\'une fiche, la vôtre.',
-      'Enregistrez, puis PUBLIEZ (c\'est la publication qui purge le cache Wix).',
-      'Contrôlez avec l\'outil de test des résultats enrichis de Google : une seule entité doit apparaître.'],
-      codeLabel: 'La ligne à ajouter dans le balisage Wix', code:
-`"@id": "${origin || 'https://votre-domaine.fr'}/#business"` };
-    case 'canonical': return { steps: [
-      'Wix gère les balises canoniques automatiquement — en général, rien à faire.',
-      'Si vraiment nécessaire : éditeur › page › panneau SEO › « Avancé » › « Balise canonique ».'] };
-    case 'viewport': return { steps: [
-      'Les sites Wix sont responsives : la balise viewport est ajoutée automatiquement.',
-      'Si elle est signalée absente, vérifiez qu\'un code personnalisé injecté dans le <head> ne la supprime pas.'] };
-    case 'sitemap': return { steps: [
-      `Wix génère et met à jour votre sitemap automatiquement : ${origin}/sitemap.xml — rien à créer.`,
-      'Soumettez-le une seule fois dans Google Search Console › « Sitemaps ».'] };
-    case 'jsonld': case 'nap_localbiz': case 'nap_address': case 'nap_phone': case 'nap_hours': return {
-      steps: [
-        'Tableau de bord Wix › Réglages › « Infos de l\'entreprise » : renseignez le nom, l\'adresse, le téléphone et les horaires.',
-        'Wix publie alors automatiquement votre fiche et vos données structurées (LocalBusiness).',
-        'Affichez aussi ces infos sur une page Contact (adresse complète, numéro en lien cliquable). Pour aller plus loin, le balisage ci-dessous peut être collé via Réglages › Code personnalisé (head).'],
-      codeLabel: 'Données structurées LocalBusiness (optionnel — avancé)',
-      code:
-`<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "LocalBusiness",
-  "@id": "${origin}/#business",
-  "name": "Nom de votre établissement",
-  "url": "${origin}",
-  "telephone": "+33 1 23 45 67 89",
-  "address": { "@type": "PostalAddress", "streetAddress": "12 rue Exemple", "addressLocality": "Ville", "postalCode": "00000", "addressCountry": "FR" },
-  "openingHours": "Mo-Fr 09:00-18:00",
-  "priceRange": "€€"
-}
-</script>` };
-    case 'perf_lcp': return { steps: [
-      'Wix sert déjà vos images en format optimisé (WebP) — le levier principal est ailleurs.',
-      'Allégez la page d\'accueil : limitez les applications tierces, les vidéos d\'arrière-plan et les animations.',
-      'Éditeur › « Optimiser le site » (Site Speed) : suivez les recommandations Wix.'] };
-    case 'perf_cls': return { steps: [
-      'Évitez les bannières/pop-ups qui apparaissent après le chargement et décalent la page.',
-      'Éditeur Wix › « Optimiser le site » : appliquez les conseils de stabilité d\'affichage.'] };
-    case 'perf_weight': return { steps: [
-      'Réduisez le nombre d\'applications Wix (App Market) et de scripts tiers ajoutés à la page.',
-      'Remplacez les vidéos d\'arrière-plan lourdes par une image ; limitez les polices personnalisées.'] };
-  }
-  return null;
-}
-function _fixFor(key, ctx, f) {
-  const url = ctx.url || '';
-  let origin = url; try { origin = new URL(url).origin; } catch (_) {}
-  const head = _headSteps(ctx.platform);
-  // Site Wix → privilégier le correctif natif Wix (sinon repli sur le générique).
-  // S10/C19 — variante typée AVANT le dispatch plateforme : pour un
-  // hébergement, le correctif « horaires » = checkinTime/checkoutTime.
-  if (key === 'nap_hours' && f && f.entity === 'lodging') {
-    return { steps: [
-      'Pour un hébergement, Google et les IA attendent les heures d\'arrivée et de départ (checkinTime / checkoutTime), pas des horaires d\'ouverture.',
-      'Ajoutez les deux champs ci-dessous à votre bloc JSON-LD existant (celui qui déclare votre LodgingBusiness).',
-      ctx.platform === 'wix' ? 'Sur Wix : Réglages › Code personnalisé — modifiez le bloc de données structurées déjà en place.' : 'Le bloc se trouve dans le <head> de vos pages (ou via votre webmaster).'],
-      codeLabel: 'Champs à ajouter au JSON-LD LodgingBusiness', code:
-`"checkinTime": "16:00",
-"checkoutTime": "10:00"` };
-  }
-  if (ctx.platform === 'wix') { const wf = _wixFix(key, ctx); if (wf) return wf; }
-  switch (key) {
-    // ── S10 — contrôles à valeur ──────────────────────────────────────────
-    case 'jsonld_url_mismatch': return { steps: [
-      'Ouvrez le bloc de données structurées (JSON-LD) de vos pages — sur Wix : Réglages › Code personnalisé, ou l\'embed HTML qui le contient.',
-      `Remplacez la valeur du champ "url" (et "@id" le cas échéant) par l'adresse RÉELLE du site : ${ctx.url || 'votre domaine de production'}.`,
-      'Bonnes pratiques : donnez le même "@id" (ex. ' + (ctx.url || 'https://votre-domaine.fr') + '#business) à tous les blocs décrivant votre établissement pour que les moteurs les fusionnent.',
-      'IMPORTANT : cliquez « Publier » après la modification — c\'est la publication qui purge le cache Wix (sinon l\'ancienne version peut être servie jusqu\'à 24 h, à vous comme à Google).',
-      'Vérifiez ensuite avec l\'outil de test des résultats enrichis de Google.'],
-      codeLabel: 'Champs à corriger dans votre JSON-LD', code:
-`"url": "${ctx.url || 'https://votre-domaine.fr'}",
-"@id": "${ctx.url || 'https://votre-domaine.fr'}#business"` };
-    case 'jsonld_entity_split': return { steps: [
-      // S16.3 — le rapport Squarespace du 04/08 servait « Si votre site tourne
-      // sous WordPress… » à un site qui n'est pas sous WordPress. Les étapes
-      // parlent maintenant de la plateforme réellement détectée.
-      'Repérez les DEUX blocs de données structurées qui décrivent votre établissement : le vôtre, et celui que votre plateforme (ou une extension SEO) ajoute automatiquement.',
-      ...(ctx.platform === 'squarespace' ? ['Sur Squarespace, la fiche automatique est construite à partir de Réglages › « Business Information » : c\'est là que se corrigent nom, adresse et téléphone, et le bloc ajouté à la main doit s\'aligner dessus.']
-        : ctx.platform === 'wordpress' ? ['Sur WordPress : quand deux extensions SEO (Yoast, Rank Math, un thème…) produisent chacune leur fiche, n\'en gardez qu\'une active — c\'est plus sain que de les aligner à la main.'] : []),
-      `Donnez-leur le MÊME identifiant : ajoutez "@id": "${ctx.url ? (() => { try { return new URL(ctx.url).origin; } catch (_) { return 'https://votre-domaine.fr'; } })() : 'https://votre-domaine.fr'}/#business" dans CHACUN des deux blocs.`,
-      'Alternative : supprimez le bloc en double et ne conservez que le plus complet.',
-      'Republiez, puis vérifiez avec l\'outil de test des résultats enrichis de Google : une seule entité doit apparaître.'],
-      codeLabel: 'L\'identifiant commun à poser dans les deux blocs', code:
-`"@id": "${ctx.url ? (() => { try { return new URL(ctx.url).origin; } catch (_) { return 'https://votre-domaine.fr'; } })() : 'https://votre-domaine.fr'}/#business"` };
-    case 'canonical_mismatch': return { steps: [
-      'La balise canonical de la page pointe vers un AUTRE domaine : Google est invité à indexer ce domaine-là à votre place.',
-      'Corrigez le href de <link rel="canonical"> pour qu\'il pointe vers la page elle-même, sur votre domaine.',
-      'Sur plateforme (Wix/WordPress), le canonical est généré automatiquement : vérifiez le domaine connecté et les réglages SEO de la page.'],
-      codeLabel: 'Canonical attendu', code: `<link rel="canonical" href="${ctx.url || 'https://votre-domaine.fr/cette-page'}">` };
-    case 'canonical_inconsistent': return { steps: [
-      'Certaines pages se déclarent en www, d\'autres sans : choisissez UNE forme et tenez-la partout.',
-      'Vérifiez la redirection 301 de la forme non retenue vers la forme canonique (réglage domaine de votre hébergeur).',
-      'Sur Wix : Réglages › Domaines — le domaine « principal » détermine la forme canonique générée.'] };
-    case 'wix_subdomain': return { steps: [
-      'Votre site est publié sur une adresse Wix gratuite (terminant par .wixsite.com) : Google la classe moins bien et elle inspire moins confiance.',
-      'Tableau de bord Wix › Réglages › « Domaines » › « Connecter un domaine » : reliez un nom de domaine à votre marque (ex. votre-entreprise.fr).',
-      'Un domaine personnalisé améliore le référencement, la crédibilité et le rendu lors des partages.'] };
-    // S16.4 — le titre promettait « affichez un numéro cliquable » et la carte
-    // ne livrait qu'un JSON-LD (constaté sur le rapport Squarespace du 04/08).
-    // Le balisage satisfait le contrôle, mais ce n'est pas ce que lisent les
-    // visiteurs : le geste visible passe donc en PREMIÈRE étape, le balisage
-    // reste le complément structuré.
-    case 'jsonld': case 'nap_localbiz': case 'nap_address': case 'nap_phone': case 'nap_hours':
-      return { steps: [
-        ...(key === 'nap_phone' ? ['Affichez d\'abord le numéro sur la page (en-tête ou pied de page), en lien cliquable : <a href="tel:+33612345678">06 12 34 56 78</a> — c\'est ce que voient vos visiteurs, et ce qu\'un mobile compose d\'un doigt.'] : []),
-        ...(key === 'nap_address' ? ['Affichez d\'abord l\'adresse complète sur la page (pied de page ou page Contact) : rue, code postal, ville.'] : []),
-        ...(key === 'nap_hours' ? ['Affichez d\'abord vos horaires sur la page — c\'est la première chose qu\'un client cherche.'] : []),
-        ...head], codeLabel: 'Fiche établissement (LocalBusiness — nom, adresse, téléphone, horaires)', code:
-`<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "LocalBusiness",
-  "@id": "${origin}/#business",
-  "name": "Nom de votre établissement",
-  "url": "${origin}",
-  "telephone": "+33 1 23 45 67 89",
-  "address": { "@type": "PostalAddress", "streetAddress": "12 rue Exemple", "addressLocality": "Ville", "postalCode": "00000", "addressCountry": "FR" },
-  "openingHours": "Mo-Fr 09:00-18:00",
-  "priceRange": "€€"
-}
-</script>` };
-    case 'meta_length':
-    case 'meta_missing': return {
-      steps: ctx.platform === 'wordpress' ? ['Avec Yoast SEO ou Rank Math : ouvrez la page › encart SEO › « Méta description ».', 'Collez le texte ci-dessous (personnalisez-le), enregistrez.']
-           : ctx.platform === 'wix' ? ['Wix : ouvrez la page › Réglages SEO (SEO de base) › « Description ».', 'Collez le texte ci-dessous, enregistrez et publiez.']
-           : ['Ajoutez cette balise dans le <head> de la page.'],
-      codeLabel: 'Méta description (modèle à personnaliser)',
-      code: `<meta name="description" content="[Votre activité] à [ville] — [bénéfice clé pour le client]. [Appel à l'action, ex. Réservez en ligne].">` };
-    case 'title_missing': return { steps: head, codeLabel: 'Balise titre', code: `<title>[Votre activité] à [ville] | [Nom de l'établissement]</title>` };
-    case 'viewport': return { steps: head, codeLabel: 'Balise viewport (mobile)', code: `<meta name="viewport" content="width=device-width, initial-scale=1">` };
-    case 'canonical': return { steps: head, codeLabel: 'URL canonique', code: `<link rel="canonical" href="${url || origin}">` };
-    case 'og_title': return { steps: head, codeLabel: 'Open Graph — titre', code: `<meta property="og:title" content="[Titre attractif de la page]">` };
-    case 'og_image': return { steps: head, codeLabel: 'Open Graph — image', code: `<meta property="og:image" content="${origin}/votre-image-partage.jpg">` };
-    case 'lang': return { steps: ['Modifiez la balise <html> d\'ouverture de votre page pour déclarer le français :'], codeLabel: 'Attribut de langue', code: `<html lang="fr">` };
-    case 'sitemap': return {
-      steps: ctx.platform === 'wordpress' ? ['Yoast/Rank Math génère le sitemap automatiquement (souvent /sitemap_index.xml).', 'Vérifiez qu\'il est déclaré dans robots.txt :']
-           : ctx.platform === 'wix' ? ['Wix génère un sitemap par défaut à /sitemap.xml.', 'Vérifiez sa déclaration dans robots.txt :']
-           : ['Générez un sitemap.xml et déclarez-le dans robots.txt :'],
-      codeLabel: 'Ligne à ajouter dans robots.txt', code: `Sitemap: ${origin}/sitemap.xml` };
-    case 'h1': return { steps: ['Assurez-vous d\'avoir UN seul titre principal (H1) par page — en général le titre principal défini dans l\'éditeur.', 'Les autres titres doivent être en H2/H3 (sous-titres).'] };
-    case 'img_alt': return { steps: ['Pour chaque image, renseignez le « texte alternatif » (alt) qui décrit l\'image.', ctx.platform === 'wordpress' ? 'WordPress : Médias › sélectionnez l\'image › champ « Texte alternatif ».' : ctx.platform === 'wix' ? 'Wix : clic sur l\'image › Paramètres › « Texte alternatif ».' : 'Ajoutez l\'attribut alt="description" sur chaque <img>.'] };
-    case 'perf_lcp': return { steps: ['Compressez l\'image principale (format WebP/AVIF) et donnez-lui une taille adaptée.', 'Activez le cache et différez les scripts non essentiels (chat, analytics).'] };
-    case 'perf_cls': return { steps: ['Donnez une largeur/hauteur fixe aux images, bannières et publicités pour éviter les sauts.', 'Réservez l\'espace des contenus chargés après coup.'] };
-    case 'perf_weight': return { steps: ['Compressez les images (WebP/AVIF), limitez les polices web et les scripts tiers.'] };
-    default:
-      if (key && key.indexOf('sec_') === 0) {
-        const label = key.slice(4);
-        const lines = { HSTS: 'Strict-Transport-Security: max-age=31536000; includeSubDomains', CSP: "Content-Security-Policy: default-src 'self'", 'X-Frame-Options': 'X-Frame-Options: SAMEORIGIN', 'X-Content-Type-Options': 'X-Content-Type-Options: nosniff', 'Referrer-Policy': 'Referrer-Policy: strict-origin-when-cross-origin' };
-        return {
-          steps: ['Cet en-tête se règle côté serveur/hébergeur (pas dans le HTML).', ctx.platform === 'wordpress' ? 'WordPress : une extension comme « HTTP Headers » permet de l\'ajouter sans code.' : ctx.platform === 'wix' ? 'Wix gère une partie de ces en-têtes (HSTS souvent déjà actif) ; sinon non réglable sans serveur dédié.' : 'Ajoutez cet en-tête dans la config de votre serveur ou de votre CDN.', 'En-tête à transmettre à votre hébergeur/webmaster :'],
-          codeLabel: `En-tête ${label}`, code: lines[label] || `${label}: ...` };
-      }
-      return null;
-  }
-}
-function _attachFixes(findings, ctx) {
-  for (const f of findings) { try { f.fix = _fixFor(f.key, ctx, f); } catch (_) { f.fix = null; } }
-  return dedupeFixCode(findings);
-}
+// ── Générateur de correctifs clé en main (S4 → extrait en S18) ──
+// _fixFor/_attachFixes vivent dans lib/audit-fixes.js (pur, testé) : le banc
+// verrouille la règle P0 « aucun code collé littéralement ne casse un site ».
 
 // ── S4.1 · A) IA rédactionnel : génère le texte à la place du client ─────
 // Pour les correctifs « texte » (méta description, FAQ AEO), un appel IA
@@ -924,7 +766,7 @@ async function _pageContext(url) {
 
 const PLAT_LABEL = { wix: 'Wix', wordpress: 'WordPress', custom: 'Sur-mesure', unknown: 'inconnue' };
 
-function _suggestSystem(kind) {
+function _suggestSystem(kind, siteKind) {
   if (kind === 'faq') {
     return [
       'Tu es un expert SEO et AEO (optimisation pour les moteurs de réponse : ChatGPT, Perplexity, Google AI Overviews).',
@@ -938,7 +780,10 @@ function _suggestSystem(kind) {
   }
   return [
     'Tu es un expert SEO. À partir du contexte du site, rédige UNE méta description en français.',
-    'Contraintes : 130 à 155 caractères, attractive, qui donne envie de cliquer, intègre l\'activité et le lieu si on les connaît, et finit idéalement par une incitation à l\'action.',
+    // S18/P1 — site sans établissement : ne pas pousser un ancrage géographique factice.
+    siteKind === 'online'
+      ? 'Contraintes : 130 à 155 caractères, attractive, qui donne envie de cliquer, intègre l\'activité (SANS mention de lieu : ce site n\'est pas un établissement local), et finit idéalement par une incitation à l\'action.'
+      : 'Contraintes : 130 à 155 caractères, attractive, qui donne envie de cliquer, intègre l\'activité et le lieu si on les connaît, et finit idéalement par une incitation à l\'action.',
     'N\'invente aucun chiffre ni coordonnée non présents dans le contexte.',
     'Réponds UNIQUEMENT par la méta description, sur une seule ligne, sans guillemets, sans préfixe, sans markdown.',
   ].join('\n');
@@ -1096,12 +941,33 @@ export async function handleSiteCreate(request, env) {
   const dup = await env.DB.prepare("SELECT id FROM sentinel_sites WHERE tenant_id = ? AND url = ?").bind(g.tenant, v.url).first();
   if (dup) return err('Ce site est déjà surveillé.', 409, origin);
 
+  // S18/P1 — nature du site, déclarée à la création ('local' par défaut =
+  // comportement historique). Jamais déduite : l'absence de téléphone/adresse
+  // est soit la nature du site, soit exactement le défaut à signaler.
+  const kind = (body && body.kind === 'online') ? 'online' : 'local';
   const probe = await _probe(v.url);
   const id = generateId();
-  await env.DB.prepare("INSERT INTO sentinel_sites (id, tenant_id, url, label, platform) VALUES (?, ?, ?, ?, ?)")
-    .bind(id, g.tenant, v.url, label || null, probe.platform || 'unknown').run();
+  await env.DB.prepare("INSERT INTO sentinel_sites (id, tenant_id, url, label, platform, site_kind) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(id, g.tenant, v.url, label || null, probe.platform || 'unknown', kind).run();
   await _recordCheck(env, g.tenant, id, probe);
-  return json({ site: { id, url: v.url, label: label || null, platform: probe.platform || 'unknown', last_ok: probe.ok, last_status: probe.status, last_ms: probe.ms } }, 201, origin);
+  return json({ site: { id, url: v.url, label: label || null, platform: probe.platform || 'unknown', site_kind: kind, last_ok: probe.ok, last_status: probe.status, last_ms: probe.ms } }, 201, origin);
+}
+
+// S18/P1 — POST /sites/:id/kind { kind: 'local'|'online' } : requalifier un
+// site déjà surveillé (le gate P1 : « le même site audité en mode non local
+// ne perd plus 15 points »). Le score ne bouge qu'au PROCHAIN audit — le
+// front enchaîne la relance pour que l'utilisateur voie l'effet tout de suite.
+export async function handleSiteKindSet(request, env, id) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await _gate(request, env, origin);
+  if (g.error) return g.error;
+  const site = await env.DB.prepare("SELECT id FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  if (!site) return err('Site introuvable.', 404, origin);
+  const b = await parseBody(request);
+  const kind = (b && b.kind === 'online') ? 'online' : 'local';
+  await env.DB.prepare("UPDATE sentinel_sites SET site_kind = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?")
+    .bind(kind, id, g.tenant).run();
+  return json({ ok: true, site_kind: kind }, 200, origin);
 }
 
 export async function handleSiteDelete(request, env, id) {
@@ -1254,10 +1120,10 @@ export async function handleSiteAudit(request, env, id) {
   const origin = getAllowedOrigin(env, request);
   const g = await _gate(request, env, origin);
   if (g.error) return g.error;
-  const site = await env.DB.prepare("SELECT id, url, label, platform, last_coverage, last_audit_at FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  const site = await env.DB.prepare("SELECT id, url, label, platform, site_kind, last_coverage, last_audit_at FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
   if (!site) return err('Site introuvable.', 404, origin);
 
-  const a = await _auditSite(site.url, site.platform);   // V2 — crawl : home + pages internes, agrégé (S9 : plateforme → scoping sécurité)
+  const a = await _auditSite(site.url, site.platform, site.site_kind);   // V2 — crawl : home + pages internes, agrégé (S9 : plateforme → scoping sécurité ; S18/P1 : nature du site → axe présence)
 
   // S8/C6 — site injoignable : pas de verdict. On ne stocke PAS d'audit
   // (une ligne à score null polluerait l'historique et les tendances) ;
@@ -1305,7 +1171,10 @@ export async function handleSiteAudit(request, env, id) {
     if (cwv.weightKb >= 3072) findings.push({ axis: 'performance', sev: 'low', key: 'perf_weight', title: `Page lourde (${_fr1(cwv.weightKb / 1024)} Mo)`, detail: 'Allégez images et scripts pour accélérer le mobile.' });
   }
   _cacheHint(findings, a.pageCount);                // S15.3
-  _attachFixes(findings, { url: site.url, host: _hostOf(site.url), platform: site.platform });
+  _attachFixes(findings, { url: site.url, host: _hostOf(site.url), platform: site.platform, siteKind: site.site_kind });
+  // S18/P3 — l'échantillon se dit DANS chaque finding (extrapolation), pas
+  // seulement en tête de rapport : c'est dans le finding que le client lit.
+  attachScopeNotes(findings, { pageCount: a.pageCount, pagesTotal: a.pagesTotal });
   const global = _globalScore(scores);              // S9/C7 : pondération fixe (lib)
   // S12.1 — gain RÉEL par finding (delta exact de barème, jamais une constante).
   attachGains(findings, { scores, pageCount: a.pageCount, notApplicable: a.notApplicable });
@@ -1372,7 +1241,7 @@ export async function handleSiteCockpit(request, env, id) {
   const origin = getAllowedOrigin(env, request);
   const g = await _gate(request, env, origin);
   if (g.error) return g.error;
-  const site = await env.DB.prepare("SELECT id, url, label, platform, last_ok, last_status, last_ms, last_checked_at, next_check_at FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  const site = await env.DB.prepare("SELECT id, url, label, platform, site_kind, last_ok, last_status, last_ms, last_checked_at, next_check_at FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
   if (!site) return err('Site introuvable.', 404, origin);
 
   // S9/C11-C13 — disponibilité : fenêtre RÉELLE (« sur N j », pas « 30 j »
@@ -1450,7 +1319,7 @@ export async function handleSiteCockpit(request, env, id) {
   }
 
   return json({ cockpit: {
-    site: { id: site.id, url: site.url, label: site.label, platform: site.platform, last_ok: site.last_ok, last_status: site.last_status, last_ms: site.last_ms, last_checked_at: site.last_checked_at, next_check_at: site.next_check_at },
+    site: { id: site.id, url: site.url, label: site.label, platform: site.platform, site_kind: site.site_kind || 'local', last_ok: site.last_ok, last_status: site.last_status, last_ms: site.last_ms, last_checked_at: site.last_checked_at, next_check_at: site.next_check_at },
     uptime30d, uptimeWindowDays, uptimeTrend, series30d, audit, scoreHistory, scoreTrend, ssl, geo, gsc,
     email_enabled: !!(env && emailConfigured(env)),
   } }, 200, origin);
@@ -1465,7 +1334,7 @@ export async function handleSiteSuggest(request, env, id) {
   const origin = getAllowedOrigin(env, request);
   const g = await _gate(request, env, origin);
   if (g.error) return g.error;
-  const site = await env.DB.prepare("SELECT id, url, label, platform FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
+  const site = await env.DB.prepare("SELECT id, url, label, platform, site_kind FROM sentinel_sites WHERE id = ? AND tenant_id = ?").bind(id, g.tenant).first();
   if (!site) return err('Site introuvable.', 404, origin);
 
   const body = await parseBody(request);
@@ -1494,7 +1363,7 @@ export async function handleSiteSuggest(request, env, id) {
   let committed = false;
   try {
     const ctx = await _pageContext(site.url);
-    const sys = _suggestSystem(kind);
+    const sys = _suggestSystem(kind, site.site_kind);
     const usr = _suggestUser(kind, site, ctx);
     let aiResp = null;
     try {

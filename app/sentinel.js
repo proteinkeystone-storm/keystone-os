@@ -276,10 +276,18 @@ function _siteCard(s) {
 
 function _addBlock(atLimit, limitTxt) {
   if (atLimit) return `<div class="snt-add snt-add-locked">${icon('lock', 18)}<span>Limite de ${limitTxt} site${_limit > 1 ? 's' : ''} atteinte pour le plan ${_esc(_plan || '—')}. Passez à un plan supérieur pour en ajouter.</span></div>`;
+  // S18/P1 — la nature du site se DÉCLARE (jamais déduite) : un site sans
+  // téléphone ni adresse est soit un site en ligne sain, soit un commerce mal
+  // balisé — seul le propriétaire sait lequel. « Local » = comportement
+  // historique ; « en ligne » = axe présence locale retiré du score.
   return `
     <form class="snt-add snt-add-top" data-form="add">
       <input class="snt-input" name="url" type="url" inputmode="url" autocomplete="off" value="https://" placeholder="https://votre-site.com" required aria-label="Adresse du site" />
       <input class="snt-input snt-input-label" name="label" type="text" placeholder="Nom (optionnel)" aria-label="Nom du site" />
+      <select class="snt-input snt-input-kind" name="kind" aria-label="Nature du site" title="Sert à adapter l'audit : un site sans lieu physique n'est pas jugé sur sa « présence locale ».">
+        <option value="local" selected>Établissement local (boutique, cabinet, resto…)</option>
+        <option value="online">Site sans lieu physique (vitrine, SaaS, média…)</option>
+      </select>
       <button class="snt-btn" type="submit"${_busy ? ' disabled' : ''}>${icon('plus', 16)} ${_busy ? 'Ajout…' : 'Ajouter'}</button>
     </form>
     <p class="snt-hint">Sentinel détecte la plateforme et lance la surveillance immédiatement.</p>
@@ -396,7 +404,10 @@ function _pagesAuditedHTML(c) {
   const full = c.audit.coverage === 'full';
   const crawling = c.crawlRunning;
   let scope;
-  if (full) scope = `${pages.length} pages auditées · <b>couverture complète</b> · score par page`;
+  // S18/P3 — un crawl borné par le plafond du plan n'est PAS une couverture
+  // complète du site : le dire, sinon le client croit que tout a été lu.
+  if (full && total && total > pages.length) scope = `${pages.length} pages auditées sur ${total} détectées · couverture plafonnée par votre plan · score par page`;
+  else if (full) scope = `${pages.length} pages auditées · <b>couverture complète</b> · score par page`;
   else if (total && total > pages.length) {
     const action = crawling
       ? `<span class="snt-dim">· crawl complet en cours… ${crawling.done}/${crawling.total} pages</span>`
@@ -415,17 +426,49 @@ const _INDET_LABEL = {
   lang: 'Langue déclarée', img_alt: 'Textes alternatifs', nap_phone: 'Téléphone',
   nap_address: 'Adresse', nap_localbiz: 'Fiche établissement', nap_hours: 'Horaires',
 };
-function _transparencyHTML(a, platform) {
+// S18/P3.2 — la carte de score n'affiche plus une case vide sans explication :
+// pour chaque axe non mesuré, UNE ligne dit ce qu'il faut pour l'activer.
+// Partagé écran (transparence) + PDF (note sous le profil).
+function _axisNaReasons(c) {
+  const a = (c && c.audit) || {};
+  const sc = a.scores || {};
+  const out = [];
+  if (c && c.gsc && c.gsc.available && !c.gsc.connected) out.push({ label: 'Mots-clés (Google)', txt: 'connectez Search Console (section Mots-clés ci-dessous) — gratuit, une minute, lecture seule.' });
+  if (c && c.geo && c.geo.enabled && c.geo.score == null) out.push({ label: 'Visibilité IA', txt: 'renseignez votre activité et votre ville dans la section Visibilité IA, puis lancez une mesure (ou collez une réponse d\'IA — gratuit).' });
+  if (c && c.uptime30d == null) out.push({ label: 'Disponibilité', txt: 'l\'axe s\'active après quelques heures de surveillance (un relevé toutes les 5 minutes).' });
+  if (!a.cwv && sc.performance == null && a.score != null) out.push({ label: 'Performance', txt: 'mesure de vitesse indisponible lors de cet audit — relancez l\'audit.' });
+  const naNap = (a.notApplicable || []).filter((k) => k.indexOf('nap_') === 0);
+  if (naNap.length) out.push({ label: 'Présence locale', txt: 'site déclaré sans établissement recevant du public — l\'axe et les conseils locaux (fiche, horaires, téléphone, adresse) sont retirés du score.' });
+  return out;
+}
+function _transparencyHTML(c) {
+  const a = c && c.audit;
+  const platform = (c && c.site && c.site.platform) || null;
   if (!a) return '';
   const parts = [];
   const indAll = a.indeterminate || [];
   if (indAll.includes('_spa')) parts.push(`<div class="snt-transp-row">${icon('alert-triangle', 13)} <b>Site en rendu client (JavaScript)</b> : le HTML source ne contient pas le contenu — les points non vérifiables sans rendu ne pénalisent pas le score. Google, lui, exécute le JavaScript.</div>`);
   const ind = indAll.filter((k) => k !== '_spa');
   if (ind.length) parts.push(`<div class="snt-transp-row">${icon('search', 13)} <b>Non vérifiable</b> (page trop volumineuse pour une lecture complète) : ${ind.map((k) => _esc(_INDET_LABEL[k] || k)).join(', ')} — ces points ne pénalisent pas le score.</div>`);
-  const na = a.notApplicable || [];
+  // S18/P1 — notApplicable porte deux familles : les en-têtes sec_* (plateforme
+  // managée) et les nap_* (site sans établissement) — deux lignes distinctes.
+  const na = (a.notApplicable || []).filter((k) => k.indexOf('sec_') === 0);
   if (na.length) {
     const labels = na.map((k) => _esc(k.replace(/^sec_/, '')));
     parts.push(`<div class="snt-transp-row">${icon('lock', 13)} <b>Gérés par l'hébergeur</b> (${_esc(PLATFORM_LABEL[platform] || 'plateforme')}) : en-têtes ${labels.join(', ')} — non réglables sans serveur dédié, exclus du score.</div>`);
+  }
+  const siteKind = (c && c.site && c.site.site_kind) || 'local';
+  if (siteKind === 'online') {
+    parts.push(`<div class="snt-transp-row">${icon('compass', 13)} <b>Site sans établissement physique</b> (déclaré) : l'axe « présence locale » et ses conseils sont retirés du score. <button class="snt-link-btn" data-act="kind-set" data-kind="local">C'est en fait un établissement local ? Requalifier</button></div>`);
+  } else if (a.scores && a.scores.presence === 0) {
+    // Le cas du rapport du 29/08 : présence 0 sur un site qui n'est pas un
+    // commerce → proposer la requalification AU MOMENT où la question se pose.
+    parts.push(`<div class="snt-transp-row">${icon('compass', 13)} <b>Présence locale 0/100</b> : normal si ce site n'est pas un établissement qu'on visite (boutique, cabinet, resto…). <button class="snt-link-btn" data-act="kind-set" data-kind="online">Ce n'est pas un établissement local ? Retirer cet axe</button></div>`);
+  }
+  // S18/P3.2 — axes absents de la carte : comment les activer, en une ligne.
+  const naReasons = _axisNaReasons(c);
+  if (naReasons.length) {
+    parts.push(`<div class="snt-transp-row">${icon('bar-chart', 13)} <b>Axes non mesurés</b> : ${naReasons.map((r) => `<b>${_esc(r.label)}</b> — ${_esc(r.txt)}`).join(' · ')}</div>`);
   }
   const cond = a.cwv && a.cwv.conditions;
   if (cond) parts.push(`<div class="snt-transp-row">${icon('refresh', 13)} <b>Conditions de mesure vitesse</b> : ${cond === 'mobile-4g-cpu4x' ? 'mobile émulé, réseau 4G lente, CPU ×4 (comparable à PageSpeed)' : 'datacenter non bridé — chiffres plus favorables que le mobile réel'}${a.cwv && a.cwv.runs > 1 ? ` · médiane de ${a.cwv.runs} mesures` : ''}.</div>`);
@@ -820,7 +863,7 @@ function _renderCockpit() {
       ${_pagesAuditedHTML(c)}
       <div id="snt-ck-history" hidden>${_historyHTML(c.scoreHistory)}</div>
       ${a.findings ? _findingsHTML(a.findings, site.platform) : `<div class="snt-okmsg">${icon('search', 16)} <button class="snt-link-btn" data-act="relaunch">Lancer le premier audit</button> pour obtenir le score et les correctifs.</div>`}
-      ${_transparencyHTML(a, site.platform)}
+      ${_transparencyHTML(c)}
       ${_geoSectionHTML()}
       ${_aeoCardHTML()}
       ${_gscSectionHTML()}
@@ -1177,6 +1220,12 @@ function _exportPdf() {
     <td style="padding:5px 0;font-size:13px;color:#334155;width:150px">${label}</td>
     <td style="padding:5px 8px;width:100%"><div style="background:#eef1f5;border-radius:99px;height:7px"><div style="background:${col(v)};height:7px;border-radius:99px;width:${v == null ? 0 : Math.max(2, Math.min(100, v))}%"></div></div></td>
     <td style="padding:5px 0;text-align:right;font-size:13px;font-weight:700;color:${col(v)};width:48px">${v == null ? 'n/a' : v}</td></tr>`).join('');
+  // S18/P3.2 — un « n/a » sans explication fait produit inachevé : chaque axe
+  // non mesuré dit en une ligne ce qu'il faut pour l'activer (même logique
+  // que la transparence du cockpit).
+  const naR = _axisNaReasons(p);
+  const axisNaNote = naR.length
+    ? `<div class="sub2" style="margin-top:8px">Axes « n/a » : ${naR.map((r) => `<b>${_esc(r.label)}</b> — ${_esc(r.txt)}`).join(' · ')}</div>` : '';
 
   // ── Visibilité IA (GEO) ──
   let geoHtml = '';
@@ -1212,7 +1261,8 @@ function _exportPdf() {
   // V2 crawl — note « pages auditées » ; S9 : périmètre HONNÊTE (« X sur N »).
   const auditPages = (p.audit && p.audit.pages) || [];
   const pTotal = p.audit && p.audit.pagesTotal;
-  const scopeTxt = (p.audit && p.audit.coverage === 'full') ? `${auditPages.length} pages — couverture complète`
+  const scopeTxt = (p.audit && p.audit.coverage === 'full')
+    ? ((pTotal && pTotal > auditPages.length) ? `${auditPages.length} pages sur ${pTotal} détectées (couverture plafonnée par le plan)` : `${auditPages.length} pages — couverture complète`)
     : (pTotal && pTotal > auditPages.length) ? `${auditPages.length} pages sur ${pTotal} détectées` : `${auditPages.length} pages`;
   const pagesNote = auditPages.length > 1 ? `<div class="sub2">Audit réalisé sur ${scopeTxt} : ${_esc(auditPages.map((x) => x.path).slice(0, 8).join(', '))}${auditPages.length > 8 ? '…' : ''}${(pTotal && pTotal > auditPages.length) ? ' — le score reflète cet échantillon.' : ''}</div>` : '';
   // S9 — transparence dans le rapport : conditions de mesure + version moteur.
@@ -1256,6 +1306,7 @@ function _exportPdf() {
   ${_summaryPdf(p)}
   ${kpis}
   <h2>Profil du site</h2><table style="width:100%;border-collapse:collapse">${axisRows}</table>
+  ${axisNaNote}
   ${geoHtml}
   <h2>${sorted.length ? 'À corriger en priorité — solutions clé en main' : 'Points de contrôle'} <span style="font-size:12px;font-weight:600;color:#64748b">· ${sorted.length ? `${sorted.length} action${sorted.length > 1 ? 's' : ''}${totalGain ? ` · gain au score : jusqu'à +${String(totalGain).replace('.', ',')} pts` : ''}` : 'aucune action requise'}</span></h2>
   ${finds || '<p>Aucun problème détecté sur les axes audités.</p>'}
@@ -1383,6 +1434,18 @@ function _onClick(e) {
   if (a === 'gsc-run')           return _gscRun();
   if (a === 'gsc-disconnect')    return _gscDisconnect();
   if (a === 'crawl-full')        return _crawlFull();
+  if (a === 'kind-set')          return _setSiteKind(act.dataset.kind);
+}
+
+// ── S18/P1 · Requalifier la nature du site (local ⇄ en ligne) ──────
+// Le score ne bouge qu'à l'audit suivant : on l'enchaîne immédiatement pour
+// que l'utilisateur voie l'effet de sa déclaration (le gate P1 du brief).
+async function _setSiteKind(kind) {
+  if (!_panel || !_panel.id || _panel.auditing) return;
+  try { await _api(`/sites/${encodeURIComponent(_panel.id)}/kind`, { method: 'POST', body: { kind: kind === 'online' ? 'online' : 'local' } }); }
+  catch (e) { alert(e.message || 'Modification impossible.'); return; }
+  _sntToast(kind === 'online' ? 'Site requalifié « sans établissement » — audit relancé' : 'Site requalifié « établissement local » — audit relancé');
+  await _relaunchAudit();
 }
 
 // ── S11 · Crawl complet — lancement + suivi de progression ──────
@@ -1412,9 +1475,11 @@ async function _onSubmit(e) {
   if (_busy) return;
   const url = (form.querySelector('[name="url"]').value || '').trim();
   const label = (form.querySelector('[name="label"]').value || '').trim();
+  const kindEl = form.querySelector('[name="kind"]');
+  const kind = (kindEl && kindEl.value === 'online') ? 'online' : 'local';   // S18/P1
   if (!url || /^https?:\/\/$/i.test(url)) return;   // vide ou schéma pré-rempli seul → on ignore
   _busy = true; _render();
-  try { await _api('/sites', { method: 'POST', body: { url, label } }); _busy = false; await _load(true); }
+  try { await _api('/sites', { method: 'POST', body: { url, label, kind } }); _busy = false; await _load(true); }
   catch (e2) { _busy = false; _render(); alert(e2.message || 'Ajout impossible.'); }
 }
 async function _checkNow(id) {

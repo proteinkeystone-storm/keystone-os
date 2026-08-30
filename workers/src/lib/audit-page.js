@@ -466,7 +466,8 @@ export function sitemapLooksValid(text) {
 // Sortie : scores moyens par axe, findings fusionnés (site-level dédupliqués,
 // page-level tagués), unions indéterminé/non-applicable, cohérence canonicals.
 export const SITE_LEVEL_KEYS = new Set(['sitemap', 'wix_subdomain', 'canonical_inconsistent',
-  'sec_HSTS', 'sec_CSP', 'sec_X-Frame-Options', 'sec_X-Content-Type-Options', 'sec_Referrer-Policy']);
+  'sec_HSTS', 'sec_CSP', 'sec_X-Frame-Options', 'sec_X-Content-Type-Options', 'sec_Referrer-Policy',
+  'soft_404', 'hreflang_missing', 'hreflang_reciprocity', 'hreflang_xdefault']);
 
 // ═══ S12.1 — GAIN RÉEL par finding ════════════════════════════════════════
 // L'ancien « gain estimé » du front était une constante par sévérité
@@ -485,7 +486,12 @@ export const FINDING_POINTS = {
   nap_localbiz: [['presence', 20]], nap_hours: [['presence', 15]],
 };
 // Informatifs : réels et importants, mais HORS barème — gain 0, dit tel quel.
-export const INFO_GAIN_KEYS = new Set(['jsonld_url_mismatch', 'canonical_mismatch', 'canonical_inconsistent', 'wix_subdomain', 'title_long', 'jsonld_entity_split']);
+// S18 : les contrôles P2 (noindex, soft 404, hreflang) suivent la même règle
+// que tous les contrôles S10+ — le barème par page reste STABLE d'une version
+// à l'autre (« à périmètre égal, le score ne bouge pas » est une promesse du
+// produit), la gravité se lit dans la sévérité du finding, pas dans le score.
+export const INFO_GAIN_KEYS = new Set(['jsonld_url_mismatch', 'canonical_mismatch', 'canonical_inconsistent', 'wix_subdomain', 'title_long', 'jsonld_entity_split',
+  'noindex', 'soft_404', 'hreflang_self', 'hreflang_xdefault', 'hreflang_missing', 'hreflang_reciprocity']);
 // Variables : le gain dépend du résultat de l'optimisation (continu) — pas de promesse chiffrée.
 export const VARIABLE_GAIN_KEYS = new Set(['perf_lcp', 'perf_cls', 'perf_weight', 'img_alt']);
 
@@ -494,7 +500,10 @@ export const VARIABLE_GAIN_KEYS = new Set(['perf_lcp', 'perf_cls', 'perf_weight'
 // pageCount = pages auditées, notApplicable = clés sec_* exemptées (managé).
 export function attachGains(findings, { scores, pageCount, notApplicable }) {
   const wsum = Object.entries(AXIS_WEIGHTS).reduce((a, [ax, w]) => a + (typeof (scores || {})[ax] === 'number' ? w : 0), 0) || 1;
-  const naCount = (notApplicable || []).length;
+  // S18 — notApplicable porte désormais AUSSI les clés nap_* (site déclaré
+  // sans établissement) : seuls les en-têtes sec_* comptent dans la
+  // renormalisation sécurité, sinon 4 nap_* gonfleraient chaque en-tête à 100.
+  const naCount = (notApplicable || []).filter((k) => /^sec_/.test(k)).length;
   const n = Math.max(1, pageCount || 1);
   for (const f of findings || []) {
     if (INFO_GAIN_KEYS.has(f.key)) { f.gain = 0; continue; }
@@ -514,6 +523,30 @@ export function attachGains(findings, { scores, pageCount, notApplicable }) {
       gain += Math.max(0, axisGain) * (AXIS_WEIGHTS[ax] || 0) / wsum;
     }
     f.gain = Math.round(gain * 10) / 10;
+  }
+  return findings;
+}
+
+// ═══ S18/P3 — l'échantillon LE DIT dans chaque finding ════════════════════
+// Constaté sur le rapport réel du 29/08 (site de 40 pages, audit 5 pages) :
+// « 1 page » affiché pour les titles trop longs, la réalité en comptait 23.
+// Le client corrige une page et croit avoir fini. La mention d'échantillon en
+// tête de rapport ne suffit pas : c'est DANS le finding que le client lit.
+// Règle : quand le site compte plus de pages que l'audit n'en a lues, chaque
+// finding page-level extrapole (proportion constatée × pages du site) et
+// renvoie au crawl complet pour la liste exacte. Les findings site-level
+// (pages: null) portent déjà sur tout le site — rien à extrapoler.
+export function attachScopeNotes(findings, { pageCount, pagesTotal }) {
+  const n = Math.max(1, pageCount || 1);
+  const total = pagesTotal || 0;
+  if (total <= n) return findings;
+  for (const f of findings || []) {
+    if (!f.pages || !f.pages.length) continue;
+    const est = Math.max(f.pages.length, Math.round(f.pages.length * total / n));
+    f.detail = (f.detail ? f.detail + ' ' : '')
+      + (f.pages.length >= n
+        ? `— Constaté sur les ${n} pages auditées ; le site en compte ${total} : le défaut touche probablement tout le site.`
+        : `— Constaté sur ${f.pages.length} des ${n} pages auditées ; le site en compte ${total} : comptez probablement ~${est} pages concernées. Le crawl complet donne la liste exacte.`);
   }
   return findings;
 }
@@ -539,6 +572,38 @@ export function aggregatePages(pagesAudited) {
       title: 'Canonicals incohérents entre les pages',
       detail: `Les pages déclarent des hôtes canoniques différents (${canonHosts.join(' vs ')}) : choisissez UNE forme (www ou non) et appliquez-la partout.`, pages: null });
   }
+  // ═══ S18/P2 — hreflang inter-pages ═══════════════════════════════════════
+  // RÉCIPROCITÉ : si A déclare B comme version alternative, B doit déclarer A
+  // — sinon Google ignore la paire. On ne juge que les paires dont les DEUX
+  // pages ont été lues (preuve S8 : pas de verdict sur une page non vue).
+  const withHl = pagesAudited.filter((p) => p.url && Array.isArray(p.hreflangs));
+  const byUrl = new Map(withHl.map((p) => [_urlLoose(p.url), p]));
+  const oneWay = [];
+  for (const p of withHl) {
+    for (const h of (p.hreflangs || [])) {
+      const target = byUrl.get(_urlLoose(h.href));
+      if (!target || target === p) continue;
+      const back = (target.hreflangs || []).some((h2) => _urlLoose(h2.href) === _urlLoose(p.url));
+      if (!back && oneWay.length < 3 && !oneWay.some((o) => o.from === p.path && o.to === target.path)) {
+        oneWay.push({ from: p.path, to: target.path });
+      }
+    }
+  }
+  if (oneWay.length) {
+    byKey.set('hreflang_reciprocity', { axis: 'seo', sev: 'medium', key: 'hreflang_reciprocity',
+      title: 'Versions linguistiques déclarées à sens unique (hreflang)',
+      detail: `${oneWay.map((o) => `« ${o.from} » déclare « ${o.to} » comme version alternative, mais « ${o.to} » ne le déclare pas en retour`).join(' ; ')}. Google exige la réciprocité : sans elle, il ignore le lien entre vos versions linguistiques et peut servir la mauvaise langue à vos visiteurs.`, pages: null });
+  }
+  // MULTILINGUE SANS HREFLANG : preuve positive uniquement — deux pages du
+  // site déclarent elles-mêmes des <html lang> différents. Sur tout site
+  // multilingue, c'est l'axe SEO n°1 ; sur un monolingue, aucun bruit.
+  const langs = [...new Set(pagesAudited.map((p) => String(p.htmlLang || '').split('-')[0].toLowerCase()).filter(Boolean))];
+  const anyHl = pagesAudited.some((p) => (p.hreflangs || []).length > 0);
+  if (langs.length >= 2 && !anyHl) {
+    byKey.set('hreflang_missing', { axis: 'seo', sev: 'medium', key: 'hreflang_missing',
+      title: 'Site multilingue sans balises hreflang',
+      detail: `Vos pages déclarent plusieurs langues (${langs.join(', ')}) mais aucune balise hreflang ne relie les versions entre elles. Sans hreflang, Google ne sait pas quelle version montrer selon la langue du visiteur : les versions se concurrencent entre elles dans les résultats.`, pages: null });
+  }
   const findings = [...byKey.values()].map((f) => { if (f.pages) f.pages = [...new Set(f.pages)]; return f; });
   return {
     scores, findings,
@@ -546,6 +611,47 @@ export function aggregatePages(pagesAudited) {
     notApplicable: [...new Set(pagesAudited.flatMap((p) => p.notApplicable || []))],
     truncated: pagesAudited.some((p) => p.truncated),
   };
+}
+
+// ═══ S18/P2 — hreflang : lire ce que la page déclare ═════════════════════
+// <link rel="alternate" hreflang="xx" href="…">. Le contrôle ne juge que la
+// COHÉRENCE de ce qui est déclaré : l'absence totale d'hreflang n'est pas un
+// défaut en soi (indistinguable d'un site monolingue sain — principe de
+// preuve S8) ; le multilingue sans hreflang se prouve autrement, par DEUX
+// <html lang> différents entre les pages auditées (cf. aggregatePages).
+export function extractHreflangs(html) {
+  const out = [];
+  const re = /<link\b[^>]*>/gi;
+  let m;
+  while ((m = re.exec(String(html || ''))) !== null) {
+    const tag = m[0];
+    if (!/rel\s*=\s*["']?alternate\b/i.test(tag)) continue;
+    const lang = _attr(tag, 'hreflang');
+    if (!lang) continue;
+    out.push({ lang: lang.toLowerCase(), href: _attr(tag, 'href') });
+  }
+  return out;
+}
+// Comparaison d'URL au sens de Google : EXACTE, barre finale comprise —
+// new URL normalise la seule équivalence réelle (racine « site.com » ≡
+// « site.com/ ») sans gommer « /fr » vs « /fr/ », qui sont deux pages.
+const _urlExact = (u) => { try { return new URL(u).href; } catch (_) { return String(u || '').trim(); } };
+// Version SOUPLE (barre finale/casse ignorées) : sert uniquement à dire au
+// client « c'est presque ça » au lieu d'un « rien ne correspond » trompeur.
+const _urlLoose = (u) => _urlExact(u).replace(/\/$/, '').toLowerCase();
+
+// ═══ S18/P2 — soft 404 : verdict pur sur la sonde réseau ═════════════════
+// L'appelant a demandé une URL inventée (redirections suivies). Preuve S8 :
+// un 2xx est un défaut AVÉRÉ ; tout statut d'erreur (404, 410, mais aussi
+// 403/401/429 — un WAF qui bloque la sonde ne prouve rien) ou une sonde non
+// jouée → aucun verdict. Cas fondateur (29/08) : un site où TOUTE URL rend
+// 200 avec la page d'accueil, et le rapport n'avait rien vu.
+export function soft404Finding(probe) {
+  if (!probe || typeof probe.status !== 'number') return null;
+  if (probe.status < 200 || probe.status >= 300) return null;
+  return { axis: 'seo', sev: 'high', key: 'soft_404',
+    title: 'Les pages inexistantes ne renvoient pas d\'erreur 404',
+    detail: `Test réalisé avec une adresse inventée : le site ${probe.redirected ? 'redirige vers une vraie page' : 'affiche une page'} avec un statut ${probe.status} au lieu de répondre « 404 introuvable ». Conséquence : Google peut indexer des adresses fantômes en doublon de vos vraies pages (contenu dupliqué) et gaspille son budget d'exploration. Très courant sur les sites une-page et les hébergements statiques.` };
 }
 
 // ── JSON-LD : extraction + parsing tolérant ──────────────────────────────
@@ -603,6 +709,13 @@ function _microdataTypes(html) {
 //   skipSite     : page interne — pas de findings site-level (sitemap, wix_subdomain)
 //   sitemap      : résultat du contrôle sitemap (fait côté réseau, sur la home)
 //   url          : URL de la page (détection sous-domaine wixsite.com)
+//   siteKind     : 'online' = site déclaré SANS établissement recevant du
+//                  public (S18/P1) → axe présence locale non applicable
+//                  (presence: null, clés nap_* dans notApplicable, aucun
+//                  finding local). Suivre ces conseils sur un SaaS ou un site
+//                  vitrine produirait des données structurées FAUSSES.
+//   inSitemap    : true si CETTE page figure dans le sitemap (S18/P2 —
+//                  aggrave le noindex : la contradiction la plus parlante)
 //
 // Retour : { scores: {seo, securite, accessibilite, presence},
 //            findings: [{axis, sev, key, title, detail}],
@@ -798,6 +911,52 @@ export function analyzePage(html, opts = {}) {
     }
   }
 
+  // ═══ S18/P2 — noindex : la faute la plus coûteuse du métier ══════════════
+  // Une page laissée en noindex (réglage de mise en ligne oublié) disparaît
+  // de Google en silence. Détection : meta robots/googlebot ET en-tête HTTP
+  // X-Robots-Tag. Preuve POSITIVE (trouvé = avéré, même sur document
+  // tronqué : la balise vit dans le <head>, toujours dans le buffer).
+  const _robotsTxt = [
+    _attr(_findTag(vis, 'meta', 'name', 'robots'), 'content'),
+    _attr(_findTag(vis, 'meta', 'name', 'googlebot'), 'content'),
+    (opts.headers && opts.headers['x-robots-tag']) || '',
+  ].join(' , ').toLowerCase();
+  // Tokens exacts : « noindex » ou « none » (= noindex,nofollow). Ne matche
+  // ni « index, follow » ni « max-image-preview:large » (fixtures réelles).
+  if (/(?:^|[,:\s])(?:noindex|none)(?:$|[,\s])/.test(_robotsTxt)) {
+    const viaHeader = /(?:^|[,:\s])(?:noindex|none)(?:$|[,\s])/i.test(String((opts.headers && opts.headers['x-robots-tag']) || '').toLowerCase());
+    const inSm = opts.inSitemap === true;
+    add('seo', (inSm || !opts.skipSite) ? 'high' : 'medium', 'noindex',
+      'Page interdite d\'indexation (noindex)',
+      `Cette page demande à Google de NE PAS l'indexer${viaHeader ? ' (en-tête HTTP X-Robots-Tag)' : ' (balise meta robots)'} : elle ne peut apparaître dans aucun résultat de recherche.${inSm ? ' Elle figure pourtant dans votre sitemap — vous demandez en même temps de l\'indexer et de l\'ignorer, et c\'est le noindex qui gagne.' : ''} Si c'est volontaire (page privée, brouillon), ignorez ce point ; sinon retirez le noindex — c'est souvent un réglage de mise en ligne oublié.`);
+  }
+
+  // ═══ S18/P2 — hreflang : cohérence de ce que la page déclare ═════════════
+  // Ne s'active QUE si la page déclare des hreflang (un monolingue sain n'en
+  // a pas — pas de bruit). Contrôles : auto-référence sur l'URL canonique
+  // EXACTE (barre finale comprise : « /fr » et « /fr/ » sont deux pages pour
+  // Google — seule la racine « site.com » ≡ « site.com/ » est normalisée),
+  // et présence d'un x-default. La réciprocité inter-pages vit dans
+  // aggregatePages (il faut avoir LU les deux pages — preuve S8).
+  const hreflangs = extractHreflangs(vis);
+  const htmlLang = _attr((vis.match(/<html\b[^>]*>/i) || [''])[0], 'lang').toLowerCase();
+  if (hreflangs.length) {
+    const selfRef = canonicalHref || opts.url || '';
+    const selfExact = _urlExact(selfRef);
+    if (selfExact && !hreflangs.some((h) => _urlExact(h.href) === selfExact)) {
+      const near = hreflangs.find((h) => _urlLoose(h.href) === _urlLoose(selfRef));
+      add('seo', near ? 'low' : 'medium', 'hreflang_self',
+        near ? 'hreflang imprécis : la barre finale diffère de la canonique' : 'Aucun hreflang ne référence cette page',
+        near
+          ? `Une entrée hreflang pointe « ${near.href} » alors que ${canonicalHref ? 'la canonique de la page est' : 'la page vit à'} « ${selfRef} » : pour Google, le hreflang doit reprendre l'URL canonique EXACTE, barre finale comprise, sinon il peut être ignoré.`
+          : `Chaque page d'un groupe linguistique doit se déclarer ELLE-MÊME dans ses hreflang (auto-référence), en plus de ses traductions. Ici, aucune des ${hreflangs.length} entrées ne pointe « ${selfRef} » : Google peut ignorer tout le groupe.`);
+    }
+    if (!hreflangs.some((h) => h.lang === 'x-default')) {
+      add('seo', 'low', 'hreflang_xdefault', 'hreflang sans version par défaut (x-default)',
+        'Ajoutez une entrée hreflang="x-default" pointant la version à servir quand la langue du visiteur ne correspond à aucune de vos versions — sans elle, Google choisit seul.');
+    }
+  }
+
   // ── Sécurité (en-têtes de réponse : déterminés même si HTML tronqué) ─────
   // S9/C8 : sur plateforme managée, un en-tête exempté absent est « non
   // applicable » (l'utilisateur n'a pas la main) — hors findings, hors calcul.
@@ -834,28 +993,41 @@ export function analyzePage(html, opts = {}) {
   }
 
   // ── Présence locale (30 tél + 35 adresse + 20 fiche + 15 horaires = 100) ──
-  item('presence', 30, napPhone ? true : (noProof ? null : false), 30,
-    () => add('presence', 'low', 'nap_phone', 'Téléphone non détecté sur la page', 'Affichez un numéro cliquable (lien tel:) — clé pour les recherches locales et les IA.'));
-  if (!napPhone && noProof) undet('nap_phone');
-  item('presence', 35, napAddress ? true : (noProof ? null : false), 35,
-    () => add('presence', 'low', 'nap_address', 'Adresse postale non structurée', 'Affichez votre adresse complète, idéalement en données structurées (PostalAddress).'));
-  if (!napAddress && noProof) undet('nap_address');
-  item('presence', 20, napLocalBiz ? true : (noProof ? null : false), 20,
-    () => add('presence', 'medium', 'nap_localbiz', 'Fiche établissement (LocalBusiness) absente', 'Décrivez votre établissement en Schema.org LocalBusiness : nom, adresse, téléphone, horaires.'));
-  if (!napLocalBiz && noProof) undet('nap_localbiz');
-  // S10/C19 — le finding « horaires » parle la langue de l'entité : conseiller
-  // openingHours à un gîte était un conseil faux pour toute la verticale.
-  item('presence', 15, napHours ? true : (noProof ? null : false), 15,
-    () => {
-      if (isLodging) {
-        findings.push({ axis: 'presence', sev: 'medium', key: 'nap_hours', entity: 'lodging',
-          title: 'Heures d\'arrivée / départ non déclarées',
-          detail: 'Pour un hébergement, déclarez checkinTime et checkoutTime (pas openingHours) — repris par Google et les assistants IA.' });
-      } else {
-        add('presence', 'medium', 'nap_hours', 'Horaires d\'ouverture non déclarés', 'Publiez vos horaires (openingHours) — repris par Google et les assistants IA.');
-      }
-    });
-  if (!napHours && noProof) undet('nap_hours');
+  // S18/P1 — site déclaré SANS établissement recevant du public : l'axe
+  // entier est NON APPLICABLE (pas 0). Mesuré sur un site réel (rapport du
+  // 29/08) : 71/100 affiché, 85/100 sans cet axe — un site vitrine, un SaaS,
+  // un média perdaient 15 points pour n'être pas une boutique, et suivre les
+  // 4 conseils locaux aurait publié des données structurées FAUSSES.
+  // La bascule est DÉCLARÉE par l'utilisateur, jamais déduite : « pas de
+  // téléphone ni d'adresse » est soit la nature du site (non local), soit
+  // précisément la maladie qu'on doit signaler (commerce mal balisé) —
+  // seule l'intention du propriétaire distingue les deux.
+  if (opts.siteKind === 'online') {
+    notApplicable.push('nap_phone', 'nap_address', 'nap_localbiz', 'nap_hours');
+  } else {
+    item('presence', 30, napPhone ? true : (noProof ? null : false), 30,
+      () => add('presence', 'low', 'nap_phone', 'Téléphone non détecté sur la page', 'Affichez un numéro cliquable (lien tel:) — clé pour les recherches locales et les IA.'));
+    if (!napPhone && noProof) undet('nap_phone');
+    item('presence', 35, napAddress ? true : (noProof ? null : false), 35,
+      () => add('presence', 'low', 'nap_address', 'Adresse postale non structurée', 'Affichez votre adresse complète, idéalement en données structurées (PostalAddress).'));
+    if (!napAddress && noProof) undet('nap_address');
+    item('presence', 20, napLocalBiz ? true : (noProof ? null : false), 20,
+      () => add('presence', 'medium', 'nap_localbiz', 'Fiche établissement (LocalBusiness) absente', 'Décrivez votre établissement en Schema.org LocalBusiness : nom, adresse, téléphone, horaires.'));
+    if (!napLocalBiz && noProof) undet('nap_localbiz');
+    // S10/C19 — le finding « horaires » parle la langue de l'entité : conseiller
+    // openingHours à un gîte était un conseil faux pour toute la verticale.
+    item('presence', 15, napHours ? true : (noProof ? null : false), 15,
+      () => {
+        if (isLodging) {
+          findings.push({ axis: 'presence', sev: 'medium', key: 'nap_hours', entity: 'lodging',
+            title: 'Heures d\'arrivée / départ non déclarées',
+            detail: 'Pour un hébergement, déclarez checkinTime et checkoutTime (pas openingHours) — repris par Google et les assistants IA.' });
+        } else {
+          add('presence', 'medium', 'nap_hours', 'Horaires d\'ouverture non déclarés', 'Publiez vos horaires (openingHours) — repris par Google et les assistants IA.');
+        }
+      });
+    if (!napHours && noProof) undet('nap_hours');
+  }
 
   // ── S10/C21 — indices GEO extraits du balisage (ville + activité) ────────
   // Tout était déjà là sur le Mas : addressLocality + @type LodgingBusiness.
@@ -884,5 +1056,6 @@ export function analyzePage(html, opts = {}) {
     canonicalHost: canonicalHref ? _hostOfUrl(canonicalHref) : null,   // S10/C18 — cohérence inter-pages (agrégation)
     canonicalHrefHost: canonicalHref ? (() => { try { return new URL(canonicalHref).hostname.toLowerCase(); } catch (_) { return null; } })() : null,  // avec www — pour le check www/apex
     geoHints: { city: geoCity, activity: geoActivity },                // S10/C21 — pré-remplissage GEO
+    hreflangs, htmlLang,                                               // S18/P2 — réciprocité + multilingue (agrégation)
   };
 }

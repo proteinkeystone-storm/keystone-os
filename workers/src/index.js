@@ -198,6 +198,7 @@ import { handleKeyringRing, handleKeyringRingStatus, handleKeyringRespond, handl
 
 // ── Sentinel — audit web avec suivi (Pad O-GEO-001 · S0) ──
 import { handleSentinelHealth, handleSitesList, handleSiteCreate, handleSiteDelete,
+         handleSiteKindSet,
          handleSiteCheck, handleSiteHistory, handleSiteAudit, handleSiteAuditGet,
          handleSiteSuggest, handleSiteSendReport, handleSiteCockpit,
          handleSiteGeoGet, handleSiteGeoSave, handleSiteGeoRun, handleSiteGeoManual,
@@ -484,6 +485,9 @@ export default {
       if (path === '/api/sentinel/sites'  && method === 'POST') return handleSiteCreate(request, env);
       const sntCheck = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/check$/);
       if (sntCheck && method === 'POST') return handleSiteCheck(request, env, sntCheck[1]);
+      // S18/P1 — nature du site (établissement local / en ligne) : requalification.
+      const sntKind = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/kind$/);
+      if (sntKind && method === 'POST') return handleSiteKindSet(request, env, sntKind[1]);
       const sntHist = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/history$/);
       if (sntHist && method === 'GET') return handleSiteHistory(request, env, sntHist[1]);
       const sntAudit = path.match(/^\/api\/sentinel\/sites\/([A-Za-z0-9-]+)\/audit$/);
