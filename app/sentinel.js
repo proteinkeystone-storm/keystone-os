@@ -465,6 +465,9 @@ function _axisNaReasons(c) {
   const sc = a.scores || {};
   const out = [];
   if (c && c.gsc && c.gsc.available && !c.gsc.connected) out.push({ label: 'Mots-clés (Google)', txt: 'connectez Search Console (section Mots-clés ci-dessous) — gratuit, une minute, lecture seule.' });
+  // S18.4 — connectée mais AUCUNE donnée Google encore (domaine/propriété
+  // récents) : le dire, plutôt qu'un 0/100 « invisible » tiré du vide.
+  else if (c && c.gsc && c.gsc.connected && _gscDisplayScore(c.gsc) == null) out.push({ label: 'Mots-clés (Google)', txt: 'Search Console est connectée — Google n\'a pas encore de données pour cette propriété (récente) ; les premières apparaissent sous quelques jours.' });
   if (c && c.geo && c.geo.enabled && c.geo.score == null) out.push({ label: 'Visibilité IA', txt: 'renseignez votre activité et votre ville dans la section Visibilité IA, puis lancez une mesure (ou collez une réponse d\'IA — gratuit).' });
   if (c && c.uptime30d == null) out.push({ label: 'Disponibilité', txt: 'l\'axe s\'active après quelques heures de surveillance (un relevé toutes les 5 minutes).' });
   if (!a.cwv && sc.performance == null && a.score != null) out.push({ label: 'Performance', txt: 'mesure de vitesse indisponible lors de cet audit — relancez l\'audit.' });
@@ -904,7 +907,7 @@ function _renderCockpit() {
       <div class="snt-ck-grid">
         <div class="snt-ck-panel">
           <div class="snt-ck-panel-h"><span>Profil du site</span><span class="snt-radar-leg"><i class="snt-radar-leg-site"></i> Ton site${a.score != null ? ' · ' + a.score + '/100' : ''} &nbsp; <i class="snt-radar-leg-obj"></i> Objectif</span></div>
-          ${_radarSVG(a.scores || {}, (c.geo && c.geo.score != null) ? c.geo.score : null, (c.gsc && c.gsc.connected && c.gsc.score != null) ? c.gsc.score : null,
+          ${_radarSVG(a.scores || {}, (c.geo && c.geo.score != null) ? c.geo.score : null, _gscDisplayScore(c.gsc),
             (a.notApplicable || []).some((k) => k.indexOf('nap_') === 0))}
         </div>
         <div class="snt-ck-panel">
@@ -1169,10 +1172,25 @@ function _gscSectionHTML() {
       <button class="snt-ai-regen" data-act="gsc-disconnect">${icon('x', 12)} Déconnecter</button>
     </div></div>`;
 }
+// S18.4 — score Mots-clés AFFICHABLE : null quand le relevé n'a AUCUNE donnée
+// (Google pas encore au rendez-vous : domaine/propriété récents, ~2 j de
+// latence). Couvre aussi les relevés déjà stockés avec un 0 « invisible »
+// calculé sur zéro impression (rétro-compat). Source unique pour la carte,
+// le radar, le PDF et les raisons d'axes.
+function _gscDisplayScore(g) {
+  if (!g || !g.connected || g.score == null) return null;
+  const r = g.results || {}; const t = r.totals || {};
+  if (g.score === 0 && !(r.queries || []).length && !(t.impressions > 0)) return null;
+  return g.score;
+}
 function _gscResultsHTML(x) {
-  const sc = x.score, r = x.results || {}, t = r.totals || {};
+  const sc = _gscDisplayScore(x), r = x.results || {}, t = r.totals || {};
   const queries = (r.queries || []).slice(0, 10);
   const propLine = x.property ? `<div class="snt-geo-legend">${_esc(x.property)}${x.account_email ? ' · ' + _esc(x.account_email) : ''}</div>` : '';
+  // Pas de données ≠ score 0 : la carte dit l'attente, pas « invisible ».
+  if (sc == null && !queries.length && !(t.impressions > 0)) {
+    return `${propLine}<div class="snt-gsc-nodata">${icon('clock', 14)} <b>Search Console est connectée</b> — Google n'a pas encore remonté de données pour cette propriété (fenêtre 28 jours). C'est normal pour un domaine ou une propriété récente : les premières données apparaissent sous quelques jours (Google a ~2 jours de latence). Si le site est en ligne depuis longtemps, vérifiez dans Search Console qu'il est bien indexé.${x.run_at ? ` <span class="snt-geo-hint">Dernier relevé ${_esc(_ago(x.run_at))}.</span>` : ''}</div>`;
+  }
   const pos = (v) => (v != null ? 'n°' + String(v).replace('.', ',') : '—');
   const totalsLine = `<div class="snt-gsc-totals"><span>${t.clicks || 0} clic${(t.clicks || 0) > 1 ? 's' : ''}</span><span>${t.impressions || 0} impression${(t.impressions || 0) > 1 ? 's' : ''}</span>${t.position != null ? `<span>position moy. ${String(t.position).replace('.', ',')}</span>` : ''}<span class="snt-geo-hint">sur 28 jours</span></div>`;
   const rows = queries.length
@@ -1272,7 +1290,7 @@ function _exportPdf() {
   const RADAR_AXES = [
     ['Performance', scores.performance], ['SEO technique', scores.seo], ['Sécurité (en-têtes)', scores.securite],
     ['Accessibilité', scores.accessibilite], ['Présence locale', scores.presence],
-    ['Mots-clés (Google)', (p.gsc && p.gsc.connected && p.gsc.score != null) ? p.gsc.score : null],
+    ['Mots-clés (Google)', _gscDisplayScore(p.gsc)],
     ['Visibilité IA (GEO)', (p.geo && p.geo.score != null) ? p.geo.score : null], ['Disponibilité', p.uptime30d != null ? Math.round(p.uptime30d) : scores.disponibilite],
   ];
   const axisRows = RADAR_AXES.map(([label, v]) => `<tr>

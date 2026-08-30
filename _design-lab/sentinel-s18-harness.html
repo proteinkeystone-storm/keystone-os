@@ -76,10 +76,13 @@
       gsc: gscState(),
       email_enabled: false,
     } });
+    // S18.4 — l'état RÉEL de la carte MICE du 30/08 : un vieux relevé « 0/100 »
+    // calculé sur ZÉRO donnée (domaine récent). La carte doit afficher
+    // « en attente de données », jamais 0 « invisible » (rétro-compat front).
     const gscState = () => S.gscConnected
-      ? { available: true, connected: true, property: 'sc-domain:mon-livre-exemple.fr', account_email: '', score: 40,
-          results: { window: { startDate: '2026-08-01', endDate: '2026-08-28' }, totals: { clicks: 4, impressions: 298, position: 14.2 },
-            queries: [{ query: 'mice archives', clicks: 3, impressions: 120, ctr: 2.5, position: 3.1 }] }, run_at: new Date().toISOString() }
+      ? { available: true, connected: true, property: 'sc-domain:mon-livre-exemple.fr', account_email: '', score: 0,
+          results: { window: { startDate: '2026-08-01', endDate: '2026-08-28' }, totals: { clicks: 0, impressions: 0, position: null }, queries: [] },
+          run_at: new Date().toISOString() }
       : { available: true, connected: false, property: null, account_email: null, score: null, results: null, run_at: null };
 
     const sites = () => ({ sites: [{ id: 'site-book', url: 'https://mon-livre-exemple.fr', label: 'Site du livre', platform: 'custom',

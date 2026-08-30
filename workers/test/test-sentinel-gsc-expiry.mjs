@@ -77,6 +77,10 @@ globalThis.fetch = async (url, opts) => {
     return new Response(JSON.stringify({ access_token: 'at-banc' }), { status: 200 });
   }
   if (u.includes('/searchAnalytics/query')) {
+    // S18.4 — mode 'vide' : réponse RÉELLE de Google pour une propriété sans
+    // données (domaine récent) : 200 SANS champ rows (constaté le 30/08 sur
+    // sc-domain:micearchives.com, propriété créée le jour même).
+    if (googleMode === 'vide') return new Response(JSON.stringify({}), { status: 200 });
     return new Response(JSON.stringify({ rows: [{ keys: ['keystone'], clicks: 3, impressions: 40, ctr: 0.075, position: 4.2 }] }), { status: 200 });
   }
   throw new Error('fetch inattendu dans le banc : ' + u);
@@ -118,6 +122,19 @@ try {
   ok(d3.gsc && typeof d3.gsc.score === 'number' && d3.gsc.score > 0, 'le score est calculé (position 4,2 pondérée)', JSON.stringify((d3.gsc || {}).score));
   ok(!!state.savedRun, 'le relevé est persisté (UPDATE last_score)');
   ok(!state.flaggedError, 'et rien n\'est marqué en erreur');
+
+  // ── 4 · S18.4 — propriété SANS données (domaine récent) ────────
+  // « 0 impression » n'est pas une mesure d'invisibilité, c'est une absence
+  // de données : le score doit être null (pas de verdict), jamais 0/100.
+  console.log('\n▶ Propriété sans données Google (domaine récent — cas micearchives 30/08)');
+  state.gscRow = await freshRow(); state.flaggedError = false; state.savedRun = null;
+  googleMode = 'vide';
+  const r4 = await handleSiteGscRun(req(), env, 'site-1');
+  const d4 = await r4.json();
+  ok(r4.status === 200, 'la route répond 200 (la connexion est saine)', 'status=' + r4.status);
+  ok(d4.gsc && d4.gsc.score === null, 'score null — « pas de verdict », jamais 0 « invisible » tiré du vide', JSON.stringify((d4.gsc || {}).score));
+  ok(!!state.savedRun && state.savedRun.score === null, 'le relevé null est persisté (la carte dira « en attente de données »)');
+  ok(!state.flaggedError, 'la connexion reste connectée');
 } finally {
   globalThis.fetch = realFetch;
 }

@@ -2034,7 +2034,12 @@ async function _gscExecuteRun(env, { id, tenant, property, refreshToken }) {
     const tr = await _gscQuery(accessToken, property, { startDate, endDate, dimensions: [], rowLimit: 1 });
     if (tr && tr[0]) totals = { clicks: tr[0].clicks || 0, impressions: tr[0].impressions || 0, position: tr[0].position ? Math.round(tr[0].position * 10) / 10 : null };
   } catch (_) { /* totaux best-effort */ }
-  const score = _gscScore(rows);
+  // S18.4 — AUCUNE ligne = Google n'a pas (encore) de données : score null
+  // (« pas de verdict »), jamais 0 (« vous êtes invisible ») — même règle que
+  // le GEO qui refuse de scorer un test vide (S9/C10). Cas réel du 30/08 :
+  // micearchives.com, domaine mis en ligne fin août, propriété GSC créée le
+  // jour même → « 0/100 » affiché sur une simple absence de données.
+  const score = (rows && rows.length) ? _gscScore(rows) : null;
   const results = { window: { startDate, endDate }, totals, queries };
   await env.DB.prepare("UPDATE sentinel_gsc SET last_score = ?, last_results = ?, last_run_at = datetime('now'), next_gsc_at = datetime('now','+7 days'), status='connected', updated_at = datetime('now') WHERE site_id = ? AND tenant_id = ?")
     .bind(score, JSON.stringify(results), id, tenant).run();

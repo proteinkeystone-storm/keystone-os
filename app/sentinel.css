@@ -76,6 +76,11 @@
 .snt-add-top .snt-input::placeholder { color: var(--ws-text-soft); }
 .snt-add-top .snt-input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ws-accent) 25%, transparent); }
 .snt-add-top .snt-btn { height: 52px; border-radius: 14px; padding: 0 22px; }
+/* S18.4 — Search Console connectée mais sans données Google encore :
+   un message d'attente, jamais un « 0/100 » tiré du vide. */
+.snt-gsc-nodata { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 4px; padding: 12px 14px; font-size: 13px; line-height: 1.5; color: var(--ws-text-soft); background: var(--ws-surface-soft); border: 1px solid var(--ws-border); border-radius: 12px; }
+.snt-gsc-nodata svg { flex: 0 0 auto; margin-top: 2px; }
+
 /* S18/P1 — nature du site : select FLAT (charte), chevron SVG en
    background-image (jamais le raccourci `background:` qui l'écraserait). */
 .snt-add-top select.snt-input-kind { flex: 0 1 300px; min-width: 240px; appearance: none; -webkit-appearance: none; cursor: pointer; padding: 0 38px 0 14px; color-scheme: dark; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; }
