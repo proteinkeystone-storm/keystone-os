@@ -1319,10 +1319,14 @@ function _cardHTML(p, prevP) {
   const nFiles = _filesOf(p).filter(f => f.status === 'ok').length;
   const fileBadge = nFiles ? `<span class="dk-pc-badge">${icon('paperclip', 9)}${nFiles}</span>` : '';
   if (p.kind === 'fixe') {
-    return `<div class="dk-pcard fixe locked${msel}" data-n="${p.n}">
+    // Figée + rubrique = carte PLEINE couleur (demande Stéphane 2026-08-30) :
+    // une figée est réglée par nature — même signal « bloc plein » qu'une
+    // page finie (classes rubbed done, encre par luminance, cf. desk.css).
+    const rub = _rubById(p.rub_id);
+    return `<div class="dk-pcard fixe locked${msel}${rub ? ' rubbed done' : ''}" data-n="${p.n}"${_rubVars(rub)}>
       <span class="dk-pc-fixe-tag">${_esc(p.fixe_tag || 'Figée')}</span>
       ${p.fixe_title ? `<div class="dk-pc-title">${_esc(p.fixe_title)}</div>` : ''}
-      <div class="dk-pc-foot"><div class="dk-pc-botline"><div class="dk-pc-status"><span class="dk-pc-status-dot" style="background:#4cc38a"></span><span>figée</span></div>${fileBadge ? `<div class="dk-pc-badges">${fileBadge}</div>` : ''}</div></div>
+      <div class="dk-pc-foot"><div class="dk-pc-botline"><div class="dk-pc-status"><span class="dk-pc-status-dot" style="background:${rub ? 'var(--dk-rub-ink)' : '#4cc38a'}"></span><span>figée</span></div>${fileBadge ? `<div class="dk-pc-badges">${fileBadge}</div>` : ''}</div></div>
     </div>`;
   }
   const slots = _slotsOf(p);
@@ -2086,6 +2090,10 @@ function _renderInspFixe(insp, p) {
   insp.innerHTML = _inspShell(p.fixe_tag || 'Page figée', null,
     `<div class="dk-sec"><h4>${_dispN(p.n) === null ? _esc(_pageLabel(p)) + ' — hors numérotation' : 'Page ' + _pn(p.n) + ' — ancrée à son numéro'}</h4>
       <label class="dk-field"><span>Intitulé</span><input type="text" data-k="fixe_title" maxlength="200" value="${_esc(p.fixe_title || '')}" placeholder="ex. Publicité — GMPA"></label>
+      <label class="dk-field dk-field-rub"><span>Rubrique</span><select data-k="fixerub">
+        <option value="">Sans rubrique</option>
+        ${(_D.rubriques || []).map(r => `<option value="${r.id}" ${p.rub_id === r.id ? 'selected' : ''}>${_esc(r.name)}</option>`).join('')}
+      </select></label>
       <div class="dk-btn-row">
         <button class="dk-btn primary" data-act="savefixe">Enregistrer</button>
         <button class="dk-btn" data-act="unfixe">Libérer la page</button>
@@ -2110,6 +2118,14 @@ function _renderInspFixe(insp, p) {
       _toast('Page libérée.'); await _loadIssue(true); _openInsp(p.n, true);
     } catch (e) { _toast(e.message, true); }
   };
+  // La rubrique colore la carte figée en bloc plein (demande 2026-08-30).
+  insp.querySelector('[data-k="fixerub"]').addEventListener('change', async e => {
+    try {
+      await _api('/page/' + p.id, { method: 'PATCH', body: { rub_id: e.target.value || null } });
+      _toast('Rubrique appliquée à la ' + _pageLabel(p) + '.');
+      await _loadIssue(true); _openInsp(p.n, true);
+    } catch (err2) { _toast(err2.message, true); }
+  });
 }
 
 function _renderInspVide(insp, p) {

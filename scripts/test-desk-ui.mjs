@@ -1845,6 +1845,46 @@ await parcours('Parcours 13 — page finie, carte pleine couleur', async () => {
   });
   await attendre(200);
   await capturer('13-page-finie-lime');
+
+  // ── La page FIGÉE aussi (30 août 2026) : « une page figée devrait se
+  //    colorer complètement de la couleur de sa catégorie ». Une figée est
+  //    réglée par nature — même bloc plein qu'une page finie. La rubrique
+  //    se pose depuis SA fiche (le sélecteur est né avec la demande) ;
+  //    rub-actu #c0392b = rouge franc, loin du seuil d'encre (0,33).
+  const FIXE = '.dk-frise .dk-pcard[data-n="16"]';          // « 4e de couv », figée sans rubrique
+  check('figée sans rubrique : fond neutre (rien à colorer)',
+    await page.evaluate(s => { const c = document.querySelector(s); return !!c && !c.classList.contains('rubbed'); }, FIXE));
+  await cliquer(page, FIXE);
+  await attendSel(page, '.dk-insp.on [data-k="fixerub"]', 'le sélecteur de rubrique de la fiche figée');
+  await choisir(page, '.dk-insp [data-k="fixerub"]', 'rub-actu');
+  await attendCote(() => DB.pages.find(q => q.id === 'pg-16').rub_id === 'rub-actu', 5000);
+  check('la rubrique est ÉCRITE (PATCH /page/pg-16 rub_id)',
+    appels('PATCH', /^\/page\/pg-16$/).some(x => x.body && x.body.rub_id === 'rub-actu'),
+    JSON.stringify(appels('PATCH', /^\/page\/pg-16$/).map(x => x.body)));
+  await attend(page, s => getComputedStyle(document.querySelector(s)).backgroundColor === 'rgb(192, 57, 43)', FIXE,
+    'la figée repeinte aux couleurs d\'« Actualités »');
+  check('la figée est un bloc PLEIN de la couleur de sa rubrique (#c0392b)',
+    (await style(FIXE, 'backgroundColor')) === 'rgb(192, 57, 43)', 'fond : ' + await style(FIXE, 'backgroundColor'));
+  check('son étiquette passe à l\'encre — lisible sur la couleur',
+    (await style(FIXE + ' .dk-pc-fixe-tag', 'color')) === 'rgb(255, 255, 255)',
+    await style(FIXE + ' .dk-pc-fixe-tag', 'color'));
+  check('le point de statut aussi',
+    (await style(FIXE + ' .dk-pc-status-dot', 'backgroundColor')) === 'rgb(255, 255, 255)',
+    await style(FIXE + ' .dk-pc-status-dot', 'backgroundColor'));
+  check('thème clair : la figée garde son bloc plein',
+    await page.evaluate(s => {
+      document.documentElement.classList.add('light-mode');
+      const bg = getComputedStyle(document.querySelector(s)).backgroundColor;
+      document.documentElement.classList.remove('light-mode');
+      return bg === 'rgb(192, 57, 43)';
+    }, FIXE));
+  check('la couverture figée SANS rubrique, elle, reste neutre',
+    await page.evaluate(() => !document.querySelector('.dk-frise .dk-pcard[data-n="1"]').classList.contains('rubbed')));
+  if (SHOTS) {                                              // preuve à l'œil : viewport ENTIER, aucun clip —
+    await page.evaluate(s => document.querySelector(s).scrollIntoView({ block: 'center' }), FIXE);
+    await attendre(700);                                    // la glissade « garder la carte en vue » (320 ms)
+    await page.screenshot({ path: `${SHOTS}/13-figee-pleine-couleur.png` });   // court sous tout clip calculé
+  }
 });
 
 /* ─────────────────────────────────────────────────────────────────

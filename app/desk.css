@@ -320,6 +320,11 @@ html.light-mode .dk-pcard.rubbed .dk-pc-marge, html.light-mode .dk-pcard.rubbed.
 .dk-pcard.rubbed.done .dk-pc-status, html.light-mode .dk-pcard.rubbed.done .dk-pc-status,
 .dk-pcard.rubbed.done .dk-pc-marge, html.light-mode .dk-pcard.rubbed.done .dk-pc-marge { color: var(--dk-rub-ink2); }
 .dk-pcard.rubbed.done .dk-pc-badge { background: var(--dk-rub-ink-bg); color: var(--dk-rub-ink); }
+/* Figée + rubrique (2026-08-30) : une page figée est réglée par nature —
+   même bloc plein qu'une page finie ; son étiquette passe à l'encre. */
+.dk-pcard.rubbed.done .dk-pc-fixe-tag, html.light-mode .dk-pcard.rubbed.done .dk-pc-fixe-tag {
+  color: var(--dk-rub-ink); border-color: var(--dk-rub-ink-bg);
+}
 .dk-pcard.sel { border-color: var(--dk-gold); box-shadow: 0 0 0 1px var(--dk-gold); }
 .dk-pcard.ambre { border-color: rgba(230, 162, 60, .55); }
 .dk-pcard.rouge { border-color: rgba(229, 72, 77, .7); }
