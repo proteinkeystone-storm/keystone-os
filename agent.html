@@ -1669,12 +1669,16 @@
       if (_busy || !c) return;
       const q = cardQuestion(c);
       if (!q) return;
-      // SA-13.6 — si la question part dans sa langue NATIVE alors que le visiteur
-      // lit une autre langue (traduction absente), la detection auto du worker
-      // repondrait dans la langue de la QUESTION — donc en francais sur une page
-      // anglaise. On impose alors la langue de lecture pour cette reponse.
-      const natif = !(c.question_i18n && c.question_i18n[_lang]);
-      const force = (_meta && _lang !== _meta.lang && natif) ? _lang : undefined;
+      // SA-13.7 — la reponse d'une carte est TOUJOURS attendue dans la langue de
+      // lecture : la question envoyee est deja celle de cette langue (traduite),
+      // ou la native en repli. SA-13.6 ne forcait la langue QUE pour le repli et
+      // s'en remettait sinon a la detection auto du worker — qui echoue sur les
+      // questions traduites sans mot-indice (« Resúmeme brevemente el caso
+      // GOUZENKO » repondait en francais, constat du 01/09/2026 sur /es/ de
+      // micearchives.com). On impose donc la langue de lecture des qu'elle
+      // differe de la native. Une question TAPEE reste en mode AUTO (SA-13.5) :
+      // l'agent continue d'y repondre dans la langue de la question posee.
+      const force = (_meta && _lang !== _meta.lang) ? _lang : undefined;
       sendMessage(q, force);
     }
 

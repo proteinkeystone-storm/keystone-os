@@ -172,6 +172,20 @@ console.log('\n\x1b[1m▶ Suite 6b — SA-13.3 : langue AUTO (langFixed) + guess
   check('guessMsgLang : « que » français → fr, pas espagnol', guessMsgLang('Qu\'est-ce que vous vendez ?') === 'fr');
   check('guessMsgLang : message court sans indice → null (continuité)', guessMsgLang('ok') === null && guessMsgLang('super') === null);
   check('guessMsgLang : vide/null → null', guessMsgLang('') === null && guessMsgLang(null) === null);
+
+  // SA-13.7 — les listes d'origine (vocabulaire « visiteur ») rataient les
+  // questions LIVRESQUES : zéro indice espagnol dans les questions de cartes
+  // traduites de l'agent M.I.C.E. → repli langue native (fr), réponse française
+  // sur une page espagnole (constat production du 01/09/2026). Les mots-outils
+  // ajoutés doivent les attraper — sans faire basculer le français.
+  check('guessMsgLang SA-13.7 : question de carte ES', guessMsgLang('Resúmeme brevemente el caso GOUZENKO.') === 'es');
+  check('guessMsgLang SA-13.7 : espagnol livresque', guessMsgLang('¿Por qué traicionó Vetrov al KGB?') === 'es');
+  check('guessMsgLang SA-13.7 : « Háblame del expediente K-129 »', guessMsgLang('Háblame del expediente K-129, o la operación Azorian.') === 'es');
+  check('guessMsgLang SA-13.7 : « le » clitique ne vole pas une phrase espagnole',
+    guessMsgLang('¿Cuándo le entregó Vetrov los documentos por primera vez?') === 'es');
+  check('guessMsgLang SA-13.7 : question de carte FR reste fr', guessMsgLang('Parlez-moi de l\'affaire Gouzenko.') === 'fr');
+  check('guessMsgLang SA-13.7 : anglais livresque', guessMsgLang('Tell me about the corpse of Operation Mincemeat.') === 'en');
+  check('guessMsgLang SA-13.7 : allemand livresque', guessMsgLang('Wer war Gordon Lonsdale? Erzähl mir von ihm, nicht zu knapp.') === 'de');
 }
 
 // ════════════════════════════════════════════════════════════════

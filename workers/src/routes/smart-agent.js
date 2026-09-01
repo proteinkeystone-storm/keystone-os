@@ -2541,19 +2541,34 @@ export function normLang(v, fallback = 'fr') {
 // SA-13.4 — liste FRANÇAISE ajoutée : sans elle, une vraie question
 // française ne pouvait jamais reprendre la main sur un historique anglais
 // (bug relevé par Stéphane : réponse EN lue avec l'accent français).
+// SA-13.7 — listes ENRICHIES de mots-outils discriminants. Les listes d'origine
+// (vocabulaire « visiteur » : horaires, prix…) rataient les questions
+// livresques : « Resúmeme brevemente el caso GOUZENKO » ou « ¿Por qué traicionó
+// Vetrov al KGB? » n'avaient AUCUN indice espagnol → repli langue native (fr),
+// constaté en production le 01/09/2026 (agent M.I.C.E. sur /es/). L'anglais,
+// lui, passait grâce à « the », présent dans presque toute phrase.
+// Chaque ajout est filtré contre les COLLISIONS entre nos 4 langues (un mot
+// partagé compterait des deux côtés ; l'égalité rend null) : écartés notamment
+// que/la/de/en (fr↔es), es (de), du (de : « du » = tu), me (fr↔es↔en),
+// un (fr↔es), y (fr : « il y a »), was/war (en↔de), des (fr↔de).
 const LANG_HINT_WORDS = {
   fr: ['bonjour', 'bonsoir', 'merci', 'quel', 'quelle', 'quels', 'quelles', 'quand', 'pourquoi',
     'comment', 'combien', 'est', 'sont', 'vous', 'votre', 'vos', 'les', 'une', 'ouvert',
-    'ouverture', 'horaires', 'prix', 'avez', 'peut', 'peux', 'faire', 'suis', 'aussi', 'avec'],
+    'ouverture', 'horaires', 'prix', 'avez', 'peut', 'peux', 'faire', 'suis', 'aussi', 'avec',
+    'le', 'dans', 'pour', 'qui', 'cette', 'pas', 'moi', 'parlez', 'sur'],
   en: ['hello', 'hi', 'hey', 'thanks', 'thank', 'please', 'what', 'when', 'where', 'how', 'why',
     'the', 'is', 'are', 'you', 'your', 'do', 'does', 'can', 'could', 'would', 'open', 'hours',
-    'price', 'much', 'many', 'there', 'have', 'need', 'want', 'goodbye', 'bye'],
+    'price', 'much', 'many', 'there', 'have', 'need', 'want', 'goodbye', 'bye',
+    'of', 'and', 'this', 'that', 'who', 'which', 'from', 'with', 'about', 'did', 'were', 'tell'],
   es: ['hola', 'gracias', 'cuanto', 'cuando', 'donde', 'usted', 'tiene', 'tienen', 'precio',
     'horario', 'horarios', 'abierto', 'puedo', 'quiero', 'necesito', 'buenos', 'buenas', 'dias',
-    'tardes', 'hay', 'esta', 'estan', 'adios', 'ustedes', 'como'],
+    'tardes', 'hay', 'esta', 'estan', 'adios', 'ustedes', 'como',
+    'el', 'los', 'las', 'del', 'una', 'por', 'para', 'este', 'fue', 'sobre', 'quien', 'cual',
+    'su', 'sus', 'pero', 'tambien', 'hablame', 'cuentame', 'resumeme', 'sabes', 'brevemente'],
   de: ['hallo', 'danke', 'bitte', 'wann', 'wie', 'wo', 'warum', 'ist', 'sind', 'sie', 'ihr',
     'haben', 'kann', 'ich', 'und', 'der', 'die', 'das', 'preis', 'geoffnet', 'offnungszeiten',
-    'guten', 'wieviel', 'gibt', 'brauche', 'mochte', 'tschuss'],
+    'guten', 'wieviel', 'gibt', 'brauche', 'mochte', 'tschuss',
+    'ein', 'eine', 'nicht', 'wer', 'mit', 'von', 'zu', 'auch'],
 };
 export function guessMsgLang(message) {
   const tokens = String(message || '')
