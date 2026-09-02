@@ -423,6 +423,174 @@ export async function handleSceauSeal(request, env, shortId) {
   return json({ ok: true, short_id: shortId, status: 'scelle', kind, max_attempts: max, expires_at: expiresAt }, 200, origin);
 }
 
+// ══════════════════════════════════════════════════════════════
+// VOIE INVITÉE M.I.C.E. (chantier BAL, sept. 2026)
+// ══════════════════════════════════════════════════════════════
+// Création SANS compte depuis le seul site micearchives.com (expérience
+// « boîte aux lettres morte » du Laboratoire — vitrine publique de Missive).
+// La lecture publique /s/:id est INCHANGÉE : un dépôt invité se lit comme
+// n'importe quel sceau. Voie séparée plutôt qu'élargissement de /api/sceau :
+// le pad licencié garde son auth et ses capacités pleines ; l'invité obtient
+// un sous-ensemble bridé, cantonné au tenant 'mice-guest' — il ne peut ni
+// lister, ni brûler, ni recharger quoi que ce soit.
+// Brides SERVEUR (le client ne négocie rien) :
+//   texte seul · chiffré ≤ 16 000 c. b64 (inline D1 → burn atomique)
+//   expiration forcée ≤ 72 h · 3 essais · ni question ni e-mail
+//   5 dépôts/jour/appareil · 200/jour au global · engagement à chaque dépôt
+
+const SEC_GUEST_TENANT     = 'mice-guest';
+const SEC_GUEST_SEAL_MAX   = 16_000;            // b64 — sous SEC_INLINE_MAX : toujours inline D1
+const SEC_GUEST_TTL_MAX_MS = 72 * 3600 * 1000;  // un dépôt invité ne traîne jamais
+const SEC_GUEST_CREATE_CAP = 5;                 // dépôts/jour/appareil
+const SEC_GUEST_GLOBAL_CAP = 200;               // dépôts/jour tous appareils (abus distribué)
+const SEC_GUEST_STEP_CAP   = 30;                // eval+seal/jour/appareil (2 par dépôt réel)
+
+// Origines M.I.C.E. admises : prod, apex technique, et previews Cloudflare
+// Pages — des SOUS-domaines de mice-site.pages.dev (même leçon que le
+// frame-ancestors de l'agent). Jamais de reflet d'une origine inconnue.
+function _miceOrigin(request) {
+  const o = request.headers.get('Origin') || '';
+  if (o === 'https://micearchives.com' || o === 'https://www.micearchives.com'
+      || o === 'https://mice-site.pages.dev') return o;
+  if (/^https:\/\/[a-z0-9-]+\.mice-site\.pages\.dev$/.test(o)) return o;
+  return null;
+}
+
+// Préflight des routes invitées : le handler OPTIONS global ne reflète que
+// les origines Keystone (KS_ALLOWED_ORIGIN), il bloquerait micearchives.com.
+export function handleSceauGuestOptions(request) {
+  const origin = _miceOrigin(request);
+  if (!origin) return new Response(null, { status: 403 });
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Vary': 'Origin',
+    },
+  });
+}
+
+// Éval OPRF de création, partagée : la clé privée ne sort jamais d'ici.
+async function _blindEvaluate(env, row, blindedB64) {
+  const priv = await _unwrapKey(row.oprf_key_enc, row.oprf_key_iv, env);
+  const evalReq = EvaluationRequest.deserialize(SUITE, _b64d(blindedB64));
+  const server  = new VOPRFServer(SUITE, priv);
+  return _b64e((await server.blindEvaluate(evalReq)).serialize());
+}
+
+// POST /api/sceau/guest/init — coquille + paire OPRF, tenant 'mice-guest'.
+export async function handleSceauGuestInit(request, env) {
+  const origin = _miceOrigin(request);
+  if (!origin) return err('Origine non autorisée', 403, '*');
+
+  const body = await parseBody(request);
+  // Un anonyme n'a pas de compte où enregistrer l'engagement une fois pour
+  // toutes : la page M.I.C.E. l'affiche et il se signe À CHAQUE dépôt.
+  if (body.pledge !== true) {
+    return json({ error: 'Engagement d’usage requis', code: 'pledge_required' }, 403, origin);
+  }
+  const device = await _secDevice(request);
+  if (!(await _rateOkFor(env, 'mg:' + device, SEC_GUEST_CREATE_CAP))
+      || !(await _rateOkFor(env, 'mg:GLOBAL', SEC_GUEST_GLOBAL_CAP))) {
+    return json({ error: 'Boîte pleine — repassez plus tard', code: 'guest_quota' }, 429, origin);
+  }
+
+  const priv = await randomPrivateKey(SUITE);
+  const pub  = generatePublicKey(SUITE, priv);
+  const wrapped = await _wrapKey(priv, env);
+
+  let shortId = _shortId();
+  for (let i = 0; i < 2; i++) {
+    const clash = await env.DB.prepare('SELECT 1 FROM sec_secrets WHERE short_id = ?').bind(shortId).first();
+    if (!clash) break;
+    shortId = _shortId();
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO sec_secrets (short_id, tenant_id, oprf_pub, oprf_key_enc, oprf_key_iv, status, label, created_at)
+     VALUES (?, ?, ?, ?, ?, 'init', NULL, datetime('now'))`
+  ).bind(shortId, SEC_GUEST_TENANT, _b64e(pub), wrapped.ciphertext, wrapped.iv).run();
+
+  await _noteUsage(env, SEC_GUEST_TENANT, request, 'created');
+  return _publicJson({ short_id: shortId, oprf_pub: _b64e(pub) }, 201, origin);
+}
+
+// POST /api/sceau/guest/:id/eval — eval OPRF de création (statut 'init' seul).
+export async function handleSceauGuestEvalCreate(request, env, shortId) {
+  const origin = _miceOrigin(request);
+  if (!origin) return err('Origine non autorisée', 403, '*');
+  if (!(await _rateOkFor(env, 'mgs:' + await _secDevice(request), SEC_GUEST_STEP_CAP))) {
+    return json({ error: 'Trop de requêtes', code: 'guest_quota' }, 429, origin);
+  }
+
+  const row = await env.DB.prepare(
+    `SELECT tenant_id, status, oprf_key_enc, oprf_key_iv FROM sec_secrets WHERE short_id = ?`
+  ).bind(shortId).first();
+  if (!row || row.tenant_id !== SEC_GUEST_TENANT) return err('Introuvable', 404, origin);
+  if (row.status !== 'init' || !row.oprf_key_enc) return err('Déjà scellé', 409, origin);
+
+  const body = await parseBody(request);
+  if (typeof body.blinded !== 'string' || body.blinded.length > 1024) return err('blinded invalide', 400, origin);
+
+  let evaluationB64;
+  try {
+    evaluationB64 = await _blindEvaluate(env, row, body.blinded);
+  } catch {
+    return err('Évaluation impossible', 400, origin); // jamais de détail crypto
+  }
+  return _publicJson({ evaluation: evaluationB64 }, 200, origin);
+}
+
+// POST /api/sceau/guest/:id/seal — dépose le chiffré, brides serveur.
+export async function handleSceauGuestSeal(request, env, shortId) {
+  const origin = _miceOrigin(request);
+  if (!origin) return err('Origine non autorisée', 403, '*');
+  if (!(await _rateOkFor(env, 'mgs:' + await _secDevice(request), SEC_GUEST_STEP_CAP))) {
+    return json({ error: 'Trop de requêtes', code: 'guest_quota' }, 429, origin);
+  }
+
+  const row = await env.DB.prepare(
+    `SELECT tenant_id, status FROM sec_secrets WHERE short_id = ?`
+  ).bind(shortId).first();
+  if (!row || row.tenant_id !== SEC_GUEST_TENANT) return err('Introuvable', 404, origin);
+  if (row.status !== 'init') return err('Déjà scellé', 409, origin);
+
+  const body = await parseBody(request);
+  const { ciphertext, iv } = body;
+  if (typeof ciphertext !== 'string' || typeof iv !== 'string') return err('ciphertext/iv requis', 400, origin);
+  if (ciphertext.length > SEC_GUEST_SEAL_MAX) return err('Secret trop volumineux', 413, origin);
+
+  // Expiration FORCÉE : au plus 72 h, 72 h si absente ou invalide.
+  const maxExp = Date.now() + SEC_GUEST_TTL_MAX_MS;
+  let expMs = maxExp;
+  if (body.expires_at) {
+    const t = new Date(body.expires_at).getTime();
+    if (!isNaN(t) && t > Date.now() && t < maxExp) expMs = t;
+  }
+  const expiresAt = new Date(expMs).toISOString();
+
+  // Mêmes champs opaques que le scellage licencié (recette de clé + preuve
+  // de lecture) — la page /s/:id applique la même recette pour tous.
+  const kdfV = body.kdf_v === 2 ? 2 : 1;
+  const receipt = typeof body.read_receipt === 'string' && /^[A-Za-z0-9+/=]{16,128}$/.test(body.read_receipt)
+    ? body.read_receipt : null;
+
+  // Brides : texte seul (inline D1, burn atomique), 3 essais, ni question
+  // ni mime ni label — quoi que demande le client.
+  await env.DB.prepare(
+    `UPDATE sec_secrets
+        SET ciphertext = ?, blob_key = NULL, iv = ?, kind = 'text', mime = NULL, question = NULL,
+            max_attempts = 3, attempts = 0, expires_at = ?, kdf_v = ?, read_receipt = ?,
+            status = 'scelle', sealed_at = datetime('now')
+      WHERE short_id = ? AND status = 'init'`
+  ).bind(ciphertext, iv, expiresAt, kdfV, receipt, shortId).run();
+
+  await _noteUsage(env, SEC_GUEST_TENANT, request, 'sealed');
+  return _publicJson({ ok: true, short_id: shortId, status: 'scelle', kind: 'text', max_attempts: 3, expires_at: expiresAt }, 200, origin);
+}
+
 // GET /api/sceau → liste du tenant (AUCUN matériel sensible exposé).
 export async function handleSceauList(request, env) {
   const origin = getAllowedOrigin(env, request);

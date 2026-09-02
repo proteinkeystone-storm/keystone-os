@@ -16,6 +16,7 @@ import {
   handleTokenCreate, handleTokenList, handleTokenPoint, handleTokenDelete,
   handleTokenMeta, handleTokenEval, handleTokenBlob, handleTokenOpened,
   handleSceauPledge, handleSceauUsageAdmin,
+  handleSceauGuestOptions, handleSceauGuestInit, handleSceauGuestEvalCreate, handleSceauGuestSeal,
 } from '../src/routes/sceau.js';
 
 // Doit rester aligné sur SEC_PLEDGE_VERSION (src/routes/sceau.js). Une
@@ -854,6 +855,85 @@ env.DB = makeD1(); env.HELP_MEDIA = makeR2();
   ok(sweep.devicesPurged === 1, 'les empreintes de plus de 90 jours aussi');
   ok(env.DB._db.prepare('SELECT COUNT(*) c FROM sec_usage_hourly WHERE tenant_id = ?').get('default').c === 1,
      'les lignes récentes survivent à la purge');
+}
+
+// ══════════════════════════════════════════════════════════════
+// T. Voie invitée M.I.C.E. (chantier BAL) — dépôt anonyme bridé
+// ══════════════════════════════════════════════════════════════
+console.log('\nT. Voie invitée M.I.C.E. — dépôt anonyme bridé');
+{
+  env.DB = makeD1();
+  // La table de débit naît paresseusement (_ensureSecRate) et son drapeau
+  // module est déjà levé par les sections précédentes : sur base neuve, on
+  // la crée à la main — sinon le fail-open avalerait le test de quota.
+  env.DB._db.exec(`CREATE TABLE IF NOT EXISTS sec_public_usage (
+    day TEXT NOT NULL, device_hash TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (day, device_hash))`);
+
+  const MICE = 'https://micearchives.com';
+  const gReq = (body, origin = MICE, ua = 'g-ua') => new Request('https://x.test/g', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(origin ? { Origin: origin } : {}), 'User-Agent': ua },
+    body: JSON.stringify(body || {}),
+  });
+
+  // Origine : rien ne passe sans micearchives.com (ou une preview du projet)
+  ok((await handleSceauGuestInit(gReq({ pledge: true }, null), env)).status === 403, 'init sans Origin -> 403');
+  ok((await handleSceauGuestInit(gReq({ pledge: true }, 'https://evil.example'), env)).status === 403, 'init origine étrangère -> 403');
+  ok(handleSceauGuestOptions(new Request('https://x/g', { method: 'OPTIONS', headers: { Origin: 'https://evil.example' } })).status === 403, 'préflight origine étrangère -> 403');
+  const pre = handleSceauGuestOptions(new Request('https://x/g', { method: 'OPTIONS', headers: { Origin: MICE } }));
+  ok(pre.status === 204 && pre.headers.get('Access-Control-Allow-Origin') === MICE, 'préflight M.I.C.E. -> 204 + ACAO exact');
+
+  // Engagement d'usage signé À CHAQUE dépôt (pas de compte où le retenir)
+  const noPledge = await handleSceauGuestInit(gReq({}), env);
+  ok(noPledge.status === 403 && (await noPledge.json()).code === 'pledge_required', 'init sans engagement -> 403 pledge_required');
+
+  // Previews Cloudflare Pages = SOUS-domaines de mice-site.pages.dev
+  ok((await handleSceauGuestInit(gReq({ pledge: true }, 'https://abc123.mice-site.pages.dev', 'ua-preview'), env)).status === 201,
+     'init depuis une preview *.mice-site.pages.dev -> 201');
+
+  // Parcours complet : init → eval de création → seal → lecture publique
+  const initRes = await handleSceauGuestInit(gReq({ pledge: true }, MICE, 'ua-flow'), env);
+  ok(initRes.status === 201, 'init invité -> 201');
+  const init = await initRes.json();
+  const client = new VOPRFClient(SUITE, b64d(init.oprf_pub));
+  const [fin, ereq] = await client.blind([enc.encode('code-invite-mice')]);
+  const evRes = await handleSceauGuestEvalCreate(gReq({ blinded: b64e(ereq.serialize()) }, MICE, 'ua-flow'), env, init.short_id);
+  ok(evRes.status === 200, 'eval de création invitée -> 200');
+  const [output] = await client.finalize(fin, Evaluation.deserialize(SUITE, b64d((await evRes.json()).evaluation)));
+  const key = await aesKeyFromOprf(output);
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode('RDV QUAI TROIS MINUIT')));
+
+  ok((await handleSceauGuestSeal(gReq({ ciphertext: 'A'.repeat(16001), iv: b64e(iv) }, MICE, 'ua-flow'), env, init.short_id)).status === 413,
+     'chiffré > 16 000 c. -> 413');
+  const sealRes = await handleSceauGuestSeal(gReq({
+    ciphertext: b64e(ct), iv: b64e(iv), kind: 'audio', mime: 'audio/webm', question: 'interdite ?',
+    max_attempts: 9, expires_at: new Date(Date.now() + 30 * 86400_000).toISOString(),
+    read_receipt: await readReceiptFromOprf(output),
+  }, MICE, 'ua-flow'), env, init.short_id);
+  ok(sealRes.status === 200, 'seal invité -> 200');
+  const sealed = await sealRes.json();
+  ok(new Date(sealed.expires_at).getTime() <= Date.now() + 72 * 3600_000 + 1000, 'expiration RAMENÉE sous 72 h');
+  const row = await env.DB.prepare('SELECT tenant_id, kind, mime, question, max_attempts FROM sec_secrets WHERE short_id = ?').bind(init.short_id).first();
+  ok(row.tenant_id === 'mice-guest', 'cantonné au tenant mice-guest');
+  ok(row.kind === 'text' && row.mime === null && row.question === null, 'kind forcé text — ni mime ni question');
+  ok(row.max_attempts === 3, 'essais forcés à 3, quoi que demande le client');
+
+  // La lecture est la lecture STANDARD /s/:id — rien de spécial pour l'invité
+  const rd = await readSecret(init.short_id, init.oprf_pub, 'code-invite-mice');
+  ok(rd.ok && rd.plaintext === 'RDV QUAI TROIS MINUIT', 'lecture publique -> clair exact');
+
+  // Étanchéité : la voie invitée ne voit PAS les sceaux licenciés
+  const own = await (await handleSceauInit(req('POST', {}), env)).json();
+  ok((await handleSceauGuestEvalCreate(gReq({ blinded: 'AA' }, MICE, 'ua-flow'), env, own.short_id)).status === 404,
+     'eval invitée sur un sceau licencié -> 404');
+
+  // Quota de création : 5/jour/appareil, puis 429
+  let last = null;
+  for (let i = 0; i < 6; i++) last = await handleSceauGuestInit(gReq({ pledge: true }, MICE, 'ua-quota'), env);
+  ok(last.status === 429 && (await last.json()).code === 'guest_quota', '6e dépôt du même appareil -> 429 guest_quota');
+  ok((await handleSceauGuestInit(gReq({ pledge: true }, MICE, 'ua-quota-2'), env)).status === 201, 'un autre appareil passe encore');
 }
 
 console.log(`\n=== RÉSULTAT : ${pass} OK, ${fail} KO ===`);

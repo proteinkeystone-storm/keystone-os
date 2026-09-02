@@ -88,7 +88,8 @@ import { handleSceauInit, handleSceauEvalCreate, handleSceauSeal, handleSceauLis
          handleSceauMeta, handleSceauEval, handleSceauBlob, handleSceauOpened, sweepExpiredSecrets,
          handleTokenCreate, handleTokenList, handleTokenPoint, handleTokenDelete,
          handleTokenMeta, handleTokenEval, handleTokenBlob, handleTokenOpened,
-         handleSceauPledge, handleSceauUsageAdmin } from './routes/sceau.js';
+         handleSceauPledge, handleSceauUsageAdmin,
+         handleSceauGuestOptions, handleSceauGuestInit, handleSceauGuestEvalCreate, handleSceauGuestSeal } from './routes/sceau.js';
 import { handleSceauPage, handleSceauTokenPage, handleSceauAsset } from './routes/sceau-page.js';
 import { handleExpirationReminders }                                  from './routes/expiration-reminders.js';
 import { handleListLicencesEnriched, handleToggleLicenceFlag,
@@ -223,6 +224,11 @@ export default {
     const origin = getAllowedOrigin(env, request);
 
     // ── Preflight CORS ────────────────────────────────────────
+    // Routes invitées M.I.C.E. d'abord : le préflight global ne reflète que
+    // les origines Keystone (KS_ALLOWED_ORIGIN) et bloquerait micearchives.com.
+    if (request.method === 'OPTIONS' && new URL(request.url).pathname.startsWith('/api/sceau/guest/')) {
+      return handleSceauGuestOptions(request);
+    }
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
@@ -984,6 +990,13 @@ export default {
         if (tp && method === 'POST') return handleTokenPoint(request, env, tp[1]);
         const td = path.match(/^\/api\/sceau\/token\/([A-Za-z0-9]{4,32})$/);
         if (td && method === 'DELETE') return handleTokenDelete(request, env, td[1]);
+      }
+      // Sceau — voie invitée M.I.C.E. (sans compte, bridée, origine contrôlée
+      // dans les handlers). AVANT les routes génériques /api/sceau/:id.
+      if (path === '/api/sceau/guest/init' && method === 'POST') return handleSceauGuestInit(request, env);
+      {
+        const g = path.match(/^\/api\/sceau\/guest\/([A-Za-z0-9]{4,32})\/(eval|seal)$/);
+        if (g && method === 'POST') return (g[2] === 'eval' ? handleSceauGuestEvalCreate : handleSceauGuestSeal)(request, env, g[1]);
       }
       // Sceau — création/gestion privée (JWT). `pledge` AVANT les routes
       // /api/sceau/:id (sinon « pledge » serait lu comme un short_id).
