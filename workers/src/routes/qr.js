@@ -2457,8 +2457,11 @@ export async function handleSmartQrConcierge(request, env) {
       // au chemin BYOK (vendor) et au repli Workers AI. On RETIENT un repère
       // potentiellement incomplet en fin de tampon ({, {{, {{Pa, {{Pa}) pour
       // ne jamais envoyer d'accolades au visiteur.
-      const pushChunk = (chunk) => {
-        if (!chunk) return;
+      const pushChunk = (raw) => {
+        // Bug des zéros Workers AI : « 0 » arrive en NOMBRE (falsy) → jamais
+        // de filtre par truthiness ; chaîne vide seule ignorée.
+        if (raw === null || raw === undefined || raw === '') return;
+        const chunk = String(raw);
         fullText += chunk;
         emitBuf  += chunk;
         const hold = (emitBuf.match(/\{\{?[A-Za-z]{0,6}\}?$/) || [''])[0].length;

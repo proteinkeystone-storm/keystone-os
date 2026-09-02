@@ -19,7 +19,7 @@
 import { execSync }      from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { cleanForChannel, makeStreamEmitter, streamMistralReply }
+import { cleanForChannel, makeStreamEmitter, streamMistralReply, sseChunkText }
   from '../workers/src/routes/smart-agent.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -158,6 +158,38 @@ function fakeEnv(stream, sink) {
     { messages: [{ role: 'user', content: 'x' }], max_tokens: 10, onChunk: (t) => pieces.push(t) },
   );
   check('3c [DONE] ignorée', full === 'OK' && pieces.length === 1);
+}
+
+// 3e — BUG DES ZÉROS (retour terrain MICE 02/09/2026) : Workers AI streame
+// les chiffres un par un et SUR-PARSE « 0 » en NOMBRE JSON (`"response":0`).
+// L'ancien `?? '' ; if (chunk)` le jetait : « 1990 » → « 199 », « 4900 » →
+// « 49 ». Flux reproduit à l'identique de la sonde edge (nombres, pas chaînes).
+{
+  const pieces = [];
+  const full = await streamMistralReply(
+    fakeEnv(aiStream(['De ', 1, 9, 9, 0, ' à ', 4, 9, 0, 0, ' m'])),
+    { messages: [{ role: 'user', content: 'x' }], max_tokens: 50, onChunk: (t) => pieces.push(t) },
+  );
+  check('3e zéros numériques conservés', full === 'De 1990 à 4900 m');
+  check('3e onChunk reçoit des CHAÎNES', pieces.every(t => typeof t === 'string') && pieces.join('') === full);
+}
+
+// 3f — forme réelle du flux : `choices[0].delta.content` porte la CHAÎNE
+// ("0"), `response` le NOMBRE (0) → la chaîne est préférée ; sans delta,
+// le nombre est accepté et converti ; null/undefined/'' seuls sont ignorés.
+{
+  check('3f delta.content string préféré', sseChunkText({ choices: [{ delta: { content: '0' } }], response: 0 }) === '0');
+  check('3f response numérique accepté',   sseChunkText({ response: 0 }) === '0' && sseChunkText({ response: 7 }) === '7');
+  check('3f response chaîne',              sseChunkText({ response: 'ab' }) === 'ab');
+  check('3f vide/null ignorés',            sseChunkText({ response: '' }) === '' && sseChunkText({ response: null }) === '' && sseChunkText({}) === '');
+  const full = await streamMistralReply(
+    fakeEnv(new ReadableStream({ start(c) {
+      c.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"1"}}],"response":1}\n\ndata: {"choices":[{"delta":{"content":"0"}}],"response":0}\n\ndata: {"choices":[{"delta":{"content":"0"}}],"response":0}\n\n'));
+      c.close();
+    } })),
+    { messages: [{ role: 'user', content: 'x' }], max_tokens: 10 },
+  );
+  check('3f flux réel Workers AI → « 100 »', full === '100');
 }
 
 // 3d — env.AI absent → throw clair (jamais un crash silencieux).

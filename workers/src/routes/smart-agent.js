@@ -1914,6 +1914,23 @@ export function makeStreamEmitter(channel, send) {
   };
 }
 
+// Texte d'un chunk SSE Workers AI — « bug des zéros » (chassé dans Kora le
+// 18/07, jamais propagé ici ; retour terrain MICE 02/09/2026 : « 1990 » lu
+// « 199 », « 4 900 m » lu « 49 m », « 1 600 » lu « 16 »).
+// Workers AI streame les chiffres UN PAR UN et SUR-PARSE le token : « 0 »
+// arrive en NOMBRE JSON (`"response":0`, falsy) → un `?? ''` le garde puis
+// un `if (chunk)` le jette. Mesuré à la sonde edge : `choices[0].delta.content`
+// porte toujours la CHAÎNE ("0") → on la préfère ; sinon `response`, accepté
+// nombre OU chaîne, converti explicitement, jamais filtré par truthiness.
+// Pur → testé (scripts/test-smart-agent-stream.mjs, suite 3e/3f).
+export function sseChunkText(p) {
+  const s = p?.choices?.[0]?.delta?.content;
+  if (typeof s === 'string') return s;
+  const r = p?.response;
+  if (r === null || r === undefined || r === '') return '';
+  return String(r);
+}
+
 // Streaming du chemin par défaut (Mistral / Workers AI) — pendant streaming
 // de _agentLLM non-BYOK. Parse le ReadableStream SSE de env.AI.run({stream:true})
 // (chunks {response:"…"}), appelle onChunk et RENVOIE le texte complet.
@@ -1940,7 +1957,7 @@ export async function streamMistralReply(env, { system, messages, max_tokens, te
       const data = line.slice(5).trim();
       if (!data || data === '[DONE]') continue;
       let p; try { p = JSON.parse(data); } catch { continue; }
-      const chunk = p?.response ?? p?.choices?.[0]?.delta?.content ?? '';
+      const chunk = sseChunkText(p);
       if (chunk) { full += chunk; cb(chunk); }
     }
   }

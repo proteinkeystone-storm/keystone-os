@@ -107,7 +107,9 @@ async function _consumeSSE(res, vendorLabel, extract, onChunk) {
         let parsed;
         try { parsed = JSON.parse(data); } catch { continue; }  // ligne malformée
         const chunk = extract(parsed);
-        if (chunk) { fullText += chunk; onChunk(chunk); }
+        // Ni truthiness ni typeof (bug des zéros Workers AI) : un token « 0 »
+        // numérique doit passer. Chaîne vide seule ignorée.
+        if (chunk !== null && chunk !== undefined && chunk !== '') { const s = String(chunk); fullText += s; onChunk(s); }
       }
     }
   } catch (e) {
