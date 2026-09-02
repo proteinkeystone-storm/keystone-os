@@ -18,6 +18,7 @@ import {
   handleSceauPledge, handleSceauUsageAdmin,
   handleSceauGuestOptions, handleSceauGuestInit, handleSceauGuestEvalCreate, handleSceauGuestSeal,
 } from '../src/routes/sceau.js';
+import { handleSceauPage, handleSceauTokenPage } from '../src/routes/sceau-page.js';
 
 // Doit rester aligné sur SEC_PLEDGE_VERSION (src/routes/sceau.js). Une
 // divergence ferait échouer la signature — c'est voulu : le contrôle porte
@@ -934,6 +935,39 @@ console.log('\nT. Voie invitée M.I.C.E. — dépôt anonyme bridé');
   for (let i = 0; i < 6; i++) last = await handleSceauGuestInit(gReq({ pledge: true }, MICE, 'ua-quota'), env);
   ok(last.status === 429 && (await last.json()).code === 'guest_quota', '6e dépôt du même appareil -> 429 guest_quota');
   ok((await handleSceauGuestInit(gReq({ pledge: true }, MICE, 'ua-quota-2'), env)).status === 201, 'un autre appareil passe encore');
+}
+
+// ══════════════════════════════════════════════════════════════
+// U. Habillage M.I.C.E. de la page de lecture (BAL-5) — gaté par tenant
+// ══════════════════════════════════════════════════════════════
+console.log('\nU. Habillage M.I.C.E. de la page /s/:id — gaté par le tenant');
+{
+  env.DB._db.prepare(`INSERT INTO sec_secrets (short_id, tenant_id, status, created_at)
+                      VALUES ('miceU001', 'mice-guest', 'scelle', datetime('now'))`).run();
+  env.DB._db.prepare(`INSERT INTO sec_secrets (short_id, tenant_id, status, created_at)
+                      VALUES ('keysU001', 'default', 'scelle', datetime('now'))`).run();
+  const pageReq = new Request('https://x.test/s/x');
+
+  const mice = await handleSceauPage(pageReq, env, 'miceU001');
+  const miceHtml = await mice.text();
+  ok(mice.status === 200 && miceHtml.includes('k-credit') && miceHtml.includes('#faeeda'),
+     'pli invité -> habillage papier M.I.C.E. + crédit Keystone');
+  ok(miceHtml.includes('propulsé par <a href="https://protein-keystone.com"'), 'le crédit pointe protein-keystone.com');
+  ok((mice.headers.get('Content-Security-Policy') || '').includes("default-src 'none'"), 'CSP stricte conservée sur la page habillée');
+
+  const keys = await handleSceauPage(pageReq, env, 'keysU001');
+  const keysHtml = await keys.text();
+  ok(keys.status === 200 && !keysHtml.includes('k-credit') && !keysHtml.includes('#faeeda'),
+     'pli licencié -> charte Keystone STRICTEMENT inchangée');
+
+  const unknown = await handleSceauPage(pageReq, env, 'zzzzzzzz');
+  ok(unknown.status === 200 && !(await unknown.text()).includes('k-credit'), 'pli inconnu -> charte Keystone (fail-open)');
+
+  const broken = await handleSceauPage(pageReq, { ...env, DB: { prepare() { throw new Error('muette'); } } }, 'miceU001');
+  ok(broken.status === 200 && !(await broken.text()).includes('k-credit'), 'base muette -> charte Keystone (fail-open), jamais de 500');
+
+  const tok = handleSceauTokenPage(pageReq, env, 'anytoken');
+  ok(!(await tok.text()).includes('k-credit'), 'page jeton (capacité licenciée) -> toujours charte Keystone');
 }
 
 console.log(`\n=== RÉSULTAT : ${pass} OK, ${fail} KO ===`);

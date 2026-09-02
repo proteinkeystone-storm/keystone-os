@@ -42,16 +42,25 @@ function _esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-// GET /s/:id — page de réclamation d'un secret direct.
-export function handleSceauPage(request, env, shortId) {
-  return _serve(`/s/${_esc(shortId)}`);
+// GET /s/:id — page de réclamation d'un secret direct. Un pli déposé depuis
+// micearchives.com (tenant 'mice-guest', voie invitée BAL) reçoit l'habillage
+// papier M.I.C.E. ; TOUT le reste garde la charte Keystone à l'octet près.
+// Fail-open : base muette ou pli inconnu → charte Keystone.
+export async function handleSceauPage(request, env, shortId) {
+  let mice = false;
+  try {
+    const row = await env.DB.prepare('SELECT tenant_id FROM sec_secrets WHERE short_id = ?').bind(shortId).first();
+    mice = row?.tenant_id === 'mice-guest';
+  } catch (_) { /* charte Keystone par défaut */ }
+  return _serve(`/s/${_esc(shortId)}`, mice);
 }
-// GET /s/t/:tid — page de réclamation via un jeton réutilisable (pointeur stable).
+// GET /s/t/:tid — page de réclamation via un jeton réutilisable (pointeur
+// stable). Les jetons sont une capacité licenciée : toujours charte Keystone.
 export function handleSceauTokenPage(request, env, tid) {
   return _serve(`/s/t/${_esc(tid)}`);
 }
 
-function _serve(base) {
+function _serve(base, mice = false) {
   const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
   const bundleHref = `/s-assets/voprf-${VOPRF_BUNDLE_VERSION}.js`;
 
@@ -67,7 +76,7 @@ function _serve(base) {
     "frame-ancestors 'none'",
   ].join('; ');
 
-  const html = _page(base, nonce, bundleHref, VOPRF_BUNDLE_SRI);
+  const html = _page(base, nonce, bundleHref, VOPRF_BUNDLE_SRI, mice);
 
   return new Response(html, {
     status: 200,
@@ -82,7 +91,36 @@ function _serve(base) {
   });
 }
 
-function _page(base, nonce, bundleHref, sri) {
+// Habillage M.I.C.E. (chantier BAL-5) : un SECOND bloc de style qui ne fait
+// que SURCHARGER le premier (le CSS Keystone reste identique). Palette relevée
+// sur styles/tokens.css de micearchives.com. La rosette Keystone d'ouverture
+// devient un tampon encre rouge (fills SVG surchargés par CSS).
+function _miceSkin(nonce) {
+  return `
+<style nonce="${nonce}">
+  :root{ --bg:#f1e3cb; --panel:#faeeda; --ink:#4a1b0c; --muted:#854f0b;
+         --line:#ef9f27; --accent:#a32d2d; --ok:#3f7d47; --warn:#854f0b; --dead:#791f1f; }
+  body{ background:radial-gradient(1200px 600px at 50% -10%, #f7e4c6 0%, var(--bg) 60%);
+        flex-direction:column; gap:8px; }
+  .card{ background:var(--panel); border-top:4px solid var(--accent); border-radius:14px;
+         box-shadow:0 24px 70px rgba(74,27,12,.22); }
+  .seal{ background:radial-gradient(circle at 35% 30%, #c04a3a, #a32d2d 55%, #6e1a14 100%);
+         box-shadow:0 10px 28px rgba(110,26,20,.4), inset 0 2px 8px rgba(255,255,255,.25); }
+  .seal::after{ border-color:rgba(163,45,45,.3); }
+  .seal svg{ fill:#f4e8d2; }
+  .seal.opened svg path, .seal.opened svg circle{ fill:#a32d2d; }
+  input, .secret{ background:#fff; color:var(--ink); border-radius:8px; }
+  .copy-icon{ background:#f7e4c6; border-radius:8px; }
+  button, .dl-btn{ border-radius:8px; }
+  .spin{ border-color:#f7e4c6; border-top-color:var(--accent); }
+  .foot{ color:#854f0b; } .foot a{ color:#791f1f; }
+  .k-credit{ margin:0; font-size:11px; letter-spacing:.4px; color:#854f0b;
+             font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .k-credit a{ color:#791f1f; }
+</style>`;
+}
+
+function _page(base, nonce, bundleHref, sri, mice = false) {
   return `<!doctype html>
 <html lang="fr">
 <head>
@@ -173,7 +211,7 @@ function _page(base, nonce, bundleHref, sri) {
     .secret{padding:16px 44px}
     .secret-img{max-height:38vh}
   }
-</style>
+</style>${mice ? _miceSkin(nonce) : ''}
 </head>
 <body>
   <main class="card" id="card" aria-live="polite">
@@ -182,6 +220,7 @@ function _page(base, nonce, bundleHref, sri) {
     </div>
     <div id="view"><div class="spin"></div><p>Ouverture…</p></div>
   </main>
+  ${mice ? '<p class="k-credit">Coffre Missive — propulsé par <a href="https://protein-keystone.com" rel="noopener">Keystone OS</a>.</p>' : ''}
 
   <script src="${bundleHref}" integrity="${sri}" crossorigin="anonymous" nonce="${nonce}"></script>
   <script type="module" nonce="${nonce}">
