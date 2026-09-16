@@ -49,6 +49,10 @@ import { handleProofDicoGet, handleProofDicoPost }                      from './
 import { handleProofVerdict }                                           from './routes/proof-verdict.js';
 import { handleAiCreditsQuota }                                         from './routes/ai-credits.js';
 import { handleMcp }                                                   from './routes/mcp.js';
+// MCP sprint 2 — OAuth 2.1 (consentement claude.ai / Desktop / Code) + tuile « Connecteur IA ».
+import { handleWellKnown, handleOauthRegister, handleOauthAuthorize, handleOauthRequestInfo,
+         handleOauthPreview, handleOauthApprove, handleOauthToken, handleOauthRevoke,
+         handleMcpConnectionsList, handleMcpConnectionRevoke, purgeOauthArtifacts } from './routes/oauth.js';
 import {
   handleAutoReloadGet, handleAutoReloadSave,
   handleAutoReloadSetup, handleAutoReloadResume,
@@ -229,6 +233,14 @@ const handler = {
     if (request.method === 'OPTIONS' && new URL(request.url).pathname.startsWith('/api/sceau/guest/')) {
       return handleSceauGuestOptions(request);
     }
+    // OAuth du MCP (sprint 2) : points d'entrée publics par nature (PKCE,
+    // hash) — un client navigateur (MCP Inspector) doit pouvoir préflighter.
+    if (request.method === 'OPTIONS' && /^\/(oauth\/(register|token|revoke)|\.well-known\/oauth-)/.test(new URL(request.url).pathname)) {
+      return new Response(null, { status: 204, headers: {
+        'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, MCP-Protocol-Version', 'Access-Control-Max-Age': '600',
+      } });
+    }
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
@@ -261,6 +273,20 @@ const handler = {
       if (path === '/mcp') {
         return handleMcp(request, env, (req, e) => handler.fetch(req, e || env));
       }
+      // ── OAuth 2.1 du MCP (sprint 2, routes/oauth.js) — hors porte de
+      // possession : ce n'est pas une application, c'est la serrure.
+      if (path.startsWith('/.well-known/oauth-') && method === 'GET') return handleWellKnown(request, env);
+      if (path === '/oauth/register'  && method === 'POST') return handleOauthRegister(request, env);
+      if (path === '/oauth/authorize' && method === 'GET')  return handleOauthAuthorize(request, env);
+      if (path === '/oauth/request'   && method === 'GET')  return handleOauthRequestInfo(request, env);
+      if (path === '/oauth/preview'   && method === 'GET')  return handleOauthPreview(request, env, (req, e) => handler.fetch(req, e || env));
+      if (path === '/oauth/approve'   && method === 'POST') return handleOauthApprove(request, env);
+      if (path === '/oauth/token')                          return handleOauthToken(request, env);   // toute méthode : le handler rend 405 hors POST
+      if (path === '/oauth/revoke'    && method === 'POST') return handleOauthRevoke(request, env);
+      // Tuile « Connecteur IA » (Réglages) : connexions actives du compte, révocation.
+      if (path === '/api/mcp/connections' && method === 'GET') return handleMcpConnectionsList(request, env);
+      const mcpConn = path.match(/^\/api\/mcp\/connections\/([A-Za-z0-9_-]+)$/);
+      if (mcpConn && method === 'DELETE') return handleMcpConnectionRevoke(request, env, mcpConn[1]);
 
       // ── PORTE DE POSSESSION (lib/app-access.js) ──────────────────
       // Jusqu'ici, « cette licence a-t-elle cette application ? » ne se
@@ -1351,6 +1377,12 @@ const handler = {
         purgeExpiredMagicLinks(env)
           .then(r => console.log('[magic-link-purge]', JSON.stringify(r)))
           .catch(e => console.warn('[magic-link-purge] failed', e?.message || e))
+      );
+      // MCP sprint 2 — codes OAuth échus, jetons morts, connexions révoquées > 30 j, clients DCR orphelins.
+      ctx.waitUntil(
+        purgeOauthArtifacts(env)
+          .then(r => console.log('[oauth-purge]', JSON.stringify(r)))
+          .catch(e => console.warn('[oauth-purge] failed', e?.message || e))
       );
       // Sentinel — mesure GEO hebdomadaire (file lissée par next_geo_at, lot borné).
       ctx.waitUntil(

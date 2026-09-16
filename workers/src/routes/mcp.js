@@ -6,10 +6,16 @@
    requête est complète en elle-même (spécification MCP 2025-06-18 ;
    la version 2026-07-28 rend ce cœur sans état officiel).
 
-   Auth (sprint 1) : un JWT Keystone en `Authorization: Bearer`. Sans
-   jeton valide → 401 + `WWW-Authenticate: Bearer resource_metadata=…`
-   (le document /.well-known arrive au sprint 2 avec OAuth). Claude ne
-   lit cet en-tête QUE sur un 401.
+   Auth : `Authorization: Bearer <jeton>`, deux voies acceptées.
+   · Sprint 2, voie normale : un jeton d'accès OAuth (`ksa_…`, routes/
+     oauth.js) obtenu par consentement sur connect.html — claude.ai,
+     Claude Desktop, Claude Code. Les routes internes sont rappelées
+     avec un JWT interne court (5 min) minté depuis la connexion : plan
+     et licence relus en base à chaque appel, tenant jamais recalculé.
+   · Sprint 1, toujours valable : un JWT Keystone (scripts/mcp-connect).
+   Sans jeton valide → 401 + `WWW-Authenticate: Bearer resource_metadata=…`
+   (+ error="invalid_token" si un jeton était présent, pour que Claude
+   rafraîchisse ou réautorise). Claude ne lit cet en-tête QUE sur un 401.
 
    Outils : lib/mcp-tools.js. Chaque outil appelle les routes existantes
    du Worker EN INTERNE (dispatch = le routeur lui-même, pas un fetch
@@ -20,9 +26,12 @@
    Ledger `mcp_calls` (sujet, outil, durée, ok) pour l'observabilité, et
    plafond quotidien par sujet (fail-open, comme les surfaces publiques).
    ═══════════════════════════════════════════════════════════════ */
-import { requireJWT }                         from '../lib/jwt.js';
+import { requireJWT, signJWT }                from '../lib/jwt.js';
 import { mcpTool, mcpToolList }               from '../lib/mcp-tools.js';
 import { ipRateExceeded, ipRateBump }          from '../lib/ip-throttle.js';
+import { resolveMcpAccessToken, ACCESS_PREFIX } from './oauth.js';
+
+const INTERNAL_JWT_TTL_S = 300;   // JWT interne minté pour un appel OAuth : le temps d'une requête
 
 export const MCP_SERVER_NAME    = 'keystone-os';
 export const MCP_SERVER_VERSION = '1.0.0';
@@ -47,11 +56,33 @@ function reply(body, status = 200, extra = {}) {
   });
 }
 
-function unauthorized(request) {
+function unauthorized(request, detail) {
   const origin = new URL(request.url).origin;
-  return reply({ error: 'unauthorized', message: 'Jeton Keystone requis (Authorization: Bearer <jwt>).' }, 401, {
-    'WWW-Authenticate': `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`,
+  const parts = [`resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`];
+  /* Un en-tête HTTP est en Latin-1 : accents repliés, guillemets et
+     apostrophes typographiques retirés (le corps JSON garde le message intact). */
+  if (detail) parts.push('error="invalid_token"', `error_description="${String(detail).normalize('NFD').replace(/[^\x20-\x7e]/g, '').replace(/["\\]/g, '')}"`);
+  return reply({ error: 'unauthorized', message: detail || 'Jeton requis (Authorization: Bearer <jeton OAuth ou JWT Keystone>).' }, 401, {
+    'WWW-Authenticate': `Bearer ${parts.join(', ')}`,
   });
+}
+
+/* Identifie l'appelant : jeton OAuth (ksa_…) ou JWT Keystone.
+   → { claims, authz } où authz est l'en-tête à rejouer sur les routes internes. */
+async function authenticate(request, env) {
+  const header = request.headers.get('Authorization') || '';
+  const token  = header.replace(/^Bearer\s+/i, '').trim();
+  if (!token) return { error: null };
+  if (token.startsWith(ACCESS_PREFIX)) {
+    const r = await resolveMcpAccessToken(env, token);
+    if (!r.ok) return { error: r.description };
+    const c = r.claims;
+    const internal = await signJWT({ sub: c.sub, plan: c.plan, owner: c.owner, email: c.email, isAdmin: c.isAdmin, via: 'mcp-oauth' }, env, INTERNAL_JWT_TTL_S);
+    return { claims: c, authz: `Bearer ${internal}` };
+  }
+  const claims = await requireJWT(request, env);
+  if (!claims || !claims.sub) return { error: 'Jeton invalide ou expiré.' };
+  return { claims, authz: header };
 }
 
 /* Empreinte du sujet pour le plafond quotidien (jamais le sub en clair en base). */
@@ -139,6 +170,10 @@ async function handleOne(msg, ctx, env, meta) {
       const args = (params && params.arguments && typeof params.arguments === 'object') ? params.arguments : {};
       const tool = mcpTool(name);
       if (!tool) return rpcError(id, E.PARAMS, `Outil inconnu : ${name}`);
+      /* Portée OAuth : sprint 2 = lectures, keystone.read requis. (Un JWT
+         Keystone n'a pas de portée : voie complète, comme au sprint 1.) */
+      if (Array.isArray(ctx.claims.scope) && !ctx.claims.scope.includes('keystone.read'))
+        return rpcResult(id, { content: [{ type: 'text', text: 'Portée keystone.read absente de cette connexion : réautorisez Keystone depuis Claude.' }], isError: true });
       /* validation minimale des requis (le schéma complet est publié par tools/list) */
       for (const req of (tool.inputSchema.required || [])) {
         if (args[req] === undefined || args[req] === null || args[req] === '')
@@ -170,10 +205,10 @@ export async function handleMcp(request, env, dispatch) {
     return reply({ error: 'method_not_allowed', message: 'Serveur MCP sans état : POST uniquement.' }, 405, { 'Allow': 'POST' });
   if (method !== 'POST') return reply({ error: 'method_not_allowed' }, 405, { 'Allow': 'POST' });
 
-  /* ── Auth : JWT Keystone (sprint 1) ── */
-  const authz = request.headers.get('Authorization') || '';
-  const claims = await requireJWT(request, env);
-  if (!claims || !claims.sub) return unauthorized(request);
+  /* ── Auth : jeton OAuth (sprint 2) ou JWT Keystone (sprint 1) ── */
+  const who = await authenticate(request, env);
+  if (!who.claims) return unauthorized(request, who.error);
+  const { claims, authz } = who;
 
   /* ── Corps JSON-RPC ── */
   const len = parseInt(request.headers.get('Content-Length') || '0', 10);

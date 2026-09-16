@@ -461,6 +461,16 @@
       showState('success');
       // Le redirect n'arrive qu'APRÈS une action humaine (clic confirmer
       // ou submit du code) — pas de conflit avec la règle anti-scanner.
+      // Consentement d'un assistant en cours (connect.html, MCP sprint 2) :
+      // on y retourne au lieu du dashboard, même origine, chemin relatif borné.
+      const back = localStorage.getItem('ks_connect_return');
+      if (back && /^\/connect\?req=[A-Za-z0-9_%-]+$/.test(back)) {
+        localStorage.removeItem('ks_connect_return');
+        $('success-cta').href = back;
+        $('success-cta').textContent = 'Revenir à l\'autorisation';
+        redirectWithCountdown(back, 2);
+        return;
+      }
       redirectWithCountdown('/app', 3);
     }
 

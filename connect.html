@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Autoriser un assistant · Keystone OS</title>
+  <link rel="icon" href="/LOGOS/favicon.ico" />
+  <style>
+    /* ═══════════════════════════════════════════════════════════════
+       Consentement OAuth du connecteur (MCP sprint 2) — même charte que
+       auth-magic.html : Apple Premium, pas d'emoji, sentence case.
+       Cette page n'est atteinte QUE depuis Claude (redirection du Worker,
+       /oauth/authorize) ; elle n'est liée nulle part ailleurs.
+       ═══════════════════════════════════════════════════════════════ */
+    :root {
+      --bg: #0a0e14; --card: #111720; --border: #1f2a37;
+      --text: #f1f5f9; --muted: #94a3b8; --accent: #c9a96e;
+      --success: #10b981; --danger: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      letter-spacing: -0.02em; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .card {
+      max-width: 480px; width: 100%; background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 40px 32px 28px; box-shadow: 0 32px 80px rgba(0,0,0,.4);
+      animation: zoom-in 280ms cubic-bezier(.18,.8,.3,1);
+    }
+    @keyframes zoom-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+    .brand { font-size: 12px; letter-spacing: .2em; color: var(--accent); text-transform: uppercase; margin-bottom: 22px; text-align: center; }
+    h1 { font-size: 22px; font-weight: 900; margin: 0 0 10px; letter-spacing: -.02em; text-align: center; }
+    .sub { color: var(--muted); font-size: 14.5px; line-height: 1.55; margin: 0 0 20px; text-align: center; }
+    .sub strong { color: var(--text); }
+    .spinner { width: 44px; height: 44px; margin: 8px auto 20px; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--accent) 25%, transparent); border-top-color: var(--accent); animation: spin 900ms linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; padding: 14px 22px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 15px; font-weight: 600;
+      font-family: inherit; text-decoration: none; cursor: pointer; transition: background 180ms ease, transform 100ms ease;
+    }
+    .btn:hover { background: #1a2330; }
+    .btn:active { transform: scale(.99); }
+    .btn:disabled { opacity: .55; cursor: default; }
+    .btn-primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+    .btn-primary:hover { background: color-mix(in srgb, var(--accent) 88%, white); }
+    .btn-tertiary { color: var(--muted); border-color: transparent; background: transparent; font-weight: 500; font-size: 14px; }
+    .btn-tertiary:hover { color: var(--text); background: transparent; }
+    .field {
+      width: 100%; padding: 13px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg);
+      color: var(--text); font-size: 15px; font-family: inherit; letter-spacing: -.01em; outline: none; transition: border-color 160ms ease;
+    }
+    .field:focus { border-color: var(--accent); }
+    .field--code { text-align: center; font-family: 'SF Mono', 'Courier New', monospace; font-size: 24px; letter-spacing: 10px; }
+    .form-err { color: var(--danger); font-size: 13px; margin: 8px 0 0; min-height: 18px; text-align: center; }
+
+    /* La fiche de consentement : qui demande, avec quel compte, ce qu'il verra */
+    .sheet { border: 1px solid var(--border); border-radius: 12px; background: var(--bg); overflow: hidden; margin: 6px 0 18px; }
+    .row { display: flex; justify-content: space-between; gap: 16px; padding: 12px 16px; font-size: 13.5px; }
+    .row + .row { border-top: 1px solid var(--border); }
+    .row .k { color: var(--muted); flex-shrink: 0; }
+    .row .v { color: var(--text); font-weight: 600; text-align: right; word-break: break-word; }
+    .row .v.mono { font-family: 'SF Mono', 'Courier New', monospace; font-weight: 500; font-size: 12.5px; }
+    .counts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border-top: 1px solid var(--border); }
+    .count { background: var(--bg); padding: 12px 8px; text-align: center; }
+    .count b { display: block; font-size: 20px; font-weight: 900; letter-spacing: -.03em; }
+    .count span { display: block; font-size: 10.5px; color: var(--muted); margin-top: 2px; line-height: 1.3; }
+    .scope { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+    .scope i { font-style: normal; font-size: 11.5px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+    .warn { font-size: 12.5px; line-height: 1.55; color: var(--muted); margin: 0 0 6px; padding: 12px 14px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+    .warn strong { color: var(--text); }
+    .footnote { margin: 26px 0 0; color: #64748b; font-size: 12px; line-height: 1.55; text-align: center; }
+    [hidden] { display: none !important; }
+    @media (max-width: 420px) { .card { padding: 32px 20px 22px; } .counts { grid-template-columns: repeat(2, 1fr); } }
+  </style>
+</head>
+<body>
+  <div class="card" role="main" aria-live="polite">
+    <div class="brand">Keystone OS</div>
+
+    <div id="state-loading">
+      <div class="spinner" aria-hidden="true"></div>
+      <h1>Lecture de la demande…</h1>
+      <p class="sub">Un instant, on vérifie qui demande l'accès.</p>
+    </div>
+
+    <div id="state-error" hidden>
+      <h1 id="error-title">Demande introuvable</h1>
+      <p class="sub" id="error-sub">Cette demande d'autorisation a expiré ou n'existe pas. Relancez l'ajout du connecteur depuis Claude.</p>
+      <div class="actions"><a class="btn btn-tertiary" href="/app">Ouvrir Keystone</a></div>
+    </div>
+
+    <div id="state-login" hidden>
+      <h1>Se connecter à Keystone</h1>
+      <p class="sub"><strong id="login-client">Un assistant</strong> demande à accéder à votre Keystone. Identifiez-vous d'abord avec l'e-mail de votre licence : vous recevrez un code à 6 chiffres.</p>
+      <form id="login-form" class="actions" novalidate>
+        <input id="login-email" class="field" type="email" inputmode="email" autocomplete="email" placeholder="votre@email.fr" required />
+        <p id="login-err" class="form-err" aria-live="polite"></p>
+        <button id="login-submit" class="btn btn-primary" type="submit">Recevoir mon code</button>
+      </form>
+    </div>
+
+    <div id="state-code" hidden>
+      <h1>Saisir le code</h1>
+      <p class="sub">Un e-mail vient de partir vers <strong id="code-email"></strong>. Recopiez le code à <strong>6 chiffres</strong> qu'il contient (ou cliquez son bouton : vous reviendrez ici).</p>
+      <form id="code-form" class="actions" novalidate>
+        <input id="code-input" class="field field--code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="\d{6}" maxlength="6" placeholder="······" required />
+        <p id="code-err" class="form-err" aria-live="polite"></p>
+        <button id="code-submit" class="btn btn-primary" type="submit">Continuer</button>
+        <button id="code-back" class="btn btn-tertiary" type="button">Changer d'adresse</button>
+      </form>
+    </div>
+
+    <div id="state-consent" hidden>
+      <h1>Autoriser cet assistant ?</h1>
+      <p class="sub"><strong id="consent-client">Claude</strong> pourra lire et écrire dans votre Keystone, avec le compte ci-dessous, jusqu'à ce que vous révoquiez l'accès dans Réglages.</p>
+      <div class="sheet">
+        <div class="row"><span class="k">Application</span><span class="v" id="c-client"></span></div>
+        <div class="row"><span class="k">Retour vers</span><span class="v mono" id="c-host"></span></div>
+        <div class="row"><span class="k">Compte</span><span class="v" id="c-email"></span></div>
+        <div class="row"><span class="k">Licence</span><span class="v" id="c-plan"></span></div>
+        <div class="row"><span class="k">Accès</span><span class="v scope" id="c-scope"></span></div>
+        <div class="counts" id="c-counts"></div>
+      </div>
+      <p class="warn"><strong>Vérifiez que ces volumes sont bien les vôtres.</strong> L'assistant verra exactement ce que ce compte voit. Si ce n'est pas la bonne licence, changez de compte et connectez-vous avec l'e-mail rattaché à celle que vous attendez.</p>
+      <div class="actions">
+        <button id="allow-btn" class="btn btn-primary" type="button">Autoriser</button>
+        <button id="deny-btn" class="btn" type="button">Refuser</button>
+        <button id="switch-btn" class="btn btn-tertiary" type="button">Changer de compte</button>
+      </div>
+      <p id="consent-err" class="form-err" aria-live="polite"></p>
+    </div>
+
+    <div id="state-done" hidden>
+      <h1 id="done-title">Retour vers l'assistant…</h1>
+      <p class="sub" id="done-sub">Si rien ne se passe, vous pouvez fermer cette page et revenir dans Claude.</p>
+      <div class="actions"><a id="done-link" class="btn btn-primary" href="#" hidden>Revenir dans l'assistant</a></div>
+    </div>
+
+    <p class="footnote">Vous pourrez retirer cet accès à tout moment : Réglages → Connecteur IA.</p>
+  </div>
+
+  <script type="module">
+    /* ═══════════════════════════════════════════════════════════════
+       Flux : ?req=<id> (posé par le Worker à /oauth/authorize)
+         1. GET /oauth/request      → qui demande (nom, hôte, portées)
+         2. JWT déjà en localStorage (même origine que /app) et valide ?
+            oui → 3 ; non → login e-mail + code (mêmes routes que l'app)
+         3. GET /oauth/preview (JWT) → compte, plan, VOLUMES réels
+         4. Autoriser / Refuser → POST /oauth/approve → redirection Claude
+       Rien n'est consommé au chargement (règle anti-scanner AUTH-1) : le
+       code n'est émis que sur le clic « Autoriser ».
+       ═══════════════════════════════════════════════════════════════ */
+    const LOCAL  = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    const WORKER = LOCAL ? 'http://127.0.0.1:8799' : 'https://keystone-os-api.keystone-os.workers.dev';
+    const $ = (id) => document.getElementById(id);
+    const REQ = new URLSearchParams(location.search).get('req') || '';
+    const RETURN_KEY = 'ks_connect_return';
+    let request = null, jwt = null, email = '';
+
+    function show(name) {
+      ['loading', 'error', 'login', 'code', 'consent', 'done'].forEach(s => { $('state-' + s).hidden = (s !== name); });
+    }
+    function fail(title, sub) { if (title) $('error-title').textContent = title; if (sub) $('error-sub').textContent = sub; show('error'); }
+
+    async function api(path, { method = 'GET', body, auth } = {}) {
+      const headers = {};
+      if (body) headers['Content-Type'] = 'application/json';
+      if (auth) headers['Authorization'] = 'Bearer ' + auth;
+      let res, data = null;
+      try { res = await fetch(WORKER + path, { method, headers, body: body ? JSON.stringify(body) : undefined }); }
+      catch (e) { return { status: 0, data: { error: 'Impossible de joindre le serveur. Vérifiez votre connexion.' } }; }
+      try { data = await res.json(); } catch (_) {}
+      return { status: res.status, data };
+    }
+
+    /* Même empreinte légère que auth-magic.html (cohérence des jetons) */
+    async function fingerprint() {
+      const had = localStorage.getItem('ks_fingerprint');
+      if (had && had.length >= 16) return had;
+      const parts = [navigator.userAgent, screen.width + 'x' + screen.height, new Date().getTimezoneOffset(), navigator.language || 'fr', Math.random().toString(36).slice(2)].join('|');
+      const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(parts));
+      const fp = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem('ks_fingerprint', fp);
+      return fp;
+    }
+    function jwtAlive(t) {
+      try { const p = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); return p.exp && p.exp * 1000 > Date.now() + 60_000; } catch (_) { return false; }
+    }
+    function persistAuth(d) {
+      if (d.jwt)         localStorage.setItem('ks_jwt', d.jwt);
+      if (d.licence_key) localStorage.setItem('ks_licence_key', d.licence_key);
+      if (d.plan)        localStorage.setItem('ks_licence_plan', d.plan);
+      if (d.owner)       localStorage.setItem('ks_licence_owner', d.owner);
+      if (d.email)       localStorage.setItem('ks_user_email', d.email);
+    }
+    const PLAN = { STARTER: 'Starter', PRO: 'Pro', MAX: 'Max', ADMIN: 'Administrateur', BETA: 'Bêta', DEMO: 'Démo' };
+    const SCOPE = { 'keystone.read': 'lecture', 'keystone.write': 'écriture', 'offline_access': 'accès durable' };
+
+    /* ── 1 · la demande ── */
+    async function loadRequest() {
+      if (!REQ) return fail('Aucune demande', 'Cette page ne s’ouvre qu’au moment où un assistant demande l’accès à Keystone. Relancez l’ajout du connecteur depuis Claude.');
+      const { status, data } = await api('/oauth/request?req=' + encodeURIComponent(REQ));
+      if (status !== 200 || !data?.ok) return fail('Demande expirée', data?.error || 'Cette demande a expiré (10 minutes). Relancez l’ajout du connecteur depuis Claude.');
+      request = data;
+      $('login-client').textContent = request.client_name;
+      $('consent-client').textContent = request.client_name;
+      $('c-client').textContent = request.client_name;
+      $('c-host').textContent = request.redirect_host || '—';
+      $('c-scope').replaceChildren(...request.scope.map(s => { const i = document.createElement('i'); i.textContent = SCOPE[s] || s; return i; }));
+      const existing = localStorage.getItem('ks_jwt');
+      if (existing && jwtAlive(existing)) { jwt = existing; return loadPreview(); }
+      show('login');
+    }
+
+    /* ── 3 · ce que l'assistant verra ── */
+    async function loadPreview() {
+      show('loading');
+      const { status, data } = await api('/oauth/preview', { auth: jwt });
+      if (status === 401) { jwt = null; localStorage.removeItem('ks_jwt'); show('login'); return; }
+      if (status !== 200 || !data?.ok) return fail('Compte illisible', data?.error || 'Impossible de lire votre compte. Réessayez.');
+      $('c-email').textContent = data.email || data.owner || '—';
+      $('c-plan').textContent = (PLAN[String(data.plan || '').toUpperCase()] || data.plan || '—') + (data.admin ? ' · espace principal' : '');
+      const c = data.apercu || {};
+      const cell = (n, label) => { const d = document.createElement('div'); d.className = 'count'; const b = document.createElement('b'); b.textContent = n == null ? '—' : String(n); const s = document.createElement('span'); s.textContent = label; d.append(b, s); return d; };
+      $('c-counts').replaceChildren(cell(c.qr_codes, 'QR codes'), cell(c.sites_sentinel, 'sites surveillés'), cell(c.jumeaux_smart_agent, 'jumeaux'), cell(c.notes_keynapse, 'notes'));
+      show('consent');
+    }
+
+    /* ── 2 · connexion (e-mail → code), mêmes routes que l'app ── */
+    $('login-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      email = $('login-email').value.trim().toLowerCase();
+      const errEl = $('login-err'); errEl.textContent = '';
+      if (!/^\S+@\S+\.\S+$/.test(email)) { errEl.textContent = 'Adresse e-mail invalide.'; return; }
+      $('login-submit').disabled = true;
+      try {
+        /* Si l'utilisateur clique le bouton de l'e-mail au lieu de saisir le code, auth-magic le ramène ici. */
+        localStorage.setItem(RETURN_KEY, '/connect?req=' + encodeURIComponent(REQ));
+        const { status, data } = await api('/api/auth/request-magic-link', { method: 'POST', body: { email, purpose: 'magic_login', fingerprint: await fingerprint() } });
+        if (status !== 200) { errEl.textContent = data?.error || 'Demande refusée. Réessayez dans une minute.'; return; }
+        $('code-email').textContent = email;
+        show('code');
+        $('code-input').focus();
+      } finally { $('login-submit').disabled = false; }
+    });
+    $('code-back').addEventListener('click', () => show('login'));
+    $('code-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const code = $('code-input').value.replace(/\s+/g, '');
+      const errEl = $('code-err'); errEl.textContent = '';
+      if (!/^\d{6}$/.test(code)) { errEl.textContent = 'Le code fait 6 chiffres.'; return; }
+      $('code-submit').disabled = true;
+      try {
+        const { status, data } = await api('/api/auth/consume-otp', { method: 'POST', body: { email, code, fingerprint: await fingerprint() } });
+        if (status === 200 && data?.jwt) { persistAuth(data); jwt = data.jwt; localStorage.removeItem(RETURN_KEY); return loadPreview(); }
+        errEl.textContent = status === 423 ? 'Trop de tentatives. Demandez un nouveau code.' : (data?.error || 'Code invalide ou expiré.');
+      } finally { $('code-submit').disabled = false; }
+    });
+
+    /* ── 4 · décision ── */
+    async function decide(decision) {
+      $('allow-btn').disabled = $('deny-btn').disabled = true;
+      $('consent-err').textContent = '';
+      const { status, data } = await api('/oauth/approve', { method: 'POST', auth: jwt, body: { req: REQ, decision } });
+      if (status === 401) { jwt = null; localStorage.removeItem('ks_jwt'); show('login'); return; }
+      if (status !== 200 || !data?.redirect_to) {
+        $('allow-btn').disabled = $('deny-btn').disabled = false;
+        $('consent-err').textContent = data?.error || 'Impossible d’enregistrer votre réponse. Réessayez.';
+        return;
+      }
+      $('done-title').textContent = decision === 'allow' ? 'Accès autorisé, retour vers l’assistant…' : 'Accès refusé, retour vers l’assistant…';
+      const link = $('done-link'); link.href = data.redirect_to; link.hidden = false;
+      show('done');
+      location.assign(data.redirect_to);
+    }
+    $('allow-btn').addEventListener('click', () => decide('allow'));
+    $('deny-btn').addEventListener('click', () => decide('deny'));
+    $('switch-btn').addEventListener('click', () => { jwt = null; show('login'); $('login-email').focus(); });
+
+    localStorage.removeItem(RETURN_KEY);
+    loadRequest();
+  </script>
+</body>
+</html>

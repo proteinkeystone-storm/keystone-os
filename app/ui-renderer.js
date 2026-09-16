@@ -4433,7 +4433,85 @@ const ACC_ICONS = {
     lock:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
     usb:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M12 2v8M8 6l4-4 4 4M8 10h8a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2z"/><circle cx="12" cy="20" r="2"/><line x1="12" y1="16" x2="12" y2="18"/></svg>`,
     support: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+    link:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
 };
+
+// ── Tuile « Connecteur IA » (MCP sprint 2) — liste + révocation ─────
+// Volontairement muette : pas de badge, pas d'entrée dans l'aide ni le
+// changelog (HANDOFF_MCP_CLAUDE §1 « Annonce »). Chargée à l'ouverture de
+// l'accordéon, jamais au boot. Le JWT du navigateur suffit : la route
+// filtre sur son sub, on ne passe jamais de tenant.
+function _mcpConnFrDate(v) {
+    if (!v) return null;
+    const t = Date.parse(/[TZ]/.test(v) ? v : v.replace(' ', 'T') + 'Z');
+    return isNaN(t) ? null : new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+async function _loadMcpConnections(root) {
+    const list = root?.querySelector('#mcp-conn-list');
+    if (!list) return;
+    const jwt = (() => { try { return localStorage.getItem('ks_jwt'); } catch (_) { return null; } })();
+    if (!jwt) { list.innerHTML = `<p class="sp-user-hint">Connectez-vous à Keystone pour voir vos connexions.</p>`; return; }
+    list.innerHTML = `<p class="sp-user-hint">Chargement…</p>`;
+    let data = null;
+    try {
+        const res = await fetch(`${CF_API}/api/mcp/connections`, { headers: { Authorization: `Bearer ${jwt}` } });
+        data = await res.json();
+        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    } catch (e) {
+        list.innerHTML = `<p class="sp-user-hint" style="color:var(--danger)">Impossible de lire les connexions : ${_escapeLivingText(e.message)}</p>`;
+        return;
+    }
+    const urlEl = root.querySelector('#mcp-conn-url');
+    if (urlEl && data.mcp_url) urlEl.value = data.mcp_url;
+    const conns = data.connections || [];
+    if (!conns.length) {
+        list.innerHTML = `<p class="sp-user-hint">Aucun assistant n'est connecté. Ajoutez l'adresse ci-dessus comme connecteur personnalisé dans Claude : l'autorisation se fait ensuite par e-mail, sans rien coller.</p>`;
+        return;
+    }
+    list.innerHTML = conns.map(c => `
+        <div class="api-key-row" data-conn="${_escapeLivingText(c.id)}" style="padding:10px 0">
+            <div class="api-key-header" style="align-items:flex-start">
+                <div style="flex:1;min-width:0">
+                    <div class="api-key-name">${_escapeLivingText(c.client_name)} <span style="color:var(--tx3);font-weight:500;font-size:10px">${_escapeLivingText(c.redirect_host || '')}</span></div>
+                    <div class="sp-user-hint" style="padding-top:2px">
+                        ${c.email ? `${_escapeLivingText(c.email)} · ` : ''}${_escapeLivingText(String(c.plan || ''))}
+                        · autorisé le ${_mcpConnFrDate(c.created_at) || '—'}
+                        · dernier usage : ${_mcpConnFrDate(c.last_used_at) || 'jamais'}
+                    </div>
+                </div>
+                <button class="api-key-save-btn" data-revoke="${_escapeLivingText(c.id)}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2)">Révoquer</button>
+            </div>
+        </div>`).join('');
+    list.querySelectorAll('[data-revoke]').forEach(btn => btn.addEventListener('click', async () => {
+        const id = btn.dataset.revoke;
+        const c = conns.find(x => x.id === id);
+        if (!confirm(`Révoquer l'accès de « ${c?.client_name || 'cet assistant'} » ?\n\nSes jetons sont détruits immédiatement : il devra redemander votre autorisation. Vos données ne sont pas touchées.`)) return;
+        btn.disabled = true;
+        try {
+            const res = await fetch(`${CF_API}/api/mcp/connections/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${jwt}` } });
+            if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`);
+            _loadMcpConnections(root);
+        } catch (e) {
+            btn.disabled = false;
+            alert('Révocation impossible : ' + e.message);
+        }
+    }));
+}
+function _mcpConnectorSectionHTML() {
+    return `<div class="sp-user-form">
+        <p class="sp-user-hint" style="font-size:12px;line-height:1.55;color:var(--tx2);margin:0 0 10px">
+            Un assistant IA compatible (Claude, par exemple) peut lire vos données Keystone avec votre autorisation, depuis son propre chat. Vous autorisez chaque assistant une fois, par e-mail, et vous le retirez ici quand vous voulez.
+        </p>
+        <div class="sp-user-row">
+            <label class="sp-user-label" for="mcp-conn-url">Adresse à ajouter comme connecteur</label>
+            <div class="api-key-input-row">
+                <input class="api-key-input" id="mcp-conn-url" type="text" readonly value="${CF_API}/mcp" spellcheck="false"/>
+                <button class="api-key-save-btn" id="mcp-conn-copy" type="button">Copier</button>
+            </div>
+        </div>
+        <div id="mcp-conn-list" style="margin-top:8px"></div>
+    </div>`;
+}
 
 // ── Rendu du logo IA — variantes dark / light ─────────────────
 function _engineLogoHTML(p, size = 20) {
@@ -5142,6 +5220,11 @@ function _renderSettingsBody() {
             })(),
         },
         {
+            id: 'acc-connector', icon: ACC_ICONS.link, title: 'Connecteur IA',
+            open: false,
+            content: _mcpConnectorSectionHTML(),
+        },
+        {
             id: 'acc-doc', icon: ACC_ICONS.doc, title: 'Documentation',
             open: false,
             content: keystoneDocHTML(),
@@ -5247,6 +5330,20 @@ function _renderSettingsBody() {
 
     // Wire section « Moteur actif » (interrupteur + sélecteur des moteurs à clé)
     _wireEngineSection(body.querySelector('#acc-engine .acc-body'));
+
+    // Wire tuile « Connecteur IA » : liste chargée à l'ouverture, copie de l'adresse
+    {
+        const sec = body.querySelector('#acc-connector');
+        sec?.querySelector('.acc-header')?.addEventListener('click', () => {
+            if (sec.classList.contains('open')) _loadMcpConnections(sec);
+        });
+        sec?.querySelector('#mcp-conn-copy')?.addEventListener('click', async (e) => {
+            const input = sec.querySelector('#mcp-conn-url');
+            try { await navigator.clipboard.writeText(input.value); } catch (_) { input.select(); document.execCommand('copy'); }
+            e.target.textContent = '✓ Copié';
+            setTimeout(() => { e.target.textContent = 'Copier'; }, 1500);
+        });
+    }
 
     // Wire user inputs → mise à jour identity zone en temps réel
     body.querySelector('#user-name-input')?.addEventListener('input', e => {
