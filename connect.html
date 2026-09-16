@@ -263,10 +263,21 @@
     });
 
     /* ── 4 · décision ── */
+    /* Sprint 5 — le SECRET DE CONNEXION naît ici, dans le navigateur : il chiffrera
+       les reflets (Réglages → « Visible par mon assistant ») et voyagera dans les
+       jetons remis à l'assistant. Gardé sous ks_mcp_mirror_secrets[demande]. */
+    function mirrorSecret() {
+      const u8 = crypto.getRandomValues(new Uint8Array(32));
+      return btoa(String.fromCharCode(...u8)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
     async function decide(decision) {
       $('allow-btn').disabled = $('deny-btn').disabled = true;
       $('consent-err').textContent = '';
-      const { status, data } = await api('/oauth/approve', { method: 'POST', auth: jwt, body: { req: REQ, decision } });
+      const secret = decision === 'allow' ? mirrorSecret() : null;
+      const { status, data } = await api('/oauth/approve', { method: 'POST', auth: jwt, body: { req: REQ, decision, ...(secret ? { mirror_secret: secret } : {}) } });
+      if (status === 200 && secret && data?.mirror && data?.request_id) {
+        try { const all = JSON.parse(localStorage.getItem('ks_mcp_mirror_secrets') || '{}'); all[data.request_id] = secret; localStorage.setItem('ks_mcp_mirror_secrets', JSON.stringify(all)); } catch (e) { /* plein : pas de reflet */ }
+      }
       if (status === 401) { jwt = null; localStorage.removeItem('ks_jwt'); show('login'); return; }
       if (status !== 200 || !data?.redirect_to) {
         $('allow-btn').disabled = $('deny-btn').disabled = false;

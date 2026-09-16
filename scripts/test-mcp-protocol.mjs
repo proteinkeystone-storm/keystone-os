@@ -6,7 +6,7 @@
      2. initialize négocie la version et annonce `tools`.
      3. notifications/initialized → 202 sans corps ; ping → {}.
      4. tools/list : tous les outils sont nommés keystone_*, schéma objet,
-        description bornée, annotations lecture seule.
+        description bornée, annotations lecture seule (sauf écritures).
      5. tools/call : requis manquant → isError ; outil inconnu → -32602 ;
         un outil réel met en forme la réponse du routeur ; une erreur de
         route devient un isError lisible, jamais une 500.
@@ -101,12 +101,14 @@ console.log('\n▶ 4 · tools/list');
   const j = await (await post(rpc('tools/list', {}))).json();
   const tools = j.result.tools;
   yes(Array.isArray(tools) && tools.length >= 25, `au moins 25 outils (${tools.length})`);
-  eq(tools.length, MCP_TOOLS.length, 'tools/list expose tout le registre');
+  eq(tools.length, MCP_TOOLS.filter(t => !t.gate).length, 'tools/list expose tout le registre');
   yes(tools.every(t => /^keystone_[a-z0-9_]+$/.test(t.name)), 'tous nommés keystone_[a-z0-9_]+');
   yes(new Set(tools.map(t => t.name)).size === tools.length, 'noms uniques');
   yes(tools.every(t => t.inputSchema && t.inputSchema.type === 'object'), 'inputSchema = objet partout');
   yes(tools.every(t => typeof t.description === 'string' && t.description.length >= 30 && t.description.length <= 400), 'descriptions entre 30 et 400 caractères');
-  yes(tools.every(t => t.annotations && t.annotations.readOnlyHint === true && t.annotations.destructiveHint === false), 'annotations : lecture seule, non destructif');
+  const byName = Object.fromEntries(MCP_TOOLS.map(t => [t.name, t]));
+  yes(tools.every(t => t.annotations && t.annotations.readOnlyHint === !byName[t.name].write && t.annotations.destructiveHint === false), 'annotations : lecture seule sauf écritures (write), jamais destructif');
+  yes(!tools.some(t => t.name === 'keystone_qr_create'), 'keystone_qr_create hors catalogue sans MCP_QR_CREATE=on');
   yes(tools.every(t => (t.inputSchema.required || []).every(r => t.inputSchema.properties && t.inputSchema.properties[r])), 'chaque requis est décrit dans properties');
 }
 
@@ -149,7 +151,7 @@ console.log('\n▶ 5 · tools/call');
 
 console.log('\n▶ 6 · erreurs de protocole & lot');
 {
-  const m = await (await post(rpc('resources/list', {}))).json();
+  const m = await (await post(rpc('prompts/list', {}))).json();   // resources/* existe depuis le sprint 6
   eq(m.error && m.error.code, -32601, 'méthode inconnue → -32601');
   const p = await post('{not json');
   eq(p.status, 400, 'JSON illisible → 400');

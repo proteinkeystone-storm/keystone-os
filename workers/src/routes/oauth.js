@@ -38,6 +38,7 @@
    · Rien d'annoncé : aucune page publique ne pointe ici.
    ═══════════════════════════════════════════════════════════════ */
 import { json, err, parseBody, getAllowedOrigin, generateId, generateToken } from '../lib/auth.js';
+import { encrypt as kmsEncrypt, decrypt as kmsDecrypt } from '../lib/crypto.js';
 import { requireJWT }                     from '../lib/jwt.js';
 import { ipHashOf, ipRateExceeded, ipRateBump } from '../lib/ip-throttle.js';
 import { audit }                          from '../lib/audit.js';
@@ -120,7 +121,18 @@ export async function ensureOauthSchema(env) {
     `CREATE INDEX IF NOT EXISTS idx_mcp_tokens_conn ON mcp_tokens(connection_id, kind)`,
     `CREATE INDEX IF NOT EXISTS idx_mcp_tokens_expires ON mcp_tokens(expires_at)`,
   ];
-  try { for (const s of stmts) await env.DB.prepare(s).run(); _ready = true; }
+  /* Sprint 5 (migration 018) — colonnes ajoutées, gardées (SQLite refuse un ALTER répété) */
+  const alters = [
+    'ALTER TABLE oauth_codes ADD COLUMN secret_enc TEXT', 'ALTER TABLE oauth_codes ADD COLUMN secret_iv TEXT',
+    'ALTER TABLE mcp_connections ADD COLUMN request_id TEXT',
+    `CREATE TABLE IF NOT EXISTS mcp_mirror (sub TEXT NOT NULL, connection_id TEXT NOT NULL, pad TEXT NOT NULL, ciphertext TEXT NOT NULL, iv TEXT NOT NULL,
+       size_bytes INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (sub, connection_id, pad))`,
+  ];
+  try {
+    for (const s of stmts) await env.DB.prepare(s).run();
+    for (const a of alters) { try { await env.DB.prepare(a).run(); } catch (_) { /* déjà là */ } }
+    _ready = true;
+  }
   catch (e) { console.warn('[oauth] schema init failed:', e.message); }
 }
 
@@ -402,16 +414,27 @@ export async function handleOauthApprove(request, env) {
 
   const code = randB64u(32);
   const codeHash = await sha256Hex(code);
-  const upd = await env.DB.prepare(`UPDATE oauth_codes SET status = 'issued', sub = ?, licence_key = ?, email = ?, code_hash = ?, expires_at = ?
+  /* Sprint 5 — le SECRET DE CONNEXION vient du navigateur (connect.html le
+     génère et le garde pour chiffrer les reflets). Il transite chiffré avec
+     KS_ENCRYPTION_KEY dans la demande, le temps de l'échange du code
+     (≤ 10 min, usage unique), puis est effacé : seul son hash restera. Sans
+     secret navigateur (ancien client, clé serveur absente) → secret aléatoire
+     à l'échange, connexion sans reflet. */
+  let secretEnc = null, secretIv = null, mirror = false;
+  const ms = typeof body.mirror_secret === 'string' ? body.mirror_secret : '';
+  if (/^[A-Za-z0-9_-]{43,64}$/.test(ms) && env.KS_ENCRYPTION_KEY) {
+    try { const e = await kmsEncrypt(ms, env.KS_ENCRYPTION_KEY); secretEnc = e.ciphertext; secretIv = e.iv; mirror = true; } catch (_) { /* pas de reflet */ }
+  }
+  const upd = await env.DB.prepare(`UPDATE oauth_codes SET status = 'issued', sub = ?, licence_key = ?, email = ?, code_hash = ?, expires_at = ?, secret_enc = ?, secret_iv = ?
                                     WHERE id = ? AND status = 'pending'`)
-    .bind(claims.sub, licenceKey, claims.email || null, codeHash, plusIso(CODE_TTL_S), row.id).run();
+    .bind(claims.sub, licenceKey, claims.email || null, codeHash, plusIso(CODE_TTL_S), secretEnc, secretIv, row.id).run();
   if ((upd?.meta?.changes ?? 0) !== 1) return err('Demande déjà traitée.', 409, origin);
 
   await audit(env, { action: 'mcp_oauth_consent', actor: claims.email || claims.sub, target: row.client_id,
     details: { client_name: row.client_name, redirect_host: hostOf(row.redirect_uri), scope: row.scope, plan: claims.plan || null }, request }).catch(() => {});
 
   const u = new URL(row.redirect_uri); u.searchParams.set('code', code); if (row.state) u.searchParams.set('state', row.state);
-  return json({ ok: true, redirect_to: u.toString() }, 200, origin);
+  return json({ ok: true, redirect_to: u.toString(), request_id: row.id, mirror }, 200, origin);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -453,6 +476,7 @@ async function revokeConnection(env, connectionId, why) {
   await env.DB.batch([
     env.DB.prepare("UPDATE mcp_connections SET revoked_at = datetime('now'), secret_hash = NULL WHERE id = ? AND revoked_at IS NULL").bind(connectionId),
     env.DB.prepare('DELETE FROM mcp_tokens WHERE connection_id = ?').bind(connectionId),
+    env.DB.prepare('DELETE FROM mcp_mirror WHERE connection_id = ?').bind(connectionId),     // sprint 5 : reflets illisibles ET effacés
   ]);
   console.log('[oauth] connexion révoquée', connectionId, why || '');
 }
@@ -487,16 +511,22 @@ export async function handleOauthToken(request, env) {
     const lic = await env.DB.prepare('SELECT plan, is_active, expires_at FROM licences WHERE key = ?').bind(row.licence_key).first();
     if (!lic || !lic.is_active || (lic.expires_at && new Date(lic.expires_at) < new Date())) return oauthError('invalid_grant', 'Licence inactive ou expirée.');
 
-    /* Le secret de connexion naît ici (brief §3 étape 1) : seul son hash reste en base. */
-    const secret = randB64u(32);
+    /* Le secret de connexion (brief §3 étape 1) : celui du navigateur s'il l'a
+       fourni au consentement (sprint 5, reflets), sinon un aléa. Seul son hash
+       reste en base ; la copie transitoire de la demande est effacée ici. */
+    let secret = randB64u(32);
+    if (row.secret_enc && row.secret_iv && env.KS_ENCRYPTION_KEY) {
+      try { const s = await kmsDecrypt(row.secret_enc, row.secret_iv, env.KS_ENCRYPTION_KEY); if (/^[A-Za-z0-9_-]{43,64}$/.test(s)) secret = s; } catch (_) { /* aléa */ }
+    }
+    await env.DB.prepare('UPDATE oauth_codes SET secret_enc = NULL, secret_iv = NULL WHERE id = ?').bind(row.id).run().catch(() => {});
     const connection = {
       id: 'kcn_' + randB64u(12), sub: row.sub, licence_key: row.licence_key, email: row.email, plan_at_consent: lic.plan || null,
       client_id: client.client_id, client_name: client.client_name, redirect_host: hostOf(row.redirect_uri), scope: row.scope,
     };
-    await env.DB.prepare(`INSERT INTO mcp_connections (id, sub, licence_key, email, plan_at_consent, client_id, client_name, redirect_host, scope, secret_hash)
-                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    await env.DB.prepare(`INSERT INTO mcp_connections (id, sub, licence_key, email, plan_at_consent, client_id, client_name, redirect_host, scope, secret_hash, request_id)
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(connection.id, connection.sub, connection.licence_key, connection.email, connection.plan_at_consent, connection.client_id,
-            connection.client_name, connection.redirect_host, connection.scope, await sha256Hex(secret)).run();
+            connection.client_name, connection.redirect_host, connection.scope, await sha256Hex(secret), row.id).run();
     return oauthJson(await issueTokens(env, connection, secret));
   }
 
@@ -566,7 +596,7 @@ export async function resolveMcpAccessToken(env, token) {
   env.DB.prepare("UPDATE mcp_connections SET last_used_at = datetime('now') WHERE id = ? AND (last_used_at IS NULL OR last_used_at < datetime('now', '-60 seconds'))")
     .bind(conn.id).run().catch(() => {});
   const planUp = String(lic.plan || '').toUpperCase();
-  return { ok: true, connection: conn, claims: {
+  return { ok: true, connection: conn, secret, claims: {
     sub: conn.sub, plan: lic.plan, owner: lic.owner, email: conn.email || null, isAdmin: planUp === 'ADMIN',
     scope: conn.scope.split(' '), via: 'mcp-oauth', connection_id: conn.id,
   } };
@@ -580,11 +610,17 @@ export async function handleMcpConnectionsList(request, env) {
   const origin = getAllowedOrigin(env, request);
   const claims = await requireJWT(request, env);
   if (!claims || !claims.sub) return err('Jeton Keystone requis', 401, origin);
-  const { results } = await env.DB.prepare(`SELECT id, client_name, redirect_host, scope, email, plan_at_consent, created_at, last_used_at
+  const { results } = await env.DB.prepare(`SELECT id, client_name, redirect_host, scope, email, plan_at_consent, created_at, last_used_at, request_id
                                             FROM mcp_connections WHERE sub = ? AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 50`).bind(claims.sub).all();
+  /* sprint 5 : reflets publiés par connexion (pad, date) */
+  const mirrors = {};
+  try {
+    const m = await env.DB.prepare('SELECT connection_id, pad, updated_at FROM mcp_mirror WHERE sub = ?').bind(claims.sub).all();
+    for (const r of (m.results || [])) (mirrors[r.connection_id] = mirrors[r.connection_id] || []).push({ pad: r.pad, updated_at: r.updated_at });
+  } catch (_) { /* table absente */ }
   return json({ ok: true, mcp_url: `${new URL(request.url).origin}/mcp`, connections: (results || []).map(r => ({
     id: r.id, client_name: r.client_name, redirect_host: r.redirect_host, scope: r.scope.split(' '), email: r.email, plan: r.plan_at_consent,
-    created_at: r.created_at, last_used_at: r.last_used_at,
+    created_at: r.created_at, last_used_at: r.last_used_at, request_id: r.request_id || null, mirror: mirrors[r.id] || [],
   })) }, 200, origin);
 }
 export async function handleMcpConnectionRevoke(request, env, id) {

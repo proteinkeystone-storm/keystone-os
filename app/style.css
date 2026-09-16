@@ -729,6 +729,54 @@ html.light-mode .engine-logo-light { display: block !important; }
 .ks-living:not(.fade-out):not(.fade-in) {
   animation: ks-living-fade-in 480ms cubic-bezier(.18,.8,.3,1) both;
 }
+/* ── Bannette (MCP sprint 3) — propositions de l'assistant, sous la barre Living ── */
+.ks-bannette {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 6px;
+  max-width: 64ch;
+  animation: ks-living-fade-in 480ms cubic-bezier(.18,.8,.3,1) both;
+}
+.ks-bannette-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.ks-bannette-icon { flex-shrink: 0; display: inline-flex; width: 14px; height: 14px; color: var(--gold); }
+.ks-bannette-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-bannette-btn {
+  flex-shrink: 0;
+  appearance: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  background: transparent;
+  color: var(--tx3);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, transform 120ms ease;
+}
+.ks-bannette-btn:hover { background: color-mix(in srgb, currentColor 8%, transparent); color: var(--text); }
+.ks-bannette-btn:active { transform: scale(.97); }
+.ks-bannette-btn--primary { color: var(--text); border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
+.ks-bannette-btn--primary:hover { background: color-mix(in srgb, var(--gold) 16%, transparent); }
+@media (max-width: 640px) {
+  .ks-bannette { max-width: 100%; }
+  .ks-bannette-item { flex-wrap: wrap; }
+  /* picto + texte sur la première ligne, les deux boutons passent dessous */
+  .ks-bannette-text { flex: 1 1 calc(100% - 22px); white-space: normal; }
+}
 /* Responsive : sur mobile, autoriser le wrap pour les phrases longues */
 @media (max-width: 640px) {
   .ks-living .ks-living-text { white-space: normal; }

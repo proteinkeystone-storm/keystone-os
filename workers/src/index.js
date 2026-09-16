@@ -53,6 +53,10 @@ import { handleMcp }                                                   from './r
 import { handleWellKnown, handleOauthRegister, handleOauthAuthorize, handleOauthRequestInfo,
          handleOauthPreview, handleOauthApprove, handleOauthToken, handleOauthRevoke,
          handleMcpConnectionsList, handleMcpConnectionRevoke, purgeOauthArtifacts } from './routes/oauth.js';
+import { handleMcpInboxList, handleMcpInboxDeposit, handleMcpInboxMark, handleMcpActivity, purgeMcpWrites } from './routes/mcp-writes.js';
+import { mcpWriteToolNames }                                           from './lib/mcp-tools.js';
+import { handleBridgeStream, handleBridgeJobResult, handleBridgePresence, purgeMcpBridge } from './routes/mcp-bridge.js';
+import { handleMirrorList, handleMirrorPut, handleMirrorDelete, purgeMcpMirror } from './routes/mcp-mirror.js';
 import {
   handleAutoReloadGet, handleAutoReloadSave,
   handleAutoReloadSetup, handleAutoReloadResume,
@@ -246,8 +250,8 @@ const handler = {
         status: 204,
         headers: {
           'Access-Control-Allow-Origin'  : origin,
-          'Access-Control-Allow-Methods' : 'GET, POST, PATCH, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers' : 'Content-Type, Authorization, X-Tenant-Id',
+          'Access-Control-Allow-Methods' : 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers' : 'Content-Type, Authorization, X-Tenant-Id, X-Bridge-Tab',
         },
       });
     }
@@ -285,6 +289,23 @@ const handler = {
       if (path === '/oauth/revoke'    && method === 'POST') return handleOauthRevoke(request, env);
       // Tuile « Connecteur IA » (Réglages) : connexions actives du compte, révocation.
       if (path === '/api/mcp/connections' && method === 'GET') return handleMcpConnectionsList(request, env);
+      // ── MCP sprint 3 — Bannette (propositions navigateur) + bandeau d'activité (routes/mcp-writes.js)
+      if (path === '/api/mcp/inbox'    && method === 'GET')  return handleMcpInboxList(request, env);
+      if (path === '/api/mcp/inbox'    && method === 'POST') return handleMcpInboxDeposit(request, env);
+      const mcpInboxMark = path.match(/^\/api\/mcp\/inbox\/([A-Za-z0-9_-]+)\/(applied|dismissed)$/);
+      if (mcpInboxMark && method === 'POST') return handleMcpInboxMark(request, env, mcpInboxMark[1], mcpInboxMark[2]);
+      if (path === '/api/mcp/activity' && method === 'GET')  return handleMcpActivity(request, env, mcpWriteToolNames());
+      // ── MCP sprint 4 — le Pont : canal SSE de l'onglet, réponse d'un ordre, présence (routes/mcp-bridge.js)
+      if (path === '/api/mcp/bridge/stream'   && method === 'GET') return handleBridgeStream(request, env);
+      if (path === '/api/mcp/bridge/presence' && method === 'GET') return handleBridgePresence(request, env);
+      const mcpJobRes = path.match(/^\/api\/mcp\/bridge\/jobs\/([A-Za-z0-9_-]+)\/result$/);
+      if (mcpJobRes && method === 'POST') return handleBridgeJobResult(request, env, mcpJobRes[1]);
+      // ── MCP sprint 5 — le Reflet chiffré : état, publication par l'onglet, coupure (routes/mcp-mirror.js)
+      if (path === '/api/mcp/mirror' && method === 'GET') return handleMirrorList(request, env);
+      const mcpMirrorPut = path.match(/^\/api\/mcp\/mirror\/([A-Za-z0-9_-]+)\/(brainstorming|ghostwriter|social)$/);
+      if (mcpMirrorPut && method === 'PUT') return handleMirrorPut(request, env, mcpMirrorPut[1], mcpMirrorPut[2]);
+      const mcpMirrorDel = path.match(/^\/api\/mcp\/mirror\/(brainstorming|ghostwriter|social)$/);
+      if (mcpMirrorDel && method === 'DELETE') return handleMirrorDelete(request, env, mcpMirrorDel[1]);
       const mcpConn = path.match(/^\/api\/mcp\/connections\/([A-Za-z0-9_-]+)$/);
       if (mcpConn && method === 'DELETE') return handleMcpConnectionRevoke(request, env, mcpConn[1]);
 
@@ -1383,6 +1404,24 @@ const handler = {
         purgeOauthArtifacts(env)
           .then(r => console.log('[oauth-purge]', JSON.stringify(r)))
           .catch(e => console.warn('[oauth-purge] failed', e?.message || e))
+      );
+      // MCP sprint 3 — confirmations périmées, propositions de bannette expirées ou résolues > 30 j.
+      ctx.waitUntil(
+        purgeMcpWrites(env)
+          .then(r => console.log('[mcp-writes-purge]', JSON.stringify(r)))
+          .catch(e => console.warn('[mcp-writes-purge] failed', e?.message || e))
+      );
+      // MCP sprint 4 — ordres du Pont et présences de plus d'un jour.
+      ctx.waitUntil(
+        purgeMcpBridge(env)
+          .then(r => console.log('[mcp-bridge-purge]', JSON.stringify(r)))
+          .catch(e => console.warn('[mcp-bridge-purge] failed', e?.message || e))
+      );
+      // MCP sprint 5 — reflets non rafraîchis depuis 90 j.
+      ctx.waitUntil(
+        purgeMcpMirror(env)
+          .then(r => console.log('[mcp-mirror-purge]', JSON.stringify(r)))
+          .catch(e => console.warn('[mcp-mirror-purge] failed', e?.message || e))
       );
       // Sentinel — mesure GEO hebdomadaire (file lissée par next_geo_at, lot borné).
       ctx.waitUntil(

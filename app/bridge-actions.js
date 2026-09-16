@@ -1066,6 +1066,31 @@ export const BRIDGE_ACTIONS = [
     },
   },
 
+  {
+    id: 'os.prefill_form', pad: 'os', mode: 'write',
+    label: 'Ouvrir un formulaire pré-rempli',
+    desc: "Ouvre un pad-formulaire du Master Renderer (Notices VEFA, Annonces…) avec ses champs pré-remplis : l'utilisateur relit, génère ou exporte lui-même. Sprint 6 du MCP (Moteur générique) : les données sont déjà validées contre les champs du pad par le Worker.",
+    target: '#tool-form',
+    params: [
+      { name: 'padId', type: 'string', required: true, desc: 'ID_KSTORE du pad-formulaire (ex. O-IMM-002)' },
+      { name: 'data', type: 'object', required: true, desc: '{ champ: valeur } selon les fields du pad' },
+    ],
+    run: async (args = {}) => {
+      const padId = String(args.padId || '').trim();
+      const data = (args.data && typeof args.data === 'object' && !Array.isArray(args.data)) ? args.data : null;
+      if (!/^[A-Za-z]-[A-Za-z]+-\d{3}$/.test(padId)) throw new Error('padId attendu (ex. O-IMM-002).');
+      if (!data || !Object.keys(data).length) throw new Error('Il me faut les champs à pré-remplir.');
+      _guardGwModal();
+      const { openTool } = await import('./ui-renderer.js');
+      if (!(await _padAccessible(padId))) {
+        openTool(padId);
+        return { fait: false, raison: 'Ce formulaire n’est pas dans la licence — sa fiche est ouverte à l’écran.' };
+      }
+      openTool(padId, { prefillData: data });
+      return { fait: true, outil_ouvert: padId, champs_remplis: Object.keys(data).length, rappel: 'Le formulaire est ouvert, pré-rempli : la génération ou l’export reste à l’utilisateur.' };
+    },
+  },
+
   /* ═══ SMART DYNAMIC QR — écritures sûres (V1.2) ═══ */
   {
     id: 'qr.open', pad: 'sdqr', mode: 'write',

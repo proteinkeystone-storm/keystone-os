@@ -676,6 +676,18 @@ async function _sensorQrTop(env, tenantId, limit = 5) {
 //                  passée — proxy explicable de la marge consommée (§3.3).
 //   - bouclage   : jalon de bouclage le plus proche (≤ 7 j, peut être passé).
 //   - issuesLive : numéros en préparation/production (état permanent informatif).
+// MCP sprint 3 — la Bannette : propositions déposées par l'assistant
+// (post Social, texte Ghost Writer, brainstorming…) en attente d'un clic
+// de l'utilisateur. Clé = sub (comme le dépôt), pas padTenant. Table
+// absente (Worker d'avant la migration 016) → 0, jamais une erreur.
+async function _sensorBannette(env, sub) {
+  if (!sub) return { pending: 0 };
+  try {
+    const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM mcp_inbox WHERE sub = ? AND status = 'pending' AND expires_at > datetime('now')").bind(sub).first();
+    return { pending: (r && r.n) || 0 };
+  } catch (_) { return { pending: 0 }; }
+}
+
 async function _sensorDesk(env, sub) {
   const empty = { inbox: 0, overdue: 0, overdueNum: '', bouclageDays: null, bouclageNum: '', issuesLive: 0 };
   if (!sub) return empty;
@@ -764,10 +776,20 @@ async function _fetchActivePilotable(env, audience) {
 // variantIndex : permet la ROTATION entre les candidats (pas toujours
 // le top-score). On trie par pertinence puis on pioche le N-ième.
 function _buildCalculatorPhrase(sensors, variantIndex = 0, extraCandidates = [], feedback = {}, preferTopic = null) {
-  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, network = {}, relances = {}, desk = {}, clientSensors = {} } = sensors;
+  const { smartqr, qrtop = {}, pulsa, ghostwriter, smartagent = {}, keynapse = {}, sentinel = {}, social = {}, sceau = {}, keybrand = {}, network = {}, relances = {}, desk = {}, bannette = {}, clientSensors = {} } = sensors;
   // Les candidats "tendance" (mémoire des chiffres) sont injectés en tête
   // avec un score élevé : un delta réel est plus parlant qu'un total brut.
   const candidates = Array.isArray(extraCandidates) ? [...extraCandidates] : [];
+
+  // ════ TIER 1 bis — Bannette (MCP sprint 3) : l'assistant a préparé quelque chose ════
+  if (bannette.pending > 0) {
+    const n = bannette.pending;
+    candidates.push({
+      text: n === 1 ? 'Votre assistant a préparé une proposition — à relire dans la bannette, juste en dessous.'
+                    : `Votre assistant a préparé ${n} propositions — à relire dans la bannette, juste en dessous.`,
+      score: 92, topic: 'bannette',
+    });
+  }
 
   // ════ TIER 1 — À AGIR (rare, important, actionnable) : scores hauts ════
   // Sentinel : un site hors ligne = priorité absolue.
@@ -1378,7 +1400,7 @@ export async function handleLivingBoard(request, env) {
     ? clientSensors.followedSite.slice(0, 64) : null;
 
   // ── Collecte capteurs serveur en parallèle ──────────────────────
-  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, relances, pilotable, followedQr, followedSite, desk] = await Promise.all([
+  const [smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, relances, pilotable, followedQr, followedSite, desk, bannette] = await Promise.all([
     _sensorSmartQR(env, padTenant),
     _sensorQrTop(env, padTenant),
     _sensorPulsa(env, lookupHmac, isAdminClaim),
@@ -1397,9 +1419,11 @@ export async function handleLivingBoard(request, env) {
     _sensorFollowedSite(env, padTenant, followedSiteId),
     // desK : tenant = publication (dk_members.sub), PAS padTenant.
     _sensorDesk(env, lookupHmac),
+    // Bannette MCP : clé = sub (celui du dépôt).
+    _sensorBannette(env, lookupHmac),
   ]);
 
-  const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, relances, desk, clientSensors };
+  const sensors = { smartqr, qrtop, pulsa, ghostwriter, kodex, smartagent, keynapse, sentinel, social, sceau, keybrand, network, relances, desk, bannette, clientSensors };
 
   // Chiffres bruts pour la ligne de jauges (Niveau 2, #6). Le focus vient
   // du client (mesuré dans l'onglet). ghostQuota peut être null (anonyme/admin).
@@ -1442,6 +1466,8 @@ export async function handleLivingBoard(request, env) {
     deskBouclageDays: (desk.bouclageDays == null ? null : desk.bouclageDays),
     deskBouclageNum:  desk.bouclageNum  || '',
     deskIssuesLive:   desk.issuesLive   || 0,
+    // MCP sprint 3 : propositions de l'assistant en attente (bannette).
+    bannettePending:  bannette.pending  || 0,
   };
 
   // ── Mémoire des chiffres (Chantier 1) ───────────────────────────

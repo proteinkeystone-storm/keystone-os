@@ -12,6 +12,9 @@ import { initLockScreen }                     from './lockscreen.js';
 import { loadPads, fetchRemoteCatalog, addLifetimePurchase, getToolList, getArtefactList } from './pads-loader.js';
 import { runSystemCoach }                     from './system-coach.js';
 import { initInbox }                          from './inbox.js';
+import { initBannette }                       from './bannette.js';
+import { initBridge }                         from './bridge.js';
+import { initMirror }                         from './mirror.js';
 import { loadFromCloud, saveToCloud, isCloudReady, installAutoSync } from './cloud-vault.js';
 // Garde-fou anti-session-coincée (incident 2026-06-14) : déconnexion propre
 // + détection « connecté mais vide ». Side-effect : expose window.ksCleanLogout.
@@ -68,6 +71,12 @@ function _boot() {
     initLockScreen();
     // Inbox push (admin) — priorité P1, fetch toutes les 5 min
     initInbox();
+    // Bannette MCP (sprint 3) — propositions de l'assistant + bandeau d'activité
+    initBannette();
+    // Le Pont MCP (sprint 4) — l'onglet exécute les actions navigateur pour l'assistant
+    initBridge();
+    // Le Reflet MCP (sprint 5) — reflets chiffrés des pads navigateur, opt-in par pad
+    initMirror();
     // Coach système — règles locales, P2, cooldown 24h, après 1.5s
     setTimeout(runSystemCoach, 1500);
     // Sprint GW-1 — Ghost Writer hook global (idempotent).

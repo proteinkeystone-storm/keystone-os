@@ -4477,6 +4477,7 @@ async function _loadMcpConnections(root) {
                         ${c.email ? `${_escapeLivingText(c.email)} · ` : ''}${_escapeLivingText(String(c.plan || ''))}
                         · autorisé le ${_mcpConnFrDate(c.created_at) || '—'}
                         · dernier usage : ${_mcpConnFrDate(c.last_used_at) || 'jamais'}
+                        ${Array.isArray(c.mirror) && c.mirror.length ? ` · reflet : ${_escapeLivingText(c.mirror.map(x => x.pad).join(', '))}` : ''}
                     </div>
                 </div>
                 <button class="api-key-save-btn" data-revoke="${_escapeLivingText(c.id)}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2)">Révoquer</button>
@@ -4510,7 +4511,37 @@ function _mcpConnectorSectionHTML() {
             </div>
         </div>
         <div id="mcp-conn-list" style="margin-top:8px"></div>
+        <div class="sp-user-hint" style="font-size:12px;line-height:1.55;color:var(--tx2);margin:14px 0 6px;padding-top:12px;border-top:1px solid var(--bd)">
+            <strong style="color:var(--text)">Visible par mon assistant, même Keystone fermé.</strong>
+            Certaines données vivent dans ce navigateur (séances de brainstorming, textes du Ghost Writer, brouillon Social). Sans onglet ouvert, l'assistant ne les voit pas — sauf si vous activez un reflet : une copie chiffrée ici, avec une clé que le serveur ne possède pas. Au repos, Keystone ne peut rien y lire ; pendant un appel de votre assistant, le reflet est déchiffré en mémoire pour lui répondre, puis oublié. Révoquer l'assistant efface ses reflets.
+        </div>
+        <div id="mcp-mirror-toggles"></div>
     </div>`;
+}
+/* Sprint 5 — interrupteurs « Visible par mon assistant », un par pad navigateur. */
+async function _loadMcpMirror(root) {
+    const host = root?.querySelector('#mcp-mirror-toggles');
+    if (!host) return;
+    let m = null;
+    try { m = await import('./mirror.js'); } catch (e) { host.innerHTML = ''; return; }
+    const st = await m.mirrorStatus().catch(() => ({ pads: m.mirrorSettings(), connections: [] }));
+    const linked = st.connections.filter(c => c.linked);
+    host.innerHTML = Object.entries(m.MIRROR_PADS).map(([pad, d]) => `
+        <div class="sp-user-row sp-row-toggle" style="padding:6px 0">
+            <label class="sp-user-label" for="mcp-mirror-${pad}">${_escapeLivingText(d.label)} <span style="color:var(--tx3);font-weight:500;font-size:10px">${_escapeLivingText(d.hint)}</span></label>
+            <label class="sp-toggle-wrap">
+                <input type="checkbox" id="mcp-mirror-${pad}" data-mirror-pad="${pad}" ${st.pads[pad] ? 'checked' : ''}>
+                <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
+            </label>
+        </div>`).join('') + `<p class="sp-user-hint" id="mcp-mirror-note" style="padding-top:4px">${
+        !st.connections.length ? 'Aucun assistant connecté : les reflets s’activeront dès la première autorisation.'
+        : linked.length ? `Reflets publiés depuis cet appareil pour : ${_escapeLivingText(linked.map(c => c.client_name).join(', '))}.`
+        : 'Les assistants connectés l’ont été depuis un autre appareil : réautorisez-les depuis Claude sur celui-ci pour que ses reflets partent d’ici.'}</p>`;
+    host.querySelectorAll('[data-mirror-pad]').forEach(cb => cb.addEventListener('change', async () => {
+        cb.disabled = true;
+        try { await m.setMirrorPad(cb.dataset.mirrorPad, cb.checked); } catch (e) { /* réseau : l'état local est posé, republication au prochain boot */ }
+        cb.disabled = false;
+    }));
 }
 
 // ── Rendu du logo IA — variantes dark / light ─────────────────
@@ -5335,7 +5366,7 @@ function _renderSettingsBody() {
     {
         const sec = body.querySelector('#acc-connector');
         sec?.querySelector('.acc-header')?.addEventListener('click', () => {
-            if (sec.classList.contains('open')) _loadMcpConnections(sec);
+            if (sec.classList.contains('open')) { _loadMcpConnections(sec); _loadMcpMirror(sec); }
         });
         sec?.querySelector('#mcp-conn-copy')?.addEventListener('click', async (e) => {
             const input = sec.querySelector('#mcp-conn-url');

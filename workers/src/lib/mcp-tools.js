@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   KEYSTONE OS — Outils MCP (sprint 1 : LECTURES)
+   KEYSTONE OS — Outils MCP (sprint 1 : lectures · sprint 3 : écritures + bannette)
    ───────────────────────────────────────────────────────────────
    Le catalogue que Claude voit via /mcp (routes/mcp.js). Chaque outil
    est une LECTURE servie par une route existante du Worker, appelée en
@@ -20,6 +20,8 @@
    board Living Layer (POST de calcul, sans effet de bord) — le banc
    scripts/test-mcp-redlines.mjs le vérifie sur `routes` déclarées.
    ═══════════════════════════════════════════════════════════════ */
+
+import { listFormPads, resolveFormPad, formSchema, validateFormData, formUri } from './mcp-forms.js';
 
 /* ── Aides ── */
 const excerpt = (text, max = 160) => {
@@ -98,7 +100,7 @@ export const MCP_TOOLS = [
         plan: ctx.claims.plan || null,
         admin: ctx.claims.isAdmin === true || String(ctx.claims.plan || '').toUpperCase() === 'ADMIN',
         applications: pads,
-        note: 'Les outils keystone_* couvrent : Smart Dynamic QR, Sentinel, Keynapse, Smart Agent, desK, Social Manager, Ghost Writer (quota), Key Form, Key Brand, networK, Living Layer. Brainstorming, la bibliothèque Ghost Writer et le composer Social vivent dans le navigateur : non lisibles d’ici.',
+        note: 'Les outils keystone_* couvrent : Smart Dynamic QR, Sentinel, Keynapse, Smart Agent, desK, Social Manager, Ghost Writer, Key Form, Key Brand, networK, Living Layer, et les pads-formulaires (keystone_form_list). Brainstorming, la bibliothèque Ghost Writer et le composer Social vivent dans le navigateur : lus via l’onglet ouvert (Pont) ou le reflet chiffré si activé.',
       };
     },
   },
@@ -720,6 +722,462 @@ export const MCP_TOOLS = [
       return out;
     },
   },
+
+  /* ═══════════════════════════════════════════════════════════════
+     ÉCRITURES (sprint 3) — HANDOFF_MCP_CLAUDE §3.2 (directes), §3.3
+     (à confirmation), Bannette (brief §2).
+     · write:true    → annotations non « lecture seule », portée OAuth
+                       keystone.write exigée par routes/mcp.js.
+     · confirm:true  → ctx.confirm(args, aperçu) : 1er appel = aperçu +
+                       confirm_token (5 min) ; 2e appel, mêmes arguments +
+                       jeton = exécution unique. Le jeton est lié au compte,
+                       à la connexion, à l'outil et aux arguments.
+     · bannette:true → rien n'est exécuté ici : la proposition est déposée
+                       (POST /api/mcp/inbox) et l'utilisateur l'applique
+                       d'un clic dans Keystone (app/bannette.js).
+     · gate:'X'      → hors catalogue tant que la variable Worker X n'est
+                       pas 'on' (keystone_qr_create : décision de Stéphane
+                       après gardien QR vert avant/après).
+     Chaque écriture réussie rend `activite` (une ligne) : le ledger la
+     garde pour le bandeau d'activité de l'onglet.
+     Toujours des CRÉATIONS : jamais de modification, de suppression, de
+     publication (lignes rouges §1 — le banc test-mcp-redlines le vérifie).
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* ═══ KEYNAPSE ═══ */
+  {
+    name: 'keystone_keynapse_create_note', title: 'Créer une note Keynapse', write: true,
+    description: "Crée une bulle Keynapse (titre + texte), dans une zone existante si précisée, avec un rappel facultatif. Toujours une nouvelle bulle : rien n'est écrasé. Pour « note-moi… », « crée une note avec le résumé… ».",
+    inputSchema: S({ title: str('titre de la note (≤ 120 caractères)'), text: str('texte de la note (facultatif, ≤ 4000 caractères)'),
+      zone: str('nom (même partiel) d’une zone existante ; facultatif'),
+      reminder_at: str('rappel : date-heure ISO 8601 (facultatif)'), reminder_label: str('libellé du rappel (facultatif)') }, ['title']),
+    routes: [{ method: 'GET', path: '/api/keynapse/state' }, { method: 'POST', path: '/api/keynapse/bubbles' }, { method: 'POST', path: '/api/keynapse/bubbles/:id/reminders' }],
+    run: async (ctx, args) => {
+      const title = String(args.title || '').trim().slice(0, 120);
+      if (!title) throw new Error('Il faut un titre.');
+      let zoneId = null, zoneName = null;
+      if (args.zone) {
+        const { zones } = await ctx.call('/api/keynapse/state');
+        const z = resolveByName(zones || [], args.zone, { what: 'zone', soloOk: false, empty: 'Aucune zone dans Keynapse pour l’instant.', label: (x) => x.name });
+        zoneId = z.id; zoneName = z.name;
+      }
+      const { bubble } = await ctx.call('/api/keynapse/bubbles', { method: 'POST', body: { title, description: String(args.text || '').slice(0, 4000), zone_id: zoneId } });
+      const out = { fait: true, id: bubble.id, titre: bubble.title, zone: zoneName, cree_le: iso(bubble.created_at) || new Date().toISOString(),
+        activite: `Note « ${excerpt(title, 60)} » créée dans Keynapse` };
+      if (args.reminder_at) {
+        const { reminder } = await ctx.call(`/api/keynapse/bubbles/${encodeURIComponent(bubble.id)}/reminders`, { method: 'POST', body: { at: String(args.reminder_at), label: args.reminder_label ? String(args.reminder_label) : null } });
+        out.rappel = { echeance: iso(reminder.at), libelle: reminder.label || null };
+      }
+      return out;
+    },
+  },
+
+  /* ═══ SENTINEL ═══ */
+  {
+    name: 'keystone_sentinel_add_site', title: 'Surveiller un site', write: true,
+    description: "Ajoute un site à la surveillance Sentinel (disponibilité, audit). kind : 'local' (commerce, cabinet : téléphone et adresse attendus sur le site, défaut) ou 'online' (activité en ligne). Doublon refusé ; la limite du plan s'applique.",
+    inputSchema: S({ url: str('adresse complète du site (https://…)'), label: str('nom court (facultatif)'), kind: str("'local' (défaut) ou 'online'") }, ['url']),
+    routes: [{ method: 'POST', path: '/api/sentinel/sites' }],
+    run: async (ctx, args) => {
+      const url = String(args.url || '').trim();
+      if (!/^https?:\/\/\S+$/i.test(url)) throw new Error('Adresse complète attendue (https://…).');
+      const kind = args.kind === 'online' ? 'online' : 'local';
+      const { site } = await ctx.call('/api/sentinel/sites', { method: 'POST', body: { url, label: args.label ? String(args.label).slice(0, 80) : '', kind } });
+      const nom = site.label || host(site.url);
+      return { fait: true, id: site.id, site: nom, url: site.url, plateforme: site.platform || null, nature: kind,
+        en_ligne: site.last_ok === 1 || site.last_ok === true, temps_reponse_ms: site.last_ms ?? null,
+        suite: 'Lance keystone_sentinel_run_audit pour obtenir un premier score.', activite: `Site ${nom} ajouté à Sentinel` };
+    },
+  },
+  {
+    name: 'keystone_sentinel_run_audit', title: 'Lancer un audit Sentinel', write: true,
+    description: "Lance l'audit complet d'un site surveillé (SEO, sécurité, performance, présence) et rend le score et les points à corriger. Prend 10 à 30 s ; plafond de 10 audits par jour via l'assistant. site : nom ou adresse (même partiels) ; inutile si un seul site.",
+    inputSchema: S({ site: str('nom ou adresse (même partiels) ; facultatif si un seul site') }),
+    routes: [{ method: 'GET', path: '/api/sentinel/sites' }, { method: 'POST', path: '/api/sentinel/sites/:id/audit' }],
+    run: async (ctx, args) => {
+      const d = await ctx.call('/api/sentinel/sites');
+      const site = resolveByName(d.sites || [], args.site, { what: 'site', empty: 'Aucun site surveillé — ajoute-le d’abord (keystone_sentinel_add_site).',
+        label: (s) => s.label || host(s.url), names: (s) => [s.label, host(s.url), s.url] });
+      if (ctx.quota) await ctx.quota('sentinel-audit', 10, 'audits Sentinel');
+      const { audit } = await ctx.call(`/api/sentinel/sites/${encodeURIComponent(site.id)}/audit`, { method: 'POST' });
+      const nom = site.label || host(site.url);
+      const sev = { high: 3, medium: 2, low: 1 };
+      const findings = Array.isArray(audit.findings) ? audit.findings.slice() : [];
+      return { fait: true, site: nom, score: audit.score ?? null, axes: audit.scores || {},
+        pages_auditees: Array.isArray(audit.pages) ? audit.pages.length : (audit.pages ?? null),
+        a_corriger: findings.sort((a, b) => (sev[b.sev] || 0) - (sev[a.sev] || 0)).slice(0, 8)
+          .map(f => ({ axe: f.axis, gravite: f.sev, quoi: f.title, detail: f.detail ? excerpt(f.detail, 160) : null })),
+        activite: `Audit Sentinel lancé sur ${nom}` };
+    },
+  },
+
+  /* ═══ networK ═══ */
+  {
+    name: 'keystone_network_add_contact', title: 'Ajouter un contact', write: true,
+    description: "Ajoute un contact à networK (personne, société, lieu ou groupe) avec ses coordonnées, une catégorie existante, des étiquettes et une relance prévue. Doublon de nom refusé (utilise alors keystone_network_log_activity).",
+    inputSchema: S({ name: str('nom du contact ou de la structure'), kind: str("type : person (défaut), company, place ou group"),
+      company: str('société'), title: str('fonction'), email: str('e-mail'), phone: str('téléphone'), website: str('site web'),
+      category: str('nom (même partiel) d’une catégorie existante ; facultatif'),
+      tags: { type: 'array', items: { type: 'string' }, description: 'étiquettes (≤ 12)' },
+      notes: str('notes libres'), relance_at: str('relance prévue : date AAAA-MM-JJ'), relance_note: str('motif de la relance') }, ['name']),
+    routes: [{ method: 'GET', path: '/api/network/bootstrap' }, { method: 'POST', path: '/api/network/contact' }],
+    run: async (ctx, args) => {
+      const name = String(args.name || '').trim().slice(0, 200);
+      if (!name) throw new Error('Il faut un nom.');
+      const boot = await nkBoot(ctx);
+      const dup = boot.contacts.find(c => norm(c.name) === norm(name));
+      if (dup) throw new Error(`« ${dup.name} » existe déjà dans networK. Pour y ajouter une interaction : keystone_network_log_activity.`);
+      let categoryId, categoryLabel = null;
+      if (args.category) {
+        const c = resolveByName(boot.categories, args.category, { what: 'catégorie', soloOk: false, empty: 'Aucune catégorie dans networK.', label: (x) => x.label });
+        categoryId = c.id; categoryLabel = c.label;
+      }
+      const body = { name, kind: NK_KINDS.includes(args.kind) ? args.kind : 'person',
+        company: args.company, title: args.title, email: args.email, phone: args.phone, website: args.website, category_id: categoryId,
+        tags: Array.isArray(args.tags) ? args.tags.slice(0, 12).map(String) : undefined,
+        notes: args.notes, relance_at: args.relance_at, relance_note: args.relance_note };
+      const { contact } = await ctx.call('/api/network/contact', { method: 'POST', body });
+      return { fait: true, id: contact.id, contact: contact.name, type: contact.kind, categorie: categoryLabel,
+        relance: contact.relance_at ? { prevue_le: contact.relance_at, motif: contact.relance_note || null } : null,
+        activite: `Contact ${contact.name} ajouté dans networK` };
+    },
+  },
+  {
+    name: 'keystone_network_log_activity', title: 'Noter une interaction', write: true,
+    description: "Journalise une interaction avec un contact networK (appel, e-mail, rendez-vous, devis, document, note). contact : nom (même partiel) ; happened_at : date AAAA-MM-JJ, sinon maintenant.",
+    inputSchema: S({ contact: str('nom (même partiel) du contact'), label: str('ce qui s’est passé, en une ligne'),
+      type: str('call, email, meeting, quote, doc, note ou other (défaut)'), happened_at: str('date AAAA-MM-JJ (facultatif)') }, ['contact', 'label']),
+    routes: [{ method: 'GET', path: '/api/network/bootstrap' }, { method: 'POST', path: '/api/network/activity' }],
+    run: async (ctx, args) => {
+      const label = String(args.label || '').trim().slice(0, 200);
+      if (!label) throw new Error('Il faut un libellé.');
+      const boot = await nkBoot(ctx);
+      const c = resolveByName(boot.contacts, args.contact, { what: 'contact', soloOk: false, empty: 'Réseau vide — ajoute d’abord le contact.', label: (x) => x.name });
+      const type = NK_ACT_TYPES.includes(args.type) ? args.type : 'other';
+      const { activity } = await ctx.call('/api/network/activity', { method: 'POST', body: { contact_id: c.id, label, type, happened_at: args.happened_at } });
+      return { fait: true, id: activity.id, contact: c.name, type: activity.type, quoi: activity.label, quand: iso(activity.happened_at),
+        activite: `Interaction notée pour ${c.name} dans networK` };
+    },
+  },
+
+  /* ═══ desK ═══ */
+  {
+    name: 'keystone_desk_create_publication', title: 'Créer une revue desK', write: true,
+    description: "Crée une publication (revue) dans desK, avec ses rubriques par défaut ; le numéro, les dates de bouclage et l'équipe se règlent ensuite dans l'application. Doublon de nom refusé.",
+    inputSchema: S({ name: str('nom de la revue') }, ['name']),
+    routes: [{ method: 'GET', path: '/api/desk/bootstrap' }, { method: 'POST', path: '/api/desk/publication' }],
+    run: async (ctx, args) => {
+      const name = String(args.name || '').trim().slice(0, 120);
+      if (!name) throw new Error('Il faut un nom de revue.');
+      const boot = await ctx.call('/api/desk/bootstrap');
+      if ((boot.publications || []).some(p => norm(p.name) === norm(name))) throw new Error(`La revue « ${name} » existe déjà dans desK.`);
+      const { publication } = await ctx.call('/api/desk/publication', { method: 'POST', body: { name } });
+      return { fait: true, id: publication.id, revue: publication.name,
+        suite: 'Dans desK : crée le premier numéro (dates de bouclage), invite l’équipe, ajuste les rubriques.',
+        activite: `Revue « ${excerpt(name, 60)} » créée dans desK` };
+    },
+  },
+
+  /* ═══ SMART AGENT (à confirmation) ═══ */
+  {
+    name: 'keystone_smartagent_kortex_add_unit', title: 'Ajouter une fiche de savoir', write: true, confirm: true,
+    description: "Ajoute une fiche de savoir au coffre privé d'un jumeau Smart Agent. À CONFIRMER : le premier appel rend un aperçu et un confirm_token ; le second, mêmes arguments + jeton, écrit. status 'draft' (défaut) attend la validation dans l'application ; 'validated' change tout de suite ce que le jumeau public répond.",
+    inputSchema: S({ agent: str('nom (même partiel) du jumeau ; facultatif si un seul'),
+      type: str('type de fiche : fact, procedure, qa, case, rule, objection ou definition'), title: str('titre de la fiche'),
+      body: { type: 'object', additionalProperties: true, description: "champs selon le type — fact:{statement,context?} · procedure:{goal,steps[],warnings?} · qa:{question,answer} · case:{situation,action,result} · rule:{rule,rationale?,exceptions?} · objection:{objection,response,proof?} · definition:{term,definition}" },
+      status: str("'draft' (défaut) ou 'validated'"), confirm_token: str('jeton rendu par l’aperçu ; absent au premier appel') }, ['type', 'title', 'body']),
+    routes: [{ method: 'GET', path: '/api/smart-agent/agents' }, { method: 'POST', path: '/api/smart-agent/kortex/units' }],
+    run: async (ctx, args) => {
+      const type = String(args.type || '').trim();
+      if (!KORTEX_TYPES.includes(type)) throw new Error(`Type inconnu « ${type} ». Types : ${KORTEX_TYPES.join(', ')}.`);
+      const title = String(args.title || '').trim().slice(0, 200);
+      if (!title) throw new Error('Il faut un titre.');
+      const body = (args.body && typeof args.body === 'object' && !Array.isArray(args.body)) ? args.body : null;
+      if (!body) throw new Error('body doit être un objet selon le gabarit du type.');
+      const status = args.status === 'validated' ? 'validated' : 'draft';
+      const agent = await saResolve(ctx, args.agent);
+      const pending = await ctx.confirm(args, {
+        action: `Ajouter la fiche « ${excerpt(title, 80)} » (${type}, ${status === 'validated' ? 'validée : le jumeau public s’en servira aussitôt' : 'brouillon : à valider dans Smart Agent'}) au jumeau ${agent.name}`,
+        jumeau: agent.name, type, titre: title, statut: status, champs: body,
+      });
+      if (pending) return pending;
+      const { unit } = await ctx.call('/api/smart-agent/kortex/units', { method: 'POST', body: { agent_id: agent.id, type, title, body, status, source_kind: 'manual', source_ref: 'assistant (MCP)' } });
+      return { fait: true, id: unit.id, jumeau: agent.name, type: unit.type, titre: unit.title, statut: unit.status,
+        activite: `Fiche « ${excerpt(unit.title, 60)} » ajoutée au jumeau ${agent.name}` };
+    },
+  },
+
+  /* ═══ KEY BRAND (à confirmation) ═══ */
+  {
+    name: 'keystone_keybrand_create_chart', title: 'Créer une charte', write: true, confirm: true,
+    description: "Crée une charte graphique Key Brand (brouillon vide, à compléter dans l'application : couleurs, typographies, logos). À CONFIRMER : aperçu + confirm_token, puis exécution. Doublon de nom refusé.",
+    inputSchema: S({ name: str('nom de la charte (marque)'), baseline: str('baseline / signature (facultatif)'), confirm_token: str('jeton rendu par l’aperçu ; absent au premier appel') }, ['name']),
+    routes: [{ method: 'GET', path: '/api/keybrand/charts' }, { method: 'POST', path: '/api/keybrand/charts' }],
+    run: async (ctx, args) => {
+      const name = String(args.name || '').trim().slice(0, 80);
+      if (!name) throw new Error('Il faut un nom de charte.');
+      const { items, max } = await ctx.call('/api/keybrand/charts');
+      if ((items || []).some(c => norm(c.name) === norm(name))) throw new Error(`La charte « ${name} » existe déjà.`);
+      const baseline = args.baseline ? String(args.baseline).slice(0, 200) : null;
+      const pending = await ctx.confirm(args, { action: `Créer la charte « ${name} »${baseline ? ` (baseline : ${excerpt(baseline, 80)})` : ''} — brouillon vide à compléter dans Key Brand`,
+        nom: name, baseline, place_restante: max != null ? Math.max(0, max - (items || []).length) : null });
+      if (pending) return pending;
+      const meta = baseline ? { name, baseline } : { name };
+      const { chart } = await ctx.call('/api/keybrand/charts', { method: 'POST', body: { name, draft: { meta } } });
+      return { fait: true, id: chart.id, charte: chart.name, statut: 'brouillon', suite: 'Complète couleurs, typographies et logos dans Key Brand.',
+        activite: `Charte « ${name} » créée dans Key Brand` };
+    },
+  },
+
+  /* ═══ SMART DYNAMIC QR (à confirmation, HORS CATALOGUE tant que MCP_QR_CREATE ≠ 'on') ═══ */
+  {
+    name: 'keystone_qr_create', title: 'Créer un QR code', write: true, confirm: true, gate: 'MCP_QR_CREATE',
+    description: "Crée un QR code URL dans Smart Dynamic QR (dynamique par défaut : traçable, cible modifiable dans l'application). À CONFIRMER : aperçu + confirm_token. Création seulement — jamais de modification, de suppression ni de redirection d'un QR existant.",
+    inputSchema: S({ name: str('nom du QR'), url: str('adresse cible (https://…)'), mode: str("'dynamic' (défaut) ou 'static'"),
+      tags: { type: 'array', items: { type: 'string' }, description: 'étiquettes (≤ 12)' }, confirm_token: str('jeton rendu par l’aperçu ; absent au premier appel') }, ['name', 'url']),
+    routes: [{ method: 'GET', path: '/api/qr' }, { method: 'POST', path: '/api/qr' }],
+    run: async (ctx, args) => {
+      const name = String(args.name || '').trim().slice(0, 80);
+      const url = String(args.url || '').trim();
+      if (!name) throw new Error('Il faut un nom.');
+      if (!/^https?:\/\/\S+$/i.test(url)) throw new Error('Adresse cible complète attendue (https://…).');
+      const mode = args.mode === 'static' ? 'static' : 'dynamic';
+      const { qrs } = await ctx.call('/api/qr');
+      if ((qrs || []).some(q => norm(q.name) === norm(name))) throw new Error(`Un QR « ${name} » existe déjà.`);
+      const pending = await ctx.confirm(args, { action: `Créer le QR « ${name} » (${mode === 'dynamic' ? 'dynamique, traçable' : 'statique'}) vers ${url}`, nom: name, cible: url, mode });
+      if (pending) return pending;
+      const { qr } = await ctx.call('/api/qr', { method: 'POST', body: { name, type: 'url', mode, payload: { url }, tags: Array.isArray(args.tags) ? args.tags.slice(0, 12).map(String) : [] } });
+      return { fait: true, id: qr.id, nom: qr.name, mode: qr.mode, cible: qr.target_url || url, short_id: qr.short_id || null,
+        suite: 'Le visuel se télécharge depuis Smart Dynamic QR.', activite: `QR « ${name} » créé dans Smart Dynamic QR` };
+    },
+  },
+
+  /* ═══ BANNETTE — écritures navigateur, déposées, jamais exécutées ici ═══ */
+  {
+    name: 'keystone_social_draft_post', title: 'Préparer un post', write: true, bannette: true, exec: 'browser', action: 'sm.compose_draft',
+    description: "Met un brouillon de post dans le composer Social Manager, réseaux pré-cochés : en direct dans l'onglet Keystone s'il est ouvert, sinon déposé dans la bannette pour la prochaine ouverture. Rien n'est publié, jamais — le bouton Publier reste à l'utilisateur.",
+    inputSchema: S({ text: str('texte du post (≤ 5000 caractères)'), networks: { type: 'array', items: { type: 'string' }, description: 'réseaux visés parmi facebook, instagram, linkedin, threads, telegram (facultatif)' } }, ['text']),
+    routes: [{ method: 'POST', path: '/api/mcp/inbox' }],
+    run: async (ctx, args) => {
+      const text = String(args.text || '').trim();
+      if (!text) throw new Error('Il faut le texte du post.');
+      const targets = (Array.isArray(args.networks) ? args.networks : []).map(n => String(n).toLowerCase()).filter(n => SOCIAL_NETWORKS.includes(n));
+      const proposal = { pad: 'O-SOC-001', kind: 'compose', payload: { text: text.slice(0, 5000), targets, append: false },
+        summary: `Post à relire : « ${excerpt(text, 70)} »`, ou: 'le composer de Social Manager', reseaux: targets };
+      return viaTabOrBannette(ctx, 'sm.compose_draft', { text: text.slice(0, 5000), networks: targets, append: false }, proposal);
+    },
+  },
+  {
+    name: 'keystone_ghostwriter_prepare_text', title: 'Envoyer un texte au Ghost Writer', write: true, bannette: true, exec: 'browser', action: 'gw.rewrite_text',
+    description: "Ouvre le Ghost Writer avec un texte prêt à réécrire (3 variantes, l'utilisateur lance et choisit) : en direct dans l'onglet Keystone s'il est ouvert, sinon déposé dans la bannette. Pour « fais réécrire ça dans Keystone ».",
+    inputSchema: S({ text: str('texte à faire réécrire (≤ 8000 caractères)') }, ['text']),
+    routes: [{ method: 'POST', path: '/api/mcp/inbox' }],
+    run: async (ctx, args) => {
+      const text = String(args.text || '').trim();
+      if (!text) throw new Error('Il faut le texte à réécrire.');
+      const proposal = { pad: 'A-COM-005', kind: 'gw.rewrite', payload: { text: text.slice(0, 8000) }, summary: `Texte à réécrire : « ${excerpt(text, 70)} »`, ou: 'le Ghost Writer' };
+      return viaTabOrBannette(ctx, 'gw.rewrite_text', { text: text.slice(0, 8000) }, proposal);
+    },
+  },
+  {
+    name: 'keystone_brainstorming_seed_session', title: 'Lancer un brainstorming', write: true, bannette: true, exec: 'browser', action: 'bs.start_session',
+    description: "Pose un brief de brainstorming : en direct dans l'onglet Keystone s'il est ouvert (la séance se lance, le comité débat), sinon déposé dans la bannette pour que l'utilisateur la lance à l'ouverture (la séance consomme des conversations).",
+    inputSchema: S({ brief: str('le sujet à faire débattre (≤ 2000 caractères)') }, ['brief']),
+    routes: [{ method: 'POST', path: '/api/mcp/inbox' }],
+    run: async (ctx, args) => {
+      const brief = String(args.brief || '').trim();
+      if (!brief) throw new Error('Il faut le sujet du brainstorming.');
+      const proposal = { pad: 'A-COM-003', kind: 'bs.session_seed', payload: { brief: brief.slice(0, 2000) }, summary: `Brainstorming à lancer : « ${excerpt(brief, 70)} »`, ou: 'le Brainstorming' };
+      return viaTabOrBannette(ctx, 'bs.start_session', { brief: brief.slice(0, 2000) }, proposal);
+    },
+  },
+  {
+    name: 'keystone_bannette_status', title: 'État de la bannette',
+    description: "Les propositions déposées par l'assistant et encore en attente d'un clic de l'utilisateur dans Keystone (post, texte, brainstorming…) : pad, résumé, dates. Pour savoir si l'utilisateur a déjà traité ce qui a été préparé.",
+    inputSchema: S(),
+    routes: [{ method: 'GET', path: '/api/mcp/inbox' }],
+    run: async (ctx) => {
+      const d = await ctx.call('/api/mcp/inbox');
+      const items = d.items || [];
+      if (!items.length) return { en_attente: 0, message: 'Bannette vide : tout ce qui a été préparé a été traité (ou rien n’a été déposé).' };
+      return { en_attente: items.length, propositions: items.map(i => ({ id: i.id, application: PAD_NAMES[i.pad] || i.pad, resume: i.summary, depose_le: i.created_at, expire_le: i.expires_at })) };
+    },
+  },
+
+  /* ═══════════════════════════════════════════════════════════════
+     LE PONT (sprint 4) — exec:'browser' : l'outil n'a pas de route,
+     il DÉLÈGUE à l'onglet Keystone ouvert l'action `action` du catalogue
+     navigateur (app/bridge-actions.js) via ctx.bridge(action, args).
+     Lectures : sans onglet → erreur claire (« ouvre Keystone »).
+     Écritures visuelles (ouvrir un pad, préparer un formulaire) : idem.
+     Les trois outils de bannette essaient d'abord l'onglet (en direct,
+     avec l'anneau) et retombent sur la bannette sans lui.
+     ═══════════════════════════════════════════════════════════════ */
+  {
+    name: 'keystone_bridge_status', title: 'Onglet Keystone ouvert ?',
+    description: "Dit si un onglet Keystone du compte est ouvert et connecté au Pont (les outils navigateur — séances Brainstorming, bibliothèque Ghost Writer, composer Social, ouverture d'un pad — ne marchent qu'avec lui). À appeler avant d'annoncer qu'une donnée est inaccessible.",
+    inputSchema: S(),
+    routes: [{ method: 'GET', path: '/api/mcp/bridge/presence' }],
+    run: async (ctx) => {
+      const p = await ctx.call('/api/mcp/bridge/presence');
+      return { onglet_ouvert: !!p.online, onglets: p.tabs || 0, vu_le: p.last_seen || null,
+        message: p.online ? 'Un onglet Keystone est en ligne : les outils navigateur s’exécutent en direct, avec l’anneau.' : 'Aucun onglet Keystone en ligne : les écritures navigateur iront en bannette, les lectures navigateur attendront l’ouverture de Keystone.' };
+    },
+  },
+  {
+    name: 'keystone_chain_status', title: 'Chaîne de contenu (onglet)', exec: 'browser', action: 'chain.status',
+    description: "Où en est la chaîne de contenu Brainstorming → Ghost Writer → Social Manager dans l'onglet Keystone (étape en cours, séance et brouillons liés). Nécessite un onglet Keystone ouvert.",
+    inputSchema: S(), routes: [],
+    run: async (ctx) => ctx.bridge('chain.status', {}),
+  },
+  {
+    name: 'keystone_brainstorming_sessions', title: 'Séances de brainstorming (onglet)', exec: 'browser', action: 'bs.list_sessions',
+    description: "Les séances de brainstorming sauvegardées dans le navigateur : brief, mode, dates, tours, synthèse présente ou non. Onglet Keystone ouvert, ou reflet chiffré si l'utilisateur l'a activé (« Visible par mon assistant ») (sinon : demande d'ouvrir Keystone).",
+    inputSchema: S(), routes: [],
+    run: async (ctx) => ctx.bridge('bs.list_sessions', {}, { mirror: ['brainstorming', 'bs.list_sessions'] }),
+  },
+  {
+    name: 'keystone_brainstorming_synthesis', title: 'Synthèse d’une séance (onglet)', exec: 'browser', action: 'bs.read_synthesis',
+    description: "La synthèse d'une séance de brainstorming (positionnement, opportunités, risques, plan d'actions, idées). Par défaut la dernière séance synthétisée. Onglet Keystone ouvert, ou reflet chiffré si l'utilisateur l'a activé (« Visible par mon assistant »).",
+    inputSchema: S({ session_id: str('id de séance (cf. keystone_brainstorming_sessions) ; défaut : la dernière avec synthèse') }), routes: [],
+    run: async (ctx, args) => ctx.bridge('bs.read_synthesis', args.session_id ? { sessionId: String(args.session_id) } : {}, args.session_id ? {} : { mirror: ['brainstorming', 'bs.read_synthesis'] }),
+  },
+  {
+    name: 'keystone_brainstorming_debate', title: 'Débat d’une séance (onglet)', exec: 'browser', action: 'bs.read_debate',
+    description: "Les derniers tours de parole d'une séance de brainstorming (qui a dit quoi). Onglet Keystone ouvert, ou reflet chiffré si l'utilisateur l'a activé (« Visible par mon assistant »).",
+    inputSchema: S({ session_id: str('id de séance ; défaut : la plus récente'), last_n: int('nombre de tours (défaut 10)') }), routes: [],
+    run: async (ctx, args) => ctx.bridge('bs.read_debate', { ...(args.session_id ? { sessionId: String(args.session_id) } : {}), ...(args.last_n ? { lastN: clampInt(args.last_n, 1, 50, 10) } : {}) },
+      (args.session_id || args.last_n) ? {} : { mirror: ['brainstorming', 'bs.read_debate'] }),
+  },
+  {
+    name: 'keystone_ghostwriter_posts', title: 'Posts composés (onglet)', exec: 'browser', action: 'gw.list_posts',
+    description: "L'archive des posts rédigés par le Ghost Writer en mode chaîne (texte, réseau visé, date), stockée dans le navigateur. Onglet Keystone ouvert, ou reflet chiffré si l'utilisateur l'a activé (« Visible par mon assistant »).",
+    inputSchema: S(), routes: [],
+    run: async (ctx) => ctx.bridge('gw.list_posts', {}, { mirror: ['ghostwriter', 'gw.list_posts'] }),
+  },
+  {
+    name: 'keystone_ghostwriter_library', title: 'Bibliothèque Ghost Writer (onglet)', exec: 'browser', action: 'gw.list_variants',
+    description: "Les variantes de texte enregistrées dans le Studio Ghost Writer (label, mode, date, extrait), stockées dans le navigateur. Onglet Keystone ouvert, ou reflet chiffré si l'utilisateur l'a activé (« Visible par mon assistant »).",
+    inputSchema: S(), routes: [],
+    run: async (ctx) => ctx.bridge('gw.list_variants', {}, { mirror: ['ghostwriter', 'gw.list_variants'] }),
+  },
+  {
+    name: 'keystone_ghostwriter_drafts', title: 'Brouillons Ghost Writer (onglet)', exec: 'browser', action: 'gw.read_draft',
+    description: "Le brouillon en cours du Studio Ghost Writer (texte + critères) et celui du Correcteur, s'ils existent. Onglet Keystone ouvert, ou reflet chiffré si l'utilisateur l'a activé (« Visible par mon assistant »).",
+    inputSchema: S(), routes: [],
+    run: async (ctx) => ctx.bridge('gw.read_draft', {}, { mirror: ['ghostwriter', 'gw.read_draft'] }),
+  },
+  {
+    name: 'keystone_social_composer', title: 'Brouillon du composer Social (onglet)', exec: 'browser', action: 'sm.read_composer',
+    description: "Ce qui attend dans le composer Social Manager : texte et réseaux cochés. Onglet Keystone ouvert, ou reflet chiffré si l'utilisateur l'a activé (« Visible par mon assistant »).",
+    inputSchema: S(), routes: [],
+    run: async (ctx) => ctx.bridge('sm.read_composer', {}, { mirror: ['social', 'sm.read_composer'] }),
+  },
+  {
+    name: 'keystone_qr_followed', title: 'QR suivi sur le tableau de bord (onglet)', exec: 'browser', action: 'qr.followed',
+    description: "Le QR code épinglé sur le tableau de bord Keystone (suivi à l'unité) et ses derniers chiffres. Nécessite un onglet Keystone ouvert.",
+    inputSchema: S(), routes: [],
+    run: async (ctx) => ctx.bridge('qr.followed', {}),
+  },
+  {
+    name: 'keystone_os_open_pad', title: 'Ouvrir une application (onglet)', write: true, exec: 'browser', action: 'os.open_pad',
+    description: "Ouvre une application Keystone à l'écran de l'utilisateur : brainstorming, ghostwriter, social, qr, sentinel, keynapse, smartagent, desk, book, keybrand, network, missive, brief prod. Nécessite un onglet Keystone ouvert. N'écrit rien.",
+    inputSchema: S({ pad: str('brainstorming | ghostwriter | social | qr | sentinel | keynapse | smartagent | desk | book | keybrand | network | missive | brief prod') }, ['pad']), routes: [],
+    run: async (ctx, args) => { const r = await ctx.bridge('os.open_pad', { pad: String(args.pad || '') }); return { ...(r || {}), activite: r && r.fait ? `${r.outil_ouvert} ouvert à l’écran` : undefined }; },
+  },
+  {
+    name: 'keystone_qr_open', title: 'Ouvrir Smart Dynamic QR (onglet)', write: true, exec: 'browser', action: 'qr.open',
+    description: "Ouvre Smart Dynamic QR à l'écran, sur la bibliothèque ou directement sur un QR nommé (même partiellement). Nécessite un onglet Keystone ouvert. N'écrit rien.",
+    inputSchema: S({ name: str('nom (même partiel) du QR à ouvrir ; défaut : la bibliothèque') }), routes: [],
+    run: async (ctx, args) => ctx.bridge('qr.open', args.name ? { name: String(args.name) } : {}),
+  },
+  {
+    name: 'keystone_qr_prepare_url', title: 'Préparer un QR URL (onglet)', write: true, exec: 'browser', action: 'qr.prepare_url',
+    description: "Ouvre le formulaire de création de Smart Dynamic QR pré-rempli (adresse cible, nom) : l'utilisateur vérifie et enregistre lui-même. Nécessite un onglet Keystone ouvert. Ne crée rien sans lui.",
+    inputSchema: S({ url: str('adresse (https://…) que le QR ouvrira'), name: str('nom du QR (facultatif)') }, ['url']), routes: [],
+    run: async (ctx, args) => {
+      const url = String(args.url || '').trim();
+      if (!/^https?:\/\/\S+$/i.test(url)) throw new Error('Adresse complète attendue (https://…).');
+      return ctx.bridge('qr.prepare_url', { url, ...(args.name ? { name: String(args.name).slice(0, 80) } : {}) });
+    },
+  },
+  {
+    name: 'keystone_keynapse_open_bubble', title: 'Ouvrir une note Keynapse (onglet)', write: true, exec: 'browser', action: 'kn.open_bubble',
+    description: "Ouvre Keynapse à l'écran, directement sur une bulle retrouvée par son titre (même partiel). Nécessite un onglet Keystone ouvert. N'écrit rien.",
+    inputSchema: S({ title: str('titre (même partiel) de la bulle ; défaut : la constellation') }), routes: [],
+    run: async (ctx, args) => ctx.bridge('kn.open_bubble', args.title ? { title: String(args.title) } : {}),
+  },
+  {
+    name: 'keystone_desk_prepare_relance', title: 'Préparer une relance desK (onglet)', write: true, exec: 'browser', action: 'dk.prepare_relance',
+    description: "Ouvre desK à l'écran sur l'inspecteur de l'article à relancer (titre ou contributeur, même partiels), relance prête ; l'utilisateur envoie lui-même. Nécessite un onglet Keystone ouvert.",
+    inputSchema: S({ revue: str('nom (même partiel) de la revue ; inutile si une seule'), article: str('titre OU contributeur (même partiel) ; sinon la liste s’ouvre') }), routes: [],
+    run: async (ctx, args) => ctx.bridge('dk.prepare_relance', { ...(args.revue ? { revue: String(args.revue) } : {}), ...(args.article ? { article: String(args.article) } : {}) }),
+  },
+  {
+    name: 'keystone_keynapse_append_note', title: 'Ajouter une note libre à une bulle', write: true,
+    description: "Ajoute une note libre (texte) à une bulle Keynapse existante, retrouvée par son titre (même partiel). Pour compléter une note sans en créer une nouvelle.",
+    inputSchema: S({ title: str('titre (même partiel) de la bulle'), text: str('texte à ajouter (≤ 4000 caractères)') }, ['title', 'text']),
+    routes: [{ method: 'GET', path: '/api/keynapse/state' }, { method: 'POST', path: '/api/keynapse/bubbles/:id/notes' }],
+    run: async (ctx, args) => {
+      const text = String(args.text || '').trim().slice(0, 4000);
+      if (!text) throw new Error('Il faut un texte.');
+      const { bubbles } = await ctx.call('/api/keynapse/state');
+      const b = resolveByName(bubbles || [], args.title, { what: 'note', soloOk: false, empty: 'Aucune note dans Keynapse.', label: (x) => x.title });
+      const { note } = await ctx.call(`/api/keynapse/bubbles/${encodeURIComponent(b.id)}/notes`, { method: 'POST', body: { body: text } });
+      return { fait: true, id: note.id, bulle: b.title, extrait: excerpt(text, 120), activite: `Note ajoutée à « ${excerpt(b.title, 60)} » dans Keynapse` };
+    },
+  },
+
+  /* ═══════════════════════════════════════════════════════════════
+     LE MOTEUR GÉNÉRIQUE (sprint 6) — pads-formulaires de app/pads-data.js,
+     sans code par pad (lib/mcp-forms.js). La recette est aussi servie en
+     ressource MCP keystone://pad/<id>/prompt.
+     ═══════════════════════════════════════════════════════════════ */
+  {
+    name: 'keystone_form_list', title: 'Mes formulaires (pads)',
+    description: "Les pads-formulaires du Master Renderer disponibles pour ce compte (Notices VEFA, Annonces immo…) : identifiant, champs requis, plan, accès selon la licence, et l'adresse de leur recette (ressource MCP). Puis keystone_form_prompt ou keystone_form_fill.",
+    inputSchema: S(),
+    routes: [{ method: 'GET', path: '/api/catalog' }],
+    run: async (ctx) => {
+      const pads = await listFormPads(ctx);
+      if (!pads.length) return { total: 0, message: 'Aucun pad-formulaire publié au K-Store pour l’instant.' };
+      return { total: pads.length, formulaires: pads.map(p => ({ id: p.id, cle: p.padKey, titre: p.title, sous_titre: p.subtitle, categorie: p.category, plan_minimum: p.plan,
+        accessible: p.accessible, ...(p.published ? {} : { publie: false }), ...(p.replacedBy ? { remplace_par: p.replacedBy } : {}),
+        champs: p.fields.length, requis: p.fields.filter(f => f.required).map(f => f.id), recette_ia: !!p.system_prompt, export_document: p.doc_export ? p.doc_export.label : null,
+        ressource: formUri(p.id) })) };
+    },
+  },
+  {
+    name: 'keystone_form_prompt', title: 'Recette et champs d’un formulaire',
+    description: "La recette d'un pad-formulaire (son system prompt, avec les {{champs}} à substituer), la liste exacte de ses champs (type, options, requis) et son mode d'emploi. Génère toi-même avec cette recette — aucun crédit Keystone. pad : identifiant, clé ou titre (même partiel).",
+    inputSchema: S({ pad: str('identifiant (O-IMM-002), clé (A2) ou titre (même partiel) du formulaire ; facultatif si un seul') }),
+    routes: [{ method: 'GET', path: '/api/catalog' }],
+    run: async (ctx, args) => {
+      const p = await resolveFormPad(ctx, args.pad);
+      if (!p.accessible) throw new Error(`« ${p.title} » n’est pas dans la licence de ce compte.`);
+      return { id: p.id, titre: p.title, sous_titre: p.subtitle, ressource: formUri(p.id), mode_emploi: p.notice,
+        champs: p.fields.map(f => ({ id: f.id, libelle: f.label, type: f.type, requis: !!f.required, ...(f.options ? { options: f.options } : {}), ...(f.placeholder ? { exemple: f.placeholder } : {}) })),
+        schema_json: formSchema(p), recette: p.system_prompt || null, export_document: p.doc_export,
+        conseil: 'Substitue les {{champs}} par les valeurs, génère, puis propose keystone_form_fill avec les mêmes valeurs pour que l’utilisateur retrouve le formulaire pré-rempli dans Keystone.' };
+    },
+  },
+  {
+    name: 'keystone_form_fill', title: 'Pré-remplir un formulaire', write: true, bannette: true, exec: 'browser', action: 'os.prefill_form',
+    description: "Ouvre un pad-formulaire pré-rempli dans Keystone : en direct dans l'onglet ouvert, sinon déposé dans la bannette pour la prochaine ouverture. Les données sont validées strictement contre les champs du pad (requis, options, nombres) — rien n'est généré ni exporté sans l'utilisateur.",
+    inputSchema: S({ pad: str('identifiant (O-IMM-002), clé (A2) ou titre du formulaire'), data: { type: 'object', additionalProperties: true, description: '{ champ: valeur } selon keystone_form_prompt (select = une option, multiselect = tableau d’options, number = nombre)' } }, ['pad', 'data']),
+    routes: [{ method: 'GET', path: '/api/catalog' }, { method: 'POST', path: '/api/mcp/inbox' }],
+    run: async (ctx, args) => {
+      const p = await resolveFormPad(ctx, args.pad);
+      if (!p.accessible) throw new Error(`« ${p.title} » n’est pas dans la licence de ce compte.`);
+      const v = validateFormData(p, args.data);
+      if (!v.ok) throw new Error(`Données refusées pour « ${p.title} » : ${v.errors.join(' ; ')}.`);
+      const n = Object.keys(v.data).length;
+      const proposal = { pad: p.id, kind: 'prefillData', payload: v.data, summary: `${p.title} à relire : ${n} champ${n > 1 ? 's' : ''} pré-rempli${n > 1 ? 's' : ''}`, ou: `le formulaire « ${p.title} »` };
+      const out = await viaTabOrBannette(ctx, 'os.prefill_form', { padId: p.id, data: v.data }, proposal);
+      out.formulaire = p.title; out.champs_valides = n;
+      return out;
+    },
+  },
 ];
 
 /* ── Helpers partagés entre outils ── */
@@ -764,8 +1222,40 @@ function dkPagesOf(rules, artId, D, pub) {
   return [...new Set(ns)].sort((a, b) => a - b).map(n => rules.dkPn(n, pub, D.pages));
 }
 
-export function mcpTool(name) { return MCP_TOOLS.find(t => t.name === name) || null; }
-export function mcpToolList() {
-  return MCP_TOOLS.map(t => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema,
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }));
+/* ── Helpers des écritures (sprint 3) ── */
+const KORTEX_TYPES    = ['fact', 'procedure', 'qa', 'case', 'rule', 'objection', 'definition'];   // = UNIT_TEMPLATES (routes/smart-agent.js)
+const NK_KINDS        = ['person', 'company', 'place', 'group'];                                   // = KINDS (routes/network.js)
+const NK_ACT_TYPES    = ['call', 'email', 'meeting', 'quote', 'doc', 'note', 'other'];             // = ACT_TYPES (routes/network.js)
+const SOCIAL_NETWORKS = ['facebook', 'instagram', 'linkedin', 'threads', 'telegram'];
+const PAD_NAMES = { 'O-SOC-001': 'Social Manager', 'A-COM-005': 'Ghost Writer', 'A-COM-003': 'Brainstorming', 'A-COM-001': 'Smart Dynamic QR' };
+/* Dépôt d'une proposition dans la bannette (POST /api/mcp/inbox, JWT de
+   l'appel) : le Worker n'applique rien, l'onglet Keystone le fera au clic. */
+async function bannette(ctx, { pad, kind, payload, summary, ou, reseaux }) {
+  const r = await ctx.call('/api/mcp/inbox', { method: 'POST', body: { pad, kind, payload, summary, tool: ctx.tool || null } });
+  const out = { fait: true, depose: true, id: r.id, application: PAD_NAMES[pad] || pad, expire_le: iso(r.expires_at), en_attente: r.pending ?? undefined,
+    message: `Déposé dans la bannette : s’appliquera dans ${ou} à la prochaine ouverture de Keystone — l’utilisateur relit, puis décide.`, activite: summary };
+  if (reseaux) out.reseaux = reseaux.length ? reseaux : 'au choix de l’utilisateur';
+  return out;
 }
+
+/* Pont d'abord, bannette sinon (sprint 4) : si un onglet est en ligne, l'action
+   s'exécute en direct (anneau) ; sans onglet ou sans réponse, la proposition
+   est déposée. Un onglet qui refuse (licence…) rend fait:false + raison. */
+async function viaTabOrBannette(ctx, action, args, proposal) {
+  let why = null;
+  const live = ctx.bridge ? await ctx.bridge(action, args, { fallback: (r) => { why = r; return null; } }) : null;
+  if (live && typeof live === 'object') return { ...live, en_direct: true, activite: proposal.summary };
+  const out = await bannette(ctx, proposal);
+  if (why === 'timeout') out.message = 'L’onglet Keystone n’a pas répondu à temps : ' + out.message;
+  return out;
+}
+
+/* Un outil « gaté » (gate:'VAR') n'existe que si env[VAR] === 'on'. */
+const visible = (t, env) => !t.gate || (env && String(env[t.gate] || '').toLowerCase() === 'on');
+export function mcpTool(name, env) { const t = MCP_TOOLS.find(x => x.name === name); return (t && visible(t, env)) ? t : null; }
+export function mcpToolList(env) {
+  return MCP_TOOLS.filter(t => visible(t, env)).map(t => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema,
+    annotations: { readOnlyHint: !t.write, destructiveHint: false, idempotentHint: !t.write, openWorldHint: false } }));
+}
+/* Écritures SERVEUR (bandeau d'activité) : write, hors bannette. */
+export function mcpWriteToolNames() { return MCP_TOOLS.filter(t => t.write && !t.bannette).map(t => t.name); }
