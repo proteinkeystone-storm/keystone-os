@@ -48,6 +48,7 @@ import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './
 import { handleProofDicoGet, handleProofDicoPost }                      from './routes/proof-dico.js';
 import { handleProofVerdict }                                           from './routes/proof-verdict.js';
 import { handleAiCreditsQuota }                                         from './routes/ai-credits.js';
+import { handleMcp }                                                   from './routes/mcp.js';
 import {
   handleAutoReloadGet, handleAutoReloadSave,
   handleAutoReloadSetup, handleAutoReloadResume,
@@ -218,7 +219,7 @@ import { handleKeyBrandPage } from './routes/key-brand-page.js';
 import { handleKeyBrandImport } from './routes/key-brand-import.js';
 
 // ── Router ────────────────────────────────────────────────────
-export default {
+const handler = {
   async fetch(request, env) {
     const origin = getAllowedOrigin(env, request);
 
@@ -250,6 +251,15 @@ export default {
       // le monitoring « juste marche » (OPS-2 · filet worker-mort externe).
       if (method === 'HEAD' && path.endsWith('/health')) {
         return new Response(null, { status: 200, headers: { 'Access-Control-Allow-Origin': origin } });
+      }
+
+      // ── MCP (Model Context Protocol) — l'accès de Claude à Keystone ──
+      // Serveur sans état sur POST /mcp (routes/mcp.js). Les outils
+      // rappellent les routes ci-dessous EN INTERNE via handler.fetch,
+      // avec le JWT du client : licence, plan et tenant restent tranchés
+      // par chaque route. Hors porte de possession (pas une route d'app).
+      if (path === '/mcp') {
+        return handleMcp(request, env, (req, e) => handler.fetch(req, e || env));
       }
 
       // ── PORTE DE POSSESSION (lib/app-access.js) ──────────────────
@@ -1414,3 +1424,5 @@ export default {
     await handleDeskEmail(message, env, ctx);
   },
 };
+
+export default handler;
