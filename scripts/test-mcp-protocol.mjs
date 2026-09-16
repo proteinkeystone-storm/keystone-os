@@ -40,7 +40,7 @@ const canned = {
   ] },
   '/api/qr/q1/stats?period=30d': { totals: { total: 42, unique: 30, today: 2, week: 9 }, heatmap: [{ dow: 2, hour: 11, cnt: 7 }], byCountry: [{ country: 'FR', cnt: 40 }], byDevice: [{ device: 'mobile', cnt: 41 }], meta: { created_at: '2026-09-01 10:00:00' } },
   '/api/sentinel/sites': { sites: [{ id: 's1', label: 'Mon site', url: 'https://www.monsite.fr', platform: 'wix', last_checked_at: '2026-09-16 08:00:00', last_ok: 1, uptime24h: 100, last_ms: 320, last_score: 81 }], limit: 1 },
-  '/api/catalog': { catalog: { pads: [{ id: 'A-COM-001', title: 'Smart Dynamic QR', subtitle: 'QR traçables', published: true }] } },
+  '/api/catalog': { catalog: { version: '1.3', tools: [{ id: 'A-COM-001', padKey: 'A3', title: 'Smart Dynamic QR', subtitle: 'QR traçables', plan: 'STARTER' }, { id: 'O-IMM-001', title: 'Notices VEFA', replacedBy: 'O-IMM-010' }] } },
 };
 const dispatch = async (req) => {
   const u = new URL(req.url);
@@ -129,6 +129,9 @@ console.log('\n▶ 5 · tools/call');
   eq(stats.result.structuredContent.meilleur_creneau, { jour: 'mardi', heure_utc: 11, scans: 7 }, 'meilleur créneau depuis la heatmap');
   const amb = await (await post(rpc('tools/call', { name: 'keystone_qr_stats', arguments: { name: 'zzz' } }))).json();
   yes(amb.result.isError === true && /Aucun QR/.test(amb.result.content[0].text), 'QR introuvable → isError explicite');
+  const cat = await (await post(rpc('tools/call', { name: 'keystone_os_catalog', arguments: {} }))).json();
+  eq(cat.result.structuredContent.applications.map(p => p.id), ['A-COM-001'], 'catalogue : lit cat.tools et ignore les pads remplacés');
+  eq(cat.result.structuredContent.plan, 'PRO', 'catalogue : plan du jeton');
   const sites = await (await post(rpc('tools/call', { name: 'keystone_sentinel_sites', arguments: {} }))).json();
   eq(sites.result.structuredContent.sites[0].nom, 'Mon site', 'Sentinel : flotte mise en forme');
   eq(sites.result.structuredContent.sites[0].en_ligne, true, 'Sentinel : en_ligne booléen');

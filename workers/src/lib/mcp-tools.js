@@ -86,9 +86,12 @@ export const MCP_TOOLS = [
       try {
         const data = await ctx.call('/api/catalog');
         const cat = data && data.catalog;
-        const list = Array.isArray(cat) ? cat : Array.isArray(cat?.pads) ? cat.pads : Array.isArray(cat?.items) ? cat.items : [];
-        pads = list.filter(p => p && p.published !== false).map(p => ({
-          id: p.id, nom: p.title || p.name || p.id, role: excerpt(p.subtitle || p.description, 120),
+        /* forme réelle du catalogue K-Store (admin → /api/admin/catalog) :
+           { version, updatedAt, tools:[{ id, padKey, title, subtitle, plan, price, longDesc… }] } */
+        const list = Array.isArray(cat?.tools) ? cat.tools : Array.isArray(cat) ? cat : Array.isArray(cat?.pads) ? cat.pads : [];
+        pads = list.filter(p => p && p.id && p.published !== false && !p.replacedBy).map(p => ({
+          id: p.id, nom: p.title || p.name || p.id, role: excerpt(p.subtitle || p.longDesc || p.description, 120),
+          plan_minimum: p.plan || null,
         }));
       } catch (_) { /* catalogue absent : on sert au moins le plan */ }
       return {
