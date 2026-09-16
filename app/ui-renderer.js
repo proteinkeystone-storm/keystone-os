@@ -4436,7 +4436,7 @@ const ACC_ICONS = {
     link:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
 };
 
-// ── Tuile « Connecteur IA » (MCP sprint 2) — liste + révocation ─────
+// ── Tuile « Connecteur MCP » (MCP sprint 2) — liste + révocation ─────
 // Volontairement muette : pas de badge, pas d'entrée dans l'aide ni le
 // changelog (HANDOFF_MCP_CLAUDE §1 « Annonce »). Chargée à l'ouverture de
 // l'accordéon, jamais au boot. Le JWT du navigateur suffit : la route
@@ -4954,6 +4954,11 @@ function _renderSettingsBody() {
             content: engineSection,
         },
         {
+            id: 'acc-connector', icon: ACC_ICONS.link, title: 'Connecteur MCP',
+            open: false,
+            content: _mcpConnectorSectionHTML(),
+        },
+        {
             id: 'acc-user', icon: ACC_ICONS.user, title: 'Utilisateur',
             open: false,
             content: `<div class="sp-user-form">
@@ -5220,11 +5225,6 @@ function _renderSettingsBody() {
             })(),
         },
         {
-            id: 'acc-connector', icon: ACC_ICONS.link, title: 'Connecteur IA',
-            open: false,
-            content: _mcpConnectorSectionHTML(),
-        },
-        {
             id: 'acc-doc', icon: ACC_ICONS.doc, title: 'Documentation',
             open: false,
             content: keystoneDocHTML(),
@@ -5331,7 +5331,7 @@ function _renderSettingsBody() {
     // Wire section « Moteur actif » (interrupteur + sélecteur des moteurs à clé)
     _wireEngineSection(body.querySelector('#acc-engine .acc-body'));
 
-    // Wire tuile « Connecteur IA » : liste chargée à l'ouverture, copie de l'adresse
+    // Wire tuile « Connecteur MCP » : liste chargée à l'ouverture, copie de l'adresse
     {
         const sec = body.querySelector('#acc-connector');
         sec?.querySelector('.acc-header')?.addEventListener('click', () => {

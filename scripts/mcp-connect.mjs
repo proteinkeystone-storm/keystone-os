@@ -21,7 +21,7 @@
    script : `claude mcp add --transport http keystone <API>/mcp` puis
    `/mcp` → Authenticate ouvre la page de consentement Keystone (e-mail +
    code), jetons renouvelés tout seuls, révocables dans Réglages →
-   Connecteur IA. Ce script reste le repli « sans navigateur » (JWT 7 j).
+   Connecteur MCP. Ce script reste le repli « sans navigateur » (JWT 7 j).
    ═══════════════════════════════════════════════════════════════ */
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, argv } from 'node:process';
