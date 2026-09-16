@@ -21,12 +21,25 @@
    Réponse : POST /api/mcp/bridge/jobs/:id/result { ok, data | error } —
    une seule fois, par le bon compte. Présence : GET /api/mcp/bridge/presence.
 
+   Repli WEB PUSH (ajout S4, décision Stéphane 17/09) : sans onglet en ligne
+   (ou onglet muet : iPhone en arrière-plan), le Worker pousse une
+   notification « Votre assistant a préparé … — ouvrir Keystone ? » sur
+   les abonnements push déjà connus du compte (tables kn_push_subs et
+   sentinel_push_subs, même tenant que les pads). Une ÉCRITURE reste
+   déposée en bannette ET mise en file 10 min (mcp_jobs.inbox_id) : si
+   l'utilisateur clique, l'onglet qui s'ouvre exécute l'ordre et marque
+   la proposition appliquée ; sinon elle l'attend dans la bannette. Une
+   LECTURE ne fait que notifier : Claude redemande, l'onglet répond.
+   Plafond 30 notifications / compte / jour.
+
    Garde-fous : l'onglet n'exécute que les actions de son catalogue
    (app/bridge-actions.js) et le dit (« hors catalogue ») ; un ordre est
    lié au sub ; un ordre d'un autre compte n'apparaît jamais sur le canal.
    ═══════════════════════════════════════════════════════════════ */
 import { json, err, parseBody, getAllowedOrigin, generateToken } from '../lib/auth.js';
 import { requireJWT } from '../lib/jwt.js';
+import { sendPush } from '../lib/webpush.js';
+import { ipRateExceeded, ipRateBump } from '../lib/ip-throttle.js';
 
 export const BRIDGE_ONLINE_S    = 40;       // « en ligne » = battement < 40 s
 export const BRIDGE_WAIT_MS     = 25_000;   // long-poll du Worker (limite Claude 30 s / 60 s)
@@ -35,6 +48,8 @@ const STREAM_POLL_MS            = 2_000;    // cadence de relecture des ordres s
 const STREAM_BEAT_MS            = 20_000;   // battement de présence
 const STREAM_MAX_MS             = 4 * 60_000;
 const JOB_TTL_S                 = 60;
+const QUEUED_TTL_S              = 600;      // ordre gardé après une notification push
+const PUSH_DAILY_CAP            = 30;
 const MAX_ARGS                  = 32 * 1024;
 const MAX_RESULT                = 64 * 1024;
 
@@ -46,8 +61,9 @@ export async function ensureMcpBridgeSchema(env) {
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_mcp_bridge_presence_seen ON mcp_bridge_presence(sub, last_seen)').run();
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS mcp_jobs (id TEXT PRIMARY KEY, sub TEXT NOT NULL, tool TEXT NOT NULL, action TEXT NOT NULL,
     args_json TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', result_json TEXT, error TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')), dispatched_at TEXT, done_at TEXT, expires_at TEXT NOT NULL)`).run();
+    created_at TEXT NOT NULL DEFAULT (datetime('now')), dispatched_at TEXT, done_at TEXT, expires_at TEXT NOT NULL, inbox_id TEXT)`).run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_mcp_jobs_sub_status ON mcp_jobs(sub, status, expires_at)').run();
+  try { await env.DB.prepare('ALTER TABLE mcp_jobs ADD COLUMN inbox_id TEXT').run(); } catch (_) { /* déjà là (migration 019) */ }
   _ready = true;
 }
 const iso = (v) => (typeof v === 'string' && !/[TZ]/.test(v)) ? v.replace(' ', 'T') + 'Z' : v;
@@ -89,16 +105,57 @@ export async function bridgeRun(env, { sub, tool, action, args, waitMs = BRIDGE_
   return { status: 'timeout', jobId: id };
 }
 
+/* Ordre mis en FILE sans attente (repli push) : exécuté par l'onglet qui
+   s'ouvrira dans les 10 min ; inbox_id = la proposition de bannette jumelle,
+   que l'onglet marquera appliquée après exécution. */
+export async function bridgeQueue(env, { sub, tool, action, args, inboxId = null }) {
+  await ensureMcpBridgeSchema(env);
+  const argsJson = JSON.stringify(args ?? {});
+  if (argsJson.length > MAX_ARGS) return null;
+  const id = 'kjb_' + generateToken(12);
+  await env.DB.prepare(`INSERT INTO mcp_jobs (id, sub, tool, action, args_json, expires_at, inbox_id) VALUES (?, ?, ?, ?, ?, datetime('now', '+${QUEUED_TTL_S} seconds'), ?)`)
+    .bind(id, sub, String(tool || ''), String(action), argsJson, inboxId ? String(inboxId) : null).run();
+  return id;
+}
+
+/* Notification push de repli. tenant = règle des pads (admin → 'default').
+   → { sent, devices } ; { sent:0, reason } sans VAPID / abonnement / au plafond. */
+export async function bridgeNotify(env, { sub, isAdmin, title, body, tag }) {
+  if (!env.VAPID_PUBLIC || !env.VAPID_PRIVATE_JWK) return { sent: 0, devices: 0, reason: 'push non configuré' };
+  let vapid;
+  try { vapid = { publicKey: env.VAPID_PUBLIC, privateJwk: JSON.parse(env.VAPID_PRIVATE_JWK), subject: 'mailto:' + (env.SDQR_DPO_EMAIL || 'contact@protein-keystone.com') }; }
+  catch (_) { return { sent: 0, devices: 0, reason: 'push non configuré' }; }
+  const tenant = isAdmin ? 'default' : sub;
+  const subs = new Map();
+  for (const table of ['kn_push_subs', 'sentinel_push_subs']) {
+    try { for (const r of ((await env.DB.prepare(`SELECT endpoint, p256dh, auth FROM ${table} WHERE tenant_id = ?`).bind(tenant).all()).results || [])) subs.set(r.endpoint, { ...r, table }); }
+    catch (_) { /* table absente */ }
+  }
+  if (!subs.size) return { sent: 0, devices: 0, reason: 'aucun appareil abonné aux notifications' };
+  const sh = (await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(sub)))); const subHash = Array.from(new Uint8Array(sh)).slice(0, 12).map(b => b.toString(16).padStart(2, '0')).join('');
+  try { if (await ipRateExceeded(env, 'mcp:push', subHash, PUSH_DAILY_CAP)) return { sent: 0, devices: subs.size, reason: 'plafond de notifications du jour atteint' }; await ipRateBump(env, 'mcp:push', subHash); } catch (_) { /* fail-open */ }
+  const payload = { kind: 'mcp-bridge', title: String(title || 'Votre assistant').slice(0, 80), body: String(body || '').slice(0, 160), tag: String(tag || 'mcp').slice(0, 40), url: './app' };
+  let sent = 0;
+  for (const s of subs.values()) {
+    try {
+      const code = await sendPush(s, payload, vapid);
+      if (code >= 200 && code < 300) sent++;
+      else if (code === 404 || code === 410) await env.DB.prepare(`DELETE FROM ${s.table} WHERE endpoint = ?`).bind(s.endpoint).run().catch(() => {});
+    } catch (_) { /* un appareil sourd n'empêche pas les autres */ }
+  }
+  return { sent, devices: subs.size };
+}
+
 /* Remise des ordres en attente à UN onglet (UPDATE gardé, anti-double). */
 async function claimPending(env, sub, tabId) {
-  const { results } = await env.DB.prepare(`SELECT id, tool, action, args_json, expires_at FROM mcp_jobs
+  const { results } = await env.DB.prepare(`SELECT id, tool, action, args_json, expires_at, inbox_id FROM mcp_jobs
                                             WHERE sub = ? AND status = 'pending' AND expires_at > datetime('now') ORDER BY created_at ASC LIMIT 5`).bind(sub).all();
   const out = [];
   for (const r of (results || [])) {
     const u = await env.DB.prepare("UPDATE mcp_jobs SET status = 'dispatched', dispatched_at = datetime('now') WHERE id = ? AND status = 'pending'").bind(r.id).run();
     if (u?.meta?.changes >= 1) {
       let args = {}; try { args = JSON.parse(r.args_json); } catch (_) { args = {}; }
-      out.push({ id: r.id, tool: r.tool, action: r.action, args, expires_at: iso(r.expires_at), tab: tabId });
+      out.push({ id: r.id, tool: r.tool, action: r.action, args, expires_at: iso(r.expires_at), tab: tabId, ...(r.inbox_id ? { inbox_id: r.inbox_id } : {}) });
     }
   }
   return out;

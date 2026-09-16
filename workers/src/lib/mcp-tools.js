@@ -1243,11 +1243,17 @@ async function bannette(ctx, { pad, kind, payload, summary, ou, reseaux }) {
    est déposée. Un onglet qui refuse (licence…) rend fait:false + raison. */
 async function viaTabOrBannette(ctx, action, args, proposal) {
   let why = null;
-  const live = ctx.bridge ? await ctx.bridge(action, args, { fallback: (r) => { why = r; return null; } }) : null;
+  /* le repli DÉPOSE lui-même (ctx.bridge lie alors la notification push et
+     l'ordre en file à cette proposition : même id, pas de doublon) */
+  const live = ctx.bridge
+    ? await ctx.bridge(action, args, { fallback: async (r) => { why = r; return bannette(ctx, proposal); } })
+    : await bannette(ctx, proposal);
+  if (live && typeof live === 'object' && live.depose) {
+    if (why === 'timeout') live.message = 'L’onglet Keystone n’a pas répondu à temps : ' + live.message;
+    return live;
+  }
   if (live && typeof live === 'object') return { ...live, en_direct: true, activite: proposal.summary };
-  const out = await bannette(ctx, proposal);
-  if (why === 'timeout') out.message = 'L’onglet Keystone n’a pas répondu à temps : ' + out.message;
-  return out;
+  return bannette(ctx, proposal);
 }
 
 /* Un outil « gaté » (gate:'VAR') n'existe que si env[VAR] === 'on'. */

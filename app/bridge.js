@@ -65,6 +65,12 @@ async function _execute(job) {
     /* la cible a pu apparaître pendant l'action (pad ouvert) : anneau a posteriori */
     if (!ringed && action.target) { try { ringed = bridgeRing(action.target); } catch (e) { ringed = null; } }
     await _reply(job.id, { ok: true, data: r.data ?? null });
+    /* ordre issu d'une notification push : la proposition jumelle de la bannette est appliquée */
+    if (job.inbox_id && r.data && r.data.fait !== false) {
+      const jwt = _jwt();
+      if (jwt) { try { await fetch(`${API}/api/mcp/inbox/${encodeURIComponent(job.inbox_id)}/applied`, { method: 'POST', headers: { Authorization: 'Bearer ' + jwt } }); } catch (e) { /* la bannette la montrera encore, sans gravité */ } }
+      window.__ksBannetteRefresh?.();
+    }
   } else {
     await _reply(job.id, { ok: false, error: r.error || 'échec dans l’onglet' });
   }

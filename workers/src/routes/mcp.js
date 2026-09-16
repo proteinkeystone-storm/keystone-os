@@ -50,7 +50,7 @@ import { mcpTool, mcpToolList }               from '../lib/mcp-tools.js';
 import { ipRateExceeded, ipRateBump }          from '../lib/ip-throttle.js';
 import { resolveMcpAccessToken, ACCESS_PREFIX } from './oauth.js';
 import { issueConfirmation, consumeConfirmation, subHash, CONFIRM_TTL_S } from './mcp-writes.js';
-import { bridgePresence, bridgeRun } from './mcp-bridge.js';
+import { bridgePresence, bridgeRun, bridgeQueue, bridgeNotify } from './mcp-bridge.js';
 import { mirrorRead } from './mcp-mirror.js';
 import { bagAllows } from '../lib/app-access.js';
 import { formResources, padIdFromUri, resolveFormPad, formPromptMarkdown } from '../lib/mcp-forms.js';
@@ -212,19 +212,37 @@ function makeCtx(request, env, dispatch, claims, authz, sh, secret = null) {
         if (m.reason === 'illisible') throw new Error('Reflet illisible avec ce jeton (connexion réautorisée depuis ?) : ouvre Keystone, le reflet sera republié.');
         return null;
       };
+      /* Repli push (S4, décision 17/09) : sans onglet ou onglet muet, on notifie
+         les appareils abonnés. Écriture : la proposition va en bannette ET en file
+         10 min (l'onglet ouvert par le clic l'exécute puis marque la bannette).
+         Lecture : notification seule, Claude redemande. */
+      const toolTitle = (mcpTool(ctx.tool, env) || {}).title || ctx.tool;
+      const pushed = async (result, why) => {
+        if (fallback) {
+          const out = await fallback(why);
+          const inboxId = out && typeof out === 'object' && typeof out.id === 'string' && out.id.startsWith('kbn_') ? out.id : null;
+          const n = await bridgeNotify(env, { sub: claims.sub, isAdmin: claims.isAdmin === true, title: 'Votre assistant a préparé quelque chose', body: (out && out.activite) || toolTitle, tag: inboxId || ctx.tool });
+          if (n.sent > 0) {
+            await bridgeQueue(env, { sub: claims.sub, tool: ctx.tool, action, args: args || {}, inboxId });
+            if (out && typeof out === 'object') out.notification = `envoyée sur ${n.sent} appareil${n.sent > 1 ? 's' : ''} : un clic ouvre Keystone et l’applique ; sinon la bannette l’attend.`;
+          } else if (out && typeof out === 'object' && n.reason) out.notification = `aucune notification (${n.reason})`;
+          return out;
+        }
+        const n = await bridgeNotify(env, { sub: claims.sub, isAdmin: claims.isAdmin === true, title: 'Votre assistant a besoin de Keystone', body: `Pour : ${toolTitle}. Ouvrir Keystone ?`, tag: ctx.tool });
+        const hint = n.sent > 0 ? ` Une notification a été envoyée sur ${n.sent} appareil${n.sent > 1 ? 's' : ''} : dès que Keystone est ouvert, redemande.` : '';
+        throw new Error(result + hint);
+      };
       const p = await bridgePresence(env, claims.sub);
       if (!p.online) {
         const m = await viaMirror('offline'); if (m) return m;
-        if (fallback) return fallback('offline');
-        throw new Error('Aucun onglet Keystone ouvert : cette donnée vit dans le navigateur, pas sur le serveur. Ouvre Keystone (protein-keystone.com/app) connecté, puis redemande' + (mirror ? ' — ou active « Visible par mon assistant » dans Réglages → Connecteur MCP pour un reflet lisible onglet fermé.' : '.'));
+        return pushed('Aucun onglet Keystone ouvert : cette donnée vit dans le navigateur, pas sur le serveur. Ouvre Keystone (protein-keystone.com/app) connecté, puis redemande' + (mirror ? ' — ou active « Visible par mon assistant » dans Réglages → Connecteur MCP pour un reflet lisible onglet fermé.' : '.'), 'offline');
       }
       const r = await bridgeRun(env, { sub: claims.sub, tool: ctx.tool, action, args: args || {},
         waitMs: waitMs ?? (env.MCP_BRIDGE_WAIT_MS ? Math.max(200, parseInt(env.MCP_BRIDGE_WAIT_MS, 10) || 0) : undefined) });
       if (r.status === 'done') return r.data;
       if (r.status === 'failed') throw new Error(`Dans l’onglet Keystone : ${r.error}`);
       const m = await viaMirror('timeout'); if (m) return m;
-      if (fallback) return fallback('timeout');
-      throw new Error('L’onglet Keystone n’a pas répondu à temps (onglet en arrière-plan sur mobile, ou occupé). Mets Keystone au premier plan, puis redemande.');
+      return pushed('L’onglet Keystone n’a pas répondu à temps (onglet en arrière-plan sur mobile, ou occupé). Mets Keystone au premier plan, puis redemande.', 'timeout');
     },
     quota: async (scope, cap, quoi = 'appels') => {
       let exceeded = false;

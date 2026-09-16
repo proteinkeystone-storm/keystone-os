@@ -122,6 +122,12 @@ KS_ALLOWED_ORIGIN = "https://protein-keystone.com,https://www.protein-keystone.c
 # propre moteur » devient atteignable dès qu'un client dépose une clé.
 BYOK_ROUTING = "on"
 
+# ── MCP sprint 3 — création de QR via l'assistant (keystone_qr_create) ──
+# Hors catalogue tant que ≠ "on". ALLUMÉ le 2026-09-17 (décision Stéphane),
+# après gardien QR vert avant/après une création de test. Création seule :
+# jamais de modification, suppression ni redirection d'un QR existant.
+MCP_QR_CREATE = "on"
+
 # ── AUTH-5 — Email transactionnel SOUVERAIN (Scaleway TEM, fr-par) ──
 # Bascule Resend (US) → Scaleway (FR) du 2026-07-26, cf.
 # HANDOFF_AUTH_DURCISSEMENT.md. Rollback instantané : remettre

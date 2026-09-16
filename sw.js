@@ -26,7 +26,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.28.535-mcp-forms';
+const VERSION       = 'ks-os-v5.28.536-mcp-push';
 const STATIC_CACHE  = `${VERSION}-static`;
 // Plus de cache API : les réponses /api/* ne sont JAMAIS stockées (cf. fetch).
 
@@ -233,6 +233,15 @@ self.addEventListener('push', (event) => {
     }));
     return;
   }
+  // MCP (le Pont, repli push) — l'assistant a préparé quelque chose ou a besoin de l'app ouverte.
+  if (data.kind === 'mcp-bridge') {
+    event.waitUntil(self.registration.showNotification(data.title || 'Votre assistant', {
+      body: data.body || 'Ouvrir Keystone ?',
+      tag:  'mcp-' + (data.tag || 'bridge'),
+      data: { kind: 'mcp-bridge', url: data.url || './app' },
+    }));
+    return;
+  }
   // Key-Ring (Sonnette) — quelqu'un sonne. Notif avec boutons de réponse 1-tap.
   if (data.kind === 'keyring-ring') {
     const who   = data.name ? data.name : 'Quelqu\'un';
@@ -267,6 +276,17 @@ self.addEventListener('notificationclick', (event) => {
       if (client) { try { await client.focus(); } catch (_) {} }
       else { try { client = await self.clients.openWindow('./app'); } catch (_) {} }
       if (client && data.bubbleId) { try { client.postMessage({ type: 'keynapse-open-bubble', bubbleId: data.bubbleId }); } catch (_) {} }
+    })());
+    return;
+  }
+  // MCP (le Pont) — clic : focalise/ouvre le dashboard ; app/bridge.js y reprend l'ordre en file.
+  if (data.kind === 'mcp-bridge') {
+    event.notification.close();
+    event.waitUntil((async () => {
+      const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const client = wins.find((c) => c.url.includes('/app')) || wins[0] || null;
+      if (client) { try { await client.focus(); } catch (_) {} }
+      else { try { await self.clients.openWindow(data.url || './app'); } catch (_) {} }
     })());
     return;
   }

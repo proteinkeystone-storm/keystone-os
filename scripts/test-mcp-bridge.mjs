@@ -197,10 +197,68 @@ console.log('\n▶ 4 · Outils MCP via le Pont');
   tabHandler = null;
 }
 
+console.log('\n▶ 5 bis · Repli Web Push (décision 17/09)');
+{
+  DB._db.prepare('DELETE FROM mcp_bridge_presence').run();
+  DB._db.exec(`CREATE TABLE IF NOT EXISTS kn_push_subs (endpoint TEXT PRIMARY KEY, tenant_id TEXT, p256dh TEXT, auth TEXT);
+               CREATE TABLE IF NOT EXISTS sentinel_push_subs (endpoint TEXT PRIMARY KEY, tenant_id TEXT, p256dh TEXT, auth TEXT);`);
+  const seen = [];
+  const dispatch = async (rq) => {
+    const u = new URL(rq.url); seen.push({ method: rq.method, path: u.pathname });
+    if (u.pathname === '/api/mcp/inbox' && rq.method === 'POST') return handleMcpInboxDeposit(rq, env);
+    if (u.pathname === '/api/mcp/inbox' && rq.method === 'GET')  return handleMcpInboxList(rq, env);
+    return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+  };
+  const call = async (name, args = {}) => {
+    const r = await handleMcp(new Request(`${API}/mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwtAlice}` },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) }), env, dispatch);
+    return (await r.json()).result;
+  };
+  /* sans VAPID : aucune notification, comportement d'avant */
+  let r = await call('keystone_social_draft_post', { text: 'Sans push' });
+  yes(r.structuredContent.depose === true && /aucune notification \(push non configuré\)/.test(r.structuredContent.notification || ''), 'sans VAPID : dépôt, « aucune notification (push non configuré) »');
+  /* VAPID + abonnement + fetch simulé vers l'endpoint push */
+  const { generateKeyPairSync } = await import('node:crypto');
+  const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const jwk = privateKey.export({ format: 'jwk' });
+  env.VAPID_PUBLIC = Buffer.from(JSON.stringify({ x: jwk.x, y: jwk.y })).toString('base64url').slice(0, 87); env.VAPID_PRIVATE_JWK = JSON.stringify(jwk);
+  const { publicKey: uaPub } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const uaRaw = Buffer.from(uaPub.export({ format: 'jwk' }).x, 'base64url'), uaRawY = Buffer.from(uaPub.export({ format: 'jwk' }).y, 'base64url');
+  const p256dh = Buffer.concat([Buffer.from([4]), uaRaw, uaRawY]).toString('base64url');
+  DB._db.prepare("INSERT INTO kn_push_subs (endpoint, tenant_id, p256dh, auth) VALUES ('https://push.test/a', 'sub-alice', ?, ?)").run(p256dh, Buffer.from('0123456789abcdef').toString('base64url'));
+  DB._db.prepare("INSERT INTO sentinel_push_subs (endpoint, tenant_id, p256dh, auth) VALUES ('https://push.test/b', 'sub-alice', ?, ?)").run(p256dh, Buffer.from('0123456789abcdef').toString('base64url'));
+  DB._db.prepare("INSERT INTO sentinel_push_subs (endpoint, tenant_id, p256dh, auth) VALUES ('https://push.test/dead', 'sub-alice', ?, ?)").run(p256dh, Buffer.from('0123456789abcdef').toString('base64url'));
+  const pushes = []; const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { if (String(url).startsWith('https://push.test/')) { pushes.push({ url: String(url), enc: init?.headers?.['Content-Encoding'], auth: init?.headers?.['Authorization'] }); return new Response(null, { status: String(url).endsWith('/dead') ? 410 : 201 }); } return realFetch(url, init); };
+  try {
+    r = await call('keystone_social_draft_post', { text: 'Avec push', networks: ['facebook'] });
+    yes(r.isError === false && r.structuredContent.depose === true && /envoyée sur 2 appareils/.test(r.structuredContent.notification || ''), 'écriture sans onglet : dépôt + notification sur 2 appareils (410 purgé)');
+    yes(pushes.length === 3 && pushes.every(p => p.enc === 'aes128gcm' && /^vapid t=/.test(p.auth || '')), '3 envois chiffrés aes128gcm signés VAPID');
+    eq(DB._db.prepare("SELECT COUNT(*) AS n FROM sentinel_push_subs WHERE endpoint = 'https://push.test/dead'").get().n, 0, 'abonnement 410 purgé');
+    const inboxId = r.structuredContent.id;
+    const job = DB._db.prepare("SELECT status, action, inbox_id, args_json FROM mcp_jobs WHERE tool = 'keystone_social_draft_post' AND status = 'pending' ORDER BY rowid DESC LIMIT 1").get();
+    yes(job && job.action === 'sm.compose_draft' && job.inbox_id === inboxId && JSON.parse(job.args_json).text === 'Avec push', 'ordre mis en file 10 min, lié à la proposition de bannette');
+    const frames = await drain(await stream(jwtAlice, { 'X-Bridge-Tab': 'tab_clic' }));
+    const j = frames.find(f => f.ev === 'job' && f.data.action === 'sm.compose_draft');
+    yes(j && j.data.inbox_id === inboxId, 'l’onglet ouvert par le clic reçoit l’ordre avec inbox_id');
+    pushes.length = 0;
+    DB._db.prepare('DELETE FROM mcp_bridge_presence').run();
+    const jobsBefore = DB._db.prepare("SELECT COUNT(*) AS n FROM mcp_jobs").get().n;
+    r = await call('keystone_brainstorming_sessions');
+    yes(r.isError && /Une notification a été envoyée sur 2 appareils/.test(r.content[0].text), 'lecture sans onglet : erreur + notification, sans ordre');
+    eq(DB._db.prepare("SELECT COUNT(*) AS n FROM mcp_jobs").get().n, jobsBefore, '… aucun ordre créé pour une lecture');
+    /* plafond quotidien */
+    DB._db.prepare("UPDATE public_ip_usage SET count = 30 WHERE scope = 'mcp:push'").run();
+    pushes.length = 0;
+    r = await call('keystone_ghostwriter_prepare_text', { text: 'Plafond' });
+    yes(r.structuredContent.depose === true && /plafond/.test(r.structuredContent.notification || '') && pushes.length === 0, 'plafond 30/j : dépôt sans notification');
+  } finally { globalThis.fetch = realFetch; delete env.VAPID_PUBLIC; delete env.VAPID_PRIVATE_JWK; }
+}
+
 console.log('\n▶ 5 · Purge');
 {
   DB._db.prepare("UPDATE mcp_jobs SET created_at = datetime('now', '-2 days')").run();
-  DB._db.prepare("UPDATE mcp_bridge_presence SET last_seen = datetime('now', '-2 days') WHERE tab_id = 'tab_live'").run();
+  DB._db.prepare("INSERT INTO mcp_bridge_presence (sub, tab_id, last_seen) VALUES ('sub-alice', 'tab_old', datetime('now', '-2 days'))").run();
   const p = await purgeMcpBridge(env);
   yes(p.jobs >= 5 && p.presence === 1, `jobs (${p.jobs}) et présence (${p.presence}) purgés`);
 }
