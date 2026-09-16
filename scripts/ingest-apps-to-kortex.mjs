@@ -174,7 +174,7 @@ function parseGlobalContext(md) {
   flush();
 
   // Fiche de tête, la plus importante : ce que Keystone EST — et n'est PAS.
-  // Cohérente avec _KEYSTONE_FACTS (app/kora-actions.js), la source de vérité
+  // Cohérente avec _KEYSTONE_FACTS (app/bridge-actions.js), la source de vérité
   // de la description officielle ; c'est la négation qui tue l'invention.
   fiches.unshift(makeFiche(app, 'definition', 'Keystone OS, en une phrase', {
     term: 'Keystone OS',

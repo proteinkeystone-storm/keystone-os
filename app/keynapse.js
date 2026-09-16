@@ -85,7 +85,7 @@ export function openKeynapse(opts = {}) {
   _bindSWMessages();           // clic notif → ouvrir la bulle
   _startReminderPoll();        // notifications locales (S7)
   _load();
-  // Handoff (Kora kn.open_bubble) : ouvre directement la fiche d'une bulle
+  // Handoff (bridge-actions kn.open_bubble) : ouvre directement la fiche d'une bulle
   // une fois la constellation chargée — même patron que _prefillAddUrl de
   // Sentinel (attend l'async de _load, poll court, aucune modification si
   // la bulle n'existe plus/pas encore rendue).

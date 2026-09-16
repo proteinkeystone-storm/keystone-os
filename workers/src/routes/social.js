@@ -678,8 +678,8 @@ export async function handleSocialPublish(request, env) {
 // VOULU public (audit sept. 2026 · M-9, statué le 26/07) : contrairement à
 // ses voisines gatées par socialEntitled, cette route ne renvoie QUE des
 // métadonnées de plateformes (listPlatformsPublic), identiques pour tous les
-// tenants — aucune donnée client, aucun token. Kora l'appelle d'ailleurs
-// explicitement en auth:false (app/kora-actions.js).
+// tenants — aucune donnée client, aucun token. bridge-actions.js l'appelle
+// d'ailleurs explicitement en auth:false.
 export function handleSocialRegistry(request, env) {
   const origin = getAllowedOrigin(env, request);
   return json({ platforms: listPlatformsPublic() }, 200, origin);

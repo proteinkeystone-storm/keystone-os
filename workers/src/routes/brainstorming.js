@@ -1712,7 +1712,7 @@ POSTURE
                     parsed.delta?.text                      ??  // Anthropic stream
                     parsed.p                                ??  // Workers AI compact
                     '';
-                  /* bug des zéros (déjà chassé dans kora.js, jamais propagé
+                  /* bug des zéros (déjà chassé le 18/07, jamais propagé
                      ici) : Workers AI sur-parse les tokens purement numériques
                      en NOMBRE JSON (« 1000 » peut streamer un token « 0 » →
                      0, falsy) — un simple `if (chunk)` avale ces tokens :

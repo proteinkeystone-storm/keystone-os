@@ -238,7 +238,7 @@ const LS_LIVING_ON    = 'ks_living_layer_on';
 // Workers AI toutes les 21 s d'onglet ouvert) pour de la décoration —
 // et c'est la SEULE partie de Living Layer qui peut dire une bêtise.
 // Le Calculateur, lui, est vrai par construction (il lit les compteurs)
-// et c'est déjà ce que Kora consomme (ll.whats_new → preferMode
+// et c'est déjà ce que bridge-actions consomme (ll.whats_new → preferMode
 // 'calculator'). Absent = OFF. Comme LS_LIVING_ON, cette clé est
 // VOLONTAIREMENT hors PREFS_KEYS : préférence par-appareil, sinon
 // _hydrate() la réécrase à chaque reload (cf. cloud-vault.js).

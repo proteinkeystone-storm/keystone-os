@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Toute votre communication sur une seule plateforme | Keystone</title>
+<title>MAQUETTE V2 — Toute votre communication sur une seule plateforme | Keystone</title>
 <meta name="description" content="Toute votre communication dans une seule plateforme : un agent IA qui répond à vos clients, des Smart Links (QR dynamiques), une charte de marque vivante, un comité d'IA qui brainstorme et des messages scellés. Souverain, hébergé en Europe.">
 <link rel="canonical" href="https://protein-keystone.com/">
 <meta name="robots" content="index, follow">
@@ -409,16 +409,13 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 .metier-card:hover span{transform:translateX(3px)}
 .tools-rise{transform-origin:center center}   /* zoom « depuis le fond » piloté au scroll (desktop) — voir JS */
 
-/* KEYSTONE AU QUOTIDIEN : fenêtre agent + chat concierge */
-.daily-visual{display:flex; flex-direction:column; justify-content:center; align-items:center; width:100%; min-width:0}
-/* Refonte 2026-08 : le gabarit iPhone (280px, texte écrasé) cède la place à
-   une fenêtre large — la vraie page v2 de l'agent (cartes-photos comprises)
-   s'y affiche à taille lisible. `.phone` garde son NOM : la parallaxe et la
-   file postMessage s'y accrochent. */
-.phone{width:min(440px,100%); height:clamp(540px,72vh,680px); border-radius:30px; padding:10px; position:relative;
+/* KEYSTONE AU QUOTIDIEN : téléphone + chat concierge */
+.daily-visual{display:flex; flex-direction:column; justify-content:center; align-items:center}
+.phone{width:280px; height:572px; border-radius:42px; padding:13px; position:relative;
   background:linear-gradient(165deg,#11162a,#05080f); border:1px solid var(--border-strong);
   box-shadow:0 60px 120px -50px rgba(0,0,0,.9), inset 0 0 0 1px rgba(255,255,255,.03), inset 0 1px 0 rgba(255,255,255,.08)}
-.phone-screen{width:100%; height:100%; border-radius:22px; overflow:hidden; background:var(--bg); display:flex; flex-direction:column}
+.phone::after{content:''; position:absolute; top:13px; left:50%; transform:translateX(-50%); width:118px; height:24px; background:#05080f; border-radius:0 0 16px 16px; z-index:3}
+.phone-screen{width:100%; height:100%; border-radius:30px; overflow:hidden; background:var(--bg); display:flex; flex-direction:column}
 /* Démo LIVE : la vraie page publique de l'agent embarquée dans le téléphone
    (mode ?embed = conversation seule). La saisie vit ICI, dans la colonne de
    gauche : la barre ci-dessous pilote l'agent par postMessage. */
@@ -454,9 +451,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 .msg.in{opacity:1; transform:none}
 .msg.user{align-self:flex-end; background:var(--accent); color:#0b1020; font-weight:500; border-bottom-right-radius:5px}
 .msg.bot{align-self:flex-start; background:var(--bg-3); color:var(--text); border:1px solid var(--border); border-bottom-left-radius:5px}
-/* Mobile/tablette (1 colonne) : la fenêtre prend la largeur de la colonne,
-   hauteur bornée pour laisser la barre de saisie visible sous elle. */
-@media (max-width:820px){ .phone{height:clamp(500px,68vh,620px)} }
+@media (max-width:820px){ .phone{width:262px; height:544px} }
 /* En etroit, le champ tombait a 195 px et rognait « Posez votre question… ».
    Boutons et gouttieres resserres : le champ repasse a 211 px et la phrase
    tient entiere. Le champ garde 16 px de corps — en dessous, iOS zoome
@@ -739,7 +734,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="kpuce" viewBox="0 0 260.85 246.17"><g fill="currentColor"><path d="M21,143.31c0-46.13,28.69-85.68,69.17-101.75l-7.72-19.53C34.2,41.19,0,88.33,0,143.31c0,41.61,19.59,78.73,50.03,102.63l12.94-16.52c-25.54-20.05-41.97-51.19-41.97-86.1Z"/><path d="M179.22,22.37l-7.86,19.47c40.11,16.24,68.48,55.6,68.48,101.47,0,35.02-16.54,66.25-42.22,86.29l12.9,16.56c30.61-23.89,50.32-61.11,50.32-102.85,0-54.67-33.82-101.58-81.63-120.94Z"/><path d="M229.14,143.31c0-41.38-25.59-76.89-61.78-91.54l-5.62,13.92c30.69,12.43,52.4,42.52,52.4,77.62,0,26.79-12.67,50.67-32.31,66l9.23,11.85c23.16-18.08,38.09-46.25,38.09-77.85Z"/><path d="M46.71,143.31c0-35.29,21.96-65.53,52.93-77.82l-5.53-13.97c-36.52,14.5-62.4,50.18-62.4,91.8,0,31.5,14.83,59.59,37.87,77.68l9.26-11.82c-19.54-15.34-32.13-39.15-32.13-65.86Z"/><circle cx="130.42" cy="143.31" r="24.46"/><path d="M108.68,65.49h42.9l19.79-60.83c-27.22-6.17-54.28-6.24-81.19,0l18.51,60.83Z"/></g></symbol></defs></svg>
 
 <nav class="nav">
-  <a class="nav-logo" href="#" aria-label="Keystone"><img src="keystone-logo.svg" alt="Keystone"></a>
+  <a class="nav-logo" href="#" aria-label="Keystone"><img src="/keystone-logo.svg" alt="Keystone"></a>
   <a href="/a-propos" style="font-size:13px;font-weight:600;color:var(--text-2);text-decoration:none;margin-right:14px">À propos</a>
   <a class="nav-cta" href="/activate">Se connecter</a>
 </nav>
@@ -771,6 +766,7 @@ a.hero-badge:hover{border-color:var(--accent-2); background:var(--accent-bd)}
 <!-- 2 · VOTRE QUOTIDIEN (agitation — le miroir) -->
 <style>
 /* ── Maquette V2 : styles additionnels ── */
+.v2-ribbon{position:fixed;left:14px;bottom:14px;z-index:60;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-3);background:rgba(99,102,241,.16);border:1px solid var(--accent-bd);border-radius:999px;padding:6px 12px;backdrop-filter:blur(10px)}
 .pains{text-align:center;padding:16px 24px 0}
 .pains .h2{font-size:clamp(40px,5vw,64px);line-height:1.06}
 .pains-stage{position:relative;height:420vh}
@@ -902,6 +898,7 @@ a.free-card:focus-visible{outline:2px solid var(--accent-2);outline-offset:3px}
   .kd-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 </style>
+<div class="v2-ribbon" aria-hidden="true">Maquette V2</div>
 <section class="sec pains" id="quotidien">
   <div class="pains-stage" id="painsStage">
     <div class="pains-pin">
@@ -1023,13 +1020,13 @@ a.free-card:focus-visible{outline:2px solid var(--accent-2);outline-offset:3px}
       <span class="eyebrow">Smart Agent · la preuve, en direct</span>
       <h2 class="h2">Vos clients ont une question.<br>Votre agent IA répond. Sans vous.</h2>
       <p class="lead">Confiez votre savoir-faire au Smart Agent : il répond à vos clients par chat ou à la voix, derrière un simple lien ou un QR — et uniquement avec ce que vous lui avez appris, sans rien inventer.</p>
-      <p class="lead" style="margin-top:10px">Celui-ci, c'est le nôtre, <b>en direct</b>. Posez votre question ci-dessous — à l'écrit ou au micro — ou touchez une des applications en haut de la fenêtre, et regardez-le répondre. Activez le haut-parleur pour l'entendre.</p>
+      <p class="lead" style="margin-top:10px">Celui-ci, c'est le nôtre, <b>en direct</b>. Posez votre question ci-dessous — à l'écrit ou au micro — et regardez-le répondre dans le téléphone. Activez le haut-parleur pour l'entendre.</p>
       <p style="margin:14px 0 0;font-size:12.5px;color:rgba(220,225,240,.55)">Gratuit, sans compte — c'est lui qui vous répond, pas un script. Questions anonymes, effacées après 90&nbsp;jours.</p>
     </div>
     <div class="daily-visual">
       <div class="phone">
         <div class="phone-screen">
-          <iframe class="phone-live" src="/agent?s=Vtg9eJfs&embed=1" title="Conseiller Keystone — démo en direct"
+          <iframe class="phone-live" src="https://protein-keystone.com/agent?s=Vtg9eJfs&embed=1" title="Conseiller Keystone — démo en direct"
                   loading="lazy" allow="microphone"></iframe>
         </div>
       </div>
@@ -1218,7 +1215,7 @@ a.free-card:focus-visible{outline:2px solid var(--accent-2);outline-offset:3px}
     </article>
     <article class="tn" id="tn-A-COM-004">
       <h3 class="tn-title">Key Form</h3>
-      <p class="tn-tldr">Key Form construit des formulaires intelligents partageables par URL. 17 types de champs, logique conditionnelle, mail Resend, RGPD natif. Parité Typeform Pro à votre sauce.</p>
+      <p class="tn-tldr">Key Form construit des formulaires intelligents partageables par URL. 17 types de champs, logique conditionnelle, notification e-mail souveraine, RGPD natif. Parité Typeform Pro à votre sauce.</p>
       <h4 class="tn-h">Comment ça marche</h4>
       <ol class="tn-steps">
         <li>Structure : ajoutez vos sections et vos champs (17 types, du texte simple à la signature manuscrite)</li>
@@ -1229,7 +1226,7 @@ a.free-card:focus-visible{outline:2px solid var(--accent-2);outline-offset:3px}
       </ol>
       <h4 class="tn-h">Questions fréquentes</h4>
       <div class="tn-faq">
-        <details><summary>Combien de temps les réponses sont-elles conservées ?</summary><div class="tn-a">Selon la TTL que vous avez choisie (30, 90, 180 ou 365 jours). Après expiration, suppression automatique côté serveur — conformité RGPD Art. 5 native. Le mail Resend reste dans la boîte du destinataire indéfiniment.</div></details>
+        <details><summary>Combien de temps les réponses sont-elles conservées ?</summary><div class="tn-a">Selon la TTL que vous avez choisie (30, 90, 180 ou 365 jours). Après expiration, suppression automatique côté serveur — conformité RGPD Art. 5 native. Le mail de notification reste dans la boîte du destinataire indéfiniment.</div></details>
         <details><summary>Mes répondants doivent-ils créer un compte ?</summary><div class="tn-a">Non, le formulaire est ouvert et anonyme par défaut. Vous pouvez activer un code d'accès optionnel dans l'étape Apparence pour les questionnaires confidentiels.</div></details>
         <details><summary>Comment partager le formulaire avec mes répondants ?</summary><div class="tn-a">Une fois publié, copiez l'URL keystone.app/f/{votre-slug} et envoyez-la par mail, SMS, Slack ou QR code. Aucune installation nécessaire pour le répondant.</div></details>
         <details><summary>Puis-je dupliquer un formulaire existant ?</summary><div class="tn-a">Oui : dans la bibliothèque, bouton 'Dupliquer'. Idéal pour réutiliser une structure (par exemple Biennale 2026 → Biennale 2027) en ne changeant que les destinataires et quelques champs.</div></details>
@@ -1367,95 +1364,6 @@ a.free-card:focus-visible{outline:2px solid var(--accent-2);outline-offset:3px}
         <details><summary>Missive est-elle compatible RGPD ? Que noter dans mon registre des traitements ?</summary><div class="tn-a">Oui — et plutôt deux fois qu'une : la minimisation et la limitation de conservation que le RGPD recommande sont ici garanties par construction (contenu chiffré illisible par l'éditeur, autodestruction, traces techniques purgées sous 24 h). Si vous tenez un registre des traitements, vous pouvez y recopier ceci : « Transmission ponctuelle d'informations sensibles via messagerie éphémère chiffrée de bout en bout (Missive, Keystone OS). Contenu illisible par l'éditeur ; autodestruction après lecture unique, expiration ou épuisement des essais ; métadonnées techniques purgées sous 24 heures. Ce canal n'est pas utilisé pour des données soumises à une obligation légale de conservation. » Une donnée déjà autodétruite ne peut plus être fournie lors d'une demande d'accès : c'est conforme, du moment que c'est documenté et que le canal n'est pas utilisé pour ce qui doit être conservé.</div></details>
         <details><summary>« Lu une fois » : et si quelqu'un filme l'écran ?</summary><div class="tn-a">On garantit qu'on ne peut plus accéder au message par ce lien après lecture — pas qu'il n'a pas été capturé pendant qu'il s'affichait. Missive protège contre l'interception du lien, pas contre un destinataire qui photographie son propre écran. C'est de l'éphémère sécurisé, pas de l'anti-capture.</div></details>
         <details><summary>Missive consomme-t-elle des conversations ?</summary><div class="tn-a">Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro conversation consommée, jamais.</div></details>
-      </div>
-    </article>
-    <article class="tn" id="tn-O-BRD-001">
-      <h3 class="tn-title">Key Brand</h3>
-      <p class="tn-tldr">Key Brand transforme votre charte graphique en mini-site interactif : logo téléchargeable au bon format, couleurs copiables avec tests de contraste, typographies à l'essai, règles d'usage générées avec votre logo. Une charte par marque, partageable d'un lien — toujours à jour, sans PDF.</p>
-      <h4 class="tn-h">Comment ça marche</h4>
-      <ol class="tn-steps">
-        <li>Créer une charte : bouton « Nouvelle charte », donnez-lui le nom de la marque — la vôtre ou celle d'un client (jusqu'à 30 chartes par compte).</li>
-        <li>Cinq onglets composent la charte : Logo, Couleurs, Typographies, Règles et Branding. Remplissez seulement ce que vous avez — la charte publiée ne montre jamais de section vide.</li>
-        <li>Tout s'enregistre automatiquement pendant que vous travaillez (mention « Enregistré » en haut à droite).</li>
-        <li>Dupliquez une charte existante pour démarrer la suivante plus vite (pratique pour les graphistes multi-clients).</li>
-        <li>Aucune intelligence artificielle : Key Brand ne consomme jamais de conversations, tout est inclus.</li>
-        <li>À venir au fil des mises à jour : dépôt du logo avec aperçus et téléchargements à la carte, atelier couleurs et contrastes, testeur de typographies, interdits auto-générés, et la page publique à partager d'un lien ou d'un QR.</li>
-      </ol>
-      <h4 class="tn-h">Questions fréquentes</h4>
-      <div class="tn-faq">
-        <details><summary>À qui s'adresse Key Brand ?</summary><div class="tn-a">Aux entreprises qui veulent une charte simple et pratique (un logo, des couleurs, une police suffisent), comme aux graphistes et agences qui livrent des chartes complètes à leurs clients. La même charte s'adapte : elle ne montre que ce que vous y mettez.</div></details>
-        <details><summary>Est-ce que ça remplace mon PDF de charte graphique ?</summary><div class="tn-a">C'est le but. Le PDF vieillit dès qu'il est envoyé ; votre charte Key Brand reste à jour en permanence, et ceux qui la consultent copient les codes couleur et téléchargent le logo directement, sans vous redemander les fichiers. Un export PDF restera disponible pour ceux qui en exigent un.</div></details>
-        <details><summary>Combien de chartes puis-je créer ?</summary><div class="tn-a">Jusqu'à 30 par compte, quelle que soit votre formule. De quoi couvrir votre marque et celles de vos clients.</div></details>
-        <details><summary>Key Brand consomme-t-il mes conversations ?</summary><div class="tn-a">Non, jamais. Key Brand n'utilise aucune intelligence artificielle : les aperçus, les tests de contraste et les téléchargements sont calculés directement dans votre navigateur.</div></details>
-        <details><summary>Qui peut voir mes chartes ?</summary><div class="tn-a">Vous seul, tant que vous ne publiez pas. La page publique à partager (lien discret non référencé, ou protégé par un code) arrive dans une prochaine mise à jour.</div></details>
-      </div>
-    </article>
-    <article class="tn" id="tn-O-NET-001">
-      <h3 class="tn-title">networK</h3>
-      <p class="tn-tldr">Votre réseau relationnel vivant — pas un carnet d'adresses de plus. Vous êtes au centre, et vos relations se déploient en carte mentale : des catégories libres (Clients, Fournisseurs, Partenaires…) d'où partent vos contacts. Un clic sur une catégorie la déplie ; un clic sur un contact ouvre sa fiche, où vous retrouvez ses coordonnées, ses rôles, ses tags, vos notes, et un journal d'activité qui raconte votre relation. Et depuis chaque fiche, vous continuez votre travail sans ressaisir : « Continuer avec… » ouvre une Missive, un Brief ou votre Smart Agent, déjà mis en contexte. Tout est à vous, rien n'est publié.</p>
-      <h4 class="tn-h">Comment ça marche</h4>
-      <ol class="tn-steps">
-        <li>Ajouter : le bouton « + Ajouter » crée une personne, une entreprise, un établissement, un groupe ou une nouvelle catégorie. Le « + » sur une catégorie ajoute directement un contact à l'intérieur.</li>
-        <li>Naviguer : cliquez une catégorie pour voir ses contacts. Sur ordinateur ils se déploient à droite ; sur mobile, le réseau glisse vers eux — touchez la catégorie à nouveau pour revenir. Glissez le fond pour vous déplacer, la molette (ou les boutons +/−) pour zoomer.</li>
-        <li>La fiche d'un contact : cliquez un contact pour ouvrir sa fiche. Boutons d'appel, e-mail et message en un tap ; onglets Résumé, Activité et Notes ; rôles et tags que vous ajoutez ou retirez ; et le « … » (ou la roue crantée) pour modifier ou supprimer le contact.</li>
-        <li>Le journal d'activité : dans l'onglet Activité, « Ajouter une activité » note un appel, un e-mail, un RDV, un devis… avec sa date. Les cinq plus récentes s'affichent dans le Résumé — la relation se raconte au fil du temps.</li>
-        <li>Continuer avec… : en bas de chaque fiche, les raccourcis ouvrent l'outil adapté (Missive, Brief, Smart Agent, Social) avec le contact déjà en contexte. Un outil que vous n'avez pas encore apparaît en suggestion « Découvrir », jamais imposé.</li>
-        <li>Ranger : le « … » d'une catégorie permet de la renommer, changer son icône, la monter/descendre ou la supprimer. Supprimer une catégorie ne supprime pas ses contacts : ils rejoignent « Sans catégorie ».</li>
-      </ol>
-      <h4 class="tn-h">Questions fréquentes</h4>
-      <div class="tn-faq">
-        <details><summary>Est-ce un CRM ? Mes contacts sont-ils privés ?</summary><div class="tn-a">networK n'est pas un CRM classique : pas de tunnel de vente ni de saisie obligatoire, juste votre réseau tel que vous le voyez. Vos contacts, notes et activités sont rangés dans votre espace Keystone, rattachés à votre compte — jamais publics ni partagés.</div></details>
-        <details><summary>Consomme-t-il des conversations ?</summary><div class="tn-a">Non. networK est 100 % manuel et sans intelligence artificielle : aucune action ne puise dans votre compteur de conversations. Vous ajoutez et organisez vos relations vous-même.</div></details>
-        <details><summary>Que veut dire « Continuer avec… » et « pré-rempli » ?</summary><div class="tn-a">Depuis une fiche, ces raccourcis ouvrent un autre outil Keystone en lui passant déjà les infos du contact. Par exemple « Publier pour ce client » ouvre Social Manager avec le message déjà amorcé à son nom — vous n'avez rien à ressaisir. Les outils que vous ne possédez pas s'affichent en suggestion, sans jamais bloquer.</div></details>
-        <details><summary>J'ai supprimé une catégorie : où sont passés ses contacts ?</summary><div class="tn-a">Ils ne sont jamais supprimés avec la catégorie. Ils réapparaissent dans un panier « Sans catégorie » à la racine de votre réseau, d'où vous pouvez les rouvrir et les reclasser.</div></details>
-        <details><summary>Pourquoi certains contacts sont-ils cachés derrière « Voir les N autres » ?</summary><div class="tn-a">Pour garder l'arbre lisible, une catégorie affiche ses premiers contacts puis un bouton « Voir les N autres » qui déplie le reste. La recherche en haut, elle, retrouve n'importe quel contact instantanément, même hors de sa catégorie.</div></details>
-      </div>
-    </article>
-    <article class="tn" id="tn-O-BOK-001">
-      <h3 class="tn-title">booK</h3>
-      <p class="tn-tldr">booK transforme un PDF ou des images en flipbook que l'on feuillette comme un vrai livre — et votre publication tient dans UN SEUL fichier autonome. Ce fichier s'ouvre d'un double-clic, partout, pour toujours : sans serveur, sans abonnement, sans watermark, sans même dépendre de Keystone. Envoyez-le par e-mail, posez-le derrière un QR, archivez-le sur une clé USB — il vous appartient. Et il reste rééditable : ré-importez-le dans booK, il redevient modifiable, même des années plus tard. Votre bibliothèque garde tous vos flipbooks sous la main.</p>
-      <h4 class="tn-h">Comment ça marche</h4>
-      <ol class="tn-steps">
-        <li>Créer : le « + » en haut ouvre un nouveau flipbook. Déposez un PDF (chaque page devient une page du livre) ou des images — tout est recompressé automatiquement pour que le fichier reste léger.</li>
-        <li>Organiser les pages : la première vignette est la couverture. Les flèches déplacent une page, la croix la retire. L'aperçu à droite montre EXACTEMENT le fichier qui sera livré.</li>
-        <li>Habiller : titre, sous-titre, auteur, teinte d'accent, fond de lecture sombre ou clair, et double page sur grand écran (comme un magazine ouvert).</li>
-        <li>Publier : « Enregistrer » range le flipbook dans votre bibliothèque ; « Télécharger le fichier autonome » produit le .html souverain. Le poids estimé s'affiche — au-delà de 20 Mo, pensez à alléger.</li>
-        <li>Feuilleter : clic ou flèches du clavier pour tourner les pages (effet page tournée sur ordinateur, glissement du doigt sur mobile), sommaire en vignettes, plein écran. Le fichier s'imprime aussi proprement, page par page.</li>
-        <li>Ré-importer : le bouton nuage en haut ouvre un fichier booK existant et le remet dans votre bibliothèque, prêt à être modifié — le fichier EST sa propre sauvegarde.</li>
-      </ol>
-      <h4 class="tn-h">Questions fréquentes</h4>
-      <div class="tn-faq">
-        <details><summary>En quoi est-ce différent des sites de flipbooks (FlipHTML5, Calaméo…) ?</summary><div class="tn-a">Chez eux, votre document vit sur LEURS serveurs : watermark, abonnement, et le lien meurt si vous résiliez. Avec booK, votre publication est un fichier qui vous appartient : il s'ouvre sans connexion, sans compte, et fonctionnera encore dans des années — même si Keystone disparaissait.</div></details>
-        <details><summary>Où le fichier peut-il être ouvert ?</summary><div class="tn-a">Partout où il y a un navigateur : double-clic depuis un ordinateur, pièce jointe d'e-mail, clé USB, espace de téléchargement de votre site… Il ne fait AUCUN appel à Internet. Et sans JavaScript (impression, très vieux navigateurs), les pages s'affichent quand même, simplement empilées.</div></details>
-        <details><summary>Mon flipbook créé sur ordinateur n'apparaît pas sur mon téléphone — c'est normal ?</summary><div class="tn-a">Oui : la bibliothèque est rangée dans le navigateur de CHAQUE appareil, elle ne transite par aucun serveur (c'est le principe souverain de booK). Pour passer un flipbook d'un appareil à l'autre : téléchargez le fichier autonome, envoyez-le-vous (AirDrop, e-mail…), puis ré-importez-le avec le bouton nuage — il arrive complet et modifiable. Le fichier EST la sauvegarde.</div></details>
-        <details><summary>L'import d'un gros PDF échoue sur mon téléphone, que faire ?</summary><div class="tn-a">La fabrication des pages demande de la mémoire, et les téléphones en ont peu : pour un PDF lourd (plusieurs dizaines de pages ou scans haute résolution), créez le flipbook sur ordinateur, puis transférez le fichier autonome sur le téléphone. Sur mobile, booK réduit automatiquement la finesse des pages pour limiter la casse.</div></details>
-        <details><summary>Mon fichier est lourd, que faire ?</summary><div class="tn-a">Le poids vient du nombre de pages et de la finesse des visuels (chaque page est déjà recompressée à l'import). Retirez les pages non essentielles, ou repartez d'un PDF exporté en qualité écran plutôt qu'imprimerie. En dessous de 15–20 Mo, tout va bien.</div></details>
-        <details><summary>Consomme-t-il des conversations ? Mes documents sont-ils envoyés quelque part ?</summary><div class="tn-a">Non et non. booK est 100 % sans IA et tout se fabrique dans votre navigateur : vos PDF et images ne quittent jamais votre appareil. Zéro conversation consommée, zéro donnée transmise.</div></details>
-        <details><summary>Puis-je le partager par un lien ou un QR ?</summary><div class="tn-a">Aujourd'hui, vous partagez le fichier lui-même (e-mail, transfert, votre site). Le lien public hébergé et le QR avec statistiques de lecture arrivent dans une prochaine version.</div></details>
-      </div>
-    </article>
-    <article class="tn" id="tn-O-DSK-001">
-      <h3 class="tn-title">desK</h3>
-      <p class="tn-tldr">desK est le chemin de fer vivant de votre revue : chaque page du numéro devient une carte dans une grille de planches partagée par toute l'équipe — le chemin de fer papier au mur, avec un curseur de taille à la InDesign. Chaque article affiche sa marge réelle avant le bouclage — tant qu'elle tient, rien ne s'allume ; quand elle se consume, la carte passe à l'ambre puis au rouge, et l'inspecteur vous tend la décision : relancer, ou basculer sur un remplaçant préparé au banc. Le marbre garde votre stock d'articles d'un numéro à l'autre : au bouclage, les publiés sont marqués, les non-utilisés y retournent avec la mention du report. La maquette reste dans InDesign : desK est le cockpit autour. Vos contributeurs, eux, ne changent rien à leurs habitudes — ils restent dans l'e-mail.</p>
-      <h4 class="tn-h">Comment ça marche</h4>
-      <ol class="tn-steps">
-        <li>Démarrer : créez votre publication (la revue et son équipe), puis un numéro — indiquez le nombre de pages et les quatre jalons (bouclage, fin de maquette, envoi imprimeur, parution). Le chemin de fer se génère, couverture et 4ᵉ de couv posées d'office.</li>
-        <li>Lire la grille : les planches (doubles-pages soudées) reviennent à la ligne et défilent verticalement, le rail des jalons reste en haut — c'est la ligne de vie du numéro. Le curseur règle la taille des cartes : tout à gauche, le numéro entier d'un coup d'œil ; tout à droite, les cartes complètes.</li>
-        <li>La carte-page : rubrique, titre, contributeur, statut et marge. Une page peut porter PLUSIEURS articles (brèves, papier + encadré) : badge « n » sur la carte, et la marge affichée est la plus serrée de ses articles. Cliquez pour ouvrir l'inspecteur : chaque emplacement a son banc de remplaçants, son historique, ses actions.</li>
-        <li>Les gestes : glissez une carte SUR une autre pour échanger ; glissez-la ENTRE deux planches pour l'insérer — tout le contenu coule, sauf les pages figées qui restent ancrées (une pub vendue « page 30 » reste page 30). Maj+clic sélectionne une plage de pages, Cmd/Ctrl+clic ajoute : la barre du bas applique rubrique, contributeur, un dossier étalé sur plusieurs pages ou le figeage, en un geste.</li>
-        <li>Le marbre : la vue de votre stock d'articles, transversale aux numéros — filtrez par rubrique, fraîcheur ou statut, réservez un article sur une page en un clic. Chaque article a sa fraîcheur : intemporel, ou daté avec péremption — le marbre signale ce qui doit être publié maintenant ou jamais. Au passage du numéro en « imprimé », le rituel de bouclage marque les publiés et reverse les remplaçants non utilisés au marbre : un report est un événement banal, pas une anomalie.</li>
-        <li>Les couleurs ne crient jamais pour rien : le rouge est réservé à la marge brûlée. Un simple retard n'allume rien tant que la marge tient — quand ça s'allume, c'est qu'une décision est requise. Le simulateur de report montre l'impact d'un retard EN DIRECT, sans rien écrire tant que vous n'appliquez pas.</li>
-      </ol>
-      <h4 class="tn-h">Questions fréquentes</h4>
-      <div class="tn-faq">
-        <details><summary>Comment la marge est-elle calculée ?</summary><div class="tn-a">Simplement, pour que tout le monde puisse la comprendre : la copie sera prête au plus tôt à sa date de remise (ou aujourd'hui si elle est dépassée), puis il faut la relire et la maquetter. La marge est ce qui reste avant le jalon concerné. Un article déjà remis ne dépend plus du bouclage — seulement de la fin de maquette. Quand une page porte plusieurs articles, sa carte affiche la marge la plus serrée.</div></details>
-        <details><summary>Que devient un article remplacé ou non utilisé au bouclage ?</summary><div class="tn-a">Il retourne au marbre avec la mention de son report — rien n'est perdu. À l'ouverture du numéro suivant, desK vous signale les articles reportés qui attendent. Un article « daté » avec une date de péremption est signalé quand il doit être publié maintenant ou jamais : fini le stock faussement rassurant plein de papiers morts.</div></details>
-        <details><summary>Comment monter un dossier de 10 pages sans le faire page par page ?</summary><div class="tn-a">Sélectionnez les pages d'un trait (clic sur la première, Maj+clic sur la dernière), puis « Étaler un article » dans la barre du bas : l'article devient titulaire de toutes les pages, marquées « suite » à partir de la deuxième. La même barre applique une rubrique, un contributeur ou fige des pages, en un seul geste.</div></details>
-        <details><summary>Pourquoi certaines pages ne bougent-elles pas quand je repagine ?</summary><div class="tn-a">Ce sont les pages figées (couverture, 4ᵉ de couv, publicités vendues, sommaire) : elles restent ancrées à leur numéro de page et le contenu coule autour d'elles — une pub vendue « page 30 » reste page 30. Pour les déplacer quand même, cochez « déplacer aussi les figées » dans la barre de sélection.</div></details>
-        <details><summary>desK remplace-t-il InDesign ou la relecture ?</summary><div class="tn-a">Non, et c'est voulu. La maquette reste dans InDesign ; la relecture de la copie se fait avec Ghost Writer. desK pilote ce qui manque : qui doit livrer quoi, quand, avec quelle marge — et quoi faire quand ça dérape.</div></details>
-        <details><summary>Mes contributeurs doivent-ils utiliser l'application ?</summary><div class="tn-a">Jamais. Ils continuent d'envoyer leurs textes par e-mail comme ils l'ont toujours fait. Vous pointez « copie reçue » en un clic. L'adresse de dépôt qui range toute seule les contributions arrive dans une prochaine version.</div></details>
-        <details><summary>Peut-on gérer plusieurs revues ?</summary><div class="tn-a">Oui, dès le premier jour : chaque publication a son équipe, ses rubriques, ses numéros. Le sélecteur en haut passe de l'une à l'autre.</div></details>
-        <details><summary>Consomme-t-il des conversations ?</summary><div class="tn-a">Non. Le cœur de desK — grille, marges, marbre, pointage, bascule, équipe — fonctionne sans aucune intelligence artificielle, à volonté.</div></details>
       </div>
     </article>
     <script type="application/ld+json">
@@ -1614,7 +1522,7 @@ a.free-card:focus-visible{outline:2px solid var(--accent-2);outline-offset:3px}
       "name": "Combien de temps les réponses sont-elles conservées ?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Selon la TTL que vous avez choisie (30, 90, 180 ou 365 jours). Après expiration, suppression automatique côté serveur — conformité RGPD Art. 5 native. Le mail Resend reste dans la boîte du destinataire indéfiniment."
+        "text": "Selon la TTL que vous avez choisie (30, 90, 180 ou 365 jours). Après expiration, suppression automatique côté serveur — conformité RGPD Art. 5 native. Le mail de notification reste dans la boîte du destinataire indéfiniment."
       }
     },
     {
@@ -1952,206 +1860,6 @@ a.free-card:focus-visible{outline:2px solid var(--accent-2);outline-offset:3px}
         "@type": "Answer",
         "text": "Non. Missive n'utilise aucune intelligence artificielle — uniquement du chiffrement. Zéro conversation consommée, jamais."
       }
-    },
-    {
-      "@type": "Question",
-      "name": "À qui s'adresse Key Brand ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Aux entreprises qui veulent une charte simple et pratique (un logo, des couleurs, une police suffisent), comme aux graphistes et agences qui livrent des chartes complètes à leurs clients. La même charte s'adapte : elle ne montre que ce que vous y mettez."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Est-ce que ça remplace mon PDF de charte graphique ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "C'est le but. Le PDF vieillit dès qu'il est envoyé ; votre charte Key Brand reste à jour en permanence, et ceux qui la consultent copient les codes couleur et téléchargent le logo directement, sans vous redemander les fichiers. Un export PDF restera disponible pour ceux qui en exigent un."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Combien de chartes puis-je créer ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Jusqu'à 30 par compte, quelle que soit votre formule. De quoi couvrir votre marque et celles de vos clients."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Key Brand consomme-t-il mes conversations ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Non, jamais. Key Brand n'utilise aucune intelligence artificielle : les aperçus, les tests de contraste et les téléchargements sont calculés directement dans votre navigateur."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Qui peut voir mes chartes ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Vous seul, tant que vous ne publiez pas. La page publique à partager (lien discret non référencé, ou protégé par un code) arrive dans une prochaine mise à jour."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Est-ce un CRM ? Mes contacts sont-ils privés ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "networK n'est pas un CRM classique : pas de tunnel de vente ni de saisie obligatoire, juste votre réseau tel que vous le voyez. Vos contacts, notes et activités sont rangés dans votre espace Keystone, rattachés à votre compte — jamais publics ni partagés."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Consomme-t-il des conversations ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Non. networK est 100 % manuel et sans intelligence artificielle : aucune action ne puise dans votre compteur de conversations. Vous ajoutez et organisez vos relations vous-même."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Que veut dire « Continuer avec… » et « pré-rempli » ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Depuis une fiche, ces raccourcis ouvrent un autre outil Keystone en lui passant déjà les infos du contact. Par exemple « Publier pour ce client » ouvre Social Manager avec le message déjà amorcé à son nom — vous n'avez rien à ressaisir. Les outils que vous ne possédez pas s'affichent en suggestion, sans jamais bloquer."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "J'ai supprimé une catégorie : où sont passés ses contacts ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Ils ne sont jamais supprimés avec la catégorie. Ils réapparaissent dans un panier « Sans catégorie » à la racine de votre réseau, d'où vous pouvez les rouvrir et les reclasser."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Pourquoi certains contacts sont-ils cachés derrière « Voir les N autres » ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Pour garder l'arbre lisible, une catégorie affiche ses premiers contacts puis un bouton « Voir les N autres » qui déplie le reste. La recherche en haut, elle, retrouve n'importe quel contact instantanément, même hors de sa catégorie."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "En quoi est-ce différent des sites de flipbooks (FlipHTML5, Calaméo…) ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Chez eux, votre document vit sur LEURS serveurs : watermark, abonnement, et le lien meurt si vous résiliez. Avec booK, votre publication est un fichier qui vous appartient : il s'ouvre sans connexion, sans compte, et fonctionnera encore dans des années — même si Keystone disparaissait."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Où le fichier peut-il être ouvert ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Partout où il y a un navigateur : double-clic depuis un ordinateur, pièce jointe d'e-mail, clé USB, espace de téléchargement de votre site… Il ne fait AUCUN appel à Internet. Et sans JavaScript (impression, très vieux navigateurs), les pages s'affichent quand même, simplement empilées."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Mon flipbook créé sur ordinateur n'apparaît pas sur mon téléphone — c'est normal ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Oui : la bibliothèque est rangée dans le navigateur de CHAQUE appareil, elle ne transite par aucun serveur (c'est le principe souverain de booK). Pour passer un flipbook d'un appareil à l'autre : téléchargez le fichier autonome, envoyez-le-vous (AirDrop, e-mail…), puis ré-importez-le avec le bouton nuage — il arrive complet et modifiable. Le fichier EST la sauvegarde."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "L'import d'un gros PDF échoue sur mon téléphone, que faire ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "La fabrication des pages demande de la mémoire, et les téléphones en ont peu : pour un PDF lourd (plusieurs dizaines de pages ou scans haute résolution), créez le flipbook sur ordinateur, puis transférez le fichier autonome sur le téléphone. Sur mobile, booK réduit automatiquement la finesse des pages pour limiter la casse."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Mon fichier est lourd, que faire ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Le poids vient du nombre de pages et de la finesse des visuels (chaque page est déjà recompressée à l'import). Retirez les pages non essentielles, ou repartez d'un PDF exporté en qualité écran plutôt qu'imprimerie. En dessous de 15–20 Mo, tout va bien."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Consomme-t-il des conversations ? Mes documents sont-ils envoyés quelque part ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Non et non. booK est 100 % sans IA et tout se fabrique dans votre navigateur : vos PDF et images ne quittent jamais votre appareil. Zéro conversation consommée, zéro donnée transmise."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Puis-je le partager par un lien ou un QR ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Aujourd'hui, vous partagez le fichier lui-même (e-mail, transfert, votre site). Le lien public hébergé et le QR avec statistiques de lecture arrivent dans une prochaine version."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Comment la marge est-elle calculée ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Simplement, pour que tout le monde puisse la comprendre : la copie sera prête au plus tôt à sa date de remise (ou aujourd'hui si elle est dépassée), puis il faut la relire et la maquetter. La marge est ce qui reste avant le jalon concerné. Un article déjà remis ne dépend plus du bouclage — seulement de la fin de maquette. Quand une page porte plusieurs articles, sa carte affiche la marge la plus serrée."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Que devient un article remplacé ou non utilisé au bouclage ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Il retourne au marbre avec la mention de son report — rien n'est perdu. À l'ouverture du numéro suivant, desK vous signale les articles reportés qui attendent. Un article « daté » avec une date de péremption est signalé quand il doit être publié maintenant ou jamais : fini le stock faussement rassurant plein de papiers morts."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Comment monter un dossier de 10 pages sans le faire page par page ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Sélectionnez les pages d'un trait (clic sur la première, Maj+clic sur la dernière), puis « Étaler un article » dans la barre du bas : l'article devient titulaire de toutes les pages, marquées « suite » à partir de la deuxième. La même barre applique une rubrique, un contributeur ou fige des pages, en un seul geste."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Pourquoi certaines pages ne bougent-elles pas quand je repagine ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Ce sont les pages figées (couverture, 4ᵉ de couv, publicités vendues, sommaire) : elles restent ancrées à leur numéro de page et le contenu coule autour d'elles — une pub vendue « page 30 » reste page 30. Pour les déplacer quand même, cochez « déplacer aussi les figées » dans la barre de sélection."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "desK remplace-t-il InDesign ou la relecture ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Non, et c'est voulu. La maquette reste dans InDesign ; la relecture de la copie se fait avec Ghost Writer. desK pilote ce qui manque : qui doit livrer quoi, quand, avec quelle marge — et quoi faire quand ça dérape."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Mes contributeurs doivent-ils utiliser l'application ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Jamais. Ils continuent d'envoyer leurs textes par e-mail comme ils l'ont toujours fait. Vous pointez « copie reçue » en un clic. L'adresse de dépôt qui range toute seule les contributions arrive dans une prochaine version."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Peut-on gérer plusieurs revues ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Oui, dès le premier jour : chaque publication a son équipe, ses rubriques, ses numéros. Le sélecteur en haut passe de l'une à l'autre."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Consomme-t-il des conversations ?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Non. Le cœur de desK — grille, marges, marbre, pointage, bascule, équipe — fonctionne sans aucune intelligence artificielle, à volonté."
-      }
     }
   ]
 }
@@ -2353,7 +2061,7 @@ a.free-card:focus-visible{outline:2px solid var(--accent-2);outline-offset:3px}
 <footer class="foot foot-v2">
   <div class="fo2-top">
     <div class="fo2-brand">
-      <div class="foot-brand"><img src="keystone-puce.svg" alt="" class="foot-puce">Keystone</div>
+      <div class="foot-brand"><img src="/keystone-puce.svg" alt="" class="foot-puce">Keystone</div>
       <p class="fo2-tagline">Vos outils métier, réunis sur une seule plateforme. Conçu et hébergé en Europe.</p>
     </div>
     <nav class="fo2-cols" aria-label="Pied de page">

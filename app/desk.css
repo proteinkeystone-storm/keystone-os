@@ -493,8 +493,8 @@ html.light-mode .dk-pcard.rubbed .dk-pc-marge, html.light-mode .dk-pcard.rubbed.
   /* ⚠ GARÉ HORS ÉCRAN NE SUFFIT PAS (défaut trouvé le 06/08/2026).
      `translateX(102%)` se compte sur la LARGEUR DU PANNEAU, pas sur l'écran :
      il ne sort du cadre que tant que le bord droit du panneau touche le bord
-     droit de l'écran. Or la fenêtre Kora pousse tous les enfants de .ws-app
-     d'un `margin-right` (kora.css) — l'inspecteur FERMÉ revenait donc DANS
+     droit de l'écran. Or un panneau latéral (l'ex-fenêtre Kora, retirée le
+     16/09/2026) poussait les enfants de .ws-app d'un `margin-right` — l'inspecteur FERMÉ revenait donc DANS
      l'écran, son fond opaque par-dessus toute la droite de l'entête :
      sélecteur de publication, réglages, aide, noter et galet invisibles et
      inatteignables (« les boutons ont disparu », Stéphane, iPad).
@@ -520,15 +520,14 @@ html.light-mode .dk-pcard.rubbed .dk-pc-marge, html.light-mode .dk-pcard.rubbed.
 
    Deux choix qui évitent une bagarre :
    · on pousse par un `padding-right` sur le CONTENU, pas par une marge sur
-     .ws-body — la fenêtre Kora pousse déjà `.ws-app > *` d'un `margin-right`
-     (kora.css) : deux propriétés différentes s'ADDITIONNENT, la même se
-     disputerait à coups de spécificité ;
+     .ws-body — un panneau latéral qui pousserait `.ws-app > *` d'un `margin-right`
+     s'ADDITIONNERAIT proprement ; la même propriété se disputerait à coups
+     de spécificité ;
    · `:has()` plutôt qu'une classe posée par le JS : l'inspecteur est dressé
      depuis une douzaine d'endroits (fiche, marbre, formulaire, bannette,
      réglages…). Une liste blanche de déclencheurs a déjà coûté trois
-     régressions côté galet Kora — on lit l'état, on ne le recopie pas.
-   La topbar, elle, reste PLEINE LARGEUR : même convention que Kora dans tout
-   l'OS, et le galet doit rester au bord droit de l'écran. */
+     régressions — on lit l'état, on ne le recopie pas.
+   La topbar, elle, reste PLEINE LARGEUR : même convention dans tout l'OS. */
 @media (min-width: 821px) {
   .dk-main { transition: padding-right .28s cubic-bezier(.22, 1, .36, 1); }
   .dk-app:has(> .dk-insp.on) .dk-main { padding-right: var(--dk-insp-w); }
@@ -826,7 +825,7 @@ html.light-mode .dk-mailbadge { box-shadow: 0 0 0 2px #fff; }
 /* ── Smartphone : l'entête doit tenir ENTIÈRE ───────────────────
    desK est le seul pad qui ajoute un sélecteur de publication dans la
    topbar. À 390 px, cinq blocs se disputaient la ligne (retour + picto +
-   nom + publication + galet Kora + burger) : le nom tombait à « d.. »
+   nom + publication + burger) : le nom tombait à « d.. »
    et le sélecteur restait large. On rend au nom sa place en retirant le
    pictogramme (le nom identifie mieux que l'icône) et on laisse le
    sélecteur maigrir jusqu'à son ellipse. */

@@ -39,7 +39,7 @@ eq(appForPath('/api/smartqr/stats'), 'A-COM-001', 'Smart QR (2e préfixe)');
 eq(appForPath('/api/desk/casier'), 'O-DSK-001', 'desK');
 // Les routes TRANSVERSES ne sont rattachées à aucune app : rien à vérifier.
 for (const p of ['/api/licence/me', '/api/vault/sync', '/api/ai-credits/quota',
-                 '/api/kora/chat', '/api/livinglayer/board', '/api/stripe/checkout',
+                 '/api/livinglayer/board', '/api/stripe/checkout',
                  '/api/admin/licences', '/api/proxy/llm', '/api/track']) {
   eq(appForPath(p), null, `transverse : ${p}`);
 }

@@ -20,13 +20,6 @@ export const PREFS_KEYS = [
     // préférence de COMPTE, comme le moteur actif — couper sa clé sur le
     // Mac doit aussi la couper sur l'iPhone.
     'ks_byok_enabled',
-    // Fix 19/07 — activation de Kora (dogfood) : posée à la console, la clé
-    // mourait à chaque purge de données de site (galet disparu, aucun moyen
-    // de la reposer sur mobile). Synchronisée, elle suit le COMPTE : activer
-    // sur un appareil (?kora=1) l'active partout au prochain boot hydraté,
-    // et elle survit aux purges après re-login. main.js écoute
-    // ks-vault-hydrated pour charger Kora dès le retour du flag.
-    'ks_kora_enabled',
     // ks_user_photo RÉ-INCLUS (2026-06-21) : l'avatar est désormais redimensionné
     // en vignette ~256 px à l'upload (et les anciennes photos >1 Mo sont migrées
     // au boot, cf. _migrateAvatarStorage dans ui-renderer.js) → ~10-25 Ko, bien

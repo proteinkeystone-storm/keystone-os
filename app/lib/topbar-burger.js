@@ -34,11 +34,11 @@ export function bindBurger(rootEl) {
 
   /* `ws-menu-open` sur le BODY : le menu d'un outil est enfermé dans le plan
      d'empilement de `.ws-app` (z-index 9999) et ne peut donc jamais passer
-     au-dessus d'un panneau posé sur la page — la fenêtre Kora naissait par
+     au-dessus d'un panneau posé sur la page — un panneau flottant naissait par
      -dessus lui et ses boutons paraissaient avoir disparu (retour Stéphane,
-     iPad, 06/08/2026). Le marqueur est sur le body pour que kora.css puisse
-     faire de la place au menu (l'écarter sur grand écran, s'effacer sur
-     téléphone où sa feuille occupe tout). */
+     iPad, 06/08/2026). Le marqueur est sur le body pour que tout panneau
+     puisse faire de la place au menu (l'écarter sur grand écran, s'effacer
+     sur téléphone où sa feuille occupe tout). */
   const close = () => {
     actions.classList.remove('is-open');
     document.body.classList.remove('ws-menu-open');

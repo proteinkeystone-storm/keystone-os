@@ -1,26 +1,24 @@
 /* ═══════════════════════════════════════════════════════════════
-   KORA — Catalogue d'actions V1 (lectures) + V1.1 (écritures sûres)
+   BRIDGE — Catalogue d'actions exécutables DANS L'ONGLET Keystone
    ───────────────────────────────────────────────────────────────
-   Le cœur de l'agent (KORA_BRIEF §2) : un catalogue d'actions bien
-   nommées, scopées par pad. V1 = la chaîne de contenu (Brainstorming,
-   Ghost Writer, Social Manager) + l'état de la chaîne elle-même.
-   V1.2 (18-19/07) = + Smart Dynamic QR, Sentinel, Keynapse (même
-   moule : lectures API/localStorage, écritures = préparer/ouvrir).
-   V1.3 (20/07, K-8) = + Smart Agent (jumeaux de savoir-faire, MAX
-   only) — 4 lectures, aucune écriture (pad de configuration fine,
-   pas de préparer/ouvrir qui aille plus vite qu'un clic).
+   Hérité du catalogue de Kora (abandonnée le 16/09/2026, cf.
+   HANDOFF_MCP_CLAUDE.md et MCP_TOUS_LES_OUTILS_BRIEF.md §1). Ce module
+   est l'EXÉCUTEUR du Pont : quand Claude (via le serveur MCP du Worker)
+   demande une action qui n'existe que côté navigateur (localStorage,
+   IndexedDB, ouverture d'un pad, pré-remplissage), l'onglet Keystone
+   ouvert exécute la fonction `run` correspondante et renvoie le résultat.
 
-   RÈGLES (KORA_BRIEF Annexe B) :
+   RÈGLES (inchangées) :
    · Module INERTE AU CHARGEMENT : zéro import statique de pads.
      Lectures = localStorage/sessionStorage + endpoints existants ;
      écritures = imports DYNAMIQUES dans run() des passerelles que
      les pads s'échangent déjà (openTool, openBrainstorming…).
    · Chaque action visible déclare `target` = le sélecteur de ce
-     qu'elle touche (l'anneau kora-ring se posera dessus).
-   · mode:'read' | 'write'. Les écritures V1.1 PRÉPARENT et OUVRENT,
+     qu'elle touche (l'anneau de bridge-ring.js se posera dessus).
+   · mode:'read' | 'write'. Les écritures PRÉPARENT et OUVRENT,
      rien de plus : publier/programmer/supprimer n'existent pas ici,
-     et détruire/trancher n'y entreront JAMAIS (§7).
-   · Isolation : préfixe kora_, ce module n'apprend rien aux pads.
+     et détruire/trancher n'y entreront JAMAIS.
+   · Isolation : préfixe bridge_, ce module n'apprend rien aux pads.
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
@@ -30,7 +28,7 @@
    PADS (app/desk.js pose des listeners), pas une lib de calcul (K-9). */
 import { dkRelancesDues, dkRelanceInfo, dkLateDays, dkPn, dkNeedsCopy } from './lib/desk-rules.js';
 
-const KORA_API = (typeof window !== 'undefined' && window.__KS_API_BASE__) ||
+const KS_API = (typeof window !== 'undefined' && window.__KS_API_BASE__) ||
   'https://keystone-os-api.keystone-os.workers.dev';
 
 /* ── Aides internes ── */
@@ -78,14 +76,14 @@ async function _api(path, { auth = true } = {}) {
     if (!token) throw new Error('Non connecté : ouvre Keystone et connecte-toi (ks_jwt absent).');
     headers['Authorization'] = `Bearer ${token}`;
   }
-  const res = await fetch(`${KORA_API}${path}`, { headers });
+  const res = await fetch(`${KS_API}${path}`, { headers });
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
   return res.json();
 }
 
 /* ── LE CATALOGUE ──
    { id, pad, mode, label, desc, target, params:[{name,type,required,desc}], run } */
-export const KORA_ACTIONS = [
+export const BRIDGE_ACTIONS = [
 
   /* ═══ CHAÎNE DE CONTENU (transverse) ═══ */
   {
@@ -777,7 +775,7 @@ export const KORA_ACTIONS = [
      Tenant = LA PUBLICATION (dk_members), jamais l'utilisateur — le worker
      l'impose seul, on lit avec le JWT. Le worker ne renvoie que le numéro
      PHYSIQUE des pages → le folio affiché (couverture hors-num, départ à 0
-     chez L'Épaulette) se recalcule via dkPn(n, pub), sinon Kora dirait
+     chez L'Épaulette) se recalcule via dkPn(n, pub), sinon l'assistant dirait
      « page 3 » là où la rédactrice lit « page 1 ». La copie des articles
      (a.notes, jusqu'à 60k) n'est JAMAIS renvoyée au modèle. */
   {
@@ -941,7 +939,7 @@ export const KORA_ACTIONS = [
       /* filet : l'ancien brouillon est sauvegardé avant remplacement */
       const prev = _ls('ks_social_manager_draft_v1', null);
       if (prev && (prev.text || '').trim() && args.append !== true) {
-        try { localStorage.setItem('kora_sm_prev_draft', JSON.stringify(prev)); } catch (e) { /* plein */ }
+        try { localStorage.setItem('bridge_sm_prev_draft', JSON.stringify(prev)); } catch (e) { /* plein */ }
       }
       /* openTool relaie opts.compose à O-SOC-001 (ui-renderer.js:2235) */
       openTool('O-SOC-001', { compose: { text, targets, append: args.append === true } });
@@ -1004,7 +1002,7 @@ export const KORA_ACTIONS = [
          Pause visible AVANT d'envoyer (retour 19/07 : « le champ ne se
          remplit pas » — en fait il se vide à l'instant même où il se
          remplit, le clic suivait sans délai) : on VOIT le brief posé
-         (§6 « on voit Kora travailler »), puis il part. */
+         (§6 « on voit l'action se faire »), puis il part. */
       await new Promise(r => setTimeout(r, 500));
       const send = document.getElementById('wr-send');
       send?.click();
@@ -1017,161 +1015,13 @@ export const KORA_ACTIONS = [
     },
   },
   {
-    id: 'chain.start', pad: 'chaine', mode: 'write',
-    label: 'Démarrer la chaîne de contenu',
-    desc: "Lance et PILOTE la chaîne Brainstorming→Ghost Writer→Social : Kora démarre, fait les relais ; l'utilisateur choisit l'idée puis publie. LA voie pour RÉDIGER. Répond à « rédige-moi un article/post sur… », « démarre la chaîne ».",
-    target: '#wr-chain-slot',
-    params: [
-      { name: 'network', type: 'string', required: false, desc: 'facebook, instagram, linkedin, threads ou telegram — si déjà connu' },
-      { name: 'brief', type: 'string', required: false, desc: 'le sujet, si déjà connu' },
-    ],
-    run: async (args = {}) => {
-      const nets = _validNetworks([args.network]);
-      if (args.network && !nets.length)
-        throw new Error(`Réseau inconnu : ${args.network}. Choix : facebook, instagram, linkedin, threads, telegram.`);
-      _guardGwModal();
-      if (document.querySelector('#wr-fullscreen.open'))
-        throw new Error('Une séance de brainstorming est déjà ouverte — termine-la ou ferme-la, puis redemande-moi.');
-      const { setChain } = await import('./lib/content-chain.js');
-      const { openBrainstorming } = await import('./brainstorming.js');
-      /* sans réseau : la séance post-ideas affiche son sélecteur (natif) */
-      setChain({ step: 'ideas', origin: 'kora', network: nets[0] || null });
-      const opts = { mode: 'post-ideas' };
-      if (String(args.brief || '').trim()) opts.brief = String(args.brief).trim();
-      /* auto-ancrage (fix immobilier 19/07, révisé 2 fois) : si le sujet EST
-         Keystone, la description officielle _KEYSTONE_FACTS est TOUJOURS posée
-         en source — 3e retour Stéphane (« l'article invente encore de
-         l'immobilier, malgré le Gest actif ») : le Gest seul ne suffit pas.
-         Son Kortex ne contient que des fiches d'APPS individuelles
-         (ingest-apps-to-kortex.mjs) — rien qui dise ce que Keystone EST
-         globalement, ni le « n'est PAS de l'immobilier » ; sur un angle
-         « présentation », le retrieval peut même faire no-hits → plus AUCUN
-         ancrage nulle part (ni débat, ni Ghost Writer). La source statique
-         est le plancher factuel (worker : DOSSIER SOURCE) ; le Gest s'y
-         AJOUTE quand il est résoluble (fiches réelles, DOSSIER MAISON) au
-         lieu de la remplacer. */
-      let ancree = null;
-      if (opts.brief && _isKeystoneTopic(opts.brief)) {
-        opts.source = { text: _KEYSTONE_FACTS, title: 'À propos de Keystone', ref: 'Keystone OS — description officielle du produit' };
-        ancree = 'la séance est ancrée sur la description officielle de Keystone';
-        const gestId = await _resolveKeystoneGest();
-        if (gestId) {
-          opts.inviteGest = true; opts.gestAgentId = gestId;
-          ancree += ', et le Conseiller Keystone (savoir maison réel) débat à la table';
-        }
-      }
-      openBrainstorming(opts);
-      /* ELLE FONCE (décision Stéphane 19/07) : Kora LANCE la séance — les
-         seuls gestes humains de la chaîne sont choisir l'idée et publier.
-         Brief < 60 car. : le coach intercepte UNE fois par page
-         (brainstorming.js:608, flag consommé) → le 2e clic lance ; le
-         coach s'adresse aux humains, Kora est l'autrice du brief. */
-      let lancee = false;
-      if (opts.brief) {
-        /* pause visible AVANT d'envoyer (même leçon que bs.start_session,
-           revue 19/07) : le brief se voit posé avant de partir */
-        await new Promise(r => setTimeout(r, 500));
-        const send = document.getElementById('wr-send');
-        send?.click();
-        if (document.querySelector('#wr-fullscreen .wr-brief-coach') && document.getElementById('wr-feed-empty'))
-          send?.click();
-        lancee = !!document.querySelector('#wr-fullscreen.open') && !document.getElementById('wr-feed-empty');
-        if (lancee) {
-          const { koraChainPilot } = await import('./kora-chain.js');
-          koraChainPilot({ brief: opts.brief });
-        }
-      }
-      return { fait: true, chaine: 'démarrée', reseau: nets[0] || 'à choisir dans l’outil',
-               seance: lancee ? 'lancée — le comité débat, Kora fera les relais' : 'ouverte — brief à poser puis lancer à l’écran',
-               brief: opts.brief ? _excerpt(opts.brief, 200) : null,
-               ancrage: ancree,   // null, ou « …le Conseiller Keystone… » / « …description officielle… »
-               rappel: lancee
-                 ? 'Deux gestes restent à l’utilisateur : choisir l’idée à la synthèse, puis publier.'
-                 : 'La séance se lance à l’écran.' };
-    },
-  },
-  {
-    id: 'chain.pick_idea', pad: 'chaine', mode: 'write',
-    label: 'Choisir l’idée à rédiger',
-    desc: "Quand les idées du brainstorming sont affichées (synthèse), valide CELLE que l'utilisateur désigne — numéro 1-5 ou ses mots — et le Ghost Writer prend le relais. Répond à « la 2 », « prends celle sur… », « la première ».",
-    target: '#wr-synthesis-drawer',
-    params: [{ name: 'choice', type: 'string', required: true, desc: 'numéro (1-5) ou mots de l’idée choisie par l’utilisateur' }],
-    run: async (args = {}) => {
-      const btns = [...document.querySelectorAll('#wr-synthesis-drawer .wr-idea-relay')];
-      if (!btns.length)
-        throw new Error('Aucune idée affichée pour l’instant — elles apparaissent à la synthèse de la séance.');
-      if (document.getElementById('gw-overlay'))
-        throw new Error('Le Ghost Writer est déjà ouvert — ferme-le d’abord, puis redis-moi ton choix.');
-      const raw = String(args.choice || '').trim();
-      if (!raw) throw new Error(`Dis-moi laquelle : son numéro (1-${btns.length}) ou ses mots.`);
-      let btn = null;
-      const numMatch = /^\d+$/.test(raw) ? [raw, raw] : raw.match(/\b([1-9])\b/);
-      const num = numMatch ? parseInt(numMatch[1], 10) : null;
-      if (num && num >= 1 && num <= btns.length) btn = btns[num - 1];
-      if (!btn) {
-        const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        const n = norm(raw);
-        const hits = btns.filter(b => norm(b.dataset.idea || '').includes(n));
-        if (hits.length === 1) btn = hits[0];
-        else if (hits.length > 1)
-          throw new Error(`Plusieurs idées correspondent — donne le numéro (1-${btns.length}).`);
-      }
-      if (!btn) throw new Error(`Je ne retrouve pas cette idée — donne son numéro (1-${btns.length}).`);
-      const idee = btn.dataset.idea || '';
-      /* = le clic « Rédiger » de la carte : setChain('write') +
-         openGhostwriterChained(idée) (brainstorming.js:1638/1172) */
-      btn.click();
-      /* le pilote prend (ou garde) la main : il composera puis enverra
-         au composer — prochains arrêts humains : aucun avant Publier */
-      const { koraChainPilot, koraChainPhase } = await import('./kora-chain.js');
-      if (!koraChainPhase()) koraChainPilot({ phase: 'idee' });
-      return { fait: true, idee: _excerpt(idee, 160),
-               suite: 'Ghost Writer ouvert — je compose le post puis je l’envoie au composer ; tu n’auras plus qu’à publier.' };
-    },
-  },
-  {
-    id: 'chain.cancel', pad: 'chaine', mode: 'write',
-    label: 'Arrêter de suivre la chaîne',
-    desc: "Arrête le pilotage auto de la chaîne (Kora ne clique/n'entoure plus rien) — ne supprime ni ne publie rien, l'utilisateur reprend la main où ça en est. Répond à « annule », « arrête », « laisse tomber », « stop la chaîne ».",
-    target: '.ks-chain',
-    params: [],
-    run: async () => {
-      /* revue 19/07 (retour Stéphane) : sans cette action, le modèle
-         répondait « c'est annulé » sans RIEN faire (aucune action du
-         catalogue pour ça) — l'anneau restait allumé, le pilote tournait
-         toujours. 2e retour (« le trait tourne toujours sur Publier ») :
-         on ne gate PLUS l'arrêt sur koraChainPhase() (une lecture de phase
-         périmée sautait koraChainStop) — on arrête TOUJOURS. koraChainStop
-         bumpe la génération (tue tout timer, cf. kora-chain.js) et efface
-         les anneaux. */
-      const { koraChainPhase, koraChainStop } = await import('./kora-chain.js');
-      const wasRunning = !!koraChainPhase();
-      koraChainStop();
-      /* filet : efface aussi les anneaux + repose l'état depuis LA MÊME
-         instance kora.js que la boucle — couvre le cas où le pilote n'a
-         jamais tourné dans cette session (_kora null dans _stop) mais où
-         un anneau traînerait malgré tout. */
-      try { const k = await import('./kora.js'); k.koraClearRings(); k.koraState('repos'); } catch (e) { /* galet absent */ }
-      /* la séance de brainstorming, elle, reste ouverte (on ne ferme rien) :
-         chain.start/bs.start_session refuseront de relancer tant qu'elle
-         l'est (garde existante) — d'où l'indice. */
-      const encoreOuvert = !!document.querySelector('#wr-fullscreen.open');
-      if (!wasRunning)
-        return { fait: true, suivi: false,
-                 message: 'Je ne suivais aucune chaîne — j’ai quand même tout remis au repos.' };
-      return { fait: true, suivi: true,
-               message: 'J’arrête de suivre — rien n’est supprimé ni publié, tu reprends la main où ça en est.'
-                 + (encoreOuvert ? ' Ferme la fenêtre du brainstorming si tu veux repartir sur un autre sujet.' : '') };
-    },
-  },
-  {
     id: 'os.open_pad', pad: 'os', mode: 'write',
     label: 'Ouvrir un outil',
     desc: "Ouvre un outil du catalogue : brainstorming, ghostwriter, social, qr, sentinel, keynapse, smartagent, desk, book, keybrand ou network. Répond à « ouvre-moi le Social Manager ».",
     target: '.ws-app',
     params: [{ name: 'pad', type: 'string', required: true, desc: 'brainstorming|social|qr|sentinel|keynapse|smartagent|desk|keybrand|network|book' }],
     run: async (args = {}) => {
-      const KORA_PADS = {
+      const OPEN_PADS = {
         brainstorming: ['A-COM-003', 'le Brainstorming'], ghostwriter: ['A-COM-005', 'le Ghost Writer'],
         social: ['O-SOC-001', 'le Social Manager'],
         'ghost writer': ['A-COM-005', 'le Ghost Writer'], 'social manager': ['O-SOC-001', 'le Social Manager'],
@@ -1194,14 +1044,14 @@ export const KORA_ACTIONS = [
         network: ['O-NET-001', 'networK'], reseau: ['O-NET-001', 'networK'],
         'réseau': ['O-NET-001', 'networK'], contacts: ['O-NET-001', 'networK'],
         relations: ['O-NET-001', 'networK'],
-        // Alias d'ouverture SEULE des pads hors-catalogue (KORA_BRIEF §15.3,
+        // Alias d'ouverture SEULE des pads hors-catalogue (_archive/kora/KORA_BRIEF.md §15.3,
         // « coût zéro, à poser au premier train qui touche le catalogue ») :
         // aucune action métier — juste « ouvre-moi Missive / Brief Prod ».
         missive: ['O-SEC-001', 'Missive'], sceau: ['O-SEC-001', 'Missive'],
         'brief prod': ['A-COM-002', 'Brief Prod'], kodex: ['A-COM-002', 'Brief Prod'], 'brief': ['A-COM-002', 'Brief Prod'],
       };
       const key = String(args.pad || '').trim().toLowerCase();
-      const entry = KORA_PADS[key];
+      const entry = OPEN_PADS[key];
       if (!entry) throw new Error(`Outil inconnu : ${args.pad}. Choix : brainstorming, ghostwriter, social, qr, sentinel, keynapse, smartagent, desk, book, keybrand.`);
       _guardGwModal();
       const [padId, nom] = entry;
@@ -1355,7 +1205,7 @@ export const KORA_ACTIONS = [
   {
     /* desK — PRÉPARER une relance, jamais l'envoyer. Envoyer un e-mail est
        une ligne rouge du brief (§7, colonne rouge « Publier / envoyer ») :
-       Kora amène la rédactrice devant le brouillon déjà rédigé, le doigt
+       l'assistant amène la rédactrice devant le brouillon déjà rédigé, le doigt
        sur « Envoyer » reste le sien. Même patron que sm.compose_draft.
        On PASSE par openTool (la porte gatée) avec {relance:artId} ou
        {relances:true} — desk.js ouvre alors la liste ou le formulaire. */
@@ -1486,7 +1336,7 @@ export const KORA_ACTIONS = [
         symbolique: Array.isArray(kit.branding?.symbolism) ? kit.branding.symbolism.slice(0, 5) : [],
       };
       if (chart.status === 'published') {
-        out.lien_public = `${KORA_API}/b/${chart.slug}`;
+        out.lien_public = `${KS_API}/b/${chart.slug}`;
         out.acces = chart.access === 'code' ? 'protégé par code' : chart.access === 'public' ? 'public, indexable' : 'lien non répertorié';
       } else {
         out.note = 'Cette charte n’est pas encore publiée — pas de lien public pour l’instant.';
@@ -1497,8 +1347,8 @@ export const KORA_ACTIONS = [
 
   /* ═══ Key Form (pad A-COM-004 — ex-Pulsa, K-11 21/07/2026) ═══
      FORMULAIRE ARTISTES EN PROD CRITIQUE. LECTURE STRICTE, ZÉRO ÉCRITURE,
-     JAMAIS (KORA_BRIEF §15.2) : ni une écriture « sûre » façon
-     dk.prepare_relance, ni même l'alias os.open_pad (mode:write). Kora peut
+     JAMAIS (_archive/kora/KORA_BRIEF.md §15.2) : ni une écriture « sûre » façon
+     dk.prepare_relance, ni même l'alias os.open_pad (mode:write). l'assistant peut
      dire « 3 réponses hier » — elle ne touche JAMAIS au flux. Les deux
      actions n'appellent que des GET (_kfApi force method:'GET'). PII des
      répondants et e-mails direction ne sortent jamais (cf. _kfApi). */
@@ -1584,7 +1434,7 @@ export const KORA_ACTIONS = [
   },
 
   /* ═══ Living Layer (K-13 21/07/2026 — GLOBALE « quoi de neuf ? ») ═══
-     Transverse, pas un pad → global:true dans KORA_PAD_META (n'entame pas
+     Transverse, pas un pad → global:true dans BRIDGE_PAD_META (n'entame pas
      les 12 domaines routables). Lecture seule : /board calcule, ne mute rien
      de métier. Synthèse construite depuis metrics UNIQUEMENT (zéro PII). */
   {
@@ -1617,9 +1467,9 @@ export const KORA_ACTIONS = [
 
       /* ALERTE — incident cassé, dérivé de metrics (jamais du texte PII).
          NB : la barre du dashboard épingle aussi l'INTERCEPTION Sceau comme
-         alerte prioritaire, mais Kora ne la surface PAS — Missive/Sceau est
-         exclu par design (KORA_BRIEF §15.3 : « aucune action, pas même un
-         compteur »). D'où le message calme scopé « côté tes outils » : Kora
+         alerte prioritaire, mais l'assistant ne la surface PAS — Missive/Sceau est
+         exclu par design (_archive/kora/KORA_BRIEF.md §15.3 : « aucune action, pas même un
+         compteur »). D'où le message calme scopé « côté tes outils » : l'assistant
          ne se prononce que sur ce qu'elle a le droit de lire. */
       let alerte = null;
       if (n(m.sitesDown) > 0)             alerte = `${m.sitesDown} site(s) hors ligne — à vérifier dans Sentinel.`;
@@ -1794,7 +1644,7 @@ function _validNetworks(input) {
 
 /* Retrouver UN QR par son nom (exact d'abord, partiel ensuite), accents
    ignorés. Ambigu ou introuvable → { match:null, candidates } pour que
-   Kora demande une précision au lieu d'ouvrir le mauvais QR. */
+   l'assistant demande une précision au lieu d'ouvrir le mauvais QR. */
 function _qrByName(qrs, ref) {
   const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const n = norm(ref);
@@ -1860,7 +1710,7 @@ async function _sntApi(path, opts = {}) {
   const timer = setTimeout(() => ctrl.abort(), opts.timeout || 30000);
   let res;
   try {
-    res = await fetch(`${KORA_API}/api/sentinel${path}`, {
+    res = await fetch(`${KS_API}/api/sentinel${path}`, {
       method: opts.method || 'GET',
       headers: { 'Authorization': `Bearer ${token}`, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
       body: opts.body ? JSON.stringify(opts.body) : undefined,
@@ -1915,7 +1765,7 @@ async function _knApi(path, opts = {}) {
   const timer = setTimeout(() => ctrl.abort(), opts.timeout || 30000);
   let res;
   try {
-    res = await fetch(`${KORA_API}/api/keynapse${path}`, {
+    res = await fetch(`${KS_API}/api/keynapse${path}`, {
       method: opts.method || 'GET',
       headers: { 'Authorization': `Bearer ${token}`, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
       body: opts.body ? JSON.stringify(opts.body) : undefined,
@@ -1966,7 +1816,7 @@ async function _saApi(path, opts = {}) {
   const timer = setTimeout(() => ctrl.abort(), opts.timeout || 30000);
   let res;
   try {
-    res = await fetch(`${KORA_API}/api/smart-agent${path}`, {
+    res = await fetch(`${KS_API}/api/smart-agent${path}`, {
       method: opts.method || 'GET',
       headers: { 'Authorization': `Bearer ${token}`, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
       body: opts.body ? JSON.stringify(opts.body) : undefined,
@@ -2013,7 +1863,7 @@ async function _saResolve(ref) {
    honorant l'override dev localStorage.dk_api comme desk.js. */
 function _dkBase() {
   try { const o = localStorage.getItem('dk_api'); if (o) return o; } catch (e) {}
-  return `${KORA_API}/api/desk`;
+  return `${KS_API}/api/desk`;
 }
 async function _dkApi(path, opts = {}) {
   const token = _jwt();
@@ -2101,7 +1951,7 @@ function _dkPagesOf(artId, D, pub) {
    base ici, en LECTURE SEULE, fermée aussitôt après (jamais de connexion
    qui traîne, pour ne jamais bloquer une future migration de schéma de
    book.js). ⚠ On REPRODUIT le schéma de création (onupgradeneeded) à
-   l'identique de book.js:_db() : si Kora ouvrait la base la toute
+   l'identique de book.js:_db() : si l'assistant ouvrait la base la toute
    première fois SANS créer le store, book.js ne recréerait jamais le
    store ensuite (la version DB serait déjà à 1, onupgradeneeded ne
    refire pas) — la bibliothèque resterait cassée à vie sur cet appareil.
@@ -2140,7 +1990,7 @@ async function _kbApi(path, opts = {}) {
   const timer = setTimeout(() => ctrl.abort(), opts.timeout || 30000);
   let res;
   try {
-    res = await fetch(`${KORA_API}/api/keybrand${path}`, {
+    res = await fetch(`${KS_API}/api/keybrand${path}`, {
       method: opts.method || 'GET',
       headers: { 'Authorization': `Bearer ${token}` },
       signal: ctrl.signal,
@@ -2177,7 +2027,7 @@ async function _kbResolve(ref) {
 }
 
 /* ── Key Form (pad A-COM-004 — ex-Pulsa, formulaire artistes EN PROD) ──
-   LECTURE STRICTE, ZÉRO ÉCRITURE, JAMAIS (KORA_BRIEF §15.2). On ne touche
+   LECTURE STRICTE, ZÉRO ÉCRITURE, JAMAIS (_archive/kora/KORA_BRIEF.md §15.2). On ne touche
    QUE des routes GET du worker pulsa, jamais un POST/PATCH/DELETE. Tenant =
    owner_sub côté worker, MAIS pour un JWT user owner_sub == claims.sub
    (pulsa-forms.js:_resolveOwner) : en envoyant le ks_jwt de l'utilisateur,
@@ -2196,7 +2046,7 @@ async function _kfApi(path, opts = {}) {
   let res;
   try {
     /* GET uniquement — aucune méthode d'écriture n'est ni passée ni permise. */
-    res = await fetch(`${KORA_API}/api/pulsa${path}`, {
+    res = await fetch(`${KS_API}/api/pulsa${path}`, {
       method: 'GET',
       headers: { 'Authorization': `Bearer ${token}` },
       signal: ctrl.signal,
@@ -2242,15 +2092,15 @@ async function _kfResolveForm(ref) {
 }
 
 /* ── Living Layer (K-13) — « quoi de neuf ? » = synthèse ambiante ──
-   PAS un pad : la surface transverse du dashboard (KORA_BRIEF §15.2). Une
+   PAS un pad : la surface transverse du dashboard (_archive/kora/KORA_BRIEF.md §15.2). Une
    SEULE action GLOBALE (montrée à l'étage 1 comme chain/os, hors des 12
    domaines). On réutilise l'endpoint existant `/api/livinglayer/board` :
    il calcule déjà toute la synthèse ET résout le piège tenant en interne
    (`padTenant = isAdmin ? 'default' : claims.sub`, sauf Key Form/desK/GW =
-   claims.sub) — exactement ce que la barre du dashboard affiche. Kora ne
+   claims.sub) — exactement ce que la barre du dashboard affiche. l'assistant ne
    fait que relayer, rien à résoudre côté client.
    preferMode:'calculator' = chemin DÉTERMINISTE du board (zéro LLM → pas de
-   coût ni latence IA côté board, Kora rédige elle-même sa phrase).
+   coût ni latence IA côté board, l'assistant rédige elle-même sa phrase).
    ⚠ PII : on ne lit QUE `metrics` (chiffres + noms des QR/sites suivis = les
    siens, sûrs). Le champ `text`, lui, peut porter des noms de contacts
    networK ou du texte libre Keynapse/desK → on le JETTE, jamais au modèle. */
@@ -2261,7 +2111,7 @@ async function _llBoard(clientSensors = {}) {
   const timer = setTimeout(() => ctrl.abort(), 30000);
   let res;
   try {
-    res = await fetch(`${KORA_API}/api/livinglayer/board`, {
+    res = await fetch(`${KS_API}/api/livinglayer/board`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ preferMode: 'calculator', clientSensors }),
@@ -2282,7 +2132,7 @@ async function _llBoard(clientSensors = {}) {
 /* ── networK (pad O-NET-001, K-14) — réseau relationnel, LECTURE SEULE ──
    Tenant = _tenantOf côté worker (network.js:106) : piège admin→'default'
    comme QR/Sentinel/Keynapse, MAIS résolu par le worker à partir du JWT →
-   Kora envoie le ks_jwt de l'utilisateur, rien à résoudre ici (cohérent
+   l'assistant envoie le ks_jwt de l'utilisateur, rien à résoudre ici (cohérent
    avec ce que le pad affiche). GET /bootstrap ramène TOUT le graphe
    (catégories + contacts + activité) en un appel — les 3 lectures s'en
    servent, jamais un 2e appel. PII = le PROPRE réseau de l'utilisateur
@@ -2351,7 +2201,7 @@ async function _padAccessible(padId) {
    Inerte tant que le catalogue ≤ 32 actions (le worker garde alors le
    chemin historique à un appel) — mais envoyé dès maintenant pour que la
    bascule soit automatique quand un pad s'ajoutera. Desc ≤ 160 car. */
-export const KORA_PAD_META = [
+export const BRIDGE_PAD_META = [
   { pad: 'chaine', global: true },
   { pad: 'os',     global: true },
   /* Living Layer (K-13) : transverse, montré à l'étage 1 comme une globale —
@@ -2384,14 +2234,14 @@ export const KORA_PAD_META = [
 ];
 
 /* ── Exécution ── */
-export function koraActionsForPad(pad) {
-  return KORA_ACTIONS.filter(a => a.pad === pad);
+export function bridgeActionsForPad(pad) {
+  return BRIDGE_ACTIONS.filter(a => a.pad === pad);
 }
-export function koraAction(id) {
-  return KORA_ACTIONS.find(a => a.id === id) || null;
+export function bridgeAction(id) {
+  return BRIDGE_ACTIONS.find(a => a.id === id) || null;
 }
-export async function runKoraAction(id, args = {}) {
-  const action = koraAction(id);
+export async function runBridgeAction(id, args = {}) {
+  const action = bridgeAction(id);
   if (!action) return { ok: false, id, error: `Action inconnue : ${id}` };
   try {
     const data = await action.run(args);

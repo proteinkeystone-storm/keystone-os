@@ -44,8 +44,8 @@ import { ratingButtonHTML, bindRatingButton } from './lib/rating-widget.js';
 import { helpButtonHTML, bindHelpButton }     from './lib/help-overlay.js';
 import { burgerHTML, bindBurger }             from './lib/topbar-burger.js';
 import { openGhostwriterChained }             from './ghostwriter.js';   // DK-5 : passerelle relecture (round-trip → relu)
-// K-9 : règles métier PURES partagées avec Kora (relances, folio, statuts).
-// Une seule implémentation — Kora lit « qui relancer » comme desK l'affiche.
+// K-9 : règles métier PURES partagées (relances, folio, statuts) avec
+// bridge-actions.js et le MCP — une seule implémentation, une seule vérité.
 import {
   DK_STATUS_LABEL, dkNeedsCopy, dkNumOpt, dkFolio, dkFolioMap, dkPn, dkHorsNumLabel, dkHorsNumShort,
   dkContribByName, dkRelancesOf, dkRelanceInfo, dkRelancesDues,
@@ -60,7 +60,7 @@ const POLL_MS = 45000;          // rafraîchissement d'équipe (2-5 personnes, p
 // Statuts d'article : libellé + point + pipeline restant (jours) une fois
 // la copie disponible. needsCopy = la remise est encore attendue.
 // ⚠ label et needsCopy viennent des règles PARTAGÉES (lib/desk-rules.js) —
-// Kora s'y branche aussi ; ne jamais les redéfinir ici. Seuls dot/reluDays/
+// bridge-actions.js s'y branche aussi ; ne jamais les redéfinir ici. Seuls dot/reluDays/
 // maqDays restent locaux : rendu et délais de pipeline n'intéressent que desK.
 const STATUS = {
   propose:  { dot: '#8d93a8', reluDays: 2, maqDays: 2 },
@@ -157,12 +157,11 @@ async function _api(path, opts = {}) {
 }
 
 // ── Ouverture / fermeture ───────────────────────────────────────
-/* K-9 · Réception des passerelles (Kora, et tout appelant d'openTool) :
+/* K-9 · Réception des passerelles (bridge-actions, et tout appelant d'openTool) :
    `{ relances:true }`  → la liste des copies à relancer ;
    `{ relance:'<artId>' }` → le brouillon déjà rédigé pour CET article.
-   Kora PRÉPARE, elle n'envoie jamais : envoyer un e-mail est une ligne
-   rouge du brief (§7) — elle amène la rédactrice devant « Envoyer », le
-   doigt reste le sien. */
+   L'appelant PRÉPARE, il n'envoie jamais : envoyer un e-mail est une ligne
+   rouge — on amène la rédactrice devant « Envoyer », le doigt reste le sien. */
 let _pendingOpts = {};
 function _applyOpts(opts) {
   if (!opts || (!opts.relance && !opts.relances)) return;
@@ -347,7 +346,7 @@ async function _boot() {
     await _loadIssue();
     clearInterval(_pollTimer);
     _pollTimer = setInterval(_autoRefresh, POLL_MS);
-    // Passerelle (Kora…) : une fois seulement, le numéro chargé — le
+    // Passerelle (bridge-actions…) : une fois seulement, le numéro chargé — le
     // brouillon de relance a besoin de _D (articles, contribs, relances).
     const o = _pendingOpts; _pendingOpts = {}; _applyOpts(o);
   } catch (e) {
@@ -543,7 +542,7 @@ function _margeTxt(m) { return m === null ? '' : (m < 0 ? 'marge brûlée (' + m
 /* ═══ Numérotation d'affichage (folio) ═══
    L'ordre PHYSIQUE des pages (p.n) ne bouge JAMAIS — il pilote le drag, le
    move, la confrontation au PDF. Ces helpers ne changent QUE le folio AFFICHÉ.
-   Deux étages (calcul partagé avec Kora : lib/desk-rules.js) :
+   Deux étages (calcul partagé, lib/desk-rules.js) :
    · Réglages → Numérotation (publication) = le socle (couverture, départ) ;
    · fiche d'une page → Numérotation (par page) = hors numérotation (2ᵉ/3ᵉ/4ᵉ
      de couv…) ou numéro imposé, la suite recoule. Août 2026 : une revue =
@@ -769,8 +768,8 @@ function _fmtSize(b) {
   return Math.max(1, Math.round(b / 1024)) + ' Ko';
 }
 /* La relance À FAIRE se calcule, elle n'est jamais stockée (§5.4) — la
-   règle vit dans lib/desk-rules.js, PARTAGÉE avec Kora (K-9) : ce qu'elle
-   annonce dans la conversation est ce que desK affiche ici, toujours.
+   règle vit dans lib/desk-rules.js, PARTAGÉE (K-9) : ce qu'un appelant
+   externe annonce est ce que desK affiche ici, toujours.
    Ces wrappers ne font que lui passer le contexte du numéro chargé.      */
 function _relCtx() { return { contribs: (_D && _D.contribs) || [], relances: (_D && _D.relances) || [] }; }
 function _contribByName(name) { return dkContribByName(name, (_D && _D.contribs) || []); }

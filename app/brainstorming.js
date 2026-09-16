@@ -288,7 +288,7 @@ export function openBrainstorming(opts = {}) {
     manualRoster: [...MANDATORY_DEBATE_AGENTS],
     roster:       [],   // résolu juste après (dépend de mode + rosterMode)
     // Socle Gest — invité « expert maison » opt-in (préf persistée).
-    // opts peut l'IMPOSER (ex. Kora auto-ancre « promo de Keystone » sur le
+    // opts peut l'IMPOSER (ex. un appelant ancre « promo de Keystone » sur le
     // Gest « Conseiller Keystone » = savoir Kortex réel plutôt qu'un texte figé).
     inviteGest:   opts.inviteGest === true || _rosterPref?.inviteGest === true,
     // P2 Gest — Smart Agent dont on convoque le savoir (résolu via le picker).
@@ -318,7 +318,7 @@ export function openBrainstorming(opts = {}) {
     if (input) { input.value = opts.brief.trim(); input.focus(); }
   }
 
-  // Source d'ancrage entrante (ex. Kora auto-ancre « promo de Keystone » avec
+  // Source d'ancrage entrante (ex. un appelant ancre « promo de Keystone » avec
   // la description officielle du produit, cf. content-source-grounding) :
   // ancre le débat ET Ghost Writer sur des FAITS au lieu d'inventer. Même
   // canal que « Ajouter une source », posé d'emblée pour la séance.

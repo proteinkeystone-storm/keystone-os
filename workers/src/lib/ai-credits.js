@@ -105,7 +105,6 @@ const COST = {
   // (46,63 neurones/min), pas à l'appel — d'où costForAudioSeconds()
   // ci-dessous, que les routes passent en override. Ces valeurs ne
   // servent que de repli si la durée est introuvable.
-  kora_stt:        1,
   keynapse_voice:  1,
 };
 function costFor(tool) {
@@ -118,8 +117,8 @@ function costFor(tool) {
 // de facturation Cloudflare (Whisper = neurones/minute) et protège
 // mécaniquement contre l'audio très long, sans pénaliser un mémo court.
 //
-// ⚠️ PÉRIMÈTRE RÉEL DE LA VOIX (vérifié 2026-07-23) : seuls Kora (mode
-// talkie-walkie) et Keynapse (mémos) transcrivent CÔTÉ SERVEUR. Smart
+// ⚠️ PÉRIMÈTRE RÉEL DE LA VOIX (vérifié 2026-07-23, Kora retirée le
+// 16/09/2026) : seul Keynapse (mémos) transcrit CÔTÉ SERVEUR. Smart
 // Agent — y compris son agent PUBLIC — utilise les API du NAVIGATEUR
 // (SpeechRecognition) et Piper en WASM local : coût Cloudflare NUL.
 // La surface publique ne génère donc aucun coût voix à couvrir.

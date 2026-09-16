@@ -1,3 +1,5 @@
+> ⚠️ **ABANDONNÉ le 16/09/2026.** Kora a été déconnectée intégralement (code, Worker, tests, landing). Ce document est conservé pour l'historique. Son catalogue d'actions survit dans `app/bridge-actions.js` et l'anneau dans `app/bridge-ring.js`. Remplacement : accès MCP pour Claude — voir [[HANDOFF_MCP_CLAUDE]] et [[MCP_TOUS_LES_OUTILS_BRIEF]].
+
 # KORA — BRIEF DE CONCEPTION (Agent-OS Keystone)
 
 > **Statut :** cadrage validé · **design de la surface VALIDÉ le 16/07/2026** (harnais livrés, cf. §3) · **EN PROD depuis le 17-20/07/2026** : boucle conversationnelle complète, 7 pads couverts (Brainstorming, Ghost Writer, Social Manager, Smart Dynamic QR, Sentinel, Keynapse, Smart Agent) + pilote de chaîne + os, **40 actions**, routage 2 étages actif, flag dogfood durable (`?kora=1`). Doc autoporté.

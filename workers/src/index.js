@@ -47,7 +47,6 @@ import { handleProxyLLM }                                               from './
 import { handleGhostwriterRewrite, handleGhostwriterQuota }             from './routes/ghostwriter.js';
 import { handleProofDicoGet, handleProofDicoPost }                      from './routes/proof-dico.js';
 import { handleProofVerdict }                                           from './routes/proof-verdict.js';
-import { handleKoraChat, handleKoraStt }                                from './routes/kora.js';
 import { handleAiCreditsQuota }                                         from './routes/ai-credits.js';
 import {
   handleAutoReloadGet, handleAutoReloadSave,
@@ -757,18 +756,6 @@ export default {
       // Pré-requis : binding [ai] dans wrangler.toml (cf. ghostwriter.js).
       if (path === '/api/ghostwriter/rewrite' && method === 'POST') {
         return handleGhostwriterRewrite(request, env);
-      }
-      // ── Kora (agent-OS, V1 lecture) — boucle decide/answer ────
-      // 2 phases orchestrées par le client (actions = kora-actions.js) ;
-      // 1 crédit/tour (tool 'kora'), réponse finale en streaming SSE.
-      if (path === '/api/kora/chat' && (method === 'POST' || method === 'OPTIONS')) {
-        return handleKoraChat(request, env);
-      }
-      // Mode vocal (K-14, V-1) — transcription talkie-walkie : blob audio
-      // (MediaRecorder) → Whisper → texte. Pas de crédit débité ici (1
-      // crédit/tour pris en phase 'decide') ; métré 'kora-stt'.
-      if (path === '/api/kora/stt' && (method === 'POST' || method === 'OPTIONS')) {
-        return handleKoraStt(request, env);
       }
       // Phase 2 — quota serveur par licence (DEMO=1 / STARTER=3 /
       // PRO=10 / MAX=50 / ADMIN=∞). Lecture seule, pas de bump.

@@ -183,7 +183,6 @@ eq(costForAudioSeconds(61), 2, '61 s = 2 (minute entamée)');
 eq(costForAudioSeconds(300), 5, '5 min = 5');
 eq(costForAudioSeconds(0), 1, 'durée inconnue → 1, jamais gratuit par accident');
 eq(costForAudioSeconds(NaN), 1, 'durée illisible → 1');
-eq(COST.kora_stt, 1, 'kora_stt a un barème de repli');
 eq(COST.keynapse_voice, 1, 'keynapse_voice a un barème de repli');
 // resolveQuota : l'arbitre legacy ↔ per-app.
 eq(resolveQuota({}, 'STARTER', ['A-COM-005']), 200, 'flag OFF → quota LEGACY du plan (200)');

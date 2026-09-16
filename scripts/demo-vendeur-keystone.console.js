@@ -15,7 +15,7 @@
        (« bêta », « sans facturation à la consommation », suite VEFA)
        contredirait les nouvelles et l'agent pourrait citer la
        mauvaise ;
-     • repose le savoir à jour : 14 applications, Kora, la vraie
+     • repose le savoir à jour : 14 applications, la vraie
        grille tarifaire, souveraineté, objections, cas d'usage ;
      • pose les CARTES-PHOTOS : une capture par application en haut
        de la page publique. Le visiteur touche une image, l'agent
@@ -200,9 +200,6 @@
       context: 'Réponse à « c\'est quoi Keystone ? » — la vue d\'ensemble avant de détailler une application.' } },
     { type: 'fact', title: 'Le principe : un seul écran, vos applications à vous', body: {
       statement: 'Chacun compose son tableau de bord depuis le K-Store, la boutique intégrée : un commerçant n\'a pas les mêmes applications qu\'une rédaction de magazine. Une seule interface, une seule connexion, une seule courbe d\'apprentissage — au lieu de six abonnements et six mots de passe. Retirer une application ne perd jamais votre travail : elle revient avec ses données quand vous la réactivez.' } },
-    { type: 'fact', title: 'Kora, l\'assistante qui pilote tout l\'écran', body: {
-      statement: 'Kora est l\'assistante intégrée à Keystone : le galet qui ondule en haut de la fenêtre, c\'est elle. Vous lui parlez ou vous lui écrivez en langage courant — « publie ce post », « prépare une missive pour Paul », « où en sont mes scans ? » — et elle pilote vos applications à votre place. C\'est la différence entre une boîte à outils et un vrai système : vous n\'avez plus à savoir dans quel outil se trouve la fonction, vous demandez.',
-      context: 'Nouveauté majeure depuis les premières versions. C\'est souvent l\'argument qui fait basculer quelqu\'un qui trouve « qu\'il y a beaucoup d\'outils ».' } },
     { type: 'fact', title: 'Le Living Layer : votre activité en direct', body: {
       statement: 'Le Living Layer est la bande vivante en haut du tableau de bord. Au lieu d\'un écran figé, elle fait remonter de vrais signaux : les questions auxquelles votre agent n\'a pas su répondre, les réponses reçues à vos formulaires, les rappels qui arrivent à échéance, les alertes de visibilité, les QR les plus scannés. Une alerte importante reste affichée tant qu\'elle n\'est pas traitée.',
       context: 'C\'est ce qui transforme Keystone d\'une boîte à outils en poste de pilotage : il vous dit quoi faire ensuite.' } },
@@ -273,11 +270,11 @@
       proof: 'Demandez à ChatGPT de publier votre post de jeudi sur Instagram à 18 h : il vous écrira le texte, et c\'est vous qui le publierez.' } },
     { type: 'objection', title: 'Objection : « Pas le temps de mettre ça en place »', body: {
       objection: 'Je n\'ai pas le temps d\'installer et de paramétrer un outil de plus.',
-      response: 'Il n\'y a rien à installer, et vous pouvez commencer par une application gratuite en deux minutes. Pour le Smart Agent, qui est le plus long à nourrir, des packs métier fournissent des fiches prêtes à relire et une interview guidée à laquelle vous répondez à l\'oral : une demi-heure suffit pour un agent opérationnel. Et Kora vous évite d\'apprendre où se trouvent les fonctions : vous les demandez.',
+      response: 'Il n\'y a rien à installer, et vous pouvez commencer par une application gratuite en deux minutes. Pour le Smart Agent, qui est le plus long à nourrir, des packs métier fournissent des fiches prêtes à relire et une interview guidée à laquelle vous répondez à l\'oral : une demi-heure suffit pour un agent opérationnel.',
       proof: 'Cette démonstration a elle-même été montée à partir d\'un pack métier.' } },
     { type: 'objection', title: 'Objection : « Je ne suis pas à l\'aise avec la technique »', body: {
       objection: 'Je ne suis pas très à l\'aise avec l\'informatique, ça a l\'air compliqué.',
-      response: 'Tout se passe dans votre navigateur, comme un site web, et chaque application a sa notice accessible par le bouton « ? ». Surtout, vous pouvez parler à Kora en langage courant plutôt que de chercher un bouton. Et si vous ne devez retenir qu\'une chose : commencez par une application gratuite, sans carte bancaire, sans engagement.',
+      response: 'Tout se passe dans votre navigateur, comme un site web, et chaque application a sa notice accessible par le bouton « ? ». Et si vous ne devez retenir qu\'une chose : commencez par une application gratuite, sans carte bancaire, sans engagement.',
       proof: 'Vos clients, eux, n\'ont strictement rien à apprendre : ils scannent un QR ou cliquent sur un lien.' } },
     { type: 'objection', title: 'Objection : « Une IA qui parle à mes clients, c\'est risqué »', body: {
       objection: 'J\'ai peur qu\'une intelligence artificielle raconte n\'importe quoi à mes clients.',
@@ -429,7 +426,6 @@
   console.log('6/7 — Tests étalons…');
   const golden = [
     { question: 'Que fait Smart Agent ?',                              expect: 'answer'   },
-    { question: 'C\'est quoi Kora ?',                                   expect: 'answer'   },
     { question: 'Combien coûte Keystone ?',                             expect: 'answer'   },
     { question: 'Y a-t-il quelque chose de gratuit ?',                  expect: 'answer'   },
     { question: 'Est-ce que mes données restent en Europe ?',           expect: 'answer'   },

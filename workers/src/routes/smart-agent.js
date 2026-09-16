@@ -1129,7 +1129,7 @@ export async function handleKortexUnitDelete(request, env, unitId) {
 // ajuste et les ajoute une à une (validation humaine = doctrine).
 // ═══════════════════════════════════════════════════════════════
 // SA-14.6 — plafond de fiches par appel d'extraction. Était 12, hérité du
-// coffre boutique. Le dogfood du 21/07 (KORA_BRIEF.md, 3 lots) l'a saturé
+// coffre boutique. Le dogfood du 21/07 (3 lots) l'a saturé
 // 3 fois sur 3 : au-delà de la 12e fiche, le contenu disparaissait EN
 // SILENCE alors que le crédit était débité. Le vrai goulot du gros volume
 // n'était pas le découpage, c'était ce plafond.
@@ -1845,7 +1845,7 @@ async function _agentLLM(env, { engine, apiKey, system, messages, max_tokens, te
   // direct jetait alors une TypeError : les « questions de couverture » de
   // Kortex échouaient à TOUS les coups (4/4 en sonde le 31/07/2026, sur le vrai
   // modèle), pendant que les variantes de repli passaient (4/4 en chaîne).
-  // Même piège, même correctif que kora.js (_koraText) et keynapse.js.
+  // Même piège, même correctif que keynapse.js.
   const rawOut = res?.response ?? res?.choices?.[0]?.message?.content ?? '';
   const out = (typeof rawOut === 'string') ? rawOut.trim() : (() => {
     try { return JSON.stringify(rawOut) || ''; } catch (_) { return ''; }
@@ -1914,7 +1914,7 @@ export function makeStreamEmitter(channel, send) {
   };
 }
 
-// Texte d'un chunk SSE Workers AI — « bug des zéros » (chassé dans Kora le
+// Texte d'un chunk SSE Workers AI — « bug des zéros » (chassé le
 // 18/07, jamais propagé ici ; retour terrain MICE 02/09/2026 : « 1990 » lu
 // « 199 », « 4 900 m » lu « 49 m », « 1 600 » lu « 16 »).
 // Workers AI streame les chiffres UN PAR UN et SUR-PARSE le token : « 0 »

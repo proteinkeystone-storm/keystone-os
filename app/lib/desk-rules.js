@@ -1,16 +1,16 @@
 /* ═══════════════════════════════════════════════════════════════
-   desK — RÈGLES MÉTIER PURES (partagées desK ↔ Kora)
+   desK — RÈGLES MÉTIER PURES (partagées desK ↔ bridge-actions / MCP)
    ───────────────────────────────────────────────────────────────
-   Né du sprint K-9 (20/07/2026) : Kora doit lire « qui relancer » et
+   Né du sprint K-9 (20/07/2026) : un appelant externe doit lire « qui relancer » et
    « quelle page » EXACTEMENT comme desK les affiche. Deux calculs
    recopiés = deux vérités qui divergent au premier correctif — donc
-   une seule implémentation, ici, et desK comme Kora s'y branchent.
+   une seule implémentation, ici, et desK comme les appelants externes s'y branchent.
 
    CONTRAT : ce module est PUR.
    · zéro DOM, zéro fetch, zéro localStorage, zéro import ;
    · aucun état module — tout arrive en argument (dont `now`, pour
      que les tests n'aient pas à voyager dans le temps) ;
-   · donc importable par Kora SANS réveiller le pad (app/desk.js
+   · donc importable par bridge-actions.js ou le Worker SANS réveiller le pad (app/desk.js
      pose des listeners au chargement et importe ghostwriter.js —
      il n'est PAS inerte, on ne l'importe pas pour un calcul).
 
@@ -54,7 +54,7 @@ export function dkNeedsCopy(status) {
      'hors'  = la page sort de la numérotation (2ᵉ/3ᵉ/4ᵉ de couv…) ;
                elle ne CONSOMME pas de numéro, comme la couverture ;
      'ancre' = la page porte folio_start et la SUITE recoule d'elle.
-   ⚠ Kora DOIT passer par là — et fournir `pages` quand il les a : le
+   ⚠ Tout appelant externe DOIT passer par là — et fournir `pages` quand il les a : le
    worker ne renvoie que le physique, dire « page 3 » quand la
    rédactrice lit « page 1 » est un bug de conversation. */
 export function dkNumOpt(pub) {
@@ -93,7 +93,7 @@ export function dkHorsNumLabel(n, total) {
   if (total >= 3 && n === total - 1) return '3ᵉ de couverture';
   return 'Hors numérotation';
 }
-/* …et courte pour les planches et les phrases (« p. X ») de Kora. */
+/* …et courte pour les planches et les phrases (« p. X ») des appelants. */
 export function dkHorsNumShort(n, total) {
   if (n === 1) return 'couv.';
   if (total >= 2 && n === total) return '4ᵉ de couv.';
@@ -110,7 +110,7 @@ export function dkFolio(n, pub, pages) {   // folio affiché ; null = hors numé
   if (o.cover && n === 1) return null;
   return o.first + (n - (o.cover ? 2 : 1));
 }
-export function dkPn(n, pub, pages) {      // pour « p. X », toasts, phrases de Kora…
+export function dkPn(n, pub, pages) {      // pour « p. X », toasts, phrases des appelants…
   const d = dkFolio(n, pub, pages);
   if (d !== null) return String(d);
   return (pages && pages.length) ? dkHorsNumShort(n, pages.length) : 'couv.';

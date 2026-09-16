@@ -38,7 +38,7 @@ import { APP_TIER, TIER, OS_ENTITLEMENT } from './pricing-grid.js';
 
 // ── Quelle application sert ce chemin ? ─────────────────────────
 // Seules les routes PROPRES à une application figurent ici. Tout ce
-// qui est transverse (licence, vault, clés, crédits, Kora, Living
+// qui est transverse (licence, vault, clés, crédits, Living
 // Layer, proxy IA, admin, catalogue…) est volontairement absent : ce
 // n'est pas vendu à l'unité, donc rien à vérifier.
 // booK (O-BOK-001) n'y est pas non plus : il n'a AUCUNE route serveur.
