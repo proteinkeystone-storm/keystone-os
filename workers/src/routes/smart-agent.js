@@ -4885,18 +4885,27 @@ export async function handleSmartAgentLifecycle(env) {
         await env.DB.prepare('DELETE FROM kortex_units_fts_v2 WHERE unit_id = ?').bind(r.id).run();
       }
     }
-    const u = await env.DB.prepare(
-      `DELETE FROM sa_public_usage WHERE day < date('now', '-${PUBLIC_RETENTION_DAYS} days')`
-    ).run();
-    usagePurged = u?.meta?.changes ?? 0;
-    // Sessions/messages PUBLICS anciens — l'historique INTERNE du proprio est conservé.
-    await env.DB.prepare(
-      `DELETE FROM sa_messages WHERE session_id IN (SELECT id FROM sa_sessions WHERE channel = 'public' AND created_at < datetime('now', '-${PUBLIC_RETENTION_DAYS} days'))`
-    ).run();
-    const s = await env.DB.prepare(
-      `DELETE FROM sa_sessions WHERE channel = 'public' AND created_at < datetime('now', '-${PUBLIC_RETENTION_DAYS} days')`
-    ).run();
-    sessionsPurged = s?.meta?.changes ?? 0;
+    /* Conversations publiques et compteurs d'usage : purge ÉTEINTE
+       (décision Stéphane, 17/09/2026 — « rien ne doit disparaître »). Ce que
+       les visiteurs ont demandé à l'agent est la matière première pour
+       l'améliorer et pour savoir ce que le marché cherche. Ne s'exécute que
+       si KS_SA_PUBLIC_PURGE = "on" (interrupteur à l'envers).
+       ⚠ Ces échanges peuvent contenir ce qu'un visiteur a écrit de lui : à
+       dire dans la page de confidentialité du Conseiller public. */
+    if (String(env.KS_SA_PUBLIC_PURGE || '').toLowerCase() === 'on') {
+      const u = await env.DB.prepare(
+        `DELETE FROM sa_public_usage WHERE day < date('now', '-${PUBLIC_RETENTION_DAYS} days')`
+      ).run();
+      usagePurged = u?.meta?.changes ?? 0;
+      // Sessions/messages PUBLICS anciens — l'historique INTERNE du proprio est conservé.
+      await env.DB.prepare(
+        `DELETE FROM sa_messages WHERE session_id IN (SELECT id FROM sa_sessions WHERE channel = 'public' AND created_at < datetime('now', '-${PUBLIC_RETENTION_DAYS} days'))`
+      ).run();
+      const s = await env.DB.prepare(
+        `DELETE FROM sa_sessions WHERE channel = 'public' AND created_at < datetime('now', '-${PUBLIC_RETENTION_DAYS} days')`
+      ).run();
+      sessionsPurged = s?.meta?.changes ?? 0;
+    }
   } catch (e) { error = e.message; }
   return { quarantined, usagePurged, sessionsPurged, error };
 }

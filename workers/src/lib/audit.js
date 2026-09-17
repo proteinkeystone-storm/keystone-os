@@ -85,6 +85,13 @@ export async function audit(env, entry) {
  * @returns {{ purged: number, retentionDays: number }}
  */
 export async function purgeAuditLogs(env) {
+  /* ÉTEINTE (décision Stéphane, 17/09/2026) — « rien ne doit disparaître ».
+     Le journal d'audit dit QUI a fait QUOI : c'est précisément ce qu'on veut
+     pouvoir relire des années plus tard (qui a changé une cible de QR, qui a
+     effacé des statistiques). Ne s'exécute que si KS_AUDIT_PURGE = "on". */
+  if (String(env.KS_AUDIT_PURGE || '').toLowerCase() !== 'on') {
+    return { purged: 0, retentionDays: 0, purge: 'off' };
+  }
   try {
     await _ensureSchema(env);
     const days = parseInt(env.KS_AUDIT_RETENTION_DAYS, 10) || DEFAULT_AUDIT_RETENTION_DAYS;

@@ -119,13 +119,24 @@ export async function handleFunnel(request, env) {
   }, 200, origin);
 }
 
-// ── Purge >90j — appelée par le cron quotidien (minimisation RGPD) ──
+/* ── Purge — ÉTEINTE (décision Stéphane, 17/09/2026) ──────────────
+   « Rien ne doit disparaître » : ces événements de parcours (visites,
+   sources, clics sur les plans) sont la mémoire commerciale de la
+   landing, et une campagne s'analyse sur plus de 90 jours. La purge ne
+   s'exécute donc que si KS_LANDING_PURGE vaut exactement "on" —
+   interrupteur à l'envers, comme pour les scans de QR (SDQR_SCAN_PURGE) :
+   une variable absente ou mal orthographiée ne détruit RIEN.
+   cf. KEYSTONE_OS/BRIEF_SDQR_HISTORIQUE_SCANS.md §7. ───────────── */
 export async function pruneTrackEvents(env) {
+  if (String(env.KS_LANDING_PURGE || '').toLowerCase() !== 'on') {
+    return { deleted: 0, purge: 'off' };
+  }
   try {
+    const jours = parseInt(env.KS_LANDING_RETENTION_DAYS || '90', 10) || 90;
     const r = await env.DB
-      .prepare("DELETE FROM landing_events WHERE ts < datetime('now', '-90 day')")
+      .prepare(`DELETE FROM landing_events WHERE ts < datetime('now', '-${jours} day')`)
       .run();
-    return { deleted: r?.meta?.changes ?? 0 };
+    return { deleted: r?.meta?.changes ?? 0, purge: 'on', jours };
   } catch (e) {
     return { error: e?.message || String(e) };
   }
