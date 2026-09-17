@@ -32,6 +32,12 @@
    LECTURE ne fait que notifier : Claude redemande, l'onglet répond.
    Plafond 30 notifications / compte / jour.
 
+   Confidentialité (correctif 17/09, trouvé au test réel) : un ordre transporte
+   des données du NAVIGATEUR (textes Ghost Writer, synthèses, brouillon Social).
+   Elles ne restent PAS en base : arguments effacés dès la remise à l'onglet,
+   résultat effacé dès sa lecture par le Worker (ou à l'expiration). Seuls
+   l'état, l'outil et les dates subsistent, purgés à 1 jour.
+
    Garde-fous : l'onglet n'exécute que les actions de son catalogue
    (app/bridge-actions.js) et le dit (« hors catalogue ») ; un ordre est
    lié au sub ; un ordre d'un autre compte n'apparaît jamais sur le canal.
@@ -97,11 +103,15 @@ export async function bridgeRun(env, { sub, tool, action, args, waitMs = BRIDGE_
     await sleep(pollMs);
     const row = await env.DB.prepare('SELECT status, result_json, error FROM mcp_jobs WHERE id = ?').bind(id).first();
     if (!row) return { status: 'failed', error: 'ordre perdu' };
-    if (row.status === 'done') { let data = null; try { data = JSON.parse(row.result_json || 'null'); } catch (_) { data = null; } return { status: 'done', data, jobId: id }; }
-    if (row.status === 'failed') return { status: 'failed', error: row.error || 'échec dans l’onglet', jobId: id };
+    if (row.status === 'done' || row.status === 'failed') {
+      /* lu : le contenu quitte la base immédiatement */
+      await forget(env, id);
+      if (row.status === 'done') { let data = null; try { data = JSON.parse(row.result_json || 'null'); } catch (_) { data = null; } return { status: 'done', data, jobId: id }; }
+      return { status: 'failed', error: row.error || 'échec dans l’onglet', jobId: id };
+    }
   }
   /* trop tard : l'onglet ne doit plus l'exécuter (et ne pourra plus répondre) */
-  await env.DB.prepare("UPDATE mcp_jobs SET status = 'expired', done_at = datetime('now') WHERE id = ? AND status IN ('pending', 'dispatched')").bind(id).run().catch(() => {});
+  await env.DB.prepare("UPDATE mcp_jobs SET status = 'expired', done_at = datetime('now'), args_json = '{}', result_json = NULL, error = NULL WHERE id = ? AND status IN ('pending', 'dispatched')").bind(id).run().catch(() => {});
   return { status: 'timeout', jobId: id };
 }
 
@@ -146,13 +156,19 @@ export async function bridgeNotify(env, { sub, isAdmin, title, body, tag }) {
   return { sent, devices: subs.size };
 }
 
+/* Efface le contenu d'un ordre traité (arguments, résultat, message d'erreur). */
+async function forget(env, id) {
+  await env.DB.prepare("UPDATE mcp_jobs SET args_json = '{}', result_json = NULL, error = NULL WHERE id = ?").bind(id).run().catch(() => {});
+}
+
 /* Remise des ordres en attente à UN onglet (UPDATE gardé, anti-double). */
 async function claimPending(env, sub, tabId) {
   const { results } = await env.DB.prepare(`SELECT id, tool, action, args_json, expires_at, inbox_id FROM mcp_jobs
                                             WHERE sub = ? AND status = 'pending' AND expires_at > datetime('now') ORDER BY created_at ASC LIMIT 5`).bind(sub).all();
   const out = [];
   for (const r of (results || [])) {
-    const u = await env.DB.prepare("UPDATE mcp_jobs SET status = 'dispatched', dispatched_at = datetime('now') WHERE id = ? AND status = 'pending'").bind(r.id).run();
+    /* remis : les arguments partent avec l'ordre et quittent la base */
+    const u = await env.DB.prepare("UPDATE mcp_jobs SET status = 'dispatched', dispatched_at = datetime('now'), args_json = '{}' WHERE id = ? AND status = 'pending'").bind(r.id).run();
     if (u?.meta?.changes >= 1) {
       let args = {}; try { args = JSON.parse(r.args_json); } catch (_) { args = {}; }
       out.push({ id: r.id, tool: r.tool, action: r.action, args, expires_at: iso(r.expires_at), tab: tabId, ...(r.inbox_id ? { inbox_id: r.inbox_id } : {}) });
@@ -209,7 +225,7 @@ export async function handleBridgeJobResult(request, env, id) {
   await ensureMcpBridgeSchema(env);
   const body = await parseBody(request);
   if (!body || typeof body !== 'object') return err('Corps JSON attendu', 400, origin);
-  const job = await env.DB.prepare('SELECT id, status FROM mcp_jobs WHERE id = ? AND sub = ?').bind(String(id || ''), g.claims.sub).first();
+  const job = await env.DB.prepare('SELECT id, status, inbox_id FROM mcp_jobs WHERE id = ? AND sub = ?').bind(String(id || ''), g.claims.sub).first();
   if (!job) return err('Ordre introuvable', 404, origin);
   if (job.status === 'done' || job.status === 'failed') return err('Ordre déjà répondu', 409, origin);
   if (job.status === 'expired') return json({ ok: false, status: 'expired', message: 'Trop tard : le Worker n’attendait plus.' }, 410, origin);
@@ -217,6 +233,8 @@ export async function handleBridgeJobResult(request, env, id) {
   let resultJson = null, error = null;
   if (ok) { resultJson = JSON.stringify(body.data ?? null); if (resultJson.length > MAX_RESULT) { resultJson = null; error = 'résultat trop volumineux (64 Ko max)'; } }
   else error = String(body.error || 'échec dans l’onglet').slice(0, 500);
+  /* ordre mis en file après une notification push : personne ne l'attend, on ne garde que l'état */
+  if (job.inbox_id) resultJson = null;
   const u = await env.DB.prepare(`UPDATE mcp_jobs SET status = ?, result_json = ?, error = ?, done_at = datetime('now')
                                   WHERE id = ? AND status IN ('pending', 'dispatched')`).bind(error && ok ? 'failed' : (ok ? 'done' : 'failed'), resultJson, error, job.id).run();
   if (!(u?.meta?.changes >= 1)) return err('Ordre déjà répondu', 409, origin);
@@ -236,6 +254,7 @@ export async function purgeMcpBridge(env) {
   await ensureMcpBridgeSchema(env);
   const r = async (sql) => { const x = await env.DB.prepare(sql).run().catch(() => null); return x?.meta?.changes ?? 0; };
   return {
+    emptied:  await r("UPDATE mcp_jobs SET args_json = '{}', result_json = NULL, error = NULL WHERE expires_at < datetime('now') AND (args_json <> '{}' OR result_json IS NOT NULL OR error IS NOT NULL)"),
     jobs:     await r("DELETE FROM mcp_jobs WHERE created_at < datetime('now', '-1 day')"),
     presence: await r("DELETE FROM mcp_bridge_presence WHERE last_seen < datetime('now', '-1 day')"),
   };
