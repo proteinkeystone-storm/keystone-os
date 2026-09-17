@@ -1394,6 +1394,110 @@ export async function handleScheduledPurge(env) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// GET /api/qr/archives — les QR SUPPRIMÉS du tenant, avec leurs chiffres
+// ───────────────────────────────────────────────────────────────────
+// Règle de la maison (17/09/2026) : rien ne disparaît. Supprimer un QR
+// retirait sa redirection et le sortait de la bibliothèque, mais ses
+// scans restaient en base, invisibles pour toujours — 172 scans de
+// « Trait d'union », 47 des « Terrasses d'Ollioules »… Cette route les
+// rend visibles, et dit lesquels peuvent être remis en service.
+// ══════════════════════════════════════════════════════════════════
+export async function handleQrArchives(request, env) {
+  const origin   = getAllowedOrigin(env, request);
+  const tenantId = await _authTenant(request, env);
+  if (!tenantId) return err('Auth requise', 401, origin);
+
+  const { results } = await env.DB
+    .prepare(`SELECT id, data, deleted_at FROM entities
+              WHERE tenant_id = ? AND type = 'qr_codes' AND deleted_at IS NOT NULL
+              ORDER BY deleted_at DESC LIMIT 300`)
+    .bind(tenantId).all();
+  const rows = (results || []).map(r => {
+    try { return { ...JSON.parse(r.data), id: r.id, deleted_at: r.deleted_at }; } catch { return null; }
+  }).filter(Boolean);
+  if (!rows.length) return json({ qrs: [], total: 0 }, 200, origin);
+
+  const shortIds = rows.map(r => r.short_id).filter(Boolean);
+  const totals = await scanTotals(env, shortIds);
+  /* Un short_id libéré à la suppression a pu être réattribué : dans ce cas
+     la restauration casserait l'autre QR, on l'annonce comme impossible. */
+  const pris = new Set();
+  if (shortIds.length) {
+    const ph = shortIds.map(() => '?').join(',');
+    const { results: red } = await env.DB
+      .prepare(`SELECT short_id FROM qr_redirects WHERE short_id IN (${ph})`)
+      .bind(...shortIds).all();
+    for (const x of red || []) pris.add(x.short_id);
+  }
+
+  const qrs = rows.map(r => {
+    const t = r.short_id ? totals.get(r.short_id) : null;
+    return {
+      id: r.id, name: r.name || '(sans nom)', short_id: r.short_id || null,
+      folder: r.folder || null, qr_type: r.qr_type || 'url', mode: r.mode || 'dynamic',
+      target_url: r.target_url || null, deleted_at: r.deleted_at,
+      scans_total: t?.scans || 0, last_scan: t?.lastDay || null,
+      restorable: !!r.short_id && !pris.has(r.short_id),
+    };
+  });
+  return json({ qrs, total: qrs.length, scans_total: qrs.reduce((a, q) => a + q.scans_total, 0) }, 200, origin);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// POST /api/qr/:id/restore — remettre en service un QR archivé
+// ───────────────────────────────────────────────────────────────────
+// Rend la redirection (le code imprimé remarche) et fait réapparaître le
+// QR dans la bibliothèque, avec tout son historique de scans intact.
+// Refuse si le code court a été réattribué depuis : on ne casse pas un
+// autre QR vivant pour en ressusciter un.
+// ══════════════════════════════════════════════════════════════════
+export async function handleQrRestore(request, env, qrId) {
+  const origin   = getAllowedOrigin(env, request);
+  const tenantId = await _authTenant(request, env);
+  if (!tenantId) return err('Auth requise', 401, origin);
+
+  const row = await env.DB
+    .prepare(`SELECT data FROM entities
+              WHERE tenant_id = ? AND type = 'qr_codes' AND id = ? AND deleted_at IS NOT NULL`)
+    .bind(tenantId, qrId).first();
+  if (!row) return err('QR archivé introuvable', 404, origin);
+  let entity;
+  try { entity = JSON.parse(row.data); } catch { return err('Données corrompues', 500, origin); }
+
+  const shortId = entity.short_id || null;
+  if (shortId) {
+    const busy = await env.DB
+      .prepare('SELECT qr_id FROM qr_redirects WHERE short_id = ?').bind(shortId).first();
+    if (busy && busy.qr_id !== qrId) {
+      return err(`Le code court « ${shortId} » a été réattribué à un autre QR : impossible de restaurer celui-ci sans casser l’autre.`, 409, origin);
+    }
+    if (!busy) {
+      await env.DB
+        .prepare(`INSERT INTO qr_redirects (short_id, qr_id, tenant_id, target_url, qr_type, encoded_payload, status)
+                  VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .bind(shortId, qrId, tenantId, entity.target_url || '', entity.qr_type || 'url',
+              entity.encoded_payload || null, entity.status === 'archived' ? 'archived' : 'active')
+        .run();
+    }
+  }
+  await env.DB
+    .prepare(`UPDATE entities SET deleted_at = NULL, updated_at = datetime('now')
+              WHERE tenant_id = ? AND type = 'qr_codes' AND id = ?`)
+    .bind(tenantId, qrId).run();
+
+  const t = shortId ? (await scanTotals(env, [shortId])).get(shortId) : null;
+  await audit(env, {
+    action: 'qr_restore',
+    actor:  tenantId === 'default' ? 'admin' : tenantId,
+    target: shortId || qrId,
+    tenantId,
+    request,
+    details: { qr_id: qrId, nom: String(entity.name || '').slice(0, 60), scans: t?.scans || 0 },
+  }).catch(() => {});
+  return json({ restored: true, id: qrId, short_id: shortId, scans_total: t?.scans || 0 }, 200, origin);
+}
+
+// ══════════════════════════════════════════════════════════════════
 // DELETE /api/qr/:id/scans — le PROPRIÉTAIRE efface les statistiques
 // ───────────────────────────────────────────────────────────────────
 // Depuis le 17/09/2026, plus rien ne disparaît tout seul : c'est la SEULE
@@ -1408,9 +1512,11 @@ export async function handleQrScansErase(request, env, qrId) {
   const tenantId = await _authTenant(request, env);
   if (!tenantId) return err('Auth requise', 401, origin);
 
+  /* Vivant OU archivé : les statistiques d'un QR supprimé s'affichent dans
+     les Archives, il faut donc pouvoir les effacer de là aussi. */
   const row = await env.DB
     .prepare(`SELECT data FROM entities
-              WHERE tenant_id = ? AND type = 'qr_codes' AND id = ? AND deleted_at IS NULL`)
+              WHERE tenant_id = ? AND type = 'qr_codes' AND id = ?`)
     .bind(tenantId, qrId).first();
   if (!row) return err('QR introuvable', 404, origin);
   let entity;

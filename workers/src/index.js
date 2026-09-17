@@ -88,7 +88,7 @@ import {
   handlePulsaResponsesList, handlePulsaResponseGet, handlePulsaResponsesCsv,
   handlePulsaResponsesListBySlug, handlePulsaResponsePatch,
 } from './routes/pulsa-responses.js';
-import { handleQrRedirect, handleCreateQr, handleListQr, handleQrOverview, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handleQrScansErase, handlePrivacyPage, handleScheduledPurge, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrRedeemWin, handleSmartQrLoyaltyStamp, handleSmartQrConcierge } from './routes/qr.js';
+import { handleQrRedirect, handleCreateQr, handleListQr, handleQrOverview, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handleQrScansErase, handleQrArchives, handleQrRestore, handlePrivacyPage, handleScheduledPurge, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrRedeemWin, handleSmartQrLoyaltyStamp, handleSmartQrConcierge } from './routes/qr.js';
 import { handleSdqrAsset } from './routes/sdqr-assets.js';
 // ── Sceau — secret usage-unique scellé E2E+OPRF (Pad O-SEC-001 · S1) ──
 // Route publique /s/ DISTINCTE de /r/ (SDQR prod) — on ne touche pas le hot-path QR.
@@ -1073,6 +1073,10 @@ const handler = {
       if (path === '/api/qr' && method === 'POST') return handleCreateQr(request, env);
       if (path === '/api/qr' && method === 'GET')  return handleListQr(request, env);
       if (path === '/api/qr/overview' && method === 'GET') return handleQrOverview(request, env);
+      /* Archives : les QR supprimés et leurs statistiques, qui n'étaient
+         visibles nulle part. AVANT la route /api/qr/:id/stats (pas de
+         conflit : « archives » n'est pas suivi de /stats). */
+      if (path === '/api/qr/archives' && method === 'GET') return handleQrArchives(request, env);
       // Smart QR V4.3 (2026-05-26) — endpoint authoritative jeux (machine
       // à sous + carte à gratter). Tire l'aléatoire serveur, anti-rejouage
       // par device_hash, gère le stock de lots_disponibles.
@@ -1132,6 +1136,12 @@ const handler = {
       const qrScansErase = path.match(/^\/api\/qr\/([^/]+)\/scans$/);
       if (qrScansErase && method === 'DELETE') {
         return handleQrScansErase(request, env, qrScansErase[1]);
+      }
+      /* Remise en service d'un QR archivé (la redirection revient, les scans
+         n'avaient jamais bougé). */
+      const qrRestore = path.match(/^\/api\/qr\/([^/]+)\/restore$/);
+      if (qrRestore && method === 'POST') {
+        return handleQrRestore(request, env, qrRestore[1]);
       }
       if (path.startsWith('/api/qr/') && method === 'DELETE') {
         const qrId = path.split('/').pop();

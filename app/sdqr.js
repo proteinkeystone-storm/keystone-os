@@ -60,6 +60,7 @@ let _busy        = false;      // anti-double-click
 let _libView = 'grid';                       // 'grid' | 'table'
 let _libSort = { key: 'scans', dir: 'desc' }; // tri du tableau
 let _libSel  = new Set();                    // ids sélectionnés (multi-sélection tableau)
+let _libArchives = false;                    // bibliothèque OU archives (QR supprimés)
 try { const v = localStorage.getItem('sdqr_lib_view'); if (v === 'grid' || v === 'table') _libView = v; } catch (e) {}
 
 // Filtres sidebar (Sprint final)
@@ -173,6 +174,27 @@ async function _apiDelete(id) {
     throw new Error(e.error || 'API delete error ' + r.status);
   }
   return true;
+}
+
+/* Archives : les QR supprimés et leurs statistiques, qui n'étaient visibles
+   nulle part. Règle de la maison : rien ne disparaît sans décision. */
+async function _apiArchives() {
+  const r = await fetch(`${CF_API}/api/qr/archives`, { headers: _headers() });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error(e.error || 'API archives error ' + r.status);
+  }
+  return r.json();
+}
+async function _apiRestore(id) {
+  const r = await fetch(`${CF_API}/api/qr/${encodeURIComponent(id)}/restore`, {
+    method: 'POST', headers: _headers(),
+  });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error(e.error || 'API restore error ' + r.status);
+  }
+  return r.json();
 }
 
 /* Effacement des statistiques d'UN QR, à la demande du propriétaire.
@@ -622,6 +644,7 @@ function _renderLibrary(panel) {
   if (!content) return;
   content.classList.remove('sdqr-content--create', 'sdqr-content--stats');
   content.classList.add('sdqr-content--lib');
+  if (_libArchives) { _renderArchives(panel); return; }
 
   const qrs = _libQrs();
   // Purge la sélection des ids qui ne sont plus visibles (filtre/suppression).
@@ -638,6 +661,7 @@ function _renderLibrary(panel) {
           <button class="sdqr-lib-seg ${_libView === 'grid'  ? 'is-active' : ''}" data-libview="grid">${_LIBICO.grid}Grille</button>
           <button class="sdqr-lib-seg ${_libView === 'table' ? 'is-active' : ''}" data-libview="table">${_LIBICO.rows}Tableau</button>
         </div>
+        <button class="sdqr-btn sdqr-btn--ghost" id="sdqr-arch-open" title="Les QR supprimés et leurs statistiques : rien n'est perdu">Archives</button>
       </div>
     </div>`;
 
@@ -693,6 +717,12 @@ function _renderLibrary(panel) {
       }))
       .catch(() => { /* la bibliothèque ne doit pas en dépendre */ });
   }
+
+  // — Archives (QR supprimés) —
+  content.querySelector('#sdqr-arch-open')?.addEventListener('click', () => {
+    _libArchives = true;
+    _renderLibrary(panel);
+  });
 
   // — Bascule Grille / Tableau —
   content.querySelectorAll('[data-libview]').forEach(b => b.addEventListener('click', () => {
@@ -816,6 +846,92 @@ function _ovLeader(lb) {
 function _ovWatch(watch) {
   if (!watch || !watch.length) return `<div style="color:#9aa6b8;font-size:12px;padding:6px 0">Rien à signaler — tout va bien.</div>`;
   return watch.map(w => `<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:0.5px solid rgba(27,42,74,.07)"><span style="width:8px;height:8px;border-radius:50%;margin-top:3px;background:${w.kind === 'warn' ? '#e0a23a' : '#6c6cf5'};flex:none"></span><div style="flex:1"><div style="font-size:12.5px;color:#1b2a4a">${_esc(w.name)}</div><div style="font-size:11px;color:#8a96ad;margin-top:1px">${_esc(w.note)}</div></div></div>`).join('');
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ARCHIVES — les QR supprimés, et leurs statistiques
+   ───────────────────────────────────────────────────────────────────
+   Supprimer un QR retirait sa redirection et le sortait de la
+   bibliothèque, mais ses scans restaient en base sans que personne ne
+   puisse les voir. Ici on les montre, on peut remettre le QR en service
+   (le code imprimé remarche, l'historique est intact) ou effacer ses
+   statistiques pour de bon. Rien ne disparaît sans décision.
+   ══════════════════════════════════════════════════════════════════ */
+function _renderArchives(panel) {
+  const content = panel.querySelector('#sdqr-content');
+  if (!content) return;
+  const retour = `<button class="sdqr-btn sdqr-btn--ghost" id="sdqr-arch-back">← Mes QR</button>`;
+  content.innerHTML = `
+    <div class="sdqr-lib-head">
+      <span class="sdqr-lib-title">Archives</span>
+      <span class="sdqr-lib-count">chargement…</span>
+      <div class="sdqr-lib-tools">${retour}</div>
+    </div>
+    <div class="sdqr-lib-empty">Lecture des QR supprimés…</div>`;
+  content.querySelector('#sdqr-arch-back')?.addEventListener('click', () => { _libArchives = false; _renderLibrary(panel); });
+
+  _apiArchives().then(({ qrs, total, scans_total }) => {
+    const jour = (s) => (s ? String(s).slice(0, 10).split('-').reverse().join('/') : '—');
+    const lignes = (qrs || []).map(q => `
+      <tr data-arch="${_esc(q.id)}">
+        <td><strong>${_esc(q.name)}</strong>${q.short_id ? `<span class="sdqr-tbl-type"> · ${_esc(q.short_id)}</span>` : ''}</td>
+        <td class="sdqr-tbl-col-hide">${_esc(q.folder || '—')}</td>
+        <td>${jour(q.deleted_at)}</td>
+        <td><strong>${q.scans_total}</strong></td>
+        <td class="sdqr-tbl-col-hide">${jour(q.last_scan)}</td>
+        <td class="sdqr-tbl-col-act">
+          ${q.restorable
+            ? `<button class="sdqr-btn sdqr-btn--ghost" data-arch-restore="${_esc(q.id)}">Remettre en service</button>`
+            : `<span class="sdqr-tbl-type" title="Le code court a été réattribué à un autre QR">non restaurable</span>`}
+          ${q.scans_total > 0 ? `<button class="sdqr-btn sdqr-btn--ghost" data-arch-erase="${_esc(q.id)}" data-arch-name="${_esc(q.name)}" data-arch-scans="${q.scans_total}">Effacer les statistiques</button>` : ''}
+        </td>
+      </tr>`).join('');
+
+    content.innerHTML = `
+      <div class="sdqr-lib-head">
+        <span class="sdqr-lib-title">Archives</span>
+        <span class="sdqr-lib-count">${total} QR supprimé${total > 1 ? 's' : ''} · ${scans_total} scan${scans_total > 1 ? 's' : ''} conservé${scans_total > 1 ? 's' : ''}</span>
+        <div class="sdqr-lib-tools">${retour}</div>
+      </div>
+      ${total === 0
+        ? `<div class="sdqr-lib-empty">Aucun QR supprimé. Tout ce que vous avez créé est dans « Mes QR ».</div>`
+        : `<div class="sdqr-tbl-wrap"><table class="sdqr-tbl">
+             <thead><tr>
+               <th>Nom</th><th class="sdqr-tbl-col-hide is-static">Dossier</th>
+               <th>Supprimé le</th><th>Scans</th>
+               <th class="sdqr-tbl-col-hide is-static">Dernier scan</th>
+               <th class="sdqr-tbl-col-act is-static"></th>
+             </tr></thead>
+             <tbody>${lignes}</tbody>
+           </table></div>
+           <p class="sdqr-lib-empty" style="text-align:left">Remettre en service rend la redirection : un QR déjà imprimé remarche, avec tout son historique. Les statistiques d'un QR supprimé restent enregistrées jusqu'à ce que vous les effaciez.</p>`}`;
+
+    content.querySelector('#sdqr-arch-back')?.addEventListener('click', () => { _libArchives = false; _renderLibrary(panel); });
+
+    content.querySelectorAll('[data-arch-restore]').forEach(b => b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        const r = await _apiRestore(b.dataset.archRestore);
+        _libArchives = false;
+        await _refreshList(panel);
+        _selectedId = r.id || null;
+        _renderCurrentView(panel);
+      } catch (e) { b.disabled = false; alert(e.message); }
+    }));
+
+    content.querySelectorAll('[data-arch-erase]').forEach(b => b.addEventListener('click', async () => {
+      const n = b.dataset.archScans;
+      if (!confirm(`Effacer les statistiques de "${b.dataset.archName}" ?\n\n• ${n} scan(s) et tout l'historique par jour seront supprimés.\n• Ce QR est déjà supprimé : il ne restera plus rien de lui.\n• Cette action est irréversible.`)) return;
+      b.disabled = true;
+      try { await _apiEraseScans(b.dataset.archErase); _renderArchives(panel); }
+      catch (e) { b.disabled = false; alert(e.message); }
+    }));
+  }).catch(e => {
+    content.innerHTML = `
+      <div class="sdqr-lib-head"><span class="sdqr-lib-title">Archives</span><div class="sdqr-lib-tools">${retour}</div></div>
+      <div class="sdqr-lib-empty">Impossible de lire les archives : ${_esc(e.message)}</div>`;
+    content.querySelector('#sdqr-arch-back')?.addEventListener('click', () => { _libArchives = false; _renderLibrary(panel); });
+  });
 }
 
 function _renderOverviewHtml(d, period) {

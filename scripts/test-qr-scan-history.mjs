@@ -24,7 +24,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { consolidateScanDaily, scanTotals, scanByDay, scanSeriesByQr, deleteScanDailyForTenant } from '../workers/src/lib/qr-history.js';
-import { handleScheduledPurge, handleListQr, handleQrOverview, handleStatsQr, handleQrScansErase } from '../workers/src/routes/qr.js';
+import { handleScheduledPurge, handleListQr, handleQrOverview, handleStatsQr, handleQrScansErase, handleQrArchives, handleQrRestore } from '../workers/src/routes/qr.js';
 import { signJWT } from '../workers/src/lib/jwt.js';
 
 let pass = 0, fail = 0;
@@ -55,7 +55,7 @@ DB._db.exec(`CREATE TABLE qr_scans (
   id INTEGER PRIMARY KEY AUTOINCREMENT, short_id TEXT NOT NULL,
   ts TEXT NOT NULL DEFAULT (datetime('now')), country TEXT,
   device_kind TEXT, os_kind TEXT, ua_hash TEXT);
-CREATE TABLE qr_redirects (short_id TEXT PRIMARY KEY, tenant_id TEXT, target_url TEXT, status TEXT, qr_type TEXT, encoded_payload TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE qr_redirects (short_id TEXT PRIMARY KEY, qr_id TEXT, tenant_id TEXT, target_url TEXT, status TEXT, qr_type TEXT, encoded_payload TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')));
 CREATE TABLE system_meta (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT);
 INSERT INTO qr_redirects (short_id, tenant_id, target_url, status) VALUES
   ('BEL','promethee','https://ex.test/bel','active'),
@@ -268,6 +268,53 @@ console.log('\n▶ 7 · Le propriétaire efface — le SEUL effacement qui exist
   eq(liste.qrs.find(q => q.short_id === 'OLD').scans_total, 2, 'le QR voisin garde ses statistiques');
   const journal = DB._db.prepare("SELECT action, target FROM audit_logs WHERE action='qr_scans_erase'").all();
   yes(journal.length === 1 && journal[0].target === 'BEL', 'l’effacement est journalisé (audit)');
+}
+
+console.log('\n▶ 8 · Archives : un QR supprimé garde ses chiffres, et peut revenir');
+{
+  const envApi = { ...env, KS_JWT_SECRET: 'secret-de-banc-32-octets-minimum-0123456789', KS_ALLOWED_ORIGIN: '*' };
+  const jwt = await signJWT({ sub: 'promethee', plan: 'PRO', owner: 'Prométhée' }, envApi);
+  const jwtAutre = await signJWT({ sub: 'client-b', plan: 'PRO', owner: 'Voisin' }, envApi);
+  const GET = (t) => new Request('https://api.test/api/qr/archives', { headers: { Authorization: 'Bearer ' + t } });
+  const POST = (t, id) => new Request('https://api.test/api/qr/' + id + '/restore', { method: 'POST', headers: { Authorization: 'Bearer ' + t } });
+
+  /* MORT : supprimé le 17/08, 6 scans, code court libre → restaurable.
+     PRIS : supprimé, mais son code court sert à un autre QR → non restaurable. */
+  DB._db.exec(`
+    INSERT INTO entities (id, tenant_id, type, data, deleted_at) VALUES
+      ('e-mort','promethee','qr_codes','{"short_id":"MORT","name":"Trait d''union","mode":"dynamic","qr_type":"url","folder":"REVEST","target_url":"https://ex.test/revest"}','2026-08-17 10:00:00'),
+      ('e-pris','promethee','qr_codes','{"short_id":"PRIS","name":"Ancien code","mode":"dynamic","qr_type":"url","target_url":"https://ex.test/old"}','2026-07-01 09:00:00');
+    INSERT INTO qr_redirects (short_id, qr_id, tenant_id, target_url, status, qr_type) VALUES ('PRIS','e-neuf','promethee','https://ex.test/neuf','active','url');`);
+  for (const ua of ['m1', 'm2', 'm2']) scan('MORT', dayAgo(120), ua);
+  for (const ua of ['m3', 'm4', 'm5']) scan('MORT', dayAgo(95), ua);
+  await consolidateScanDaily(env);
+  DB._db.exec(`DELETE FROM qr_scans WHERE short_id = 'MORT'`);   // brut parti, compteur seul
+
+  const arch = await (await handleQrArchives(GET(jwt), envApi)).json();
+  const mort = arch.qrs.find(q => q.short_id === 'MORT');
+  yes(mort && mort.scans_total === 6, `archives : « Trait d'union » retrouvé avec ses 6 scans (brut effacé, compteur seul)`);
+  eq(mort.restorable, true, '… et il est restaurable (code court libre)');
+  eq(mort.name, "Trait d'union", '… nom conservé');
+  eq(arch.qrs.find(q => q.short_id === 'PRIS').restorable, false, 'code court réattribué → annoncé NON restaurable');
+  yes(arch.total >= 2 && arch.scans_total >= 6, `total des archives : ${arch.total} QR, ${arch.scans_total} scan(s)`);
+  eq((await (await handleQrArchives(GET(jwtAutre), envApi)).json()).total, 0, 'un autre compte ne voit pas ces archives');
+
+  const refus = await handleQrRestore(POST(jwt, 'e-pris'), envApi, 'e-pris');
+  eq(refus.status, 409, 'restaurer sur un code court réattribué → refus (409), l’autre QR est préservé');
+  const horsTenant = await handleQrRestore(POST(jwtAutre, 'e-mort'), envApi, 'e-mort');
+  eq(horsTenant.status, 404, 'un autre compte ne peut pas restaurer');
+
+  const r = await (await handleQrRestore(POST(jwt, 'e-mort'), envApi, 'e-mort')).json();
+  yes(r.restored === true && r.scans_total === 6, 'restauré avec ses 6 scans');
+  eq(DB._db.prepare("SELECT COUNT(*) AS n FROM qr_redirects WHERE short_id='MORT' AND qr_id='e-mort'").get().n, 1, 'la redirection est recréée : le QR imprimé remarche');
+  eq(DB._db.prepare("SELECT deleted_at FROM entities WHERE id='e-mort'").get().deleted_at, null, 'le QR est sorti des archives');
+  const liste = await (await handleListQr(new Request('https://api.test/api/qr', { headers: { Authorization: 'Bearer ' + jwt } }), envApi)).json();
+  eq(liste.qrs.find(q => q.short_id === 'MORT')?.scans_total, 6, 'il réapparaît dans « Mes QR » avec son historique');
+
+  /* Effacer les statistiques d'un QR ENCORE archivé (relâchement du filtre
+     deleted_at) : c'est le seul moyen de vider une archive. */
+  const eff = await (await handleQrScansErase(new Request('https://api.test/api/qr/e-pris/scans', { method: 'DELETE', headers: { Authorization: 'Bearer ' + jwt } }), envApi, 'e-pris')).json();
+  yes(eff.erased === true, 'les statistiques d’un QR archivé peuvent être effacées');
 }
 
 console.log(`\n${pass + fail} vérifications — ${pass} \x1b[32mok\x1b[0m, ${fail} ${fail ? '\x1b[31mko\x1b[0m' : 'ko'}\n`);
