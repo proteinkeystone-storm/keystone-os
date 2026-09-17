@@ -175,6 +175,22 @@ async function _apiDelete(id) {
   return true;
 }
 
+/* Effacement des statistiques d'UN QR, à la demande du propriétaire.
+   Depuis le 17/09/2026 c'est la SEULE façon dont des scans disparaissent :
+   plus aucune purge automatique. Le QR continue de rediriger, il repart
+   simplement de zéro. */
+async function _apiEraseScans(id) {
+  const r = await fetch(`${CF_API}/api/qr/${encodeURIComponent(id)}/scans`, {
+    method: 'DELETE',
+    headers: _headers(),
+  });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error(e.error || 'API erase error ' + r.status);
+  }
+  return r.json().catch(() => ({ erased: true }));
+}
+
 // Sprint SDQR-4 — analytics
 async function _apiStats(id, period = '30d') {
   const r = await fetch(`${CF_API}/api/qr/${encodeURIComponent(id)}/stats?period=${period}`, {
@@ -3803,7 +3819,8 @@ async function _openQrDetail(panel, qr) {
           <div class="sdqr-detail-actions sdqr-detail-actions--incard">
             <button class="sdqr-btn sdqr-btn--ghost" id="sdqr-archive">${qr.status === 'archived' ? 'Réactiver' : 'Archiver'}</button>
             ${isRedirected ? `<a class="sdqr-btn sdqr-btn--ghost" href="${_esc(redirectUrl)}" target="_blank" rel="noopener noreferrer">Tester le scan ↗</a>` : ''}
-            <button class="sdqr-btn sdqr-btn--danger" id="sdqr-delete" title="Suppression définitive (les scans historiques sont conservés)">Supprimer définitivement</button>
+            <button class="sdqr-btn sdqr-btn--ghost" id="sdqr-erase-scans" title="Efface le journal des scans et les compteurs de ce QR. Le QR continue de rediriger et repart de zéro.">Effacer les statistiques</button>
+            <button class="sdqr-btn sdqr-btn--danger" id="sdqr-delete" title="Suppression définitive du QR. Les statistiques restent : pour qu'elles partent aussi, utilisez « Effacer les statistiques » avant.">Supprimer définitivement</button>
           </div>
         </div>
       </div>
@@ -4252,9 +4269,31 @@ async function _openQrDetail(panel, qr) {
     }
   });
 
+  /* Effacer les statistiques — le seul effacement de scans qui existe
+     (plus aucune purge automatique depuis le 17/09/2026). Confirmation
+     forte : l'action est irréversible et l'historique peut représenter
+     des mois de campagne. */
+  content.querySelector('#sdqr-erase-scans')?.addEventListener('click', async () => {
+    const total = Number(qr.scans_total || 0);
+    if (!confirm(`Effacer les statistiques de "${qr.name}" ?\n\n• ${total} scan${total > 1 ? 's' : ''} et tout l'historique par jour seront supprimés.\n• Le QR continue de rediriger et repart de zéro.\n• Cette action est irréversible : Keystone ne conserve aucune copie.`)) return;
+    const msg = content.querySelector('#sdqr-detail-msg');
+    try {
+      const r = await _apiEraseScans(qr.id);
+      if (msg) {
+        msg.hidden = false;
+        msg.textContent = `Statistiques effacées : ${r.scans || 0} scan(s), ${r.jours || 0} jour(s) d’historique.`;
+        msg.className = 'sdqr-detail-msg sdqr-detail-msg--ok';
+      }
+      await _refreshList(panel);
+      _renderCurrentView(panel);
+    } catch (e) {
+      if (msg) { msg.hidden = false; msg.textContent = e.message; msg.className = 'sdqr-detail-msg sdqr-detail-msg--err'; }
+    }
+  });
+
   // Supprimer définitivement (possible sans archivage prealable — confirmation forte)
   content.querySelector('#sdqr-delete')?.addEventListener('click', async () => {
-    if (!confirm(`Supprimer définitivement "${qr.name}" ?\n\n• Le QR ne pourra plus rediriger.\n• Les statistiques historiques (scans) sont conservées pour audit.\n• Cette action est irréversible.`)) return;
+    if (!confirm(`Supprimer définitivement "${qr.name}" ?\n\n• Le QR ne pourra plus rediriger.\n• Les statistiques restent enregistrées : pour les effacer aussi, faites-le AVANT avec « Effacer les statistiques ».\n• Cette action est irréversible.`)) return;
     const msg = content.querySelector('#sdqr-detail-msg');
     try {
       await _apiDelete(qr.id);

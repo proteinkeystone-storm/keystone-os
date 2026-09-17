@@ -1282,8 +1282,9 @@ function _renderPrivacyPage(retentionDays, dpoEmail) {
   <p>L'<em>empreinte UA</em> est un hash SHA-256 tronqué à 8 caractères du <em>User-Agent</em> de votre navigateur. Elle permet de distinguer si deux scans proviennent du même appareil <strong>sans pouvoir vous identifier</strong>. Elle est non-réversible.</p>
 
   <h2>Durée de conservation</h2>
-  <p>Les logs de scan sont automatiquement supprimés après <strong>${retentionDays} jours</strong>. Une fois purgés, il est impossible de les reconstituer.</p>
-  <p>Avant leur suppression, ils sont réduits à un <strong>compteur journalier anonyme</strong> — « ce QR, ce jour-là, N scans et N navigateurs distincts » — conservé pour que le propriétaire du QR garde l'historique de sa campagne. Ce compteur ne contient <strong>ni pays, ni type d'appareil, ni système, ni empreinte de navigateur, ni heure</strong> : il ne permet de remonter à personne, et il disparaît avec le QR.</p>
+  <p>Les statistiques d'un QR code racontent la vie d'une campagne, qui peut durer des années — l'affichage d'un programme immobilier, par exemple. Elles sont donc <strong>conservées aussi longtemps que le propriétaire du QR le souhaite</strong> : rien n'est supprimé automatiquement.</p>
+  <p><strong>C'est lui qui décide de l'effacement</strong>, d'un geste, depuis son tableau de bord (« Effacer les statistiques ») : le journal des scans et les compteurs de ce QR partent alors définitivement. Vous pouvez demander cet effacement, ou l'accès à ce qui vous concerne, en écrivant à <a href="mailto:${dpoEmail}">${dpoEmail}</a> — nous relayons la demande au propriétaire du QR, responsable de traitement.</p>
+  <p>Rappel de ce qui est enregistré, et de ce qui ne l'est pas : <strong>aucune adresse IP</strong>, aucun identifiant publicitaire, aucun cookie. Le pays, le type d'appareil et le système sont grossiers ; l'empreinte de navigateur est un condensé tronqué, qui sert à distinguer deux visites sans permettre de vous identifier.</p>
 
   <h2>Souveraineté technique</h2>
   <div class="card">
@@ -1335,38 +1336,50 @@ export async function handleScheduledPurge(env) {
     )
   `).run().catch(() => {});
 
-  let purged = '?';
+  let purged = 0;
   let status = 'ok';
   let error  = null;
   let consolide = null;
   try {
-    /* CONSOLIDER D'ABORD, PURGER ENSUITE — l'ordre est la garantie : ce qui
-       part du journal brut est déjà compté, par QR et par jour, dans
-       qr_scan_daily (compteur anonyme, conservé sans limite). Sans cette
-       passe, la purge faisait baisser le compteur affiché au client. */
+    /* Consolidation du compteur journalier : totaux et courbes servis sans
+       compter des dizaines de milliers de lignes, et deuxième exemplaire des
+       chiffres si le journal brut était perdu un jour. */
     consolide = await consolidateScanDaily(env);
     console.log(`[sdqr-purge] compteur journalier consolidé — ${consolide.lignes} ligne(s), ${consolide.jours} jour(s) d’historique`);
   } catch (e) {
-    /* Jamais de purge sur une consolidation ratée : on préfère garder le
-       brut un jour de plus que perdre l'historique. */
-    console.error('[sdqr-purge] consolidation FAILED — purge annulée', e.message);
-    await env.DB.prepare(`
-      INSERT INTO system_meta (key, value, updated_at)
-      VALUES ('last_purge_at', ?, datetime('now'))
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-    `).bind(JSON.stringify({ status: 'failed', purged: 0, error: 'consolidation: ' + e.message, retentionDays })).run().catch(() => {});
-    return;
-  }
-  try {
-    const result = await env.DB
-      .prepare(`DELETE FROM qr_scans WHERE ts < datetime('now', '-${retentionDays} days')`)
-      .run();
-    purged = result?.meta?.changes ?? '?';
-    console.log(`[sdqr-purge] OK — supprimé ${purged} lignes anciennes (> ${retentionDays}j)`);
-  } catch (e) {
+    console.error('[sdqr-purge] consolidation FAILED', e.message);
     status = 'failed';
-    error  = e.message;
-    console.error('[sdqr-purge] FAILED', e.message);
+    error  = 'consolidation: ' + e.message;
+  }
+
+  /* ═══ RIEN NE DISPARAÎT TOUT SEUL (décision de Stéphane, 17/09/2026) ═══
+     Les scans d'un QR racontent la vie d'une campagne : une bâche de
+     programme immobilier vit des années, et un client ne comprendrait pas
+     que ses chiffres baissent. La purge automatique est donc ÉTEINTE, et
+     l'interrupteur est à l'envers : il faut écrire noir sur blanc
+     SDQR_SCAN_PURGE = "on" pour qu'une ligne soit supprimée. Une variable
+     oubliée, mal orthographiée ou absente ne détruit RIEN.
+     Le seul effacement possible est celui que le propriétaire demande :
+     DELETE /api/qr/:id/scans (handleQrScansErase). ═══ */
+  const purgeArmee = String(env.SDQR_SCAN_PURGE || '').toLowerCase() === 'on';
+  if (!purgeArmee) {
+    console.log('[sdqr-purge] aucune purge — conservation illimitée (SDQR_SCAN_PURGE ≠ "on")');
+  } else if (status === 'failed') {
+    /* Purge armée mais consolidation ratée : on ne supprime RIEN. Mieux vaut
+       garder le brut un jour de plus que perdre l'historique. */
+    console.error('[sdqr-purge] purge annulée — la consolidation a échoué');
+  } else {
+    try {
+      const result = await env.DB
+        .prepare(`DELETE FROM qr_scans WHERE ts < datetime('now', '-${retentionDays} days')`)
+        .run();
+      purged = result?.meta?.changes ?? 0;
+      console.log(`[sdqr-purge] purge ARMÉE — supprimé ${purged} lignes anciennes (> ${retentionDays}j)`);
+    } catch (e) {
+      status = 'failed';
+      error  = e.message;
+      console.error('[sdqr-purge] FAILED', e.message);
+    }
   }
 
   // Enregistre toujours le timestamp, même en cas d'échec : permet à
@@ -1377,7 +1390,46 @@ export async function handleScheduledPurge(env) {
     ON CONFLICT(key) DO UPDATE SET
       value      = excluded.value,
       updated_at = excluded.updated_at
-  `).bind(JSON.stringify({ status, purged, error, retentionDays, consolide })).run().catch(() => {});
+  `).bind(JSON.stringify({ status, purged, error, retentionDays, purge: purgeArmee ? 'on' : 'off', consolide })).run().catch(() => {});
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DELETE /api/qr/:id/scans — le PROPRIÉTAIRE efface les statistiques
+// ───────────────────────────────────────────────────────────────────
+// Depuis le 17/09/2026, plus rien ne disparaît tout seul : c'est la SEULE
+// façon dont des scans s'effacent. Journal brut ET compteur journalier
+// partent ensemble — sinon le total « durable » survivrait à l'effacement
+// demandé, ce qui serait le contraire du service rendu.
+// Le QR lui-même n'est pas touché : il continue de rediriger et de
+// compter à partir de zéro. Confirmation forte côté pad (app/sdqr.js).
+// ══════════════════════════════════════════════════════════════════
+export async function handleQrScansErase(request, env, qrId) {
+  const origin   = getAllowedOrigin(env, request);
+  const tenantId = await _authTenant(request, env);
+  if (!tenantId) return err('Auth requise', 401, origin);
+
+  const row = await env.DB
+    .prepare(`SELECT data FROM entities
+              WHERE tenant_id = ? AND type = 'qr_codes' AND id = ? AND deleted_at IS NULL`)
+    .bind(tenantId, qrId).first();
+  if (!row) return err('QR introuvable', 404, origin);
+  let entity;
+  try { entity = JSON.parse(row.data); } catch { return err('Données corrompues', 500, origin); }
+  const shortId = entity.short_id;
+  if (!shortId) return json({ erased: true, scans: 0, jours: 0, note: 'QR statique — aucun scan tracké' }, 200, origin);
+
+  const brut = await env.DB.prepare('DELETE FROM qr_scans WHERE short_id = ?').bind(shortId).run();
+  const jours = await env.DB.prepare('DELETE FROM qr_scan_daily WHERE short_id = ?').bind(shortId).run().catch(() => null);
+  const out = { erased: true, scans: brut?.meta?.changes || 0, jours: jours?.meta?.changes || 0 };
+  await audit(env, {
+    action: 'qr_scans_erase',
+    actor:  tenantId === 'default' ? 'admin' : tenantId,
+    target: shortId,
+    tenantId,
+    request,
+    details: { qr_id: qrId, nom: String(entity.name || '').slice(0, 60), scans: out.scans, jours: out.jours },
+  }).catch(() => {});
+  return json(out, 200, origin);
 }
 
 // ══════════════════════════════════════════════════════════════════

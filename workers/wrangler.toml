@@ -174,8 +174,16 @@ PRICING_V2 = "on"
 # redaction-<slug>@redaction-pks.com.
 DK_EMAIL_DOMAIN = "redaction-pks.com"
 
-# ── SDQR — RGPD (Sprint SDQR-5) ─────────────────────────────
-# Rétention des logs de scan en jours (purge auto via Cron, voir [triggers])
+# ── SDQR — conservation des statistiques ────────────────────
+# DÉCISION Stéphane 17/09/2026 : les statistiques d'un QR ne disparaissent
+# JAMAIS tout seules. Une bâche de programme immobilier vit des années ;
+# un client ne comprendrait pas que ses scans baissent. La purge n'a lieu
+# que si SDQR_SCAN_PURGE vaut exactement "on" — interrupteur à l'envers,
+# pour qu'une variable oubliée ou mal orthographiée ne détruise rien.
+# Le seul effacement possible est celui du propriétaire :
+# DELETE /api/qr/:id/scans (bouton « Effacer les statistiques » du pad).
+SDQR_SCAN_PURGE = "off"
+# Durée utilisée UNIQUEMENT si la purge est armée ci-dessus.
 SDQR_SCAN_RETENTION_DAYS = "90"
 # Email du DPO affiché sur la page /sdqr-privacy
 SDQR_DPO_EMAIL = "contact@protein-keystone.com"

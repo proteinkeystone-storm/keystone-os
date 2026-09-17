@@ -10,10 +10,12 @@
         reste servi par le brut) → aucun double comptage.
      2. Elle est idempotente et ne BAISSE jamais une valeur, même quand la
         purge a déjà rogné le brut du jour consolidé.
-     3. Après une purge réelle, le total par QR NE BOUGE PAS — y compris
-        pour un QR dont TOUT le brut est parti.
-     4. Si la consolidation échoue, la purge n'a pas lieu (on garde le brut
-        un jour de plus plutôt que de perdre l'historique).
+     3. RIEN NE DISPARAÎT TOUT SEUL : le cron quotidien ne supprime aucune
+        ligne tant que SDQR_SCAN_PURGE ≠ 'on' (interrupteur à l'envers).
+     3 bis. Si la purge est ARMÉE, le total par QR ne bouge toujours pas,
+        et une consolidation en échec l'annule.
+     4. Le propriétaire, lui, peut tout effacer : DELETE /api/qr/:id/scans
+        emporte le brut ET le compteur de ce QR.
      5. Fenêtres (7/30/90 j), courbe par jour, courbe par QR : justes.
      6. Effacement RGPD d'un tenant : ses compteurs partent aussi, ceux des
         autres restent.
@@ -22,7 +24,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { consolidateScanDaily, scanTotals, scanByDay, scanSeriesByQr, deleteScanDailyForTenant } from '../workers/src/lib/qr-history.js';
-import { handleScheduledPurge, handleListQr, handleQrOverview, handleStatsQr } from '../workers/src/routes/qr.js';
+import { handleScheduledPurge, handleListQr, handleQrOverview, handleStatsQr, handleQrScansErase } from '../workers/src/routes/qr.js';
 import { signJWT } from '../workers/src/lib/jwt.js';
 
 let pass = 0, fail = 0;
@@ -129,19 +131,28 @@ console.log('\n▶ 2 · Fenêtres, courbes');
   eq(parQr.get('OLD').map(r => r.cnt), [4], 'courbe de OLD : son seul jour actif, même hors rétention');
 }
 
-console.log('\n▶ 3 · Le vrai cron de purge : le total ne bouge pas');
+console.log('\n▶ 3 · Le vrai cron : par défaut, il ne supprime RIEN');
 {
   const avant = await scanTotals(env, ['BEL', 'OLD']);
   const brutAvant = rawCount();
-  await handleScheduledPurge(env);
+  await handleScheduledPurge(env);                       // env SANS SDQR_SCAN_PURGE
+  eq(rawCount(), brutAvant, 'cron passé : AUCUNE ligne brute supprimée (conservation illimitée)');
+  const meta0 = JSON.parse(DB._db.prepare(`SELECT value FROM system_meta WHERE key = 'last_purge_at'`).get().value);
+  yes(meta0.purge === 'off' && meta0.purged === 0 && meta0.consolide, 'journal du cron : purge « off », consolidation faite');
+  const apres0 = await scanTotals(env, ['BEL', 'OLD']);
+  eq(apres0.get('BEL').scans, avant.get('BEL').scans, 'total BEL inchangé');
+
+  /* Purge ARMÉE explicitement : elle supprime, mais le total ne bouge pas. */
+  const envArme = { ...env, SDQR_SCAN_PURGE: 'on' };
+  await handleScheduledPurge(envArme);
   const brutApres = rawCount();
-  yes(brutApres < brutAvant, `purge effectuée : ${brutAvant} → ${brutApres} lignes brutes`);
+  yes(brutApres < brutAvant, `purge armée : ${brutAvant} → ${brutApres} lignes brutes`);
   eq(DB._db.prepare(`SELECT COUNT(*) AS n FROM qr_scans WHERE ts < datetime('now','-90 days')`).get().n, 0, 'plus rien au-delà de 90 jours dans le brut');
   const apres = await scanTotals(env, ['BEL', 'OLD']);
-  eq(apres.get('BEL').scans, avant.get('BEL').scans, 'total BEL INCHANGÉ après la purge (13)');
+  eq(apres.get('BEL').scans, avant.get('BEL').scans, 'total BEL INCHANGÉ après la purge armée (13)');
   eq(apres.get('OLD').scans, 4, 'total OLD INCHANGÉ (4) alors que son brut a entièrement disparu');
   const meta = JSON.parse(DB._db.prepare(`SELECT value FROM system_meta WHERE key = 'last_purge_at'`).get().value);
-  yes(meta.status === 'ok' && meta.consolide && meta.consolide.jours >= 3, 'le cron journalise la consolidation avant la purge');
+  yes(meta.status === 'ok' && meta.purge === 'on' && meta.consolide.jours >= 3, 'le cron journalise la consolidation avant la purge');
 
   await consolidateScanDaily(env);
   const t = await scanTotals(env, ['BEL', 'OLD']);
@@ -166,11 +177,11 @@ console.log('\n▶ 4 · Garde-fou : consolidation en échec → pas de purge');
       batch: DB.batch.bind(DB),
     },
   };
-  await handleScheduledPurge(envCasse);
-  eq(rawCount(), brutAvant, 'consolidation impossible → AUCUNE ligne brute supprimée');
+  await handleScheduledPurge({ ...envCasse, SDQR_SCAN_PURGE: 'on' });
+  eq(rawCount(), brutAvant, 'purge ARMÉE + consolidation impossible → AUCUNE ligne brute supprimée');
   const meta = JSON.parse(DB._db.prepare(`SELECT value FROM system_meta WHERE key = 'last_purge_at'`).get().value);
   yes(meta.status === 'failed' && /consolidation/.test(meta.error || ''), 'échec journalisé, cause nommée');
-  await handleScheduledPurge(env);                                   // retour à la normale
+  await handleScheduledPurge({ ...env, SDQR_SCAN_PURGE: 'on' });     // retour à la normale
   yes(rawCount() < brutAvant, 'la passe suivante consolide puis purge normalement');
   const t = await scanTotals(env, ['BEL']);
   eq(t.get('BEL').scans, 15, 'les 2 scans de J-200 sont comptés avant de disparaître (13 + 2)');
@@ -221,7 +232,7 @@ console.log('\n▶ 6 · Les VRAIS écrans du pad (liste, vue d’ensemble, fiche
   eq(fiche1.totals.total, 8, 'fiche du QR « tout » : 8');
   eq(fiche1.byDay.length, 3, '… trois jours dans la courbe');
 
-  await handleScheduledPurge(envApi);
+  await handleScheduledPurge({ ...envApi, SDQR_SCAN_PURGE: 'on' });
 
   const liste2 = await lire(await handleListQr(rq('/api/qr/list'), envApi));
   eq(liste2.qrs.find(q => q.short_id === 'BEL').scans_total, 8, 'APRÈS LA PURGE — liste : toujours 8');
@@ -233,6 +244,30 @@ console.log('\n▶ 6 · Les VRAIS écrans du pad (liste, vue d’ensemble, fiche
   yes(fiche2.byCountry.length >= 0 && fiche2.heatmap.length >= 0, 'les ventilations fines répondent (fenêtre de rétention)');
   const vue3 = await lire(await handleQrOverview(rq('/api/qr/overview?period=7d'), envApi));
   eq(vue3.totals.scans_total, 2, 'fenêtre 7 jours : les 2 scans du jour');
+}
+
+console.log('\n▶ 7 · Le propriétaire efface — le SEUL effacement qui existe');
+{
+  const envApi = { ...env, KS_JWT_SECRET: 'secret-de-banc-32-octets-minimum-0123456789', KS_ALLOWED_ORIGIN: '*' };
+  const jwt = await signJWT({ sub: 'promethee', plan: 'PRO', owner: 'Prométhée' }, envApi);
+  const jwtAutre = await signJWT({ sub: 'client-b', plan: 'PRO', owner: 'Voisin' }, envApi);
+  const rq = (t) => new Request('https://api.test/api/qr/e-bel/scans', { method: 'DELETE', headers: { Authorization: 'Bearer ' + t } });
+
+  const intrus = await handleQrScansErase(rq(jwtAutre), envApi, 'e-bel');
+  eq(intrus.status, 404, 'un autre compte ne peut pas effacer les statistiques de ce QR');
+  const brutAvant = DB._db.prepare("SELECT COUNT(*) AS n FROM qr_scans WHERE short_id='BEL'").get().n;
+  yes(brutAvant > 0, `avant : ${brutAvant} ligne(s) brute(s) pour BEL`);
+
+  const r = await (await handleQrScansErase(rq(jwt), envApi, 'e-bel')).json();
+  yes(r.erased === true && r.scans === brutAvant && r.jours >= 1, `effacé : ${r.scans} scan(s), ${r.jours} jour(s) de compteur`);
+  eq(DB._db.prepare("SELECT COUNT(*) AS n FROM qr_scans WHERE short_id='BEL'").get().n, 0, 'plus aucune ligne brute pour ce QR');
+  eq(DB._db.prepare("SELECT COUNT(*) AS n FROM qr_scan_daily WHERE short_id='BEL'").get().n, 0, 'plus aucune ligne de compteur — rien ne « survit » à la demande');
+
+  const liste = await (await handleListQr(new Request('https://api.test/api/qr', { headers: { Authorization: 'Bearer ' + jwt } }), envApi)).json();
+  eq(liste.qrs.find(q => q.short_id === 'BEL').scans_total, 0, 'la liste repart de zéro pour ce QR');
+  eq(liste.qrs.find(q => q.short_id === 'OLD').scans_total, 2, 'le QR voisin garde ses statistiques');
+  const journal = DB._db.prepare("SELECT action, target FROM audit_logs WHERE action='qr_scans_erase'").all();
+  yes(journal.length === 1 && journal[0].target === 'BEL', 'l’effacement est journalisé (audit)');
 }
 
 console.log(`\n${pass + fail} vérifications — ${pass} \x1b[32mok\x1b[0m, ${fail} ${fail ? '\x1b[31mko\x1b[0m' : 'ko'}\n`);

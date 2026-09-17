@@ -88,7 +88,7 @@ import {
   handlePulsaResponsesList, handlePulsaResponseGet, handlePulsaResponsesCsv,
   handlePulsaResponsesListBySlug, handlePulsaResponsePatch,
 } from './routes/pulsa-responses.js';
-import { handleQrRedirect, handleCreateQr, handleListQr, handleQrOverview, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handlePrivacyPage, handleScheduledPurge, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrRedeemWin, handleSmartQrLoyaltyStamp, handleSmartQrConcierge } from './routes/qr.js';
+import { handleQrRedirect, handleCreateQr, handleListQr, handleQrOverview, handleUpdateQr, handleDeleteQr, handleStatsQr, handleScansCsv, handleQrScansErase, handlePrivacyPage, handleScheduledPurge, handleSmartQrGamePlay, handleSmartQrVerifyWin, handleSmartQrRedeemWin, handleSmartQrLoyaltyStamp, handleSmartQrConcierge } from './routes/qr.js';
 import { handleSdqrAsset } from './routes/sdqr-assets.js';
 // ── Sceau — secret usage-unique scellé E2E+OPRF (Pad O-SEC-001 · S1) ──
 // Route publique /s/ DISTINCTE de /r/ (SDQR prod) — on ne touche pas le hot-path QR.
@@ -1125,6 +1125,13 @@ const handler = {
       if (path.startsWith('/api/qr/') && method === 'PATCH') {
         const qrId = path.split('/').pop();
         return handleUpdateQr(request, env, qrId);
+      }
+      /* Effacement des statistiques d'UN QR — décidé par son propriétaire, la
+         seule façon dont des scans disparaissent (plus aucune purge auto).
+         AVANT la route DELETE générique, qui capterait cette adresse. */
+      const qrScansErase = path.match(/^\/api\/qr\/([^/]+)\/scans$/);
+      if (qrScansErase && method === 'DELETE') {
+        return handleQrScansErase(request, env, qrScansErase[1]);
       }
       if (path.startsWith('/api/qr/') && method === 'DELETE') {
         const qrId = path.split('/').pop();
