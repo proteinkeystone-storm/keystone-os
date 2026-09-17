@@ -272,6 +272,18 @@ console.log('\n\x1b[1m▶ Suite 11 — câblage worker Concierge SDQR (structure
   truthy('appelle streamLLM (vendor)', /await\s+streamLLM\(/.test(qr));
   truthy('repli Mistral préservé (env.AI.run KS_AI_MODEL)', /env\.AI\.run\(KS_AI_MODEL/.test(qr));
   truthy('skip budget/crédits si byok', /if\s*\(\s*!byok\s*\)/.test(qr));
+  // Le garde-fou anti-injection doit armer les DEUX chemins. Il était absent
+  // du chemin vendor : un visiteur BYOK n'avait aucune re-affirmation de la
+  // consigne après ses propres tours. Un seul tour `user` porteur, partagé.
+  truthy('un seul tour visiteur porteur du garde-fou (guardedTurn)',
+    /const\s+guardedTurn\s*=\s*\{\s*role:\s*'user',\s*content:\s*GUARD\s*\+/.test(qr));
+  truthy('chemin BYOK : garde-fou armé', /messages\s*:\s*\[\.\.\.history,\s*guardedTurn\]/.test(qr));
+  truthy('chemin géré : garde-fou armé', /\.\.\.history,\n\s*guardedTurn,/.test(qr));
+  // Jamais de `system` après l'historique : c'est le refus 400 du vendor
+  // (« Unexpected role 'system' after role 'assistant' ») qui a rendu le
+  // Concierge de Bel'Arti muet du 27/07 au 17/09/2026.
+  truthy('aucun `system` posé après l\'historique',
+    !/\.\.\.history,\s*\n\s*\{\s*role:\s*'system'/.test(qr));
 }
 
 // ─────────────────────────────────────────────────────────────────

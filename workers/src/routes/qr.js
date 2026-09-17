@@ -2625,10 +2625,18 @@ export async function handleSmartQrConcierge(request, env) {
   // page (Bel'Arti, 27/07 -> 17/09, invisible car l'échec partait dans le
   // corps SSE). La propriété qui compte est conservée : la consigne garde le
   // DERNIER mot, après les tours fournis par le visiteur. Banc §7.
+  // UN SEUL tour visiteur porteur de la consigne, partagé par les deux
+  // chemins. Le vendor BYOK n'en recevait aucun : le proprio qui paie sa
+  // clé avait un Concierge MOINS protégé que le chemin géré, alors que la
+  // surface est la même (page publique, visiteur anonyme, historique fourni
+  // par le client et donc falsifiable). Une seule définition = plus de
+  // chemin qui repart sans garde-fou.
+  const guardedTurn = { role: 'user', content: GUARD + '\n\n' + question };
+
   const messages = [
     { role: 'system', content: systemPrompt },
     ...history,
-    { role: 'user', content: GUARD + '\n\n' + question },
+    guardedTurn,
   ];
 
   const encoder = new TextEncoder();
@@ -2676,7 +2684,7 @@ export async function handleSmartQrConcierge(request, env) {
               engine    : byok.engine,
               apiKey    : byok.apiKey,
               system    : systemPrompt,
-              messages  : [...history, { role: 'user', content: question }],
+              messages  : [...history, guardedTurn],
               max_tokens: CONCIERGE_MAX_TOK,
               onChunk   : pushChunk,
             });
