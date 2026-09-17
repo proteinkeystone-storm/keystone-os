@@ -50,7 +50,7 @@ import { mcpTool, mcpToolList }               from '../lib/mcp-tools.js';
 import { ipRateExceeded, ipRateBump }          from '../lib/ip-throttle.js';
 import { resolveMcpAccessToken, ACCESS_PREFIX } from './oauth.js';
 import { issueConfirmation, consumeConfirmation, subHash, CONFIRM_TTL_S } from './mcp-writes.js';
-import { bridgePresence, bridgeRun, bridgeQueue, bridgeNotify } from './mcp-bridge.js';
+import { bridgePresence, bridgeRun, bridgeNotify } from './mcp-bridge.js';
 import { mirrorRead } from './mcp-mirror.js';
 import { bagAllows } from '../lib/app-access.js';
 import { formResources, padIdFromUri, resolveFormPad, formPromptMarkdown } from '../lib/mcp-forms.js';
@@ -221,10 +221,10 @@ function makeCtx(request, env, dispatch, claims, authz, sh, secret = null) {
         if (fallback) {
           const out = await fallback(why);
           const inboxId = out && typeof out === 'object' && typeof out.id === 'string' && out.id.startsWith('kbn_') ? out.id : null;
-          const n = await bridgeNotify(env, { sub: claims.sub, isAdmin: claims.isAdmin === true, title: 'Votre assistant a préparé quelque chose', body: (out && out.activite) || toolTitle, tag: inboxId || ctx.tool });
+          /* correctif 17/09 : la notification porte l'id de la proposition ; seul le CLIC l'applique */
+          const n = await bridgeNotify(env, { sub: claims.sub, isAdmin: claims.isAdmin === true, title: 'Votre assistant a préparé quelque chose', body: (out && out.activite) || toolTitle, tag: inboxId || ctx.tool, applyId: inboxId });
           if (n.sent > 0) {
-            await bridgeQueue(env, { sub: claims.sub, tool: ctx.tool, action, args: args || {}, inboxId });
-            if (out && typeof out === 'object') out.notification = `envoyée sur ${n.sent} appareil${n.sent > 1 ? 's' : ''} : un clic ouvre Keystone et l’applique ; sinon la bannette l’attend.`;
+            if (out && typeof out === 'object') out.notification = `envoyée sur ${n.sent} appareil${n.sent > 1 ? 's' : ''} : toucher la notification ouvre Keystone et applique la proposition ; sinon elle attend dans la bannette.`;
           } else if (out && typeof out === 'object' && n.reason) out.notification = `aucune notification (${n.reason})`;
           return out;
         }

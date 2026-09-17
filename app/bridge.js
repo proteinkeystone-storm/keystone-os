@@ -36,6 +36,14 @@ const _seen = new Set();
 const _tabId = (() => { try { const k = 'ks_bridge_tab'; let v = sessionStorage.getItem(k); if (!v) { v = 'tab_' + Math.random().toString(36).slice(2, 10); sessionStorage.setItem(k, v); } return v; } catch (e) { return 'tab_' + Math.random().toString(36).slice(2, 10); } })();
 
 const _jwt = () => { try { return localStorage.getItem('ks_jwt') || ''; } catch (e) { return ''; } };
+/* mobile / PWA : un onglet en arrière-plan est suspendu par le système → il se retire du Pont */
+const _isMobile = (() => { try { return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (matchMedia('(display-mode: standalone)').matches && 'ontouchstart' in window); } catch (e) { return false; } })();
+
+/* L'onglet se retire lui-même de la présence (keepalive : part même à la fermeture). */
+function _bye() {
+  const jwt = _jwt(); if (!jwt) return;
+  try { fetch(`${API}/api/mcp/bridge/bye`, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + jwt }, body: JSON.stringify({ tab: _tabId }) }); } catch (e) { /* tant pis : la présence expirera */ }
+}
 
 /* ── Réponse au Worker ── */
 async function _reply(jobId, payload) {
@@ -140,6 +148,14 @@ export function initBridge() {
   window.addEventListener('ks-licence-activated', _reconnectNow);
   window.addEventListener('ks-vault-hydrated', () => { if (!state.connected && !_connecting) _connect(); });
   window.addEventListener('online', () => { if (!state.connected && !_connecting) _connect(); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && !state.connected && !_connecting) _connect(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      /* sur ordinateur, un onglet caché reste utile (claude.ai au premier plan) ; sur mobile il sera suspendu */
+      if (_isMobile) { if (_abort) { try { _abort.abort(); } catch (e) { /* no-op */ } _abort = null; } _bye(); }
+      return;
+    }
+    if (!state.connected && !_connecting) _connect();
+  });
+  window.addEventListener('pagehide', () => { if (_abort) { try { _abort.abort(); } catch (e) { /* no-op */ } } _bye(); });
   window.__ksBridge = { state, reconnect: _reconnectNow, stop: () => { _stopped = true; if (_abort) _abort.abort(); } };
 }

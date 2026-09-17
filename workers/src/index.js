@@ -55,7 +55,7 @@ import { handleWellKnown, handleOauthRegister, handleOauthAuthorize, handleOauth
          handleMcpConnectionsList, handleMcpConnectionRevoke, purgeOauthArtifacts } from './routes/oauth.js';
 import { handleMcpInboxList, handleMcpInboxDeposit, handleMcpInboxMark, handleMcpActivity, purgeMcpWrites } from './routes/mcp-writes.js';
 import { mcpWriteToolNames }                                           from './lib/mcp-tools.js';
-import { handleBridgeStream, handleBridgeJobResult, handleBridgePresence, purgeMcpBridge } from './routes/mcp-bridge.js';
+import { handleBridgeStream, handleBridgeJobResult, handleBridgePresence, handleBridgeBye, purgeMcpBridge } from './routes/mcp-bridge.js';
 import { handleMirrorList, handleMirrorPut, handleMirrorDelete, purgeMcpMirror } from './routes/mcp-mirror.js';
 import {
   handleAutoReloadGet, handleAutoReloadSave,
@@ -298,6 +298,7 @@ const handler = {
       // ── MCP sprint 4 — le Pont : canal SSE de l'onglet, réponse d'un ordre, présence (routes/mcp-bridge.js)
       if (path === '/api/mcp/bridge/stream'   && method === 'GET') return handleBridgeStream(request, env);
       if (path === '/api/mcp/bridge/presence' && method === 'GET') return handleBridgePresence(request, env);
+      if (path === '/api/mcp/bridge/bye'      && method === 'POST') return handleBridgeBye(request, env);
       const mcpJobRes = path.match(/^\/api\/mcp\/bridge\/jobs\/([A-Za-z0-9_-]+)\/result$/);
       if (mcpJobRes && method === 'POST') return handleBridgeJobResult(request, env, mcpJobRes[1]);
       // ── MCP sprint 5 — le Reflet chiffré : état, publication par l'onglet, coupure (routes/mcp-mirror.js)

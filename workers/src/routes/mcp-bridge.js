@@ -31,6 +31,13 @@
    la proposition appliquée ; sinon elle l'attend dans la bannette. Une
    LECTURE ne fait que notifier : Claude redemande, l'onglet répond.
    Plafond 30 notifications / compte / jour.
+   Correctif 17/09 (test réel) : plus d'ordre en file. Une ouverture manuelle
+   de Keystone appliquait la proposition sans clic. Désormais la notification
+   porte l'id de la proposition (url ./app?mcp_apply=kbn_…) : SEUL le clic
+   l'applique (app/bannette.js) ; sinon elle attend dans la bannette.
+   Présence : le canal détecte la déconnexion (cancel) et retire l'onglet
+   aussitôt ; POST /api/mcp/bridge/bye permet à l'onglet de se retirer
+   lui-même (fermeture, iPhone mis en arrière-plan).
 
    Confidentialité (correctif 17/09, trouvé au test réel) : un ordre transporte
    des données du NAVIGATEUR (textes Ghost Writer, synthèses, brouillon Social).
@@ -130,7 +137,15 @@ export async function bridgeQueue(env, { sub, tool, action, args, inboxId = null
 
 /* Notification push de repli. tenant = règle des pads (admin → 'default').
    → { sent, devices } ; { sent:0, reason } sans VAPID / abonnement / au plafond. */
-export async function bridgeNotify(env, { sub, isAdmin, title, body, tag }) {
+/* Charge utile d'une notification du Pont (pure, testée) : applyId = proposition
+   de bannette que le CLIC doit appliquer. */
+export function bridgePushPayload({ title, body, tag, applyId = null }) {
+  const id = (typeof applyId === 'string' && /^kbn_[A-Za-z0-9_-]{8,40}$/.test(applyId)) ? applyId : null;
+  return { kind: 'mcp-bridge', title: String(title || 'Votre assistant').slice(0, 80), body: String(body || '').slice(0, 160),
+    tag: String(tag || 'mcp').slice(0, 40), url: id ? `./app?mcp_apply=${id}` : './app', ...(id ? { apply: id } : {}) };
+}
+
+export async function bridgeNotify(env, { sub, isAdmin, title, body, tag, applyId = null }) {
   if (!env.VAPID_PUBLIC || !env.VAPID_PRIVATE_JWK) return { sent: 0, devices: 0, reason: 'push non configuré' };
   let vapid;
   try { vapid = { publicKey: env.VAPID_PUBLIC, privateJwk: JSON.parse(env.VAPID_PRIVATE_JWK), subject: 'mailto:' + (env.SDQR_DPO_EMAIL || 'contact@protein-keystone.com') }; }
@@ -144,7 +159,7 @@ export async function bridgeNotify(env, { sub, isAdmin, title, body, tag }) {
   if (!subs.size) return { sent: 0, devices: 0, reason: 'aucun appareil abonné aux notifications' };
   const sh = (await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(sub)))); const subHash = Array.from(new Uint8Array(sh)).slice(0, 12).map(b => b.toString(16).padStart(2, '0')).join('');
   try { if (await ipRateExceeded(env, 'mcp:push', subHash, PUSH_DAILY_CAP)) return { sent: 0, devices: subs.size, reason: 'plafond de notifications du jour atteint' }; await ipRateBump(env, 'mcp:push', subHash); } catch (_) { /* fail-open */ }
-  const payload = { kind: 'mcp-bridge', title: String(title || 'Votre assistant').slice(0, 80), body: String(body || '').slice(0, 160), tag: String(tag || 'mcp').slice(0, 40), url: './app' };
+  const payload = bridgePushPayload({ title, body, tag, applyId });
   let sent = 0;
   for (const s of subs.values()) {
     try {
@@ -193,6 +208,10 @@ export async function handleBridgeStream(request, env, opts = {}) {
   const tabId = (request.headers.get('X-Bridge-Tab') || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || ('tab_' + generateToken(6));
   const pollMs = opts.pollMs ?? STREAM_POLL_MS, beatMs = opts.beatMs ?? STREAM_BEAT_MS, maxMs = opts.maxMs ?? STREAM_MAX_MS;
   const enc = new TextEncoder();
+  /* gone : le client s'est déconnecté (cancel) — on cesse de battre, de réclamer
+     des ordres, et l'onglet quitte la présence tout de suite. */
+  let gone = false;
+  const leave = () => env.DB.prepare('DELETE FROM mcp_bridge_presence WHERE sub = ? AND tab_id = ?').bind(sub, tabId).run().catch(() => {});
   const stream = new ReadableStream({
     async start(controller) {
       const send = (event, data) => controller.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
@@ -201,16 +220,26 @@ export async function handleBridgeStream(request, env, opts = {}) {
       try {
         await beat(env, sub, tabId); lastBeat = Date.now();
         send('hello', { tab: tabId, poll_ms: pollMs, beat_ms: beatMs, max_ms: maxMs });
-        while (Date.now() - t0 < maxMs) {
+        while (!gone && Date.now() - t0 < maxMs) {
+          /* ping d'abord : un canal fermé lève ici, AVANT de réclamer un ordre */
+          if (Date.now() - lastBeat >= beatMs) { controller.enqueue(enc.encode(': ping\n\n')); await beat(env, sub, tabId); lastBeat = Date.now(); }
+          if (gone) break;
           const jobs = await claimPending(env, sub, tabId);
-          for (const j of jobs) send('job', j);
-          if (Date.now() - lastBeat >= beatMs) { await beat(env, sub, tabId); lastBeat = Date.now(); controller.enqueue(enc.encode(': ping\n\n')); }
+          for (let i = 0; i < jobs.length; i++) {
+            try { if (gone) throw new Error('gone'); send('job', jobs[i]); }
+            catch (e) {
+              /* remise impossible : les ordres réclamés repartent en attente pour un autre onglet */
+              for (const j of jobs.slice(i)) await env.DB.prepare("UPDATE mcp_jobs SET status = 'pending', dispatched_at = NULL, args_json = ? WHERE id = ? AND status = 'dispatched'").bind(JSON.stringify(j.args ?? {}), j.id).run().catch(() => {});
+              throw e;
+            }
+          }
           await sleep(pollMs);
         }
-        send('bye', { reason: 'cycle', reconnect_ms: 500 });
-      } catch (_) { /* onglet parti : on s'arrête, la présence expirera d'elle-même */ }
+        if (!gone) send('bye', { reason: 'cycle', reconnect_ms: 500 });
+      } catch (_) { gone = true; await leave(); }
       finally { try { controller.close(); } catch (_) { /* déjà fermé */ } }
     },
+    cancel() { gone = true; return leave(); },
   });
   return new Response(stream, { headers: {
     'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-store', 'Connection': 'keep-alive',
@@ -239,6 +268,18 @@ export async function handleBridgeJobResult(request, env, id) {
                                   WHERE id = ? AND status IN ('pending', 'dispatched')`).bind(error && ok ? 'failed' : (ok ? 'done' : 'failed'), resultJson, error, job.id).run();
   if (!(u?.meta?.changes >= 1)) return err('Ordre déjà répondu', 409, origin);
   return json({ ok: true, status: ok && !error ? 'done' : 'failed' }, 200, origin);
+}
+
+/* POST /api/mcp/bridge/bye { tab } — l'onglet se retire lui-même (fermeture, arrière-plan mobile). */
+export async function handleBridgeBye(request, env) {
+  const origin = getAllowedOrigin(env, request);
+  const g = await gate(request, env, origin); if (g.error) return g.error;
+  await ensureMcpBridgeSchema(env);
+  const body = await parseBody(request);
+  const tab = String((body && body.tab) || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+  if (!tab) return err('tab requis', 400, origin);
+  const r = await env.DB.prepare('DELETE FROM mcp_bridge_presence WHERE sub = ? AND tab_id = ?').bind(g.claims.sub, tab).run();
+  return json({ ok: true, removed: r?.meta?.changes || 0 }, 200, origin);
 }
 
 /* GET /api/mcp/bridge/presence — l'onglet est-il là ? (tuile, outil keystone_bridge_status) */

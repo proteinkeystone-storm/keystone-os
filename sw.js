@@ -26,7 +26,7 @@
    celui-ci proprement au prochain refresh.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'ks-os-v5.28.537-mcp-mirror-fix';
+const VERSION       = 'ks-os-v5.28.538-mcp-click-apply';
 const STATIC_CACHE  = `${VERSION}-static`;
 // Plus de cache API : les réponses /api/* ne sont JAMAIS stockées (cf. fetch).
 
@@ -238,7 +238,7 @@ self.addEventListener('push', (event) => {
     event.waitUntil(self.registration.showNotification(data.title || 'Votre assistant', {
       body: data.body || 'Ouvrir Keystone ?',
       tag:  'mcp-' + (data.tag || 'bridge'),
-      data: { kind: 'mcp-bridge', url: data.url || './app' },
+      data: { kind: 'mcp-bridge', url: data.url || './app', apply: data.apply || null },
     }));
     return;
   }
@@ -281,12 +281,15 @@ self.addEventListener('notificationclick', (event) => {
   }
   // MCP (le Pont) — clic : focalise/ouvre le dashboard ; app/bridge.js y reprend l'ordre en file.
   if (data.kind === 'mcp-bridge') {
+    /* seul CE clic applique la proposition (data.apply) : onglet existant → message ; sinon ouverture avec ?mcp_apply= */
     event.notification.close();
     event.waitUntil((async () => {
       const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       const client = wins.find((c) => c.url.includes('/app')) || wins[0] || null;
-      if (client) { try { await client.focus(); } catch (_) {} }
-      else { try { await self.clients.openWindow(data.url || './app'); } catch (_) {} }
+      if (client) {
+        try { await client.focus(); } catch (_) {}
+        if (data.apply) { try { client.postMessage({ type: 'mcp-apply', id: data.apply }); } catch (_) {} }
+      } else { try { await self.clients.openWindow(data.url || './app'); } catch (_) {} }
     })());
     return;
   }

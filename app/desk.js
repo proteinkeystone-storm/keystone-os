@@ -421,6 +421,7 @@ function _openPubMenu(e) {
   menu.innerHTML = _pubs.map(p => `
     <div class="dk-menu-group">${_esc(p.name)}</div>
     ${p.issues.map(i => `<button class="dk-menu-item ${i.id === _issueId ? 'on' : ''}" data-pub="${p.id}" data-issue="${i.id}">n° ${_esc(i.num)}${i.theme ? ' — ' + _esc(i.theme) : ''}</button>`).join('')}
+    ${p.issues.length ? '' : `<button class="dk-menu-item" data-pub="${p.id}" data-pubsettings="1">${icon('settings', 13)} Réglages de la revue</button>`}
     <button class="dk-menu-item dk-menu-new" data-pub="${p.id}" data-newissue="1">${icon('plus', 13)} Nouveau numéro</button>
   `).join('') + `<button class="dk-menu-item dk-menu-new" data-newpub="1">${icon('plus', 13)} Nouvelle publication</button>`;
   const r = e.currentTarget.getBoundingClientRect();
@@ -431,7 +432,14 @@ function _openPubMenu(e) {
     const b = ev.target.closest('.dk-menu-item'); if (!b) return;
     menu.remove();
     if (b.dataset.newpub) { _renderCreatePub(true); return; }
-    if (b.dataset.newissue) { _pubId = b.dataset.pub; _renderCreateIssue(); return; }
+    /* correctif 17/09 : changer de revue vide les données du numéro chargé (_D), sinon le
+       panneau de réglages affichait les jalons / pages / casier de l'AUTRE revue */
+    if (b.dataset.newissue || b.dataset.pubsettings) {
+      if (b.dataset.pub !== _pubId) { _issueId = null; _D = null; _selN = null; _clearMsel(); }
+      _pubId = b.dataset.pub; _renderPubSlot(); _renderCreateIssue();
+      if (b.dataset.pubsettings) _openSettings();
+      return;
+    }
     _pubId = b.dataset.pub; _issueId = b.dataset.issue; _selN = null; _clearMsel();
     _friseY = 0; _marbreY = 0;    // autre numéro = autre chemin de fer, on repart en haut
     _renderPubSlot(); _loadIssue();

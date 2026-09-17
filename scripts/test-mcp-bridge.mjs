@@ -22,7 +22,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { signJWT } from '../workers/src/lib/jwt.js';
 import { handleMcp } from '../workers/src/routes/mcp.js';
-import { handleBridgeStream, handleBridgeJobResult, handleBridgePresence, bridgeRun, bridgePresence, purgeMcpBridge } from '../workers/src/routes/mcp-bridge.js';
+import { handleBridgeStream, handleBridgeJobResult, handleBridgePresence, handleBridgeBye, bridgeRun, bridgePresence, purgeMcpBridge, bridgePushPayload } from '../workers/src/routes/mcp-bridge.js';
 import { handleMcpInboxDeposit, handleMcpInboxList } from '../workers/src/routes/mcp-writes.js';
 
 let pass = 0, fail = 0;
@@ -240,13 +240,14 @@ console.log('\n▶ 5 bis · Repli Web Push (décision 17/09)');
     yes(pushes.length === 3 && pushes.every(p => p.enc === 'aes128gcm' && /^vapid t=/.test(p.auth || '')), '3 envois chiffrés aes128gcm signés VAPID');
     eq(DB._db.prepare("SELECT COUNT(*) AS n FROM sentinel_push_subs WHERE endpoint = 'https://push.test/dead'").get().n, 0, 'abonnement 410 purgé');
     const inboxId = r.structuredContent.id;
-    const job = DB._db.prepare("SELECT status, action, inbox_id, args_json FROM mcp_jobs WHERE tool = 'keystone_social_draft_post' AND status = 'pending' ORDER BY rowid DESC LIMIT 1").get();
-    yes(job && job.action === 'sm.compose_draft' && job.inbox_id === inboxId && JSON.parse(job.args_json).text === 'Avec push', 'ordre mis en file 10 min, lié à la proposition de bannette');
-    const frames = await drain(await stream(jwtAlice, { 'X-Bridge-Tab': 'tab_clic' }));
-    const j = frames.find(f => f.ev === 'job' && f.data.action === 'sm.compose_draft');
-    yes(j && j.data.inbox_id === inboxId, 'l’onglet ouvert par le clic reçoit l’ordre avec inbox_id');
-    await reply(j.data.id, { ok: true, data: { fait: true, texte: 'Avec push' } });
-    eq(DB._db.prepare('SELECT result_json FROM mcp_jobs WHERE id = ?').get(j.data.id).result_json, null, 'ordre en file : le résultat n’est jamais conservé (personne ne l’attend)');
+    /* correctif 17/09 : plus d'ordre en file — seul le clic sur la notification applique */
+    eq(DB._db.prepare("SELECT COUNT(*) AS n FROM mcp_jobs WHERE inbox_id IS NOT NULL").get().n, 0, 'aucun ordre mis en file : une ouverture manuelle n’appliquera rien');
+    const pl = bridgePushPayload({ title: 't', body: 'b', tag: inboxId, applyId: inboxId });
+    yes(pl.apply === inboxId && pl.url === `./app?mcp_apply=${inboxId}`, 'la notification désigne la proposition (./app?mcp_apply=…)');
+    yes(!bridgePushPayload({ title: 't', applyId: '"><script>' }).apply && bridgePushPayload({ title: 't', applyId: 'x' }).url === './app', 'identifiant de proposition invalide → notification sans application');
+    const frames = await drain(await stream(jwtAlice, { 'X-Bridge-Tab': 'tab_manuel' }));
+    eq(frames.filter(f => f.ev === 'job').length, 0, 'un onglet ouvert à la main ne reçoit aucun ordre');
+    eq(DB._db.prepare("SELECT status FROM mcp_inbox WHERE id = ?").get(inboxId).status, 'pending', '… la proposition attend dans la bannette');
     pushes.length = 0;
     DB._db.prepare('DELETE FROM mcp_bridge_presence').run();
     const jobsBefore = DB._db.prepare("SELECT COUNT(*) AS n FROM mcp_jobs").get().n;
@@ -259,6 +260,29 @@ console.log('\n▶ 5 bis · Repli Web Push (décision 17/09)');
     r = await call('keystone_ghostwriter_prepare_text', { text: 'Plafond' });
     yes(r.structuredContent.depose === true && /plafond/.test(r.structuredContent.notification || '') && pushes.length === 0, 'plafond 30/j : dépôt sans notification');
   } finally { globalThis.fetch = realFetch; delete env.VAPID_PUBLIC; delete env.VAPID_PRIVATE_JWK; }
+}
+
+console.log('\n▶ 5 ter · Présence : déconnexion et retrait volontaire (correctif 17/09)');
+{
+  DB._db.prepare('DELETE FROM mcp_bridge_presence').run();
+  const res = await handleBridgeStream(req('/api/mcp/bridge/stream', { token: jwtAlice, headers: { 'X-Bridge-Tab': 'tab_cancel' } }), env, { pollMs: 30, beatMs: 60, maxMs: 5000 });
+  const reader = res.body.getReader();
+  await reader.read();                                   // hello
+  yes((await bridgePresence(env, 'sub-alice')).online, 'canal ouvert : onglet en ligne');
+  const t0 = Date.now();
+  await reader.cancel();                                 // l'onglet se ferme
+  await sleep(80);
+  yes(!(await bridgePresence(env, 'sub-alice')).online, `déconnexion : hors ligne aussitôt (${Date.now() - t0} ms), sans attendre 40 s`);
+  const id = insertJob('sub-alice');
+  await sleep(150);
+  eq(DB._db.prepare('SELECT status FROM mcp_jobs WHERE id = ?').get(id).status, 'pending', 'un canal fermé ne réclame plus d’ordre');
+  DB._db.prepare("DELETE FROM mcp_jobs WHERE id = ?").run(id);
+  DB._db.prepare("INSERT INTO mcp_bridge_presence (sub, tab_id) VALUES ('sub-alice', 'tab_iphone')").run();
+  const bye = await handleBridgeBye(req('/api/mcp/bridge/bye', { method: 'POST', body: { tab: 'tab_iphone' }, token: jwtBob }), env);
+  eq((await bye.json()).removed, 0, 'Bob ne peut pas retirer l’onglet d’Alice');
+  const bye2 = await handleBridgeBye(req('/api/mcp/bridge/bye', { method: 'POST', body: { tab: 'tab_iphone' }, token: jwtAlice }), env);
+  yes((await bye2.json()).removed === 1 && !(await bridgePresence(env, 'sub-alice')).online, 'retrait volontaire (iPhone en arrière-plan) : hors ligne tout de suite');
+  eq((await handleBridgeBye(req('/api/mcp/bridge/bye', { method: 'POST', body: {} , token: jwtAlice }), env)).status, 400, 'tab manquant → 400');
 }
 
 console.log('\n▶ 5 · Purge');

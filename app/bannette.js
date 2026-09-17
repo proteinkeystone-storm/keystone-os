@@ -32,6 +32,8 @@ const LS_SEEN     = 'ks_mcp_activity_seen';
 const PAD_NAMES = { 'O-SOC-001': 'Social Manager', 'A-COM-005': 'Ghost Writer', 'A-COM-003': 'Brainstorming', 'A-COM-001': 'Smart Dynamic QR' };
 
 let _items = [];
+/* proposition à appliquer parce que l'utilisateur a TOUCHÉ sa notification (?mcp_apply= ou message du SW) */
+let _pendingApply = null;
 let _lastFetch = 0;
 let _slowTimer = null;
 let _busy = false;
@@ -185,13 +187,35 @@ async function _refresh(force = false) {
   _lastFetch = now;
   try {
     const [{ status, data }] = await Promise.all([_api('/api/mcp/inbox'), _pollActivity().catch(() => null)]);
-    if (status === 200 && data?.ok) { _items = Array.isArray(data.items) ? data.items : []; _render(); }
+    if (status === 200 && data?.ok) {
+      _items = Array.isArray(data.items) ? data.items : []; _render();
+      if (_pendingApply) {
+        const id = _pendingApply; _pendingApply = null;
+        const it = _items.find(x => x.id === id);
+        if (it) await _apply(it, _el()?.querySelector(`[data-id="${CSS.escape(id)}"]`) || null);
+      }
+    }
     else if (status === 401) { _items = []; _render(); }
   } catch (e) { /* hors ligne : on garde l'affichage courant */ }
 }
 
 export function initBannette() {
   if (!_el()) return;
+  try {
+    const u = new URL(location.href);
+    const id = u.searchParams.get('mcp_apply');
+    if (id && /^kbn_[A-Za-z0-9_-]{8,40}$/.test(id)) {
+      _pendingApply = id;
+      u.searchParams.delete('mcp_apply');
+      history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash);
+    }
+  } catch (e) { /* URL illisible : rien à appliquer */ }
+  try {
+    navigator.serviceWorker?.addEventListener('message', (e) => {
+      const d = e.data || {};
+      if (d.type === 'mcp-apply' && /^kbn_[A-Za-z0-9_-]{8,40}$/.test(String(d.id || ''))) { _pendingApply = d.id; _refresh(true); }
+    });
+  } catch (e) { /* pas de service worker */ }
   setTimeout(() => _refresh(true), 1500);
   window.addEventListener('ks-vault-hydrated',   () => _refresh(true));
   window.addEventListener('ks-licence-activated', () => _refresh(true));
