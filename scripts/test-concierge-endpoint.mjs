@@ -171,6 +171,25 @@ function mockAIStream(text) {
   };
 }
 
+// Dernier tableau `messages` remis au moteur (inspecté §7).
+let lastMessages = null;
+
+// CONTRAT DU VENDOR, REPRODUIT. Workers AI (Mistral) refuse en 400 un
+// message `system` qui suit un `assistant` :
+//   8007 « Unexpected role 'system' after role 'assistant' ».
+// Un bouchon qui accepte tout rend ce banc AVEUGLE — c'est exactement ce
+// qui a laissé passer le Concierge muet de Bel'Arti : GUARD placé après
+// l'historique (27/07), une seule réponse par chargement de page, banc
+// vert pendant 52 jours. Le bouchon doit être aussi sévère que le vendor.
+function assertRoleOrder(messages) {
+  for (let i = 1; i < messages.length; i++) {
+    if (messages[i].role === 'system' && messages[i - 1].role === 'assistant') {
+      throw new Error('8007: {"error":{"message":"Unexpected role \'system\' after '
+        + 'role \'assistant\'","type":"BadRequestError","param":null,"code":400}}');
+    }
+  }
+}
+
 // env minimal : DB.prepare().bind().first()/run() + AI.run(). Le même row
 // est renvoyé pour toute requête (suffisant : le garde-fou budget lit juste
 // throttle_on -> undefined -> non bridé).
@@ -190,8 +209,10 @@ function mockEnv({ qr = 'concierge', aiText = 'Réponse mock.', aiThrows = false
   };
   const env = { DB: { prepare: () => stmt } };
   if (withAI) {
-    env.AI = { run: async () => {
+    env.AI = { run: async (_model, opts) => {
       if (aiThrows) throw new Error('boom');
+      lastMessages = (opts && opts.messages) || [];
+      assertRoleOrder(lastMessages);          // le vendor, pas un oui-oui
       return mockAIStream(aiText);
     } };
   }
@@ -283,6 +304,74 @@ const doneObj = sseNoise.split('\n').filter((l) => l.startsWith('data:'))
   .find((o) => o && o.type === 'done');
 assert(doneObj && !/zk39qp7w2x/.test(doneObj.full_text), 'E2E anti-bruit: blob retiré du full_text (done)');
 assert(doneObj && /Camille\./.test(doneObj.full_text), 'E2E anti-bruit: texte utile préservé');
+
+// ─────────────────────────────────────────────────────────────
+// 7. Multi-tours — le défaut « une seule réponse par chargement »
+// ───────────────────────────────────────────────────────────────────
+// Bel'Arti (1Wm27YVH, bâche Prométhée, 437 scans), 17/09/2026 : la 1re
+// question répondait, TOUTES les suivantes rendaient « Je ne parviens pas
+// à répondre pour le moment ». Cause : le GUARD était un message `system`
+// posé APRÈS l'historique, donc juste après un tour `assistant` dès la 2e
+// question -> refus 400 du vendor, event `error` dans le flux, repli de la
+// page. Ces assertions tiennent la régression fermée.
+// ─────────────────────────────────────────────────────────────
+const HIST = [
+  { role: 'user',      content: 'Quand est la livraison ?' },
+  { role: 'assistant', content: 'La livraison est prévue pour 4e trimestre 2026.' },
+];
+
+lastMessages = null;
+r = await handleSmartQrConcierge(
+  mockReq({ short_id: 'OLLI1234', question: 'Quels sont les prix ?', history: HIST }),
+  mockEnv({ aiText: 'La Maison A est à 389000 €.' }),
+);
+const sseHist = await r.text();
+assert(!sseHist.includes('"type":"error"'), 'multi-tours: aucun event error (2e question)');
+assert(sseHist.includes('"type":"done"'),   'multi-tours: le flux va jusqu\'à done');
+assert(/"type":"done","full_text":"[^"]+"/.test(sseHist), 'multi-tours: done porte un texte non vide');
+
+// Structure remise au moteur : c'est ELLE que le vendor valide.
+assert(Array.isArray(lastMessages) && lastMessages.length > 0, 'multi-tours: messages capturés');
+let violation = null;
+for (let i = 1; i < (lastMessages || []).length; i++) {
+  if (lastMessages[i].role === 'system' && lastMessages[i - 1].role === 'assistant') {
+    violation = i; break;
+  }
+}
+assert(violation === null, 'multi-tours: aucun `system` ne suit un `assistant`');
+
+// L'historique du visiteur est bien transmis (on n'a pas corrigé en le jetant).
+const roles = (lastMessages || []).map((m) => m.role).join(',');
+assert(roles.startsWith('system,user,assistant'), 'multi-tours: historique conservé dans l\'ordre');
+assert(roles.endsWith('user'), 'multi-tours: la question du visiteur a le dernier tour');
+
+// Le garde-fou anti-injection garde sa PROPRIÉTÉ : il parle APRÈS les tours
+// fournis par le visiteur (sinon le correctif aurait désarmé la mitigation).
+const idxLastHist = (lastMessages || []).map((m) => m.role).lastIndexOf('assistant');
+const guardIdx = (lastMessages || []).findIndex((m) => /Rappel prioritaire/.test(m.content || ''));
+assert(guardIdx > idxLastHist, 'multi-tours: le garde-fou reste après l\'historique');
+assert((lastMessages || []).slice(-1)[0]?.content?.includes('Quels sont les prix ?'),
+  'multi-tours: la question réelle est bien dans le dernier message');
+
+// 8 tours (le cap d'historique) : toujours pas de refus.
+const LONG = [];
+for (let i = 0; i < 8; i++) {
+  LONG.push({ role: 'user', content: 'Question ' + i + ' ?' });
+  LONG.push({ role: 'assistant', content: 'Réponse ' + i + '.' });
+}
+r = await handleSmartQrConcierge(
+  mockReq({ short_id: 'OLLI1234', question: 'Et le T4 ?', history: LONG }),
+  mockEnv({ aiText: 'Le T4 fait 92 m².' }),
+);
+const sseLong = await r.text();
+assert(!sseLong.includes('"type":"error"'), 'multi-tours: 8 tours d\'historique -> pas de refus');
+
+// La 1re question (historique vide) n'a jamais été cassée : elle le reste.
+r = await handleSmartQrConcierge(
+  mockReq({ short_id: 'OLLI1234', question: 'Quels modèles ?', history: [] }),
+  mockEnv({ aiText: 'Quatre maisons.' }),
+);
+assert(!(await r.text()).includes('"type":"error"'), 'multi-tours: 1re question intacte');
 
 // ─────────────────────────────────────────────────────────────
 console.log(`\n\x1b[1m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m`);

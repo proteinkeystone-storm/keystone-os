@@ -616,7 +616,20 @@ const TEMPLATE = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ short_id: SHORT, question: question, history: history })
     }).then(function (resp) {
-      if (!resp.ok || !resp.body) throw new Error('net');
+      // Le serveur nomme souvent la vraie raison du refus (plafond du jour,
+      // budget, moteur indisponible). On la RESTITUE au visiteur pour
+      // 429/402/503 au lieu de l'ecraser par un aveu d'echec generique : un
+      // incident lisible se repare en minutes, un incident muet dure 52 jours.
+      if (!resp.ok) {
+        var relay = (resp.status === 429 || resp.status === 402 || resp.status === 503);
+        return resp.json().catch(function () { return null; }).then(function (j) {
+          var e2 = new Error('http ' + resp.status);
+          e2.detail = (j && j.error) || ('HTTP ' + resp.status);
+          if (relay && j && j.error) e2.shown = j.error;
+          throw e2;
+        });
+      }
+      if (!resp.body) throw new Error('net');
       var reader = resp.body.getReader();
       var dec = new TextDecoder('utf-8');
       var buf = '', full = '', started = false, errored = false;
@@ -638,7 +651,7 @@ const TEMPLATE = {
             } else if (ev.type === 'done') {
               if (ev.full_text) { full = ev.full_text; bubble.innerHTML = md(full); }
             } else if (ev.type === 'error') {
-              errored = true;
+              errored = ev.message || true;
             }
           }
           return pump();
@@ -646,12 +659,20 @@ const TEMPLATE = {
       }
 
       return pump().then(function () {
-        if (errored || !full) throw new Error('empty');
+        if (errored || !full) {
+          var e3 = new Error('empty');
+          e3.detail = (typeof errored === 'string') ? errored : 'reponse vide';
+          throw e3;
+        }
         history.push({ role: 'user', content: question });
         history.push({ role: 'assistant', content: full });
         if (history.length > 16) history = history.slice(-16);
       });
-    }).catch(function () {
+    }).catch(function (e) {
+      // Trace technique en console (jamais montree au visiteur) : sans elle,
+      // un Concierge muet ne laisse aucune trace, ni page ni Worker.
+      try { console.warn('[concierge]', (e && (e.detail || e.message)) || e); } catch (e4) {}
+      if (e && e.shown) { bubble.textContent = e.shown; down(); return; }
       var fb = 'Je ne parviens pas à répondre pour le moment.';
       if (CNAME) fb += ' Contactez ' + CNAME + (CTEL ? ' (' + CTEL + ')' : '') + '.';
       bubble.textContent = fb;
