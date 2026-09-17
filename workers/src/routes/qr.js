@@ -28,6 +28,9 @@ import { buildConciergeBlockFromVefa, buildConciergeBlockFromKeyform } from './s
 import { KS_AI_MODEL } from '../lib/ai-model.js';
 import { budgetGuard, recordUsage, estimateTokens } from '../lib/ai-budget.js';
 import { ipHashOf, ipRateExceeded, ipRateBump } from '../lib/ip-throttle.js';
+/* Historique durable des scans : le journal brut s'efface à 90 jours, le
+   compteur journalier (anonyme) garde toute la vie du QR. cf. lib/qr-history.js */
+import { consolidateScanDaily, scanTotals, scanByDay, scanSeriesByQr } from '../lib/qr-history.js';
 import { isEnforceEnabled, resolvePlanByHmac, consumeCredits, quotaForPlan } from '../lib/ai-credits.js';
 import { audit } from '../lib/audit.js';
 import { streamLLM } from '../lib/llm-stream.js';
@@ -583,36 +586,23 @@ export async function handleListQr(request, env) {
   let targetsMap = new Map();
   let seriesMap = new Map();   // short_id -> [{ day, cnt }] (asc)
   if (shortIds.length) {
-    const scans = await env.DB
-      .prepare(`SELECT short_id, COUNT(*) AS total FROM qr_scans
-                WHERE short_id IN (${placeholders}) GROUP BY short_id`)
-      .bind(...shortIds).all();
-    scans.results?.forEach(r => scansMap.set(r.short_id, r.total));
+    // Total de TOUTE la vie du QR et courbe complète : lus sur le compteur
+    // journalier (lib/qr-history.js) + le brut du jour. Le journal brut
+    // s'efface à 90 jours — s'appuyer dessus faisait BAISSER le compteur
+    // affiché au client (constat du 17/09/2026 : Bel'Arti 437 → 320).
+    scansMap  = await scanTotals(env, shortIds);
+    seriesMap = await scanSeriesByQr(env, shortIds);
 
     const targets = await env.DB
       .prepare(`SELECT short_id, target_url FROM qr_redirects WHERE short_id IN (${placeholders})`)
       .bind(...shortIds).all();
     targets.results?.forEach(r => targetsMap.set(r.short_id, r.target_url));
-
-    // Historique de scans par QR pour la courbe d'utilisation des cartes : TOUTE
-    // l'histoire du QR (agrégée par jour), bucketisée ensuite à 14 points. Pas de
-    // fenêtre glissante -> un QR scanné il y a >X jours garde sa courbe. ADDITIF,
-    // lecture seule — /r/, qr_redirects, écritures : intacts.
-    const series = await env.DB
-      .prepare(`SELECT short_id, date(ts) AS day, COUNT(*) AS cnt FROM qr_scans
-                WHERE short_id IN (${placeholders})
-                GROUP BY short_id, day ORDER BY day ASC`)
-      .bind(...shortIds).all();
-    series.results?.forEach(r => {
-      if (!seriesMap.has(r.short_id)) seriesMap.set(r.short_id, []);
-      seriesMap.get(r.short_id).push({ day: r.day, cnt: r.cnt });
-    });
   }
 
   const enriched = qrs.map(q => ({
     ...q,
     target_url   : targetsMap.get(q.short_id) || null,
-    scans_total  : scansMap.get(q.short_id) || 0,
+    scans_total  : scansMap.get(q.short_id)?.scans || 0,
     scans_series : _bucketScanSeries(seriesMap.get(q.short_id), 14),
   }));
 
@@ -631,7 +621,10 @@ export async function handleQrOverview(request, env) {
   if (!tenantId) return err('Auth requise', 401, origin);
   const url    = new URL(request.url);
   const period = url.searchParams.get('period') || '30d';
-  const days   = PERIOD_DAYS[period] ?? 30;
+  /* Piège corrigé le 17/09/2026 : `PERIOD_DAYS['all'] ?? 30` rendait 30 —
+     « tout » valait donc 30 jours, en silence. Une période connue garde sa
+     valeur (null = toute la vie du QR), une inconnue retombe sur 30. */
+  const days   = Object.prototype.hasOwnProperty.call(PERIOD_DAYS, period) ? PERIOD_DAYS[period] : 30;
 
   const { results: rows } = await env.DB
     .prepare(`SELECT data FROM entities
@@ -651,23 +644,27 @@ export async function handleQrOverview(request, env) {
   const ph = shortIds.map(() => '?').join(',');
   const periodWhere = days ? `AND ts >= datetime('now', '-${days} days')` : '';
 
+  /* Fenêtres COURTES (semaine, semaine précédente, visiteurs distincts) :
+     lues sur le journal brut, qui les couvre toujours (rétention 90 j).
+     TOTAUX et COURBES : lus sur le compteur journalier durable, sinon le
+     chiffre du client baisse quand la purge passe. */
   const totals = await env.DB.prepare(`
-    SELECT COUNT(*) AS total, COUNT(DISTINCT ua_hash) AS uniq_count,
+    SELECT COUNT(DISTINCT ua_hash) AS uniq_count,
       SUM(CASE WHEN ts >= datetime('now','-7 days') THEN 1 ELSE 0 END) AS week,
       SUM(CASE WHEN ts >= datetime('now','-14 days') AND ts < datetime('now','-7 days') THEN 1 ELSE 0 END) AS prev_week
     FROM qr_scans WHERE short_id IN (${ph}) ${periodWhere}
-  `).bind(...shortIds).first() || { total: 0, uniq_count: 0, week: 0, prev_week: 0 };
+  `).bind(...shortIds).first() || { uniq_count: 0, week: 0, prev_week: 0 };
 
-  const { results: byDay } = await env.DB.prepare(`
-    SELECT date(ts) AS day, COUNT(*) AS cnt FROM qr_scans
-    WHERE short_id IN (${ph}) ${periodWhere} GROUP BY day ORDER BY day ASC
-  `).bind(...shortIds).all();
+  const byDay = await scanByDay(env, shortIds, days);
 
-  const { results: perPeriod } = await env.DB.prepare(`
-    SELECT short_id, COUNT(*) AS cnt FROM qr_scans
-    WHERE short_id IN (${ph}) ${periodWhere} GROUP BY short_id
-  `).bind(...shortIds).all();
-  const cntMap = new Map((perPeriod || []).map(r => [r.short_id, r.cnt]));
+  const perPeriod = await scanTotals(env, shortIds, days);
+  const cntMap = new Map([...perPeriod].map(([s, v]) => [s, v.scans]));
+  /* « tout » : le brut ne voit que 90 jours, donc les visiteurs distincts
+     viennent du compteur — somme des visiteurs PAR JOUR (un visiteur revenu
+     un autre jour compte deux fois, l'écran le dit). */
+  const uniqueCount = days ? (totals.uniq_count || 0)
+                           : [...perPeriod.values()].reduce((a, v) => a + (v.uniques || 0), 0);
+  const scansTotal  = [...cntMap.values()].reduce((a, v) => a + v, 0);
 
   const { results: perMeta } = await env.DB.prepare(`
     SELECT short_id, MAX(ts) AS last_ts,
@@ -700,10 +697,16 @@ export async function handleQrOverview(request, env) {
 
   const watch = [];
   const nowMs = Date.now();
+  /* « aucun scan à ce jour » ne doit être dit que d'un QR JAMAIS scanné :
+     un QR dormant depuis plus de 90 jours n'a plus de ligne brute, mais
+     le compteur se souvient de son dernier jour actif. */
+  const lifetime = days ? await scanTotals(env, shortIds) : perPeriod;
   for (const q of qrs) {
     if (!q.short_id || (q.status && q.status !== 'active')) continue;
     const m = metaMap.get(q.short_id);
-    const lastMs = m?.last_ts ? Date.parse(String(m.last_ts).replace(' ', 'T') + 'Z') : null;
+    const lastDay = lifetime.get(q.short_id)?.lastDay || null;
+    const lastMs = m?.last_ts ? Date.parse(String(m.last_ts).replace(' ', 'T') + 'Z')
+                 : (lastDay ? Date.parse(lastDay + 'T12:00:00Z') : null);
     const daysAgo = lastMs ? Math.floor((nowMs - lastMs) / 86400000) : null;
     if (daysAgo === null) {
       watch.push({ name: q.name || '(sans nom)', note: 'aucun scan à ce jour', kind: 'warn' });
@@ -719,8 +722,8 @@ export async function handleQrOverview(request, env) {
 
   return json({
     totals: {
-      scans_total: totals.total || 0,
-      unique: totals.uniq_count || 0,
+      scans_total: scansTotal,
+      unique: uniqueCount,
       qr_total: qrs.length,
       qr_active: qrActive,
       week, week_delta: weekDelta,
@@ -1047,22 +1050,20 @@ export async function handleStatsQr(request, env, qrId) {
   try {
     const totals = await env.DB.prepare(`
       SELECT
-        COUNT(*)                AS total,
         COUNT(DISTINCT ua_hash) AS uniq_count,
         SUM(CASE WHEN date(ts) = date('now')                   THEN 1 ELSE 0 END) AS today,
         SUM(CASE WHEN ts >= datetime('now', '-7 days')         THEN 1 ELSE 0 END) AS week
       FROM qr_scans
       WHERE short_id = ? ${periodWhere}
-    `).bind(shortId).first() || { total: 0, uniq_count: 0, today: 0, week: 0 };
+    `).bind(shortId).first() || { uniq_count: 0, today: 0, week: 0 };
 
-  // ── Scans par jour (pour line chart) ───────────────────────
-  const { results: byDay } = await env.DB.prepare(`
-    SELECT date(ts) AS day, COUNT(*) AS cnt
-    FROM qr_scans
-    WHERE short_id = ? ${periodWhere}
-    GROUP BY day
-    ORDER BY day ASC
-  `).bind(shortId).all();
+  /* Total et courbe : compteur journalier durable (+ brut du jour). Les
+     ventilations qui suivent (pays, appareil, OS, heatmap) restent sur le
+     journal brut : elles couvrent la fenêtre de rétention, pas toute la vie
+     du QR — l'écran l'annonce. */
+  const hist   = await scanTotals(env, [shortId], days);
+  const durable = hist.get(shortId) || { scans: 0, uniques: 0 };
+  const byDay  = await scanByDay(env, [shortId], days);
 
   // ── Top pays ──────────────────────────────────────────────
   const { results: byCountry } = await env.DB.prepare(`
@@ -1118,8 +1119,8 @@ export async function handleStatsQr(request, env, qrId) {
       mode: 'dynamic',
       period,
       totals: {
-        total : totals.total      || 0,
-        unique: totals.uniq_count || 0,
+        total : durable.scans || 0,
+        unique: days ? (totals.uniq_count || 0) : (durable.uniques || 0),
         today : totals.today      || 0,
         week  : totals.week       || 0,
       },
@@ -1282,6 +1283,7 @@ function _renderPrivacyPage(retentionDays, dpoEmail) {
 
   <h2>Durée de conservation</h2>
   <p>Les logs de scan sont automatiquement supprimés après <strong>${retentionDays} jours</strong>. Une fois purgés, il est impossible de les reconstituer.</p>
+  <p>Avant leur suppression, ils sont réduits à un <strong>compteur journalier anonyme</strong> — « ce QR, ce jour-là, N scans et N navigateurs distincts » — conservé pour que le propriétaire du QR garde l'historique de sa campagne. Ce compteur ne contient <strong>ni pays, ni type d'appareil, ni système, ni empreinte de navigateur, ni heure</strong> : il ne permet de remonter à personne, et il disparaît avec le QR.</p>
 
   <h2>Souveraineté technique</h2>
   <div class="card">
@@ -1336,6 +1338,25 @@ export async function handleScheduledPurge(env) {
   let purged = '?';
   let status = 'ok';
   let error  = null;
+  let consolide = null;
+  try {
+    /* CONSOLIDER D'ABORD, PURGER ENSUITE — l'ordre est la garantie : ce qui
+       part du journal brut est déjà compté, par QR et par jour, dans
+       qr_scan_daily (compteur anonyme, conservé sans limite). Sans cette
+       passe, la purge faisait baisser le compteur affiché au client. */
+    consolide = await consolidateScanDaily(env);
+    console.log(`[sdqr-purge] compteur journalier consolidé — ${consolide.lignes} ligne(s), ${consolide.jours} jour(s) d’historique`);
+  } catch (e) {
+    /* Jamais de purge sur une consolidation ratée : on préfère garder le
+       brut un jour de plus que perdre l'historique. */
+    console.error('[sdqr-purge] consolidation FAILED — purge annulée', e.message);
+    await env.DB.prepare(`
+      INSERT INTO system_meta (key, value, updated_at)
+      VALUES ('last_purge_at', ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).bind(JSON.stringify({ status: 'failed', purged: 0, error: 'consolidation: ' + e.message, retentionDays })).run().catch(() => {});
+    return;
+  }
   try {
     const result = await env.DB
       .prepare(`DELETE FROM qr_scans WHERE ts < datetime('now', '-${retentionDays} days')`)
@@ -1356,7 +1377,7 @@ export async function handleScheduledPurge(env) {
     ON CONFLICT(key) DO UPDATE SET
       value      = excluded.value,
       updated_at = excluded.updated_at
-  `).bind(JSON.stringify({ status, purged, error, retentionDays })).run().catch(() => {});
+  `).bind(JSON.stringify({ status, purged, error, retentionDays, consolide })).run().catch(() => {});
 }
 
 // ══════════════════════════════════════════════════════════════════

@@ -8,6 +8,7 @@
 
 import { json, err, requireAdmin, parseBody, getAllowedOrigin } from '../lib/auth.js';
 import { audit } from '../lib/audit.js';
+import { deleteScanDailyForTenant } from '../lib/qr-history.js';
 
 // ── GET /api/admin/export ─────────────────────────────────────
 // Retourne toutes les licences + devices (RGPD portabilité Art.20)
@@ -57,6 +58,10 @@ export async function handlePurgeTenant(request, env) {
     'DELETE FROM qr_scans WHERE short_id IN (SELECT short_id FROM qr_redirects WHERE tenant_id = ?)'
   ).bind(tenantId).run();
   counts.qr_scans = r1.meta.changes || 0;
+
+  // 1 bis. qr_scan_daily — le compteur journalier (anonyme, conservé sans
+  // limite) part avec les QR du tenant : un effacement RGPD n'en laisse rien.
+  counts.qr_scan_daily = await deleteScanDailyForTenant(env, tenantId).catch(() => 0);
 
   // 2. qr_redirects
   const r2 = await env.DB.prepare('DELETE FROM qr_redirects WHERE tenant_id = ?').bind(tenantId).run();
