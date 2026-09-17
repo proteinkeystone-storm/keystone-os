@@ -22,6 +22,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { listFormPads, resolveFormPad, formSchema, validateFormData, formUri } from './mcp-forms.js';
+import { APPS_UI_URI, APPS_APP_URL }                                          from './mcp-apps.js';
 
 /* ── Aides ── */
 const excerpt = (text, max = 160) => {
@@ -1178,6 +1179,39 @@ export const MCP_TOOLS = [
       return out;
     },
   },
+
+  /* ═══════════════════════════════════════════════════════════════
+     SONDE MCP APPS (S7) — hors catalogue tant que MCP_APPS ≠ 'on'.
+     Même donnée que keystone_qr_overview, plus `_meta.ui` qui désigne
+     l'interface `ui://keystone/qr-card` (lib/mcp-apps.js). Un client qui
+     ignore l'extension ne voit qu'une lecture de plus : le résultat JSON
+     suffit au modèle. Lecture seule, une seule route, en GET.
+     ═══════════════════════════════════════════════════════════════ */
+  {
+    name: 'keystone_qr_card', title: 'Carte de mes QR codes', gate: 'MCP_APPS',
+    meta: { ui: { resourceUri: APPS_UI_URI, prefersBorder: true } },
+    description: "Carte visuelle des Smart Dynamic QR : scans, visiteurs uniques, aujourd'hui, QR actifs, meilleurs QR et points à surveiller. Rend une interface dans la conversation si le client sait l'afficher ; sinon les mêmes chiffres en texte. period : 7d, 30d, 90d ou all (défaut 7d). Pour « montre-moi la carte de mes QR codes ».",
+    inputSchema: S({ period: str('7d | 30d | 90d | all (défaut 7d)') }),
+    routes: [{ method: 'GET', path: '/api/qr/overview' }],
+    run: async (ctx, args) => {
+      const period = ['7d', '30d', '90d', 'all'].includes(args.period) ? args.period : '7d';
+      const data = await ctx.call(`/api/qr/overview?period=${period}`);
+      const t = data.totals || {};
+      const today = todayIso();
+      const TREND = { up: 'en hausse', down: 'en baisse', flat: 'stable' };
+      return {
+        vue: 'carte_qr', periode: period,
+        scans: t.scans_total || 0, visiteurs_uniques: t.unique || 0,
+        qr_total: t.qr_total || 0, qr_actifs: t.qr_active || 0,
+        aujourdhui: (data.byDay || []).find(d => d.day === today)?.cnt || 0,
+        cette_semaine: t.week || 0,
+        classement: (data.leaderboard || []).slice(0, 5).map(l => ({ nom: l.name, scans: l.scans, tendance: TREND[l.trend] || 'stable' })),
+        a_surveiller: (data.watch || []).map(w => `${w.name} : ${w.note}`),
+        mesure_le: new Date().toISOString(),
+        ouvrir: APPS_APP_URL,
+      };
+    },
+  },
 ];
 
 /* ── Helpers partagés entre outils ── */
@@ -1260,8 +1294,12 @@ async function viaTabOrBannette(ctx, action, args, proposal) {
 const visible = (t, env) => !t.gate || (env && String(env[t.gate] || '').toLowerCase() === 'on');
 export function mcpTool(name, env) { const t = MCP_TOOLS.find(x => x.name === name); return (t && visible(t, env)) ? t : null; }
 export function mcpToolList(env) {
+  /* `meta` → `_meta` : seule la sonde MCP Apps s'en sert aujourd'hui (elle y
+     désigne son interface). Un client qui ne connaît pas l'extension ignore
+     `_meta` : le champ est libre par la spec MCP. */
   return MCP_TOOLS.filter(t => visible(t, env)).map(t => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema,
-    annotations: { readOnlyHint: !t.write, destructiveHint: false, idempotentHint: !t.write, openWorldHint: false } }));
+    annotations: { readOnlyHint: !t.write, destructiveHint: false, idempotentHint: !t.write, openWorldHint: false },
+    ...(t.meta ? { _meta: t.meta } : {}) }));
 }
 /* Écritures SERVEUR (bandeau d'activité) : write, hors bannette. */
 export function mcpWriteToolNames() { return MCP_TOOLS.filter(t => t.write && !t.bannette).map(t => t.name); }

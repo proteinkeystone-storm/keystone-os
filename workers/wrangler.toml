@@ -128,6 +128,14 @@ BYOK_ROUTING = "on"
 # jamais de modification, suppression ni redirection d'un QR existant.
 MCP_QR_CREATE = "on"
 
+# ── MCP sprint 7 — SONDE « MCP Apps » (interface dans la conversation) ──
+# Allume l'outil keystone_qr_card et la ressource ui://keystone/qr-card
+# (lib/mcp-apps.js). Une seule question : claude.ai rend-il l'interface
+# d'un connecteur PERSONNALISÉ ? Lecture seule, aucune donnée nouvelle,
+# aucune migration. "off" = l'outil et la ressource disparaissent du
+# catalogue, et la sonde est annulée — rien d'autre à défaire.
+MCP_APPS = "on"
+
 # ── AUTH-5 — Email transactionnel SOUVERAIN (Scaleway TEM, fr-par) ──
 # Bascule Resend (US) → Scaleway (FR) du 2026-07-26, cf.
 # HANDOFF_AUTH_DURCISSEMENT.md. Rollback instantané : remettre

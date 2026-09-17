@@ -54,6 +54,7 @@ import { bridgePresence, bridgeRun, bridgeNotify } from './mcp-bridge.js';
 import { mirrorRead } from './mcp-mirror.js';
 import { bagAllows } from '../lib/app-access.js';
 import { formResources, padIdFromUri, resolveFormPad, formPromptMarkdown } from '../lib/mcp-forms.js';
+import { appsResources, appsResourceRead }  from '../lib/mcp-apps.js';
 
 const INTERNAL_JWT_TTL_S = 300;   // JWT interne minté pour un appel OAuth : le temps d'une requête
 
@@ -290,15 +291,20 @@ async function handleOne(msg, ctx, env, meta) {
       return isNotification ? null : rpcResult(id, {});
     case 'tools/list':
       return rpcResult(id, { tools: mcpToolList(env) });
-    /* ── Ressources (sprint 6) : la recette de chaque pad-formulaire accessible ── */
+    /* ── Ressources (sprint 6) : la recette de chaque pad-formulaire accessible,
+          plus l'interface de la sonde MCP Apps si MCP_APPS = 'on' (S7) ── */
     case 'resources/list':
-      try { return rpcResult(id, { resources: await formResources(ctx) }); }
+      try { return rpcResult(id, { resources: [...await formResources(ctx), ...appsResources(env)] }); }
       catch (e) { return rpcError(id, E.INTERNAL, (e && e.message) || 'ressources indisponibles'); }
     case 'resources/templates/list':
       return rpcResult(id, { resourceTemplates: [{ uriTemplate: 'keystone://pad/{padId}/prompt', name: 'pad/{padId}/prompt', title: 'Recette d’un pad-formulaire', mimeType: 'text/markdown',
         description: 'Recette (system prompt), champs et mode d’emploi d’un pad-formulaire Keystone — padId = ID_KSTORE (ex. O-IMM-002).' }] });
     case 'resources/read': {
       const uri = params && params.uri;
+      /* sonde MCP Apps : page HTML autonome, aucune donnée dedans (elle les
+         reçoit par le résultat de l'outil ou un tools/call relayé) */
+      const ui = appsResourceRead(uri, env);
+      if (ui) return rpcResult(id, { contents: [ui] });
       const padId = padIdFromUri(uri);
       if (!padId) return rpcError(id, E.RESOURCE, `Ressource inconnue : ${uri}`, { uri });
       try {
