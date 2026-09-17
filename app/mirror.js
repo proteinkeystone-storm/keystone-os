@@ -133,6 +133,25 @@ export async function publish(pad) {
 }
 export async function publishAll() { const s = mirrorSettings(); const r = {}; for (const p of Object.keys(s)) if (s[p]) r[p] = await publish(p); return r; }
 
+/* Rattrapage (correctif 17/09) : un pad activé dont le reflet manque pour une
+   connexion liée à cet appareil est publié maintenant. Couvre le cas réel du
+   premier test : interrupteurs activés AVANT l'autorisation, ou onglet
+   Keystone jamais rechargé après le consentement. Throttle 60 s sauf force. */
+let _lastCatchUp = 0;
+export async function mirrorCatchUp({ force = false } = {}) {
+  if (!_jwt()) return { published: 0 };
+  if (!force && Date.now() - _lastCatchUp < 60000) return { published: 0, reason: 'throttle' };
+  _lastCatchUp = Date.now();
+  const st = await mirrorStatus();
+  const linked = st.connections.filter(c => c.linked);
+  let n = 0;
+  for (const pad of Object.keys(st.pads)) {
+    if (!st.pads[pad]) continue;
+    if (linked.some(c => !(c.mirror || []).some(m => m.pad === pad))) { const r = await publish(pad); n += r.published || 0; }
+  }
+  return { published: n };
+}
+
 /* ── Déclencheurs ── */
 const _timers = {};
 function _schedule(pad) { clearTimeout(_timers[pad]); _timers[pad] = setTimeout(() => publish(pad), DEBOUNCE); }
@@ -148,5 +167,9 @@ export function initMirror() {
   } catch (e) { console.warn('[mirror] hook setItem impossible :', e?.message); }
   setTimeout(() => publishAll(), 3000);
   window.addEventListener('ks-licence-activated', () => setTimeout(() => publishAll(), 1500));
-  window.__ksMirror = { publish, publishAll, status: mirrorStatus, settings: mirrorSettings, set: setMirrorPad };
+  /* le consentement (connect.html, autre onglet du même navigateur) vient de poser un secret */
+  window.addEventListener('storage', (e) => { if (e.key === LS_SECRETS) setTimeout(() => mirrorCatchUp({ force: true }), 800); });
+  /* retour sur l'onglet Keystone : rattrapage des reflets manquants */
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) mirrorCatchUp(); });
+  window.__ksMirror = { publish, publishAll, catchUp: mirrorCatchUp, status: mirrorStatus, settings: mirrorSettings, set: setMirrorPad };
 }

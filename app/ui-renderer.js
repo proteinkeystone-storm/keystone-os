@@ -4519,13 +4519,32 @@ function _mcpConnectorSectionHTML() {
     </div>`;
 }
 /* Sprint 5 — interrupteurs « Visible par mon assistant », un par pad navigateur. */
-async function _loadMcpMirror(root) {
+async function _loadMcpMirror(root, _retried = false) {
     const host = root?.querySelector('#mcp-mirror-toggles');
     if (!host) return;
     let m = null;
     try { m = await import('./mirror.js'); } catch (e) { host.innerHTML = ''; return; }
     const st = await m.mirrorStatus().catch(() => ({ pads: m.mirrorSettings(), connections: [] }));
     const linked = st.connections.filter(c => c.linked);
+    /* Rattrapage : un pad activé sans reflet pour une connexion liée → publication, puis un seul re-rendu */
+    const missing = linked.length && Object.keys(st.pads).some(p => st.pads[p] && linked.some(c => !(c.mirror || []).some(x => x.pad === p)));
+    if (missing && !_retried) {
+        host.innerHTML = `<p class="sp-user-hint">Publication des reflets…</p>`;
+        await m.mirrorCatchUp({ force: true }).catch(() => null);
+        return _loadMcpMirror(root, true);
+    }
+    const published = [...new Set(linked.flatMap(c => (c.mirror || []).map(x => x.pad)))];
+    const label = (p) => m.MIRROR_PADS[p]?.label || p;
+    let note;
+    if (!st.connections.length) note = 'Aucun assistant connecté : les reflets s’activeront dès la première autorisation.';
+    else if (!linked.length) note = 'Les assistants connectés l’ont été depuis un autre appareil : réautorisez-les depuis Claude sur celui-ci pour que ses reflets partent d’ici.';
+    else {
+        const enabled = Object.keys(st.pads).filter(p => st.pads[p]);
+        const failed = enabled.filter(p => !published.includes(p));
+        note = `Appareil relié à : ${_escapeLivingText(linked.map(c => c.client_name).join(', '))}. `
+             + (published.length ? `Reflets en ligne : ${_escapeLivingText(published.map(label).join(', '))}.` : 'Aucun reflet en ligne.')
+             + (failed.length ? ` Publication impossible pour : ${_escapeLivingText(failed.map(label).join(', '))} — rechargez Keystone, puis rouvrez ce panneau.` : '');
+    }
     host.innerHTML = Object.entries(m.MIRROR_PADS).map(([pad, d]) => `
         <div class="sp-user-row sp-row-toggle" style="padding:6px 0">
             <label class="sp-user-label" for="mcp-mirror-${pad}">${_escapeLivingText(d.label)} <span style="color:var(--tx3);font-weight:500;font-size:10px">${_escapeLivingText(d.hint)}</span></label>
@@ -4533,16 +4552,15 @@ async function _loadMcpMirror(root) {
                 <input type="checkbox" id="mcp-mirror-${pad}" data-mirror-pad="${pad}" ${st.pads[pad] ? 'checked' : ''}>
                 <span class="sp-toggle-track"><span class="sp-toggle-thumb"></span></span>
             </label>
-        </div>`).join('') + `<p class="sp-user-hint" id="mcp-mirror-note" style="padding-top:4px">${
-        !st.connections.length ? 'Aucun assistant connecté : les reflets s’activeront dès la première autorisation.'
-        : linked.length ? `Reflets publiés depuis cet appareil pour : ${_escapeLivingText(linked.map(c => c.client_name).join(', '))}.`
-        : 'Les assistants connectés l’ont été depuis un autre appareil : réautorisez-les depuis Claude sur celui-ci pour que ses reflets partent d’ici.'}</p>`;
+        </div>`).join('') + `<p class="sp-user-hint" id="mcp-mirror-note" style="padding-top:4px">${note}</p>`;
     host.querySelectorAll('[data-mirror-pad]').forEach(cb => cb.addEventListener('change', async () => {
         cb.disabled = true;
-        try { await m.setMirrorPad(cb.dataset.mirrorPad, cb.checked); } catch (e) { /* réseau : l'état local est posé, republication au prochain boot */ }
-        cb.disabled = false;
+        try { await m.setMirrorPad(cb.dataset.mirrorPad, cb.checked); } catch (e) { /* réseau : l'état local est posé, rattrapage au retour sur l'onglet */ }
+        _loadMcpMirror(root, true);
+        _loadMcpConnections(root);
     }));
 }
+
 
 // ── Rendu du logo IA — variantes dark / light ─────────────────
 function _engineLogoHTML(p, size = 20) {
